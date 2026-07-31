@@ -52,11 +52,18 @@ export function writeConfig(config: CliConfig): void {
  * If the config file exists with world/group read permissions, warn the
  * user and refuse to read the api_key. Forces explicit re-login under
  * 0600 perms, or env-var-only operation.
+ *
+ * POSIX only. This used to claim it was cross-platform, but Windows has no POSIX mode bits:
+ * `chmod` is a no-op there and `statSync().mode` reports a synthesized 0666 (0444 when the
+ * read-only attribute is set), so `mode & 0o077` is never 0 and this returned false for every
+ * Windows user. The effect was that `certen auth login --no-keyring` wrote a key the CLI then
+ * refused to read, with an error telling them to re-run the login that had just succeeded.
+ * Access control on Windows is the file's ACL, inherited from the user profile directory.
  */
 function configFileIsSecure(): boolean {
+  if (process.platform === 'win32') return true;
   try {
     const stat = statSync(CONFIG_FILE);
-    // Cross-platform: check that group/world have no read bits.
     const mode = stat.mode & 0o077;
     return mode === 0;
   } catch {

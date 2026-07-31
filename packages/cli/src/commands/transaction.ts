@@ -3,9 +3,32 @@ import { readFileSync } from 'node:fs';
 import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput } from '../output.js';
+import { resolveSigner } from '../signer.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
+}
+
+/**
+ * Pull the hash to sign out of an intent response.
+ *
+ * The gateway returns snake_case on the wire (`signing_data.hash_to_sign`), which is what the
+ * live OpenAPI spec documents and what `execute.ts` reads. The SDK's `TransactionResponse` type
+ * declares camelCase `signingData.dataToSign` and `return data` performs no transformation, so
+ * the declared type does not describe the value. Both spellings are accepted here rather than
+ * betting on which one a given gateway build emits.
+ */
+function hashToSign(result: unknown): string | undefined {
+  const r = result as {
+    signing_data?: { hash_to_sign?: string };
+    signingData?: { dataToSign?: string; hashToSign?: string };
+  };
+  return r.signing_data?.hash_to_sign ?? r.signingData?.hashToSign ?? r.signingData?.dataToSign;
+}
+
+function intentIdOf(result: unknown): string | undefined {
+  const r = result as { intent_id?: string; intentId?: string };
+  return r.intent_id ?? r.intentId;
 }
 
 export function registerTransactionCommands(program: Command): void {
@@ -29,8 +52,14 @@ export function registerTransactionCommands(program: Command): void {
     .option('--signer-key-page <url>', 'Which key page signs, e.g. acc://org.acme/book/2')
     .option('--signer-public-key <hex>', 'Which seat on the page signs (64 hex)')
     .option('--idempotency-key <key>', 'Idempotency key (one is generated if omitted)')
+    .option('--sign-with <key>', 'Local key: sign the returned hash and submit it in one step')
     .action(async (opts) => {
       const client = await getClient();
+
+      // Resolve (and unlock) the signer BEFORE opening the intent. Prompting for a passphrase
+      // after the intent exists would leave an unsigned intent behind every time someone
+      // mistypes it or hits Ctrl-C at the prompt.
+      const signer = opts.signWith ? await resolveSigner(opts.signWith) : null;
 
       let intent: Record<string, unknown>;
       if (opts.intent) {
@@ -57,23 +86,69 @@ export function registerTransactionCommands(program: Command): void {
         intent,
         contractAddresses: opts.contractAddress,
         signerKeyPage: opts.signerKeyPage,
-        signerPublicKey: opts.signerPublicKey,
+        signerPublicKey: opts.signerPublicKey ?? signer?.publicKey,
         idempotencyKey: opts.idempotencyKey,
       });
-      printOutput(result as unknown as Record<string, unknown>);
+
+      if (!signer) {
+        printOutput(result as unknown as Record<string, unknown>);
+        return;
+      }
+
+      const hash = hashToSign(result);
+      const intentId = intentIdOf(result);
+      if (!hash || !intentId) {
+        // Provider mode (the gateway holds a key) returns no signing data. Printing the intent and
+        // stopping is honest; pretending we signed something we never saw is not.
+        printOutput(result as unknown as Record<string, unknown>);
+        throw new Error(
+          'Intent opened but returned no hash to sign — this gateway is in provider mode for that '
+          + 'identity, so --sign-with does not apply. The intent above was created.',
+        );
+      }
+
+      const signed = await client.transaction.submitSignature(intentId, {
+        signature: signer.sign(hash),
+        publicKey: signer.publicKey,
+      });
+      printOutput(signed as unknown as Record<string, unknown>);
     });
 
   tx
     .command('sign <id>')
     .description('Submit a signature for a transaction')
-    .requiredOption('--signature <sig>', 'Signature (hex)')
-    .requiredOption('--public-key <key>', 'Public key (hex)')
+    .option('--sign-with <key>', 'Local key to sign with (needs --hash)')
+    .option('--hash <hex>', 'Hash to sign, from the intent\'s signing_data.hash_to_sign')
+    .option('--signature <sig>', 'Signature (hex) — for an HSM or air-gapped signer')
+    .option('--public-key <key>', 'Public key (hex), required with --signature')
     .action(async (id: string, opts) => {
+      // --signature/--public-key were required options, so there was no way to sign from the CLI
+      // itself. They are now optional and --sign-with is the alternative; supplying neither is
+      // still an error, just a more useful one.
+      let signature: string;
+      let publicKey: string;
+
+      if (opts.signWith) {
+        if (opts.signature) throw new Error('Pass either --sign-with or --signature, not both.');
+        if (!opts.hash) {
+          throw new Error(
+            '--sign-with needs --hash <hex> (the signing_data.hash_to_sign from `tx create`). '
+            + 'Or use `tx create --sign-with` to do both in one step.',
+          );
+        }
+        const signer = await resolveSigner(opts.signWith);
+        signature = signer.sign(opts.hash);
+        publicKey = signer.publicKey;
+      } else {
+        if (!opts.signature || !opts.publicKey) {
+          throw new Error('Provide --sign-with <key> --hash <hex>, or both --signature and --public-key.');
+        }
+        signature = opts.signature;
+        publicKey = opts.publicKey;
+      }
+
       const client = await getClient();
-      const result = await client.transaction.submitSignature(id, {
-        signature: opts.signature,
-        publicKey: opts.publicKey,
-      });
+      const result = await client.transaction.submitSignature(id, { signature, publicKey });
       printOutput(result as unknown as Record<string, unknown>);
     });
 

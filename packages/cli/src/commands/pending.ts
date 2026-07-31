@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput } from '../output.js';
+import { resolveSignature } from '../signer.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -35,7 +36,9 @@ export function registerPendingCommands(program: Command): void {
     .description('Create a sign request for a pending action')
     .option('--identity <id>', 'Identity to sign as')
     .option('--signer-url <url>', 'Signer URL')
-    .option('--vote <vote>', 'Vote (accept/reject)')
+    // Was documented as "accept/reject". The API takes a lowercase `approve` | `reject` |
+    // `abstain`; `accept` is rejected. The help text was sending people to a value that fails.
+    .option('--vote <vote>', 'Vote: approve | reject | abstain')
     .action(async (id: string, opts) => {
       const client = await getClient();
       const result = await client.sign.create({
@@ -51,14 +54,19 @@ export function registerPendingCommands(program: Command): void {
   pending
     .command('submit <id>')
     .description('Submit a signature for a pending sign request')
-    .requiredOption('--signature <sig>', 'Signature (hex)')
-    .requiredOption('--public-key <key>', 'Public key (hex)')
+    .option('--sign-with <key>', 'Local key to sign with (needs --hash)')
+    .option('--hash <hex>', 'Hash to sign, from the sign request\'s signing data')
+    .option('--signature <sig>', 'Signature (hex) — for an HSM or air-gapped signer')
+    .option('--public-key <key>', 'Public key (hex), required with --signature')
     .action(async (id: string, opts) => {
-      const client = await getClient();
-      const result = await client.sign.submitSignature(id, {
+      const { signature, publicKey } = await resolveSignature({
+        signWith: opts.signWith,
         signature: opts.signature,
         publicKey: opts.publicKey,
+        hash: opts.hash,
       });
+      const client = await getClient();
+      const result = await client.sign.submitSignature(id, { signature, publicKey });
       printOutput(result as unknown as Record<string, unknown>);
     });
 }

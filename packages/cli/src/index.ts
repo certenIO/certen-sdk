@@ -1,8 +1,22 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { CertenError } from '@certen.io/sdk';
+
+/** Read the version from package.json — dist/ sits one level below the manifest. */
+function readVersion(): string {
+  try {
+    const here = dirname(fileURLToPath(import.meta.url));
+    return JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf-8')).version as string;
+  } catch {
+    return '0.0.0-unknown';
+  }
+}
 import { registerAuthCommands } from './commands/auth.js';
+import { registerKeysCommands } from './commands/keys.js';
 import { registerIdentityCommands } from './commands/identity.js';
 import { registerTransactionCommands } from './commands/transaction.js';
 import { registerPendingCommands } from './commands/pending.js';
@@ -15,9 +29,12 @@ const program = new Command();
 program
   .name('certen')
   .description('CERTEN Gateway CLI')
-  .version('0.1.0');
+  // Was hardcoded to 0.1.0 while package.json said 0.2.0, so `certen --version` reported a
+  // release that does not exist. Read it from the manifest so the two cannot drift again.
+  .version(readVersion());
 
 registerAuthCommands(program);
+registerKeysCommands(program);
 registerIdentityCommands(program);
 registerTransactionCommands(program);
 registerPendingCommands(program);
