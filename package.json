@@ -1,0 +1,30 @@
+{
+  "name": "certen-sdk-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Client libraries for the CERTEN Gateway API",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/certenIO/certen-sdk.git"
+  },
+  "//workspaces": "The CLI is the SDK's only consumer and they ship in lockstep, so they live together and the CLI resolves @certen.io/sdk from packages/sdk during development while declaring a published range for consumers.",
+  "workspaces": [
+    "packages/sdk",
+    "packages/cli"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.1",
+    "@types/node": "^22.0.0"
+  }
+}

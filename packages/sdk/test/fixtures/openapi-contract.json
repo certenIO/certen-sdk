@@ -1,0 +1,909 @@
+{
+ "_source": "buildServer() /docs/json — regenerate with REGEN_SDK_CONTRACT=1",
+ "_capturedFor": "1.0.0",
+ "paths": {
+  "/reference": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/metrics": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/health": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/health/detail": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/identity": {
+   "post": {
+    "required": [
+     "name"
+    ],
+    "properties": [
+     "name",
+     "public_key_hash",
+     "public_key",
+     "credits",
+     "chains",
+     "signing_mode",
+     "signing_provider",
+     "idempotency_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/identity/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   },
+   "patch": {
+    "required": [],
+    "properties": [
+     "link_chains",
+     "unlink_chains",
+     "webhook_url",
+     "public_key"
+    ],
+    "query": []
+   },
+   "delete": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/identity/{id}/mnemonic/{token}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/portfolio": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "identity"
+    ]
+   }
+  },
+  "/v1/admin/org": {
+   "post": {
+    "required": [
+     "name"
+    ],
+    "properties": [
+     "name",
+     "plan",
+     "webhook_url"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/org/{id}/webhook": {
+   "post": {
+    "required": [
+     "webhook_url"
+    ],
+    "properties": [
+     "webhook_url",
+     "webhook_secret"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/api-keys": {
+   "post": {
+    "required": [
+     "name",
+     "org_id"
+    ],
+    "properties": [
+     "name",
+     "org_id",
+     "permissions",
+     "rate_limit_rpm",
+     "expires_at"
+    ],
+    "query": []
+   },
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/api-keys/{id}/rotate": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/audit-log": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "resource_type",
+     "action",
+     "from",
+     "to",
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/admin/api-keys/{id}": {
+   "delete": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/usage": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "from",
+     "to"
+    ]
+   }
+  },
+  "/v1/admin/webhooks/deliveries": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "status",
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/admin/webhooks/deliveries/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/webhooks/deliveries/{id}/redeliver": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/webhooks/endpoints": {
+   "post": {
+    "required": [
+     "url"
+    ],
+    "properties": [
+     "url",
+     "secret",
+     "event_types",
+     "description",
+     "skip_verification"
+    ],
+    "query": []
+   },
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/webhooks/endpoints/{id}/verify": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/webhooks/endpoints/{id}": {
+   "patch": {
+    "required": [],
+    "properties": [
+     "url",
+     "event_types",
+     "description",
+     "is_active"
+    ],
+    "query": []
+   },
+   "delete": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/webhooks/endpoints/{id}/rotate-secret": {
+   "post": {
+    "required": [],
+    "properties": [
+     "secret"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/signing-providers": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/signing-providers/{id}": {
+   "delete": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/transaction": {
+   "post": {
+    "required": [
+     "identity_id",
+     "intent"
+    ],
+    "properties": [
+     "identity_id",
+     "intent",
+     "contract_addresses",
+     "proof_class",
+     "idempotency_key",
+     "signer_key_page",
+     "signer_public_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/transaction/{id}/signature": {
+   "post": {
+    "required": [
+     "signature",
+     "public_key"
+    ],
+    "properties": [
+     "signature",
+     "public_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/transaction/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/transactions": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/proof/tx/{txHash}/receipt": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/proof/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/proof/{id}/bundle": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/proof/{id}/custody": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/proof/tx/{txHash}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/governance": {
+   "post": {
+    "required": [
+     "identity",
+     "operations"
+    ],
+    "properties": [
+     "identity",
+     "operations",
+     "key_page_url",
+     "signer_key_page",
+     "signer_public_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/governance/{id}/signature": {
+   "post": {
+    "required": [
+     "signature",
+     "public_key"
+    ],
+    "properties": [
+     "signature",
+     "public_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/governance/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/pending": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "identity",
+     "status",
+     "category",
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/sign": {
+   "post": {
+    "required": [
+     "type",
+     "target_id"
+    ],
+    "properties": [
+     "type",
+     "target_id",
+     "identity",
+     "signer_url",
+     "vote",
+     "signature",
+     "public_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/sign/{id}/signature": {
+   "post": {
+    "required": [
+     "signature",
+     "public_key"
+    ],
+    "properties": [
+     "signature",
+     "public_key"
+    ],
+    "query": []
+   }
+  },
+  "/v1/oauth/token": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/oauth/revoke": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/oauth-clients": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   },
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/oauth-clients/{id}": {
+   "delete": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/oauth-clients/{id}/rotate-secret": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/me": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/portal/keys": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   },
+   "post": {
+    "required": [
+     "name"
+    ],
+    "properties": [
+     "name",
+     "scopes",
+     "rate_limit_rpm"
+    ],
+    "query": []
+   }
+  },
+  "/v1/portal/keys/{id}/rotate": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/portal/keys/{id}": {
+   "delete": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/portal/members": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/portal/invites": {
+   "post": {
+    "required": [
+     "email"
+    ],
+    "properties": [
+     "email",
+     "role"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/orgs": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "status"
+    ]
+   }
+  },
+  "/v1/admin/orgs/{id}/approve": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/orgs/{id}/suspend": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/obligations": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/balance": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/ledger": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/quote": {
+   "post": {
+    "required": [
+     "chain"
+    ],
+    "properties": [
+     "chain",
+     "sku",
+     "leg_count"
+    ],
+    "query": []
+   }
+  },
+  "/v1/quote/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/payments": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/billing/deposits": {
+   "post": {
+    "required": [
+     "chain"
+    ],
+    "properties": [
+     "chain",
+     "amount_usd"
+    ],
+    "query": []
+   }
+  },
+  "/v1/billing/deposit-addresses": {
+   "post": {
+    "required": [
+     "chain",
+     "address"
+    ],
+    "properties": [
+     "chain",
+     "address",
+     "label"
+    ],
+    "query": []
+   },
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/receipts": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/billing/receipts/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/receipts/{id}/proof": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "tree_size"
+    ]
+   }
+  },
+  "/v1/transparency": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/transparency/heads": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "limit",
+     "offset"
+    ]
+   }
+  },
+  "/v1/transparency/heads/{treeSize}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/transparency/consistency": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "first",
+     "second"
+    ]
+   }
+  },
+  "/v1/transparency/price-books": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/transparency/fx/{id}": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/billing/receipts/verification-key": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/entitlement/current": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/entitlement/health": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/chain-coverage": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/margin": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "days"
+    ]
+   }
+  },
+  "/v1/admin/billing/enforcement-readiness": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "days"
+    ]
+   }
+  },
+  "/v1/admin/billing/price-books": {
+   "post": {
+    "required": [
+     "version",
+     "items"
+    ],
+    "properties": [
+     "version",
+     "kind",
+     "notes",
+     "effective_from",
+     "items"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/signing-keys": {
+   "post": {
+    "required": [
+     "provider_type",
+     "public_key"
+    ],
+    "properties": [
+     "provider_type",
+     "public_key",
+     "provider_config",
+     "not_before",
+     "not_after"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/signing-keys/{keyId}/revoke": {
+   "post": {
+    "required": [
+     "reason"
+    ],
+    "properties": [
+     "reason",
+     "compromised"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/price-books/{id}/assign": {
+   "post": {
+    "required": [
+     "org_id"
+    ],
+    "properties": [
+     "org_id"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/payments/unattributed": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/payments/{id}/attribute": {
+   "post": {
+    "required": [
+     "org_id"
+    ],
+    "properties": [
+     "org_id",
+     "register_address"
+    ],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/balance-drift": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "limit"
+    ]
+   }
+  },
+  "/v1/admin/billing/run-balance-check": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/reconcile": {
+   "post": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/summary": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "days"
+    ]
+   }
+  },
+  "/v1/admin/billing/chains": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "days"
+    ]
+   }
+  },
+  "/v1/admin/billing/intents": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "days",
+     "limit",
+     "offset",
+     "chain",
+     "org_id",
+     "only"
+    ]
+   }
+  },
+  "/v1/admin/billing/accounts": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  },
+  "/v1/admin/billing/timeseries": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": [
+     "days",
+     "bucket",
+     "by_chain"
+    ]
+   }
+  },
+  "/v1/admin/billing/health": {
+   "get": {
+    "required": [],
+    "properties": [],
+    "query": []
+   }
+  }
+ }
+}

@@ -1,0 +1,65 @@
+# Changelog — @certen.io/sdk
+
+## 0.2.0 — first published version
+
+**0.1.0 was never published.** Three of its methods could not work against the live API. They were found
+while preparing the package for release, by comparing what the SDK sends against the gateway's own OpenAPI
+spec. Nothing in the existing test suite could have caught them: those tests exercise retry, idempotency,
+and error mapping against a local mock that accepts any body, and a mock answering 200 to anything will
+never tell you the request was wrong.
+
+### Fixed — methods that could not work
+
+- **`transaction.create` sent no `intent`.** It sent a flat `{ type, to, amount, token, chain, memo }` body.
+  `POST /v1/transaction` requires `identity_id` and `intent`, and accepts none of those six fields — so every
+  call returned 400. Now takes `{ identityId, intent, contractAddresses?, proofClass?, signerKeyPage?,
+  signerPublicKey?, idempotencyKey? }`, matching the API, including multi-leg and `contractCall` intents.
+- **`governance.create` omitted both required fields.** It sent `{ identity_id, operation_type, payload }`;
+  the API requires `identity` (the ADI, not a uuid) and `operations` (an **array**, so several changes are
+  authorized under one quorum). Every call returned 400.
+- **`identity.list` called a route that does not exist.** `GET /v1/identities` returns 404 — the gateway has
+  no plural collection route. **Removed** rather than shipped as a dead method. Track the ids you create.
+
+### Fixed — silent no-ops
+
+- **`identity.create` no longer sends `webhook_url`.** `POST /v1/identity` does not accept it, and Fastify
+  strips unknown properties, so the option did nothing while appearing to work. Set it via `identity.update()`,
+  which does accept it. `create` now also supports `signingMode`, `signingProvider`, and `idempotencyKey`.
+- **`identity.get` no longer sends an `include` query parameter.** The route takes none; it was ignored.
+
+### Added
+
+- **`identity.retire(id)`** — `DELETE /v1/identity/{id}`, which frees the org's identity quota. Soft delete
+  inside Certen only: the on-chain ADI, key book, and key page are untouched.
+- **`DEFAULT_BASE_URL` is exported**, and the base URL now resolves `options.baseUrl` → `$CERTEN_API_URL` →
+  `https://gateway.kompendium.co`. The previous default was `https://api.certen.io`, which resolves — to the
+  Certen marketing site. A client built without an explicit `baseUrl` returned HTML for every call.
+- **`test/contract.test.ts`** — validates the request every method produces against a vendored snapshot of
+  the gateway's OpenAPI spec: path exists, method exists, required fields present, no field the endpoint
+  would strip. This is the guard that would have caught all of the above. Refresh it with the command at the
+  bottom of this file when the API changes.
+- Publish metadata: `files`, `exports`, `engines`, repository, keywords, `prepack` build, README, LICENSE.
+
+### Changed
+
+- `license` corrected to **MIT**. `package.json` claimed Apache-2.0 while `LICENSE` is MIT.
+
+## Also fixed, in the gateway
+
+Six routes — `/v1/transactions`, `/v1/pending`, `/v1/portfolio`, `/v1/admin/usage`, `/v1/admin/audit-log`,
+and `/v1/admin/webhooks/deliveries` — read query parameters but declared no `querystring` schema, so
+`@fastify/swagger` emitted no `parameters` and the spec reported that they took none.
+
+The routes worked. The damage was to everyone reading the spec instead of the source: a client generated
+from it had no paging at all, and `/v1/pending` silently lost the `identity` and `category` filters a signer
+needs to find its own work. All six now declare their parameters, guarded on both sides —
+`test/integration/openapi-snapshot.test.ts` in the gateway, and `test/contract.test.ts` here.
+
+Refresh this package's contract fixture after an API change, from the gateway root:
+
+```bash
+REGEN_SDK_CONTRACT=1 npx vitest run test/integration/openapi-snapshot.test.ts
+```
+
+The fixture is generated from `buildServer()` rather than from the deployed gateway on purpose: the SDK
+must be tested against the code it ships beside, not against whatever happens to be live.

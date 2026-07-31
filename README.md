@@ -1,0 +1,102 @@
+# CERTEN client libraries
+
+Client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) — proof-gated
+cross-chain execution on Accumulate.
+
+| Package | |
+|---|---|
+| [`@certen.io/sdk`](packages/sdk) | TypeScript client. Typed errors, automatic retries, auto-idempotency, and the proof-gated execution flow as one call. |
+| [`@certen.io/cli`](packages/cli) | The `certen` command line. |
+
+```bash
+npm install @certen.io/sdk
+```
+
+```ts
+import { CertenClient } from '@certen.io/sdk';
+
+const certen = new CertenClient({ apiKey: process.env.CERTEN_API_KEY! });
+
+// Open a proof-gated contract call, sign it, submit the signature — one call.
+const { intentId } = await certen.execute.contractCall({
+  identityId, adiUrl: 'acc://seller-bot.acme', fromAddress: abstractAccount,
+  chain: 'ethereum-sepolia', chainId: 11155111,
+  contractCall: { target: escrobot, functionSignature: 'confirm(bytes32)', args: [orderId] },
+  publicKey,
+  sign: (hashHex) => ed25519Sign(hashHex),   // YOU hold the key
+});
+
+await certen.execute.wait(intentId);          // ~60–110s: real validator work
+const proof = await certen.execute.proof(intentId);   // hand this to your counterparty
+```
+
+**Your key never reaches this code.** You pass a `sign` function; the SDK hands it bytes and takes back a
+signature. It cannot act without you. That is the supported posture for anything carrying value.
+
+---
+
+## Documentation
+
+The **[live API reference](https://gateway.kompendium.co/reference)** is generated from the running
+gateway and is authoritative. When a document here and the spec disagree, the spec is right.
+
+Task-shaped guides, in the order most people need them:
+
+| | |
+|---|---|
+| [Onboard an identity](docs/guides/onboard-an-identity.md) | Creating the ADI that signs and holds. Everything else needs one. |
+| [Sign while holding your own key](docs/guides/external-signing.md) | The pattern almost every integration uses. |
+| [Proof-gate a contract call](docs/guides/proof-gated-contract-call.md) | Arbitrary contract functions — escrow, settlement, anything past a transfer. |
+| [M-of-N panels](docs/guides/multisig-panel.md) | Arbitration, dual control, break-glass. |
+| [Verify a proof](docs/guides/verify-a-proof.md) | Handing evidence to someone who should not have to trust you. |
+
+Reference: [authentication](docs/authentication.md) · [errors](docs/errors.md) ·
+[idempotency](docs/idempotency.md)
+
+## Four things to know before you build
+
+**Identity creation is asynchronous.** `identity.create` returns a `202` and provisioning continues. Poll
+until the status is terminal and check `can_sign` before relying on it.
+
+**Send an idempotency key on every POST.** The SDK does this for you. A network error is otherwise
+indistinguishable from success, and a blind retry can open a second intent or burn identity quota.
+
+**A proof cycle takes 60–110 seconds.** Real validator work, not a tunable delay. Do not wrap it in a
+30-second timeout.
+
+**`vote` is `approve` | `reject` | `abstain`** — a lowercase string, not a number, and not `accept`.
+
+## Development
+
+```bash
+npm install          # workspaces: the CLI resolves @certen.io/sdk from packages/sdk
+npm run build
+npm test             # SDK 59, CLI 13 — no network, no key
+npm run typecheck
+```
+
+The SDK's requests are validated against a snapshot of the gateway's OpenAPI spec
+(`packages/sdk/test/contract.test.ts`). That guard exists because three methods once shipped in a state
+where they could not work — they sent bodies the API rejects — and a mock that answers 200 to anything will
+never tell you the request was wrong. Refresh the fixture from the gateway repo:
+
+```bash
+REGEN_SDK_CONTRACT=1 npx vitest run test/integration/openapi-snapshot.test.ts
+```
+
+## Releasing
+
+Tag-driven, and nothing publishes until the packed tarball has been installed into a scratch project and
+run. npm versions are immutable — a bad publish can only be superseded, never fixed.
+
+```bash
+cd packages/sdk && npm version minor
+git tag sdk-v0.2.0 && git push --follow-tags
+```
+
+See [.github/workflows/release.yml](.github/workflows/release.yml). Publishing needs `NPM_TOKEN` as a
+repository secret; never put a token in a local `.npmrc`.
+
+## License
+
+MIT

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tgz
+
+# NEVER commit an .npmrc — it is where npm auth tokens land. Publishing uses CI
+# with NPM_TOKEN as a repository secret; see .github/workflows/release.yml
+.npmrc
+
+*.log
+.DS_Store

@@ -1,0 +1,67 @@
+{
+  "name": "@certen.io/sdk",
+  "version": "0.2.0",
+  "description": "TypeScript client for the CERTEN Gateway API — proof-gated cross-chain execution on Accumulate",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "certen",
+    "accumulate",
+    "blockchain",
+    "cross-chain",
+    "multisig",
+    "proof-gated",
+    "sdk"
+  ],
+  "homepage": "https://github.com/certenIO/certen-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/certenIO/certen-sdk.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/certenIO/certen-sdk/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "//exports": "Explicit map so a consumer on modern resolution gets the types; main/types stay for older toolchains.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "//files": "Only the build output and docs. src/ and test/ stay in the repo — declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
+  "files": [
+    "dist/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "//prepack": "Build before packing so a published tarball can never carry a stale or missing dist/. That failure mode is nasty: the package installs cleanly and dies on first import.",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "axios": "^1.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.1",
+    "@types/node": "^22.0.0"
+  },
+  "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself."
+}

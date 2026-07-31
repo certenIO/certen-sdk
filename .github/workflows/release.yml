@@ -1,0 +1,115 @@
+# Publish @certen.io/sdk (and @certen.io/cli) to npm.
+#
+# Triggered by a package-scoped tag so the SDK versions independently of the gateway service — they ship on
+# different clocks, and tying an SDK release to a server deploy means either stale clients or pointless
+# version churn.
+#
+#   cd sdk && npm version minor        # bump + commit
+#   git tag sdk-v0.2.0 && git push --follow-tags
+#
+# Nothing publishes unless the packed tarball has been installed into a scratch project and exercised. The
+# failure that guard exists for is specific and nasty: `files` or `prepack` misconfigured produces a package
+# that installs cleanly and throws on first import, and npm versions are immutable — you cannot fix it, only
+# publish another.
+name: release-sdk
+
+on:
+  push:
+    tags: ["sdk-v*.*.*", "cli-v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Which package to release"
+        type: choice
+        options: [sdk, cli]
+        default: sdk
+      dry_run:
+        description: "Build and verify without publishing"
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      # sdk-v* -> sdk, cli-v* -> cli. workflow_dispatch passes it directly.
+      - id: target
+        run: |
+          if [ -n "${{ inputs.package }}" ]; then
+            echo "dir=${{ inputs.package }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=${GITHUB_REF_NAME%%-v*}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Install and build at the ROOT: this is a workspace, and the CLI's types come from the SDK's build
+      # output, so building only one package leaves the other unable to typecheck.
+      - name: Install and build the workspace
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verify the package being released
+        working-directory: packages/${{ steps.target.outputs.dir }}
+        run: |
+          npm run typecheck --if-present
+          npm test
+
+      # The tag must match what package.json claims, or `npm install @certen.io/sdk@0.2.0` and the git tag
+      # sdk-v0.2.0 refer to different code.
+      - name: Tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: packages/${{ steps.target.outputs.dir }}
+        run: |
+          TAG="${GITHUB_REF_NAME#*-v}"
+          PKG=$(node -p "require('./package.json').version")
+          test "$TAG" = "$PKG" || { echo "tag v$TAG != package.json $PKG"; exit 1; }
+
+      # Pack, then USE the packed artifact from a scratch project. Testing the repo working tree proves the
+      # source works; it does not prove the tarball does.
+      - name: Pack and consume the tarball
+        working-directory: packages/${{ steps.target.outputs.dir }}
+        run: |
+          npm pack
+          TGZ=$(ls *.tgz | head -1)
+          echo "packed $TGZ"
+          tar -tzf "$TGZ" | grep -qx "package/dist/index.js" || { echo "dist/index.js missing from tarball"; exit 1; }
+          tar -tzf "$TGZ" | grep -qx "package/README.md"     || { echo "README.md missing from tarball"; exit 1; }
+          tar -tzf "$TGZ" | grep -qx "package/LICENSE"       || { echo "LICENSE missing from tarball"; exit 1; }
+          if tar -tzf "$TGZ" | grep -q "package/src/"; then echo "src/ leaked into the tarball"; exit 1; fi
+
+          mkdir -p /tmp/consume && cd /tmp/consume && npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/packages/${{ steps.target.outputs.dir }}/$TGZ"
+          node --input-type=module -e "
+            import { CertenClient, DEFAULT_BASE_URL } from '@certen.io/sdk';
+            const c = new CertenClient({ apiKey: 'ck_live_test' });
+            if (DEFAULT_BASE_URL.includes('api.certen.io')) throw new Error('default base URL is the marketing site');
+            if (DEFAULT_BASE_URL !== 'https://gateway.kompendium.co') throw new Error('unexpected default: ' + DEFAULT_BASE_URL);
+            for (const r of ['identity','transaction','sign','governance','pending','portfolio','admin'])
+              if (typeof c[r] !== 'object') throw new Error('missing resource: ' + r);
+            if (typeof c.transaction.submitSignature !== 'function') throw new Error('missing transaction.submitSignature');
+            console.log('packed artifact imports and exposes its resources');
+          "
+
+      # The license in package.json must match the LICENSE file. Publishing a false license claim is not the
+      # kind of mistake you fix with a patch release.
+      - name: License claim matches LICENSE
+        working-directory: packages/${{ steps.target.outputs.dir }}
+        run: |
+          CLAIM=$(node -p "require('./package.json').license")
+          head -3 LICENSE | grep -qi "$CLAIM" || { echo "package.json says $CLAIM but LICENSE disagrees"; exit 1; }
+
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/${{ steps.target.outputs.dir }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

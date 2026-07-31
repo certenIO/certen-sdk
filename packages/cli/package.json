@@ -1,0 +1,56 @@
+{
+  "name": "@certen.io/cli",
+  "version": "0.2.0",
+  "description": "Command line for the CERTEN Gateway API",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "certen",
+    "accumulate",
+    "cli",
+    "blockchain"
+  ],
+  "homepage": "https://github.com/certenIO/certen-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/certenIO/certen-sdk.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/certenIO/certen-sdk/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "certen": "dist/index.js"
+  },
+  "//files": "Build output plus docs. Without this npm ships the whole directory, including src/ and test/.",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "//prepack": "Build before packing so the published bin can never point at a missing dist/index.js.",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "//dependencies": "@certen.io/sdk MUST be a version range, not file:../sdk. A published package carrying a file: dependency installs and then fails to resolve on the consumer's machine, because that path does not exist there. Local development uses `npm link` or a workspace instead.",
+  "dependencies": {
+    "@certen.io/sdk": "^0.2.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.1",
+    "@types/node": "^22.0.0"
+  },
+  "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself."
+}

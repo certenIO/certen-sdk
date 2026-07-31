@@ -1,0 +1,65 @@
+# Everything provable without the network, a key, or a running gateway.
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # The CLI's types come from the SDK's build output, so the SDK must be built before either is checked.
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+
+  # A published package is only as good as its tarball. `files`, `exports`, and `prepack` are all easy to
+  # get wrong in ways that install cleanly and fail on first import — and npm versions are immutable, so
+  # that mistake cannot be corrected, only superseded.
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: npm }
+      - run: npm ci
+      - name: Pack and consume from a scratch project
+        run: |
+          cd packages/sdk
+          npm pack
+          TGZ=$(ls *.tgz | head -1)
+          tar -tzf "$TGZ" | grep -qx "package/dist/index.js" || { echo "dist/index.js missing"; exit 1; }
+          tar -tzf "$TGZ" | grep -qx "package/README.md"     || { echo "README.md missing"; exit 1; }
+          tar -tzf "$TGZ" | grep -qx "package/LICENSE"       || { echo "LICENSE missing"; exit 1; }
+          if tar -tzf "$TGZ" | grep -q "package/src/"; then echo "src/ leaked into the tarball"; exit 1; fi
+
+          mkdir -p /tmp/consume && cd /tmp/consume && npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/packages/sdk/$TGZ"
+          node --input-type=module -e "
+            import { CertenClient, DEFAULT_BASE_URL } from '@certen.io/sdk';
+            const c = new CertenClient({ apiKey: 'ck_live_test' });
+            if (DEFAULT_BASE_URL.includes('api.certen.io')) throw new Error('default base URL is the marketing site');
+            for (const r of ['identity','transaction','sign','governance','pending','portfolio','admin','execute'])
+              if (typeof c[r] !== 'object') throw new Error('missing resource: ' + r);
+            if (typeof c.execute.contractCall !== 'function') throw new Error('missing execute.contractCall');
+            console.log('packed artifact imports and exposes its resources');
+          "
+      # package.json must not claim a licence the LICENSE file disagrees with. Not fixable with a patch
+      # release once published.
+      - name: License claim matches LICENSE
+        run: |
+          for p in packages/sdk packages/cli; do
+            CLAIM=$(node -p "require('./$p/package.json').license")
+            head -3 "$p/LICENSE" | grep -qi "$CLAIM" || { echo "$p: package.json says $CLAIM but LICENSE disagrees"; exit 1; }
+          done
