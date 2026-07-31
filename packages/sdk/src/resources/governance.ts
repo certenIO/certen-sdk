@@ -2,8 +2,10 @@ import { AxiosInstance } from 'axios';
 import { omitUndefined } from '../internal.js';
 import type {
   GovernanceParams,
+  CreateGovernanceResponse,
   GovernanceResponse,
   SubmitGovernanceSignatureParams,
+  SubmitGovernanceSignatureResponse,
 } from '../types.js';
 
 export class GovernanceResource {
@@ -15,7 +17,7 @@ export class GovernanceResource {
    * This previously sent `{ identity_id, operation_type, payload }` and omitted BOTH fields the API
    * requires (`identity` — the ADI, not a uuid — and `operations`, an array), so every call 400'd.
    */
-  async create(params: GovernanceParams): Promise<GovernanceResponse> {
+  async create(params: GovernanceParams): Promise<CreateGovernanceResponse> {
     const { data } = await this.http.post('/v1/governance', omitUndefined({
       identity: params.identity,
       operations: params.operations,
@@ -26,7 +28,7 @@ export class GovernanceResource {
     return data;
   }
 
-  async submitSignature(id: string, params: SubmitGovernanceSignatureParams): Promise<GovernanceResponse> {
+  async submitSignature(id: string, params: SubmitGovernanceSignatureParams): Promise<SubmitGovernanceSignatureResponse> {
     const { data } = await this.http.post(`/v1/governance/${id}/signature`, {
       signature: params.signature,
       public_key: params.publicKey,

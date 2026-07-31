@@ -2,8 +2,11 @@ import { AxiosInstance } from 'axios';
 import { omitUndefined } from '../internal.js';
 import type {
   CreateTransactionParams,
+  CreateTransactionResponse,
   TransactionResponse,
+  ListTransactionsResponse,
   SubmitSignatureParams,
+  SubmitSignatureResponse,
   ListTransactionsParams,
 } from '../types.js';
 
@@ -18,7 +21,7 @@ export class TransactionResource {
    * only exercised retry and error plumbing against a mock that accepted anything;
    * `test/contract.test.ts` now validates request shapes against a snapshot of the live OpenAPI spec.
    */
-  async create(params: CreateTransactionParams): Promise<TransactionResponse> {
+  async create(params: CreateTransactionParams): Promise<CreateTransactionResponse> {
     const headers: Record<string, string> = {};
     if (params.idempotencyKey) {
       headers['Idempotency-Key'] = params.idempotencyKey;
@@ -38,7 +41,7 @@ export class TransactionResource {
     return data;
   }
 
-  async submitSignature(id: string, params: SubmitSignatureParams): Promise<TransactionResponse> {
+  async submitSignature(id: string, params: SubmitSignatureParams): Promise<SubmitSignatureResponse> {
     const { data } = await this.http.post(`/v1/transaction/${id}/signature`, {
       signature: params.signature,
       public_key: params.publicKey,
@@ -51,7 +54,9 @@ export class TransactionResource {
     return data;
   }
 
-  async list(params?: ListTransactionsParams): Promise<{ transactions: TransactionResponse[]; pagination: unknown }> {
+  // Declared `{ transactions, pagination }`; the endpoint returns `{ transactions, limit, offset }`
+  // with no pagination object at all.
+  async list(params?: ListTransactionsParams): Promise<ListTransactionsResponse> {
     const { data } = await this.http.get('/v1/transactions', {
       params: {
         limit: params?.limit,

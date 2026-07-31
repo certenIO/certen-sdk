@@ -25,30 +25,62 @@ export interface CreateIdentityParams {
   // it was a silent no-op. Set it with `identity.update()`, which does accept it.
 }
 
+/**
+ * RESPONSE TYPES ARE snake_case, BECAUSE THE API IS.
+ *
+ * These interfaces used to be camelCase while the resources did `return data` with no
+ * transformation, so every declared response field was `undefined` at runtime. The mismatch was
+ * invisible: TypeScript reported `intentId: string`, the value was `undefined`, and the failure
+ * surfaced somewhere else entirely as a missing id. `execute.ts` was written against the real
+ * shape and reads snake_case directly, which is why the one flow that had been exercised
+ * end-to-end worked while the typed resources did not.
+ *
+ * Verified against the live OpenAPI spec and real responses on 2026-07-31. Request parameter
+ * types stay camelCase — those are this SDK's own surface, and the resources map them to
+ * snake_case on the way out.
+ */
 export interface ChainAccount {
-  chainId: string;
+  chain_id: string;
   address: string;
   status: string;
 }
 
+export interface Identity {
+  id: string;
+  adi_url: string;
+  book_url: string | null;
+  key_page_url: string | null;
+  status: string;
+  /**
+   * Derived from the on-chain key page, NOT from the provisioning state machine — so it can be
+   * true while `status` is still `creating`. Check both before relying on an identity.
+   */
+  can_sign?: boolean;
+  error_message?: string | null;
+  credit_balance: number;
+  chain_accounts: ChainAccount[];
+  created_at: string;
+}
+
 export interface IdentityResponse {
-  identity: {
-    id: string;
-    adiUrl: string;
-    bookUrl: string | null;
-    keyPageUrl: string | null;
-    status: string;
-    creditBalance: number;
-    chainAccounts: ChainAccount[];
-    createdAt: string;
-  };
+  identity: Identity;
+  signing_mode?: string;
+  signing_provider?: unknown;
+  /** Only on create, and only once — the URL stops working after it is read. */
+  mnemonic_retrieval?: { url: string; expires_in: number };
+  warning?: string;
+  /**
+   * Free-form: the gateway serializes this subtree with mixed casing (`key_books` holds
+   * `keyBookUrl`, `keyPages`, `signers[].keyAddress`) and `publicKeyHash` arrives as a
+   * JSON-serialized Node Buffer. Typing it precisely would encode a shape that is itself a bug.
+   */
   governance?: {
     authorities: number;
-    totalSigners: number;
-    keyBooks: unknown[];
+    total_signers: number;
+    key_books: unknown[];
   };
   balances?: {
-    chainId: string;
+    chain_id: string;
     address: string;
     token: string;
     balance: string;
@@ -59,6 +91,13 @@ export interface IdentityResponse {
     governance: number;
     transactions: number;
   };
+}
+
+export interface DeleteIdentityResponse {
+  deleted: boolean;
+  id: string;
+  adi_url: string;
+  note?: string;
 }
 
 export interface UpdateIdentityParams {
@@ -137,23 +176,79 @@ export interface LegacyFlatTransactionParams {
   idempotencyKey?: string;
 }
 
-export interface SigningData {
-  dataToSign: string;
-  signerUrl: string;
-  signerVersion: number;
-  timestamp: number;
+/**
+ * Signing data from `POST /v1/transaction` — a NEW intent.
+ *
+ * Distinct from `SignRequestSigningData` below, which is what `POST /v1/sign` returns for an
+ * EXISTING transaction. They carry the bytes to sign under different names, and a single
+ * `SigningData` type covering both is what let the wrong field name go unnoticed. Read
+ * `hash_to_sign` here and `data_for_signature` there, or use `execute.*`, which handles it.
+ */
+export interface IntentSigningData {
+  request_id?: string;
+  transaction_hash?: string;
+  /** Sign the RAW BYTES of this hex. Do not hash it again; do not sign its ASCII. */
+  hash_to_sign: string;
 }
 
-export interface TransactionResponse {
-  intentId: string;
-  identityId: string;
+/** Signing data from `POST /v1/sign` — co-signing something that already exists. */
+export interface SignRequestSigningData {
+  /** Same contract as `hash_to_sign`, different name. See `IntentSigningData`. */
+  data_for_signature: string;
+  transaction_hash?: string;
+  signer_url?: string;
+  signer_version?: number;
+  timestamp?: number;
+}
+
+/** Response to `POST /v1/transaction` — the intent was opened, not executed. */
+export interface CreateTransactionResponse {
+  intent_id: string;
   status: string;
-  signingData?: SigningData;
-  accumTxHash?: string;
-  proofId?: string;
-  proofBundleUrl?: string;
-  createdAt: string;
-  completedAt?: string;
+  /** `external` (you hold the key) or `provider` (the gateway signs). */
+  signing_mode?: 'external' | 'provider';
+  /** Absent in provider mode — there is nothing for you to sign. */
+  signing_data?: IntentSigningData;
+  submit_url?: string;
+  tx_hash?: string;
+  proof_id?: string;
+  /** True when this is an idempotent replay echoing the original intent. */
+  idempotent?: boolean;
+}
+
+/** Response to `GET /v1/transaction/{id}`. */
+export interface TransactionResponse {
+  intent_id: string;
+  identity_id: string;
+  status: string;
+  intent_type?: string;
+  accum_tx_hash?: string;
+  proof_id?: string;
+  proof_bundle_url?: string;
+  error_message?: string | null;
+  created_at: string;
+  updated_at?: string;
+  completed_at?: string;
+  proof?: {
+    id: string;
+    bundle_url?: string;
+    layers?: unknown;
+    governance?: unknown;
+    attestations?: unknown;
+  };
+}
+
+export interface ListTransactionsResponse {
+  transactions: TransactionResponse[];
+  limit: number;
+  offset: number;
+}
+
+/** Response to `POST /v1/transaction/{id}/signature`. */
+export interface SubmitSignatureResponse {
+  intent_id: string;
+  status: string;
+  tx_hash?: string;
 }
 
 export interface SubmitSignatureParams {
@@ -185,15 +280,34 @@ export interface GovernanceParams {
   signerPublicKey?: string;
 }
 
-export interface GovernanceResponse {
-  governanceOpId: string;
-  identityId: string;
-  operationType: string;
+/** Response to `POST /v1/governance` — the operation was opened, not executed. */
+export interface CreateGovernanceResponse {
+  governance_op_id: string;
   status: string;
-  signingData?: SigningData;
-  accumTxHash?: string;
-  createdAt: string;
-  completedAt?: string;
+  tx_hash?: string;
+  signing_mode?: 'external' | 'provider';
+  signing_data?: IntentSigningData;
+  submit_url?: string;
+}
+
+/** Response to `GET /v1/governance/{id}`. */
+export interface GovernanceResponse {
+  governance_op_id: string;
+  identity_id: string;
+  operation_type: string;
+  status: string;
+  request_payload?: unknown;
+  signing_data?: IntentSigningData;
+  accum_tx_hash?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+/** Response to `POST /v1/governance/{id}/signature`. */
+export interface SubmitGovernanceSignatureResponse {
+  governance_op_id: string;
+  status: string;
+  tx_hash?: string;
 }
 
 export interface SubmitGovernanceSignatureParams {
@@ -205,23 +319,38 @@ export interface SubmitGovernanceSignatureParams {
 
 export interface PendingAction {
   id: string;
-  identityId: string | null;
+  identity_id: string | null;
+  identity_url?: string | null;
   category: string;
   type: string;
   status: string;
-  txHash: string;
-  txId: string | null;
+  tx_hash: string;
+  tx_id: string | null;
   principal: string | null;
-  transactionType: string | null;
-  collectedSignatures: number;
-  totalAuthorities: number;
-  approvedAuthorities: number;
-  expiresAt: string | null;
-  discoveredAt: string;
+  transaction_type: string | null;
+  collected_signatures: number;
+  total_authorities: number;
+  required_signatures?: number;
+  approved_authorities: number;
+  /** Whether the caller's own key has already signed — the field most inboxes filter on. */
+  user_has_signed?: boolean;
+  awaiting_authorities?: unknown;
+  is_ready?: boolean;
+  chain_status?: unknown;
+  expires_at: string | null;
+  discovered_at: string;
+  created_at?: string;
 }
 
 export interface PendingActionsResponse {
   actions: PendingAction[];
+  stats?: {
+    total: number;
+    urgent: number;
+    governance: number;
+    transactions: number;
+    awaiting_others: number;
+  };
   pagination: {
     limit: number;
     offset: number;
@@ -249,10 +378,28 @@ export interface SignRequestParams {
   publicKey?: string;
 }
 
+/** Response to `POST /v1/sign`. */
 export interface SignResponse {
-  signRequestId: string;
+  sign_request_id: string;
   status: string;
-  signingData?: SigningData;
+  tx_hash?: string;
+  signature_count?: number;
+  signing_mode?: 'external' | 'provider';
+  signing_data?: SignRequestSigningData;
+  submit_url?: string;
+  expires_at?: string;
+}
+
+/**
+ * Response to `POST /v1/sign/{id}/signature`.
+ *
+ * A spent `sign_request_id` 404s rather than replaying, so a failed submit must be retried by
+ * requesting fresh signing data — never by resubmitting the same id.
+ */
+export interface SubmitSignSignatureResponse {
+  status: string;
+  tx_hash?: string;
+  signature_count?: number;
 }
 
 export interface SubmitSignSignatureParams {
@@ -263,23 +410,23 @@ export interface SubmitSignSignatureParams {
 // ---- Portfolio ----
 
 export interface ChainBalance {
-  chainId: string;
+  chain_id: string;
   address: string;
   deployed: boolean;
   balances: { token: string; balance: string }[];
 }
 
 export interface PortfolioIdentity {
-  adiUrl: string;
+  adi_url: string;
   status: string;
-  creditBalance: number;
+  credit_balance: number;
   chains: ChainBalance[];
-  pendingActions: number;
+  pending_actions: number;
 }
 
 export interface PortfolioResponse {
   identities: PortfolioIdentity[];
-  totalChains: number;
+  total_chains: number;
 }
 
 // ---- Admin ----
@@ -295,7 +442,7 @@ export interface OrgResponse {
     id: string;
     name: string;
     plan: string;
-    createdAt: string;
+    created_at: string;
   };
 }
 
@@ -308,13 +455,15 @@ export interface CreateApiKeyParams {
 }
 
 export interface ApiKeyResponse {
-  apiKey: {
+  api_key: {
     id: string;
+    /** The only time the secret is ever returned. It cannot be retrieved again. */
     key: string;
     name: string;
     prefix: string;
-    rateLimitRpm: number;
-    createdAt: string;
+    rate_limit_rpm: number;
+    permissions?: string[];
+    created_at: string;
   };
   warning: string;
 }
@@ -323,25 +472,25 @@ export interface ApiKeyListItem {
   id: string;
   name: string;
   prefix: string;
-  orgId: string;
+  org_id: string;
   permissions: string[];
-  rateLimitRpm: number;
-  isActive: boolean;
-  createdAt: string;
-  expiresAt: string | null;
-  lastUsedAt: string | null;
+  rate_limit_rpm: number;
+  is_active: boolean;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
 }
 
 export interface AuditLogEntry {
   id: number;
-  orgId: string;
-  apiKeyId: string | null;
+  org_id: string;
+  api_key_id: string | null;
   action: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  requestSummary: Record<string, unknown> | null;
-  responseStatus: number | null;
-  createdAt: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  request_summary: Record<string, unknown> | null;
+  response_status: number | null;
+  created_at: string;
 }
 
 export interface AuditLogResponse {
@@ -358,8 +507,8 @@ export interface UsageSummaryResponse {
     from: string;
     to: string;
   };
-  totalRequests: number;
-  successfulRequests: number;
-  byEndpoint: { endpoint: string; count: number }[];
+  total_requests: number;
+  successful_requests: number;
+  by_endpoint: { endpoint: string; count: number }[];
   daily: { date: string; count: number }[];
 }

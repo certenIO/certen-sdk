@@ -2,6 +2,7 @@ import { AxiosInstance } from 'axios';
 import type {
   SignRequestParams,
   SignResponse,
+  SubmitSignSignatureResponse,
   SubmitSignSignatureParams,
 } from '../types.js';
 
@@ -21,7 +22,7 @@ export class SignResource {
     return data;
   }
 
-  async submitSignature(id: string, params: SubmitSignSignatureParams): Promise<SignResponse> {
+  async submitSignature(id: string, params: SubmitSignSignatureParams): Promise<SubmitSignSignatureResponse> {
     const { data } = await this.http.post(`/v1/sign/${id}/signature`, {
       signature: params.signature,
       public_key: params.publicKey,

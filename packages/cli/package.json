@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Command line for the CERTEN Gateway API",
   "license": "MIT",
   "type": "module",
@@ -44,7 +44,7 @@
   },
   "//dependencies": "@certen.io/sdk MUST be a version range, not file:../sdk. A published package carrying a file: dependency installs and then fails to resolve on the consumer's machine, because that path does not exist there. Local development uses `npm link` or a workspace instead.",
   "dependencies": {
-    "@certen.io/sdk": "^0.2.0",
+    "@certen.io/sdk": "^0.3.0",
     "commander": "^12.0.0"
   },
   "devDependencies": {

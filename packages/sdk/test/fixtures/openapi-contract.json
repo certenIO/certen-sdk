@@ -1,909 +1,1679 @@
 {
- "_source": "buildServer() /docs/json — regenerate with REGEN_SDK_CONTRACT=1",
- "_capturedFor": "1.0.0",
- "paths": {
-  "/reference": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/metrics": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/health": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/health/detail": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/identity": {
-   "post": {
-    "required": [
-     "name"
-    ],
-    "properties": [
-     "name",
-     "public_key_hash",
-     "public_key",
-     "credits",
-     "chains",
-     "signing_mode",
-     "signing_provider",
-     "idempotency_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/identity/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   },
-   "patch": {
-    "required": [],
-    "properties": [
-     "link_chains",
-     "unlink_chains",
-     "webhook_url",
-     "public_key"
-    ],
-    "query": []
-   },
-   "delete": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/identity/{id}/mnemonic/{token}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/portfolio": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "identity"
-    ]
-   }
-  },
-  "/v1/admin/org": {
-   "post": {
-    "required": [
-     "name"
-    ],
-    "properties": [
-     "name",
-     "plan",
-     "webhook_url"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/org/{id}/webhook": {
-   "post": {
-    "required": [
-     "webhook_url"
-    ],
-    "properties": [
-     "webhook_url",
-     "webhook_secret"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/api-keys": {
-   "post": {
-    "required": [
-     "name",
-     "org_id"
-    ],
-    "properties": [
-     "name",
-     "org_id",
-     "permissions",
-     "rate_limit_rpm",
-     "expires_at"
-    ],
-    "query": []
-   },
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/api-keys/{id}/rotate": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/audit-log": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "resource_type",
-     "action",
-     "from",
-     "to",
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/admin/api-keys/{id}": {
-   "delete": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/usage": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "from",
-     "to"
-    ]
-   }
-  },
-  "/v1/admin/webhooks/deliveries": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "status",
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/admin/webhooks/deliveries/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/webhooks/deliveries/{id}/redeliver": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/webhooks/endpoints": {
-   "post": {
-    "required": [
-     "url"
-    ],
-    "properties": [
-     "url",
-     "secret",
-     "event_types",
-     "description",
-     "skip_verification"
-    ],
-    "query": []
-   },
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/webhooks/endpoints/{id}/verify": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/webhooks/endpoints/{id}": {
-   "patch": {
-    "required": [],
-    "properties": [
-     "url",
-     "event_types",
-     "description",
-     "is_active"
-    ],
-    "query": []
-   },
-   "delete": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/webhooks/endpoints/{id}/rotate-secret": {
-   "post": {
-    "required": [],
-    "properties": [
-     "secret"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/signing-providers": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/signing-providers/{id}": {
-   "delete": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/transaction": {
-   "post": {
-    "required": [
-     "identity_id",
-     "intent"
-    ],
-    "properties": [
-     "identity_id",
-     "intent",
-     "contract_addresses",
-     "proof_class",
-     "idempotency_key",
-     "signer_key_page",
-     "signer_public_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/transaction/{id}/signature": {
-   "post": {
-    "required": [
-     "signature",
-     "public_key"
-    ],
-    "properties": [
-     "signature",
-     "public_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/transaction/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/transactions": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/proof/tx/{txHash}/receipt": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/proof/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/proof/{id}/bundle": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/proof/{id}/custody": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/proof/tx/{txHash}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/governance": {
-   "post": {
-    "required": [
-     "identity",
-     "operations"
-    ],
-    "properties": [
-     "identity",
-     "operations",
-     "key_page_url",
-     "signer_key_page",
-     "signer_public_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/governance/{id}/signature": {
-   "post": {
-    "required": [
-     "signature",
-     "public_key"
-    ],
-    "properties": [
-     "signature",
-     "public_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/governance/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/pending": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "identity",
-     "status",
-     "category",
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/sign": {
-   "post": {
-    "required": [
-     "type",
-     "target_id"
-    ],
-    "properties": [
-     "type",
-     "target_id",
-     "identity",
-     "signer_url",
-     "vote",
-     "signature",
-     "public_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/sign/{id}/signature": {
-   "post": {
-    "required": [
-     "signature",
-     "public_key"
-    ],
-    "properties": [
-     "signature",
-     "public_key"
-    ],
-    "query": []
-   }
-  },
-  "/v1/oauth/token": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/oauth/revoke": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/oauth-clients": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   },
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/oauth-clients/{id}": {
-   "delete": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/oauth-clients/{id}/rotate-secret": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/me": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/portal/keys": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   },
-   "post": {
-    "required": [
-     "name"
-    ],
-    "properties": [
-     "name",
-     "scopes",
-     "rate_limit_rpm"
-    ],
-    "query": []
-   }
-  },
-  "/v1/portal/keys/{id}/rotate": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/portal/keys/{id}": {
-   "delete": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/portal/members": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/portal/invites": {
-   "post": {
-    "required": [
-     "email"
-    ],
-    "properties": [
-     "email",
-     "role"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/orgs": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "status"
-    ]
-   }
-  },
-  "/v1/admin/orgs/{id}/approve": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/orgs/{id}/suspend": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/obligations": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/balance": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/ledger": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/quote": {
-   "post": {
-    "required": [
-     "chain"
-    ],
-    "properties": [
-     "chain",
-     "sku",
-     "leg_count"
-    ],
-    "query": []
-   }
-  },
-  "/v1/quote/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/payments": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/billing/deposits": {
-   "post": {
-    "required": [
-     "chain"
-    ],
-    "properties": [
-     "chain",
-     "amount_usd"
-    ],
-    "query": []
-   }
-  },
-  "/v1/billing/deposit-addresses": {
-   "post": {
-    "required": [
-     "chain",
-     "address"
-    ],
-    "properties": [
-     "chain",
-     "address",
-     "label"
-    ],
-    "query": []
-   },
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/receipts": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/billing/receipts/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/receipts/{id}/proof": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "tree_size"
-    ]
-   }
-  },
-  "/v1/transparency": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/transparency/heads": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "limit",
-     "offset"
-    ]
-   }
-  },
-  "/v1/transparency/heads/{treeSize}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/transparency/consistency": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "first",
-     "second"
-    ]
-   }
-  },
-  "/v1/transparency/price-books": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/transparency/fx/{id}": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/billing/receipts/verification-key": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/entitlement/current": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/entitlement/health": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/chain-coverage": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/margin": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "days"
-    ]
-   }
-  },
-  "/v1/admin/billing/enforcement-readiness": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "days"
-    ]
-   }
-  },
-  "/v1/admin/billing/price-books": {
-   "post": {
-    "required": [
-     "version",
-     "items"
-    ],
-    "properties": [
-     "version",
-     "kind",
-     "notes",
-     "effective_from",
-     "items"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/signing-keys": {
-   "post": {
-    "required": [
-     "provider_type",
-     "public_key"
-    ],
-    "properties": [
-     "provider_type",
-     "public_key",
-     "provider_config",
-     "not_before",
-     "not_after"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/signing-keys/{keyId}/revoke": {
-   "post": {
-    "required": [
-     "reason"
-    ],
-    "properties": [
-     "reason",
-     "compromised"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/price-books/{id}/assign": {
-   "post": {
-    "required": [
-     "org_id"
-    ],
-    "properties": [
-     "org_id"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/payments/unattributed": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/payments/{id}/attribute": {
-   "post": {
-    "required": [
-     "org_id"
-    ],
-    "properties": [
-     "org_id",
-     "register_address"
-    ],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/balance-drift": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "limit"
-    ]
-   }
-  },
-  "/v1/admin/billing/run-balance-check": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/reconcile": {
-   "post": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/summary": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "days"
-    ]
-   }
-  },
-  "/v1/admin/billing/chains": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "days"
-    ]
-   }
-  },
-  "/v1/admin/billing/intents": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "days",
-     "limit",
-     "offset",
-     "chain",
-     "org_id",
-     "only"
-    ]
-   }
-  },
-  "/v1/admin/billing/accounts": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
-  },
-  "/v1/admin/billing/timeseries": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": [
-     "days",
-     "bucket",
-     "by_chain"
-    ]
-   }
-  },
-  "/v1/admin/billing/health": {
-   "get": {
-    "required": [],
-    "properties": [],
-    "query": []
-   }
+  "//": "GENERATED by scripts/build-contract-fixture.mjs from the gateway OpenAPI spec. Do not hand-edit.",
+  "generatedFrom": "gw-tmp.json",
+  "paths": {
+    "/reference": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/metrics": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/health": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "status"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/health/detail": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "status",
+            "service",
+            "version",
+            "checks",
+            "timestamp"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "checks": [
+              "database",
+              "api_bridge",
+              "proofs_service",
+              "accumulate"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/identity": {
+      "post": {
+        "required": [
+          "name"
+        ],
+        "properties": [
+          "name",
+          "public_key_hash",
+          "public_key",
+          "credits",
+          "chains",
+          "signing_mode",
+          "signing_provider",
+          "idempotency_key"
+        ],
+        "query": [],
+        "responses": {
+          "202": [
+            "identity",
+            "signing_mode",
+            "signing_provider",
+            "mnemonic_retrieval",
+            "warning"
+          ]
+        },
+        "responseShapes": {
+          "202": {
+            "identity": [
+              "id",
+              "adi_url",
+              "book_url",
+              "key_page_url",
+              "status",
+              "chain_accounts",
+              "credit_balance",
+              "created_at"
+            ],
+            "mnemonic_retrieval": [
+              "url",
+              "expires_in"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/identity/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "identity",
+            "signing_mode",
+            "signing_provider",
+            "governance",
+            "balances",
+            "pending"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "identity": [
+              "id",
+              "adi_url",
+              "book_url",
+              "key_page_url",
+              "status",
+              "can_sign",
+              "error_message",
+              "credit_balance",
+              "chain_accounts",
+              "created_at"
+            ]
+          }
+        }
+      },
+      "patch": {
+        "required": [],
+        "properties": [
+          "link_chains",
+          "unlink_chains",
+          "webhook_url",
+          "public_key"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "identity",
+            "signing_mode",
+            "signing_provider",
+            "governance",
+            "balances",
+            "pending"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "identity": [
+              "id",
+              "adi_url",
+              "book_url",
+              "key_page_url",
+              "status",
+              "can_sign",
+              "error_message",
+              "credit_balance",
+              "chain_accounts",
+              "created_at"
+            ]
+          }
+        }
+      },
+      "delete": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "deleted",
+            "id",
+            "adi_url",
+            "note"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/identity/{id}/mnemonic/{token}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "mnemonic",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/portfolio": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "identity"
+        ],
+        "responses": {
+          "200": [
+            "identities",
+            "total_chains"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "identities": [
+              "adi_url",
+              "status",
+              "credit_balance",
+              "chains",
+              "pending_actions"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/org": {
+      "post": {
+        "required": [
+          "name"
+        ],
+        "properties": [
+          "name",
+          "plan",
+          "webhook_url"
+        ],
+        "query": [],
+        "responses": {
+          "201": [
+            "organization"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "organization": [
+              "id",
+              "name",
+              "plan",
+              "created_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/org/{id}/webhook": {
+      "post": {
+        "required": [
+          "webhook_url"
+        ],
+        "properties": [
+          "webhook_url",
+          "webhook_secret"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "webhook_url",
+            "webhook_secret",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/api-keys": {
+      "post": {
+        "required": [
+          "name",
+          "org_id"
+        ],
+        "properties": [
+          "name",
+          "org_id",
+          "permissions",
+          "rate_limit_rpm",
+          "expires_at"
+        ],
+        "query": [],
+        "responses": {
+          "201": [
+            "api_key",
+            "warning"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "api_key": [
+              "id",
+              "key",
+              "name",
+              "prefix",
+              "rate_limit_rpm",
+              "permissions",
+              "created_at"
+            ]
+          }
+        }
+      },
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "api_keys"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "api_keys": [
+              "id",
+              "name",
+              "prefix",
+              "org_id",
+              "permissions",
+              "rate_limit_rpm",
+              "is_active",
+              "created_at",
+              "expires_at",
+              "last_used_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/api-keys/{id}/rotate": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "previous_id",
+            "new_key",
+            "warning"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "new_key": [
+              "id",
+              "key",
+              "prefix",
+              "name",
+              "rate_limit_rpm",
+              "permissions",
+              "created_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/audit-log": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "resource_type",
+          "action",
+          "from",
+          "to",
+          "limit",
+          "offset"
+        ],
+        "responses": {
+          "200": [
+            "entries",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "pagination": [
+              "limit",
+              "offset",
+              "total"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/api-keys/{id}": {
+      "delete": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/usage": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "from",
+          "to"
+        ],
+        "responses": {
+          "200": [
+            "period"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "period": [
+              "from",
+              "to"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/webhooks/deliveries": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "status",
+          "limit",
+          "offset"
+        ],
+        "responses": {
+          "200": [
+            "deliveries",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "pagination": [
+              "limit",
+              "offset",
+              "total"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/webhooks/deliveries/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "id",
+            "org_id",
+            "event_type",
+            "status",
+            "attempts",
+            "response_status",
+            "signature_version",
+            "signature_hex",
+            "signed_at_unix",
+            "signed_canonical_payload",
+            "delivery_id_header",
+            "last_error",
+            "dlq_at",
+            "created_at"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/webhooks/deliveries/{id}/redeliver": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "id",
+            "status"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/webhooks/endpoints": {
+      "post": {
+        "required": [
+          "url"
+        ],
+        "properties": [
+          "url",
+          "secret",
+          "event_types",
+          "description",
+          "skip_verification"
+        ],
+        "query": [],
+        "responses": {
+          "201": [
+            "id",
+            "url",
+            "event_types",
+            "description",
+            "is_active",
+            "verified",
+            "verification_error",
+            "created_at",
+            "secret",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      },
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "endpoints"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "endpoints": [
+              "id",
+              "url",
+              "event_types",
+              "description",
+              "is_active",
+              "verified_at",
+              "last_success_at",
+              "consecutive_failures",
+              "created_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/webhooks/endpoints/{id}/verify": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "verified",
+            "error"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/webhooks/endpoints/{id}": {
+      "patch": {
+        "required": [],
+        "properties": [
+          "url",
+          "event_types",
+          "description",
+          "is_active"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "id",
+            "url",
+            "event_types",
+            "description",
+            "is_active",
+            "verified_at",
+            "consecutive_failures"
+          ]
+        },
+        "responseShapes": {}
+      },
+      "delete": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/webhooks/endpoints/{id}/rotate-secret": {
+      "post": {
+        "required": [],
+        "properties": [
+          "secret"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "id",
+            "secret",
+            "secret_rotated_at",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/signing-providers": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "providers"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "providers": [
+              "id",
+              "provider_type",
+              "status",
+              "signing_log_count",
+              "last_signed_at",
+              "created_at",
+              "revoked_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/signing-providers/{id}": {
+      "delete": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "id",
+            "status",
+            "affected_identities"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/transaction": {
+      "post": {
+        "required": [
+          "identity_id",
+          "intent"
+        ],
+        "properties": [
+          "identity_id",
+          "intent",
+          "contract_addresses",
+          "proof_class",
+          "idempotency_key",
+          "signer_key_page",
+          "signer_public_key"
+        ],
+        "query": [],
+        "responses": {
+          "201": [
+            "intent_id",
+            "status",
+            "signing_mode",
+            "signing_data",
+            "submit_url",
+            "tx_hash",
+            "proof_id",
+            "idempotent"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "signing_data": [
+              "request_id",
+              "transaction_hash",
+              "hash_to_sign"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/transaction/{id}/signature": {
+      "post": {
+        "required": [
+          "signature",
+          "public_key"
+        ],
+        "properties": [
+          "signature",
+          "public_key"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "intent_id",
+            "status",
+            "tx_hash"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/transaction/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "intent_id",
+            "identity_id",
+            "status",
+            "intent_type",
+            "accum_tx_hash",
+            "proof_id",
+            "proof_bundle_url",
+            "error_message",
+            "created_at",
+            "updated_at",
+            "completed_at",
+            "proof"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "proof": [
+              "id",
+              "bundle_url",
+              "layers",
+              "governance",
+              "attestations"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/transactions": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "limit",
+          "offset"
+        ],
+        "responses": {
+          "200": [
+            "transactions",
+            "limit",
+            "offset"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "transactions": [
+              "intent_id",
+              "identity_id",
+              "status",
+              "intent_type",
+              "accum_tx_hash",
+              "proof_id",
+              "error_message",
+              "created_at",
+              "updated_at",
+              "completed_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/proof/tx/{txHash}/receipt": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "tx_hash",
+            "status",
+            "principal",
+            "tx_type",
+            "anchored",
+            "chain_index",
+            "block_time",
+            "receipt"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/proof/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/proof/{id}/bundle": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/proof/{id}/custody": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/proof/tx/{txHash}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/governance": {
+      "post": {
+        "required": [
+          "identity",
+          "operations"
+        ],
+        "properties": [
+          "identity",
+          "operations",
+          "key_page_url",
+          "signer_key_page",
+          "signer_public_key"
+        ],
+        "query": [],
+        "responses": {
+          "201": [
+            "governance_op_id",
+            "status",
+            "tx_hash",
+            "signing_mode",
+            "signing_data",
+            "submit_url"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/governance/{id}/signature": {
+      "post": {
+        "required": [
+          "signature",
+          "public_key"
+        ],
+        "properties": [
+          "signature",
+          "public_key"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "governance_op_id",
+            "status",
+            "tx_hash"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/governance/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "governance_op_id",
+            "identity_id",
+            "operation_type",
+            "status",
+            "request_payload",
+            "signing_data",
+            "accum_tx_hash",
+            "created_at",
+            "completed_at"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/pending": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "identity",
+          "status",
+          "category",
+          "limit",
+          "offset"
+        ],
+        "responses": {
+          "200": [
+            "actions",
+            "stats",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "actions": [
+              "id",
+              "identity_id",
+              "identity_url",
+              "category",
+              "type",
+              "status",
+              "tx_hash",
+              "tx_id",
+              "principal",
+              "transaction_type",
+              "collected_signatures",
+              "total_authorities",
+              "required_signatures",
+              "approved_authorities",
+              "user_has_signed",
+              "expires_at",
+              "discovered_at",
+              "created_at"
+            ],
+            "stats": [
+              "total",
+              "urgent",
+              "governance",
+              "transactions",
+              "awaiting_others"
+            ],
+            "pagination": [
+              "limit",
+              "offset",
+              "total"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/sign": {
+      "post": {
+        "required": [
+          "type",
+          "target_id"
+        ],
+        "properties": [
+          "type",
+          "target_id",
+          "identity",
+          "signer_url",
+          "vote",
+          "signature",
+          "public_key"
+        ],
+        "query": [],
+        "responses": {
+          "201": [
+            "status",
+            "tx_hash",
+            "signature_count",
+            "signing_mode",
+            "sign_request_id",
+            "signing_data",
+            "submit_url",
+            "expires_at"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "signing_data": [
+              "data_for_signature",
+              "transaction_hash",
+              "signer_url",
+              "signer_version",
+              "timestamp"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/sign/{id}/signature": {
+      "post": {
+        "required": [
+          "signature",
+          "public_key"
+        ],
+        "properties": [
+          "signature",
+          "public_key"
+        ],
+        "query": [],
+        "responses": {
+          "200": [
+            "status",
+            "tx_hash",
+            "signature_count"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/oauth/token": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "access_token",
+            "token_type",
+            "expires_in",
+            "refresh_token",
+            "refresh_expires_in",
+            "scope"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/oauth/revoke": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/oauth-clients": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "201": [
+            "client_id",
+            "client_secret",
+            "org_id",
+            "scopes",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      },
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "clients"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "clients": [
+              "id",
+              "client_id",
+              "org_id",
+              "scopes",
+              "is_active",
+              "created_at",
+              "last_rotated_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/admin/oauth-clients/{id}": {
+      "delete": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/oauth-clients/{id}/rotate-secret": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "client_id",
+            "client_secret",
+            "grace_seconds",
+            "previous_secret_expires_at",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/keys": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      },
+      "post": {
+        "required": [
+          "name"
+        ],
+        "properties": [
+          "name",
+          "scopes",
+          "rate_limit_rpm"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/keys/{id}/rotate": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/keys/{id}": {
+      "delete": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/members": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/invites": {
+      "post": {
+        "required": [
+          "email"
+        ],
+        "properties": [
+          "email",
+          "role"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/orgs": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "status"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/orgs/{id}/approve": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/orgs/{id}/suspend": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/obligations": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/balance": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {
+          "200": [
+            "currency",
+            "available_usd",
+            "held_usd",
+            "credit_limit_usd",
+            "spendable_usd",
+            "status"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/ledger": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "limit",
+          "offset"
+        ],
+        "responses": {
+          "200": [
+            "entries"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "entries": [
+              "id",
+              "account",
+              "amount_usd",
+              "kind",
+              "ref_type",
+              "ref_id",
+              "memo",
+              "created_at"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/quote": {
+      "post": {
+        "required": [
+          "chain"
+        ],
+        "properties": [
+          "chain",
+          "sku",
+          "leg_count"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/quote/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/payments": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "limit",
+          "offset"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/deposits": {
+      "post": {
+        "required": [
+          "chain"
+        ],
+        "properties": [
+          "chain",
+          "amount_usd"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/deposit-addresses": {
+      "post": {
+        "required": [
+          "chain",
+          "address"
+        ],
+        "properties": [
+          "chain",
+          "address",
+          "label"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      },
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/receipts": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "limit",
+          "offset"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/receipts/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/receipts/{id}/proof": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "tree_size"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/transparency": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/transparency/heads": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "limit",
+          "offset"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/transparency/heads/{treeSize}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/transparency/consistency": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "first",
+          "second"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/transparency/price-books": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/transparency/fx/{id}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/billing/receipts/verification-key": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/entitlement/current": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/entitlement/health": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/chain-coverage": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/margin": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "days"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/enforcement-readiness": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "days"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/price-books": {
+      "post": {
+        "required": [
+          "version",
+          "items"
+        ],
+        "properties": [
+          "version",
+          "kind",
+          "notes",
+          "effective_from",
+          "items"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/signing-keys": {
+      "post": {
+        "required": [
+          "provider_type",
+          "public_key"
+        ],
+        "properties": [
+          "provider_type",
+          "public_key",
+          "provider_config",
+          "not_before",
+          "not_after"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/signing-keys/{keyId}/revoke": {
+      "post": {
+        "required": [
+          "reason"
+        ],
+        "properties": [
+          "reason",
+          "compromised"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/price-books/{id}/assign": {
+      "post": {
+        "required": [
+          "org_id"
+        ],
+        "properties": [
+          "org_id"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/payments/unattributed": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/payments/{id}/attribute": {
+      "post": {
+        "required": [
+          "org_id"
+        ],
+        "properties": [
+          "org_id",
+          "register_address"
+        ],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/balance-drift": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "limit"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/run-balance-check": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/reconcile": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/summary": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "days"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/chains": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "days"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/intents": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "days",
+          "limit",
+          "offset",
+          "chain",
+          "org_id",
+          "only"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/accounts": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/timeseries": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [
+          "days",
+          "bucket",
+          "by_chain"
+        ],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/admin/billing/health": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    }
   }
- }
 }
