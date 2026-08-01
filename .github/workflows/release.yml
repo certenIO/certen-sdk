@@ -88,16 +88,48 @@ jobs:
 
           mkdir -p /tmp/consume && cd /tmp/consume && npm init -y >/dev/null
           npm install "$GITHUB_WORKSPACE/packages/${{ steps.target.outputs.dir }}/$TGZ"
-          node --input-type=module -e "
-            import { CertenClient, DEFAULT_BASE_URL } from '@certen.io/sdk';
-            const c = new CertenClient({ apiKey: 'ck_live_test' });
-            if (DEFAULT_BASE_URL.includes('api.certen.io')) throw new Error('default base URL is the marketing site');
-            if (DEFAULT_BASE_URL !== 'https://gateway.kompendium.co') throw new Error('unexpected default: ' + DEFAULT_BASE_URL);
-            for (const r of ['identity','transaction','sign','governance','pending','portfolio','admin'])
-              if (typeof c[r] !== 'object') throw new Error('missing resource: ' + r);
-            if (typeof c.transaction.submitSignature !== 'function') throw new Error('missing transaction.submitSignature');
-            console.log('packed artifact imports and exposes its resources');
-          "
+
+          # Exercise the artifact ACTUALLY being released. This block used to import @certen.io/sdk
+          # whatever the target was, so a cli or mcp release "verified" the SDK that happened to be
+          # installed as its dependency — the one package it was not publishing.
+          case "${{ steps.target.outputs.dir }}" in
+            sdk)
+              node --input-type=module -e "
+                import { CertenClient, DEFAULT_BASE_URL } from '@certen.io/sdk';
+                const c = new CertenClient({ apiKey: 'ck_live_test' });
+                if (DEFAULT_BASE_URL.includes('api.certen.io')) throw new Error('default base URL is the marketing site');
+                if (DEFAULT_BASE_URL !== 'https://gateway.kompendium.co') throw new Error('unexpected default: ' + DEFAULT_BASE_URL);
+                for (const r of ['identity','transaction','sign','governance','pending','portfolio','admin'])
+                  if (typeof c[r] !== 'object') throw new Error('missing resource: ' + r);
+                if (typeof c.transaction.submitSignature !== 'function') throw new Error('missing transaction.submitSignature');
+                console.log('packed SDK imports and exposes its resources');
+              "
+              ;;
+            cli)
+              # The binary must run and honour the --json contract, not merely be present.
+              node node_modules/@certen.io/cli/dist/index.js --json --help > help.json
+              node -e "
+                const d = JSON.parse(require('fs').readFileSync('help.json','utf8'));
+                if (!d.ok) throw new Error('--help --json did not return ok');
+                if (d.data.exitCodes['3'] !== 'gateway unreachable') throw new Error('exit code contract missing');
+                if (!d.data.commands.some(c => c.name === 'identity')) throw new Error('commands missing');
+                console.log('packed CLI runs and serves its command tree');
+              "
+              ;;
+            mcp)
+              # Must serve its documentation resources; without the prepack bundling step it serves none.
+              printf '%s\n%s\n' \
+                '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}' \
+                '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/list\",\"params\":{}}' \
+                | node node_modules/@certen.io/mcp/dist/index.js > out.jsonl
+              node -e "
+                const lines = require('fs').readFileSync('out.jsonl','utf8').trim().split('\n').map(JSON.parse);
+                const n = lines.find(m => m.id === 2).result.resources.length;
+                if (n === 0) throw new Error('published MCP package serves 0 resources');
+                console.log('packed MCP server serves ' + n + ' resources');
+              "
+              ;;
+          esac
 
       # The license in package.json must match the LICENSE file. Publishing a false license claim is not the
       # kind of mistake you fix with a patch release.
