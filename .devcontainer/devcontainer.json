@@ -1,0 +1,25 @@
+{
+  "name": "certen-sdk",
+  "//image": "Node 20 is the middle of the CI matrix (18, 20, 22) and the version the repo is developed against. Pinning the major here means a container rebuild cannot silently move the toolchain.",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-20-bookworm",
+
+  "//postCreateCommand": "Install and build on create. The CLI and MCP packages resolve @certen.io/sdk types from its dist/, which is gitignored — so without a build, a fresh container cannot typecheck them and the failure looks like a broken checkout.",
+  "postCreateCommand": "npm install && npm run build",
+
+  "customizations": {
+    "vscode": {
+      "//extensions": "No ESLint or Prettier: this repo has neither configured, and suggesting them invites an agent to run a linter that does not exist. `npm run typecheck` is the static gate.",
+      "extensions": [],
+      "settings": {
+        "typescript.tsdk": "node_modules/typescript/lib"
+      }
+    }
+  },
+
+  "//containerEnv": "Writes are opt-in and stay opt-in. An agent working in this container gets the read-only MCP surface unless a human changes this deliberately.",
+  "containerEnv": {
+    "CERTEN_MCP_ALLOW_WRITES": "0"
+  },
+
+  "remoteUser": "node"
+}

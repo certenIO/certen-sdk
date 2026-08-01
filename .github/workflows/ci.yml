@@ -22,7 +22,26 @@ jobs:
       # The CLI's types come from the SDK's build output, so the SDK must be built before either is checked.
       - run: npm run build
       - run: npm run typecheck
-      - run: npm test
+      # Each suite is invoked by name rather than relying on `npm run test --workspaces`. That form
+      # stops at the first workspace whose script reports failure, so a single spurious non-zero
+      # exit silently reduces CI to "the SDK passed" while the CLI and MCP suites never run — a
+      # green check that means much less than it appears to.
+      - run: npm test --workspace packages/sdk
+      - run: npm test --workspace packages/cli
+      - run: npm test --workspace packages/mcp
+
+  # Generated agent context that has silently gone stale is worse than none, because an agent trusts
+  # it. Everything derived from spec/openapi.json — the contract fixture, llms.txt, llms-full.txt —
+  # must match what the generator produces from the spec that is committed alongside it.
+  agent-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: npm }
+      - run: npm ci
+      - name: Generated artifacts are up to date
+        run: npm run agentgen:check
 
   # A published package is only as good as its tarball. `files`, `exports`, and `prepack` are all easy to
   # get wrong in ways that install cleanly and fail on first import — and npm versions are immutable, so
@@ -55,11 +74,37 @@ jobs:
             if (typeof c.execute.contractCall !== 'function') throw new Error('missing execute.contractCall');
             console.log('packed artifact imports and exposes its resources');
           "
+      # The MCP package serves llms.txt and docs/ as MCP resources, but those live OUTSIDE its package
+      # root and npm's `files` cannot reach outside one. Without the prepack bundling step the tarball
+      # installs cleanly, starts cleanly, lists its tools, and serves ZERO resources — invisible in the
+      # monorepo, where the repo root is right there and every lookup succeeds.
+      - name: MCP tarball actually carries its documentation
+        run: |
+          cd packages/mcp
+          npm pack
+          TGZ=$(ls *.tgz | head -1)
+          tar -tzf "$TGZ" | grep -qx "package/bundled/llms.txt" || { echo "bundled/llms.txt missing"; exit 1; }
+          tar -tzf "$TGZ" | grep -q  "package/bundled/docs/guides/" || { echo "guides missing"; exit 1; }
+
+          mkdir -p /tmp/mcp-consume && cd /tmp/mcp-consume && npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/packages/mcp/$TGZ"
+          # Speak MCP to the installed binary and require it to serve its resources.
+          printf '%s\n%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}' \
+            | node node_modules/@certen.io/mcp/dist/index.js > out.jsonl
+          node -e "
+            const lines = require('fs').readFileSync('out.jsonl','utf8').trim().split('\n').map(JSON.parse);
+            const n = lines.find(m => m.id === 2).result.resources.length;
+            if (n === 0) { console.error('published MCP package serves 0 resources'); process.exit(1); }
+            console.log('packed MCP server serves ' + n + ' resources');
+          "
+
       # package.json must not claim a licence the LICENSE file disagrees with. Not fixable with a patch
       # release once published.
       - name: License claim matches LICENSE
         run: |
-          for p in packages/sdk packages/cli; do
+          for p in packages/sdk packages/cli packages/mcp; do
             CLAIM=$(node -p "require('./$p/package.json').license")
             head -3 "$p/LICENSE" | grep -qi "$CLAIM" || { echo "$p: package.json says $CLAIM but LICENSE disagrees"; exit 1; }
           done

@@ -15,13 +15,13 @@ name: release-sdk
 
 on:
   push:
-    tags: ["sdk-v*.*.*", "cli-v*.*.*"]
+    tags: ["sdk-v*.*.*", "cli-v*.*.*", "mcp-v*.*.*"]
   workflow_dispatch:
     inputs:
       package:
         description: "Which package to release"
         type: choice
-        options: [sdk, cli]
+        options: [sdk, cli, mcp]
         default: sdk
       dry_run:
         description: "Build and verify without publishing"
