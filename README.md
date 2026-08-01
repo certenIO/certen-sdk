@@ -8,7 +8,8 @@ cross-chain execution on Accumulate.
 | Package | |
 |---|---|
 | [`@certen.io/sdk`](packages/sdk) | TypeScript client. Typed errors, automatic retries, auto-idempotency, and the proof-gated execution flow as one call. |
-| [`@certen.io/cli`](packages/cli) | The `certen` command line. |
+| [`@certen.io/cli`](packages/cli) | The `certen` command line. Add `--json` for a machine contract. |
+| [`@certen.io/mcp`](packages/mcp) | MCP server for AI agents. Read-only by default; holds no signing key. |
 
 ```bash
 npm install @certen.io/sdk
@@ -73,18 +74,36 @@ indistinguishable from success, and a blind retry can open a second intent or bu
 ```bash
 npm install          # workspaces: the CLI resolves @certen.io/sdk from packages/sdk
 npm run build
-npm test             # SDK 59, CLI 13 — no network, no key
+npm test             # SDK 77, CLI 26 — no network, no key
 npm run typecheck
 ```
 
 The SDK's requests are validated against a snapshot of the gateway's OpenAPI spec
 (`packages/sdk/test/contract.test.ts`). That guard exists because three methods once shipped in a state
 where they could not work — they sent bodies the API rejects — and a mock that answers 200 to anything will
-never tell you the request was wrong. Refresh the fixture from the gateway repo:
+never tell you the request was wrong.
+
+The spec is vendored at [`spec/openapi.json`](spec/README.md) and is the single source of truth for the
+contract fixture *and* the agent-facing docs. Refresh it and rebuild everything derived from it:
 
 ```bash
-REGEN_SDK_CONTRACT=1 npx vitest run test/integration/openapi-snapshot.test.ts
+npm run spec:refresh   # the only step that touches the network
+npm run agentgen       # rebuild the fixture, llms.txt and llms-full.txt
 ```
+
+`npm run agentgen:check` runs in CI and fails if any generated artifact is out of date.
+
+## Working with AI coding agents
+
+| | |
+|---|---|
+| [AGENTS.md](AGENTS.md) | Working **on** this repo: setup, build, test, layout, gotchas, and which commands need a human first. |
+| [llms.txt](llms.txt) | Building **on** CERTEN: quickstart and the rules that decide whether your code works. |
+| [llms-full.txt](llms-full.txt) | Building **on** CERTEN: the full API digest, generated from the spec. |
+| [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) | The `certen --json` machine contract: envelope shape and exit codes. |
+
+`llms.txt` and `llms-full.txt` are generated — edit the prose in
+`tools/agentgen/templates/llms.head.md` and regenerate, rather than editing them directly.
 
 ## Releasing
 
