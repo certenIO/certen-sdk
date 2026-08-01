@@ -51,16 +51,13 @@ describe('CLI config: file storage', () => {
     await c.setApiKey('ck_live_secret', false);
     chmodSync(CONFIG_FILE(), 0o644);
 
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    }) as never);
-    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    await expect(c.getApiKey()).rejects.toThrowError('process.exit(1)');
-    expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('refusing to read'));
-
-    exitSpy.mockRestore();
-    errSpy.mockRestore();
+    // Throws rather than calling process.exit: the thrown UsageError is what lets the top-level
+    // handler emit a JSON envelope and exit 2. Calling process.exit here would bypass both.
+    await expect(c.getApiKey()).rejects.toMatchObject({
+      code: 'CONFIG_PERMISSIONS',
+      exitCode: 2,
+    });
+    await expect(c.getApiKey()).rejects.toThrowError(/refusing to read/);
   });
 
   it('CERTEN_API_KEY env wins over the config file', async () => {
@@ -81,12 +78,12 @@ describe('CLI config: file storage', () => {
 
   it('errors if no key is configured anywhere', async () => {
     const c = await loadConfig();
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    }) as never);
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await expect(c.getApiKey()).rejects.toThrowError('process.exit(1)');
-    exitSpy.mockRestore();
+    // A usage error (exit 2), not a failed operation (exit 1): nothing was ever sent, and the fix
+    // is to configure a key rather than to retry.
+    await expect(c.getApiKey()).rejects.toMatchObject({
+      code: 'NO_API_KEY',
+      exitCode: 2,
+    });
   });
 });
 

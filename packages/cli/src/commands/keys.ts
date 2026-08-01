@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { printOutput } from '../output.js';
+import { printOutput, human } from '../output.js';
 import { resolvePassphrase, resolveNewPassphrase, PASSPHRASE_ENV_VAR } from '../passphrase.js';
 import {
   generateKey, listKeys, getKeyInfo, deleteKey, signHash, selfTest, keyPath, KEYS_DIR,
@@ -52,7 +52,7 @@ export function registerKeysCommands(program: Command): void {
     .action(() => {
       const all = listKeys();
       if (all.length === 0) {
-        console.log(`(no keys in ${KEYS_DIR})`);
+        human(`(no keys in ${KEYS_DIR})`);
         return;
       }
       printOutput(all.map((k) => ({
@@ -110,7 +110,7 @@ export function registerKeysCommands(program: Command): void {
       // should not be deletable by an accidental Enter on a y/N prompt.
       const path = keyPath(name);
       deleteKey(name);
-      console.log(`Deleted ${path}`);
+      human(`Deleted ${path}`);
       console.error('If this key was on a key page, it is still on that page — remove it there too.');
     });
 

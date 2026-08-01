@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { readConfig, writeConfig, setApiKey, clearApiKey, DEFAULT_API_URL } from '../config.js';
-import { printOutput } from '../output.js';
+import { printOutput, human } from '../output.js';
 
 export function registerAuthCommands(program: Command): void {
   const auth = program.command('auth').description('Authentication management');
@@ -25,7 +25,7 @@ export function registerAuthCommands(program: Command): void {
         cfg.api_url = opts.apiUrl;
         writeConfig(cfg);
       }
-      console.log(useKeyring ? 'API key saved to OS keyring' : 'API key saved to ~/.certen/config.json (mode 0600)');
+      human(useKeyring ? 'API key saved to OS keyring' : 'API key saved to ~/.certen/config.json (mode 0600)');
     });
 
   auth
@@ -33,7 +33,7 @@ export function registerAuthCommands(program: Command): void {
     .description('Remove the saved API key from keyring or config file')
     .action(async () => {
       await clearApiKey();
-      console.log('API key cleared');
+      human('API key cleared');
     });
 
   auth

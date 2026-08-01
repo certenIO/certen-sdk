@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { UsageError } from './errors.js';
 
 const CONFIG_DIR = join(homedir(), '.certen');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -106,21 +107,28 @@ export async function getApiKey(): Promise<string> {
       const v = await kr.getPassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
       if (v) return v;
     } else {
-      console.error('storage=keyring requested but `keytar` is not installed; install it or set CERTEN_API_KEY.');
-      process.exit(1);
+      throw new UsageError(
+        'storage=keyring requested but `keytar` is not installed; install it or set CERTEN_API_KEY.',
+        'KEYRING_UNAVAILABLE',
+      );
     }
   }
 
   if (cfg.api_key) {
     if (!configFileIsSecure()) {
-      console.error('refusing to read ~/.certen/config.json — file permissions are not 0600. Run `certen auth login` again to fix.');
-      process.exit(1);
+      throw new UsageError(
+        'refusing to read ~/.certen/config.json — file permissions are not 0600. '
+        + 'Run `certen auth login` again to fix.',
+        'CONFIG_PERMISSIONS',
+      );
     }
     return cfg.api_key;
   }
 
-  console.error('No API key configured. Run "certen auth login --api-key <key>" or set CERTEN_API_KEY.');
-  process.exit(1);
+  throw new UsageError(
+    'No API key configured. Run "certen auth login --api-key <key>" or set CERTEN_API_KEY.',
+    'NO_API_KEY',
+  );
 }
 
 export async function setApiKey(apiKey: string, useKeyring: boolean): Promise<void> {

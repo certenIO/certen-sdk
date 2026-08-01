@@ -97,6 +97,30 @@ certen admin audit-log | usage
 
 Run `certen <group> --help` for the flags on any of them.
 
+## Scripting and AI agents: `--json`
+
+`--json` turns the CLI into a machine interface. It is a contract, documented in full in
+[docs/CLI-CONTRACT.md](../../docs/CLI-CONTRACT.md) and enforced by a conformance suite.
+
+```bash
+certen --json tx status <id>
+# {"ok":true,"data":{"intent_id":"…","status":"completed"}}
+
+certen --json portfolio
+# {"ok":false,"error":{"code":"NETWORK_ERROR","message":"connect ECONNREFUSED","retryable":true,"status":0}}
+```
+
+- **Exactly one JSON object on stdout**, nothing else. Every human-facing line goes to stderr.
+- **Exit codes:** `0` ok · `1` operation failed · `2` usage error · `3` gateway unreachable. Branch on
+  these instead of parsing text. `3` guarantees nothing was submitted, so a retry cannot
+  double-execute.
+- **`error.retryable`** comes from the SDK's own `CertenError.isRetryable`, so the CLI and the SDK
+  give an identical retry decision.
+- **`certen --help --json`** returns the entire command tree — every command, flag and exit code — in
+  one call.
+
+Without `--json`, output is the human table format as before. Do not parse it.
+
 ## Configuration
 
 | | |
