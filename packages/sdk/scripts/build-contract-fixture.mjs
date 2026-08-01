@@ -1,26 +1,33 @@
 #!/usr/bin/env node
 /**
- * Regenerate test/fixtures/openapi-contract.json from the gateway's live OpenAPI spec.
+ * Derive test/fixtures/openapi-contract.json from the gateway's OpenAPI spec.
  *
  * The contract test used to say "then regenerate the fixture" without saying how, so the fixture
  * was hand-shaped and captured only REQUEST bodies. That is why the response types could drift all
  * the way to camelCase-versus-snake_case without a single test noticing: nothing had ever recorded
  * what the API returns.
  *
- *   node scripts/build-contract-fixture.mjs                       # fetch from the default gateway
- *   node scripts/build-contract-fixture.mjs path/to/spec.json     # or use a local spec
- *   CERTEN_API_URL=https://staging node scripts/build-contract-fixture.mjs
+ * The spec is now vendored at `spec/openapi.json` and is the single source for every generated
+ * artifact — this fixture, `llms.txt`, and `llms-full.txt`. Refresh the spec first, then regenerate:
  *
- * The result is vendored deliberately. A unit suite that reaches the network fails for reasons that
- * have nothing to do with the code under test.
+ *   npm run spec:refresh    # fetch the live spec into spec/openapi.json
+ *   npm run agentgen        # rebuild everything derived from it
+ *
+ * Running this script directly rebuilds only the fixture:
+ *
+ *   node scripts/build-contract-fixture.mjs                    # from the vendored spec
+ *   node scripts/build-contract-fixture.mjs path/to/spec.json  # from a local spec
+ *
+ * The spec is vendored rather than fetched at test time on purpose: a unit suite that reaches the
+ * network fails for reasons that have nothing to do with the code under test.
  */
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, '..', 'test', 'fixtures', 'openapi-contract.json');
-const DEFAULT_URL = process.env.CERTEN_API_URL ?? 'https://gateway.kompendium.co';
+const VENDORED_SPEC = join(HERE, '..', '..', '..', 'spec', 'openapi.json');
 
 /** Collect the top-level property names of a response schema, unwrapping arrays. */
 function topLevelProps(schema) {
@@ -43,58 +50,66 @@ function nestedProps(schema) {
   return out;
 }
 
-async function loadSpec() {
-  const arg = process.argv[2];
-  if (arg && existsSync(arg)) {
-    return JSON.parse(readFileSync(arg, 'utf8'));
-  }
-  const url = `${DEFAULT_URL}/docs/json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
-  return res.json();
-}
+/**
+ * Reduce a full OpenAPI document to the contract the SDK is tested against.
+ *
+ * Exported so `tools/agentgen` can rebuild this fixture from the same vendored spec it uses for
+ * the agent docs, in one pass, and CI can check all of them for drift together.
+ */
+export function buildContract(spec, generatedFrom = 'spec/openapi.json') {
+  const paths = {};
 
-const spec = await loadSpec();
-const paths = {};
+  for (const [path, methods] of Object.entries(spec.paths ?? {})) {
+    for (const [method, op] of Object.entries(methods)) {
+      if (!['get', 'post', 'patch', 'put', 'delete'].includes(method)) continue;
 
-for (const [path, methods] of Object.entries(spec.paths ?? {})) {
-  for (const [method, op] of Object.entries(methods)) {
-    if (!['get', 'post', 'patch', 'put', 'delete'].includes(method)) continue;
+      const bodySchema = op.requestBody?.content?.['application/json']?.schema ?? {};
+      const query = (op.parameters ?? []).filter((p) => p.in === 'query').map((p) => p.name);
 
-    const bodySchema = op.requestBody?.content?.['application/json']?.schema ?? {};
-    const query = (op.parameters ?? [])
-      .filter((p) => p.in === 'query')
-      .map((p) => p.name);
+      const responses = {};
+      const responseShapes = {};
+      for (const [code, r] of Object.entries(op.responses ?? {})) {
+        if (!code.startsWith('2')) continue;
+        const schema = r.content?.['application/json']?.schema;
+        const props = topLevelProps(schema);
+        // additionalProperties-only responses carry no shape worth pinning.
+        if (props.length === 0) continue;
+        responses[code] = props;
+        const nested = nestedProps(schema);
+        if (Object.keys(nested).length > 0) responseShapes[code] = nested;
+      }
 
-    const responses = {};
-    const responseShapes = {};
-    for (const [code, r] of Object.entries(op.responses ?? {})) {
-      if (!code.startsWith('2')) continue;
-      const schema = r.content?.['application/json']?.schema;
-      const props = topLevelProps(schema);
-      // additionalProperties-only responses carry no shape worth pinning.
-      if (props.length === 0) continue;
-      responses[code] = props;
-      const nested = nestedProps(schema);
-      if (Object.keys(nested).length > 0) responseShapes[code] = nested;
+      paths[path] ??= {};
+      paths[path][method] = {
+        required: bodySchema.required ?? [],
+        properties: Object.keys(bodySchema.properties ?? {}),
+        query,
+        responses,
+        responseShapes,
+      };
     }
-
-    paths[path] ??= {};
-    paths[path][method] = {
-      required: bodySchema.required ?? [],
-      properties: Object.keys(bodySchema.properties ?? {}),
-      query,
-      responses,
-      responseShapes,
-    };
   }
+
+  return {
+    '//': 'GENERATED by tools/agentgen from spec/openapi.json. Do not hand-edit.',
+    generatedFrom,
+    paths,
+  };
 }
 
-const out = {
-  '//': 'GENERATED by scripts/build-contract-fixture.mjs from the gateway OpenAPI spec. Do not hand-edit.',
-  generatedFrom: process.argv[2] ?? `${DEFAULT_URL}/docs/json`,
-  paths,
-};
+export function contractFixturePath() {
+  return OUT;
+}
 
-writeFileSync(OUT, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
-console.log(`wrote ${OUT} — ${Object.keys(paths).length} paths`);
+// Run as a script only when invoked directly, so importing this module has no side effects.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const arg = process.argv[2];
+  const specPath = arg && existsSync(arg) ? arg : VENDORED_SPEC;
+  if (!existsSync(specPath)) {
+    throw new Error(`no spec at ${specPath} — run \`npm run spec:refresh\` first`);
+  }
+  const spec = JSON.parse(readFileSync(specPath, 'utf8'));
+  const out = buildContract(spec, arg ? arg : 'spec/openapi.json');
+  writeFileSync(OUT, `${JSON.stringify(out, null, 2)}\n`, 'utf8');
+  console.log(`wrote ${OUT} — ${Object.keys(out.paths).length} paths`);
+}

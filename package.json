@@ -9,18 +9,23 @@
     "type": "git",
     "url": "git+https://github.com/certenIO/certen-sdk.git"
   },
-  "//workspaces": "The CLI is the SDK's only consumer and they ship in lockstep, so they live together and the CLI resolves @certen.io/sdk from packages/sdk during development while declaring a published range for consumers.",
+  "//workspaces": "The CLI and MCP server are the SDK's only consumers and they ship in lockstep, so they live together and resolve @certen.io/sdk from packages/sdk during development while declaring a published range for consumers.",
   "workspaces": [
     "packages/sdk",
-    "packages/cli"
+    "packages/cli",
+    "packages/mcp"
   ],
   "engines": {
     "node": ">=18"
   },
+  "//scripts": "spec:refresh is the only step that touches the network. Everything else is derived from the vendored spec/openapi.json, so tests and CI stay offline and deterministic.",
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "spec:refresh": "node tools/agentgen/refresh-spec.mjs",
+    "agentgen": "node tools/agentgen/index.mjs",
+    "agentgen:check": "node tools/agentgen/index.mjs --check"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
