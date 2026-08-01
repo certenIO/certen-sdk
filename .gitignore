@@ -2,6 +2,10 @@ node_modules/
 dist/
 *.tgz
 
+# Generated at prepack by packages/mcp/scripts/bundle-docs.mjs — a copy of llms.txt and docs/ so the
+# published MCP package can serve them. Committing it would create a second copy that goes stale.
+packages/mcp/bundled/
+
 # NEVER commit an .npmrc — it is where npm auth tokens land. Publishing uses CI
 # with NPM_TOKEN as a repository secret; see .github/workflows/release.yml
 .npmrc
