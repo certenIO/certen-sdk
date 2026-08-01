@@ -3,6 +3,8 @@
 The `certen` command line for the [CERTEN Gateway](https://gateway.kompendium.co/reference) —
 proof-gated cross-chain execution on Accumulate.
 
+**Docs: <https://docs.kompendium.co>** · **Get an API key: <https://gateway.kompendium.co/portal>**
+
 ```bash
 npm install -g @certen.io/cli
 ```
@@ -122,10 +124,12 @@ this for you.
 
 ## Documentation
 
+**<https://docs.kompendium.co>** — getting started, authentication, errors, idempotency, and
+task-shaped guides: onboarding an identity, external signing, proof-gating a contract call, M-of-N
+panels, and verifying a proof.
+
 The [live API reference](https://gateway.kompendium.co/reference) is generated from the running
-gateway and is authoritative. Task-shaped guides live in
-[the SDK repo](https://github.com/certenIO/certen-sdk): onboarding an identity, external signing,
-proof-gating a contract call, M-of-N panels, and verifying a proof.
+gateway and is authoritative — when a guide and the spec disagree, the spec is right.
 
 ## License
 

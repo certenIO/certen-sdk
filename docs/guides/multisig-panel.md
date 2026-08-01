@@ -130,7 +130,7 @@ Exact per-operation fields: **<https://gateway.kompendium.co/reference>**.
 ## Automating a seat
 
 A seat does not have to be a human with a browser. The
-[headless policy-engine signer](https://github.com/certen/certen-policy-signer) is a service that watches
+[headless policy-engine signer](https://github.com/certenIO/certen-external-policy-signer) is a service that watches
 Accumulate for transactions naming its page, asks a policy engine of yours, and votes only on an explicit
 approval — fail-closed, so an outage delays a decision but never grants one. Point its `vote` backend at this
 gateway and it becomes an automated panel seat with an auditable reason attached to every vote.

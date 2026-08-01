@@ -3,6 +3,8 @@
 TypeScript client for the [CERTEN Gateway](https://gateway.kompendium.co/reference) — proof-gated
 cross-chain execution on Accumulate.
 
+**Docs: <https://docs.kompendium.co>** · **Get an API key: <https://gateway.kompendium.co/portal>**
+
 ```bash
 npm install @certen.io/sdk
 ```
@@ -31,7 +33,7 @@ await certen.transaction.submitSignature(intent_id, { signature, public_key: pub
 
 **Your key never leaves your process.** The gateway computes what must be signed and you decide whether to
 sign it. That is the supported posture for anything carrying value — see
-[the external-signing guide](../../docs/guides/external-signing.md).
+[the external-signing guide](https://docs.kompendium.co/external-signing.html).
 
 ---
 
@@ -106,11 +108,11 @@ timeout.
 
 ## Guides
 
-- [Onboard an identity](../../docs/guides/onboard-an-identity.md)
-- [Sign while holding your own key](../../docs/guides/external-signing.md)
-- [Proof-gate a contract call](../../docs/guides/proof-gated-contract-call.md)
-- [M-of-N panels](../../docs/guides/multisig-panel.md)
-- [Verify a proof](../../docs/guides/verify-a-proof.md)
+- [Onboard an identity](https://docs.kompendium.co/onboard-an-identity.html)
+- [Sign while holding your own key](https://docs.kompendium.co/external-signing.html)
+- [Proof-gate a contract call](https://docs.kompendium.co/proof-gated-contract-call.html)
+- [M-of-N panels](https://docs.kompendium.co/multisig-panel.html)
+- [Verify a proof](https://docs.kompendium.co/verify-a-proof.html)
 
 ## License
 

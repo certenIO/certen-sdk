@@ -3,6 +3,8 @@
 Client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) — proof-gated
 cross-chain execution on Accumulate.
 
+**Documentation: <https://docs.kompendium.co>** — guides, authentication, errors, and the live API reference.
+
 | Package | |
 |---|---|
 | [`@certen.io/sdk`](packages/sdk) | TypeScript client. Typed errors, automatic retries, auto-idempotency, and the proof-gated execution flow as one call. |

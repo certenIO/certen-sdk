@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TypeScript client for the CERTEN Gateway API \u2014 proof-gated cross-chain execution on Accumulate",
   "license": "MIT",
   "type": "module",

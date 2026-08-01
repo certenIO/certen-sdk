@@ -1,5 +1,17 @@
 # Changelog — @certen.io/sdk
 
+## 0.3.1 — documentation links that work off GitHub
+
+No code changes.
+
+The README linked its guides with repository-relative paths (`../../docs/guides/...`). Those resolve
+on GitHub and are **dead on the npm package page**, which renders the README standalone and where
+`docs/` is not part of the tarball. Every guide link a reader followed from npm 404'd. They now point
+at <https://docs.kompendium.co>, which publishes the same guides.
+
+Also adds the documentation and API-key links to the top of the README, and corrects a link to the
+policy signer that pointed at a GitHub org that does not exist.
+
 ## 0.3.0 — response types now describe what the API actually returns
 
 **Breaking, at the type level only. No runtime behavior changed.**
