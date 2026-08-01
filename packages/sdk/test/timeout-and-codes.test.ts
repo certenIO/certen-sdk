@@ -1,0 +1,140 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import http from 'node:http';
+import { AddressInfo } from 'node:net';
+import { CertenClient } from '../src/index.js';
+import { CertenError } from '../src/errors.js';
+
+/**
+ * Both of these were found by running the SDK against the live gateway, not by reading it.
+ *
+ *   1. `execute.proof()` failed with `NETWORK_ERROR` because the 30s request timeout was hardcoded
+ *      and unreachable from the outside — the merkle-receipt fallback legitimately takes longer.
+ *   2. An edge-level 502 has a `text/plain` body, so `data.code` was undefined and the error
+ *      surfaced as `UNKNOWN_ERROR`. Anyone branching on `BAD_GATEWAY`, as docs/errors.md instructs,
+ *      never matched.
+ *
+ * Neither is visible against a mock that always answers JSON promptly, which is why neither was
+ * caught before.
+ */
+
+const servers: http.Server[] = [];
+
+afterEach(() => {
+  for (const s of servers.splice(0)) s.close();
+});
+
+/** A server that replies exactly as told — including non-JSON bodies and deliberate delays. */
+async function serve(
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+): Promise<string> {
+  const server = http.createServer(handler);
+  servers.push(server);
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+describe('configurable request timeout', () => {
+  it('defaults to 30s', async () => {
+    const baseUrl = await serve((_req, res) => res.end('{}'));
+    const c = new CertenClient({ apiKey: 'k', baseUrl });
+    // Reach into the axios instance the client built — the default is otherwise unobservable.
+    expect((c as unknown as { http: { defaults: { timeout: number } } }).http.defaults.timeout).toBe(30_000);
+  });
+
+  it('honours timeoutMs', async () => {
+    const baseUrl = await serve((_req, res) => res.end('{}'));
+    const c = new CertenClient({ apiKey: 'k', baseUrl, timeoutMs: 90_000 });
+    expect((c as unknown as { http: { defaults: { timeout: number } } }).http.defaults.timeout).toBe(90_000);
+  });
+
+  it('a slow response fails under a short timeout', async () => {
+    const baseUrl = await serve((_req, res) => {
+      setTimeout(() => res.end('{"identity":{}}'), 400);
+    });
+    const c = new CertenClient({ apiKey: 'k', baseUrl, timeoutMs: 60, maxRetries: 0 });
+    await expect(c.identity.get('x')).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
+  });
+
+  it('the same response succeeds when the caller allows more time', async () => {
+    const baseUrl = await serve((_req, res) => {
+      setTimeout(() => res.end('{"identity":{"id":"x"}}'), 400);
+    });
+    const c = new CertenClient({ apiKey: 'k', baseUrl, timeoutMs: 5_000 });
+    await expect(c.identity.get('x')).resolves.toBeTruthy();
+  });
+
+  it('execute.proof outlives the client default, and accepts an override', async () => {
+    let receiptDelay = 0;
+    const baseUrl = await serve((req, res) => {
+      res.setHeader('content-type', 'application/json');
+      if (req.url?.includes('/v1/transaction/')) {
+        // No proof_id -> forces the merkle-receipt fallback, the slow path.
+        res.end(JSON.stringify({ accum_tx_hash: 'a'.repeat(64) }));
+        return;
+      }
+      setTimeout(() => res.end(JSON.stringify({ receipt: true })), receiptDelay);
+    });
+
+    // Client timeout is tiny, but proof() applies its own longer budget to the receipt fetch.
+    const c = new CertenClient({ apiKey: 'k', baseUrl, timeoutMs: 50, maxRetries: 0 });
+    receiptDelay = 250;
+    const p = await c.execute.proof('intent-1');
+    expect(p.kind).toBe('accumulate-receipt');
+
+    // And an explicit override still bounds it.
+    receiptDelay = 400;
+    await expect(c.execute.proof('intent-1', { timeoutMs: 60 })).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+    });
+  });
+});
+
+describe('error codes stay inside the documented catalog', () => {
+  const cases: Array<[number, string]> = [
+    [400, 'BAD_REQUEST'],
+    [401, 'UNAUTHORIZED'],
+    [403, 'FORBIDDEN'],
+    [404, 'NOT_FOUND'],
+    [409, 'CONFLICT'],
+    [429, 'RATE_LIMIT_EXCEEDED'],
+    [500, 'INTERNAL_ERROR'],
+    [502, 'BAD_GATEWAY'],
+    [503, 'BAD_GATEWAY'],
+    [504, 'BAD_GATEWAY'],
+  ];
+
+  for (const [status, code] of cases) {
+    it(`a plain-text ${status} maps to ${code}, not UNKNOWN_ERROR`, async () => {
+      const baseUrl = await serve((_req, res) => {
+        // Exactly what an edge 502 looks like: text/plain, no JSON, no code field.
+        res.writeHead(status, { 'content-type': 'text/plain' });
+        res.end(`error code: ${status}`);
+      });
+      const c = new CertenClient({ apiKey: 'k', baseUrl, maxRetries: 0 });
+      await expect(c.identity.get('x')).rejects.toMatchObject({ status, code });
+    });
+  }
+
+  it('a code the gateway actually sent always wins over the status map', async () => {
+    const baseUrl = await serve((_req, res) => {
+      res.writeHead(502, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'downstream exploded', code: 'PROOF_SERVICE_DOWN' }));
+    });
+    const c = new CertenClient({ apiKey: 'k', baseUrl, maxRetries: 0 });
+    await expect(c.identity.get('x')).rejects.toMatchObject({ code: 'PROOF_SERVICE_DOWN' });
+  });
+
+  it('an unmapped status still reports UNKNOWN_ERROR', async () => {
+    const baseUrl = await serve((_req, res) => {
+      res.writeHead(418, { 'content-type': 'text/plain' });
+      res.end('teapot');
+    });
+    const c = new CertenClient({ apiKey: 'k', baseUrl, maxRetries: 0 });
+    await expect(c.identity.get('x')).rejects.toMatchObject({ status: 418, code: 'UNKNOWN_ERROR' });
+  });
+
+  it('the mapped codes keep their documented retry semantics', () => {
+    expect(new CertenError('x', 502, 'BAD_GATEWAY').isRetryable).toBe(true);
+    expect(new CertenError('x', 404, 'NOT_FOUND').isRetryable).toBe(false);
+  });
+});

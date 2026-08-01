@@ -37,6 +37,32 @@ function envBaseUrl(): string | undefined {
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_BACKOFF_MS = 250;
 const DEFAULT_MAX_BACKOFF_MS = 8_000;
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * The code to report when the gateway returns an error with no machine-readable `code`.
+ *
+ * Not hypothetical: an edge-level 502 from Cloudflare has a `text/plain` body, so `data.code` is
+ * undefined and every such failure surfaced as `UNKNOWN_ERROR` — a code that appears nowhere in the
+ * documented catalog. Callers branching on `BAD_GATEWAY`, exactly as `docs/errors.md` tells them to,
+ * silently never matched. Mapping by status keeps the SDK's codes inside the documented set no
+ * matter which layer produced the error.
+ *
+ * A `code` sent by the gateway always wins over this table.
+ */
+const CODE_BY_STATUS: Record<number, string> = {
+  400: 'BAD_REQUEST',
+  401: 'UNAUTHORIZED',
+  403: 'FORBIDDEN',
+  404: 'NOT_FOUND',
+  409: 'CONFLICT',
+  429: 'RATE_LIMIT_EXCEEDED',
+  500: 'INTERNAL_ERROR',
+  // 503/504 are also "a downstream service did not answer", which is what BAD_GATEWAY documents.
+  502: 'BAD_GATEWAY',
+  503: 'BAD_GATEWAY',
+  504: 'BAD_GATEWAY',
+};
 
 interface RetryConfig extends AxiosRequestConfig {
   __retryCount?: number;
@@ -96,7 +122,7 @@ export class CertenClient {
         'Content-Type': 'application/json',
         'User-Agent': `certen-sdk-node/${process.env.npm_package_version ?? 'dev'}`,
       },
-      timeout: 30_000,
+      timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       validateStatus: (status) => status >= 200 && status < 300,
     });
 
@@ -145,8 +171,14 @@ export class CertenClient {
       async (error: AxiosError<{ error?: string; code?: string }> & { config?: RetryConfig }) => {
         const cfg = error.config;
         const status = error.response?.status ?? 0;
-        const code = error.response?.data?.code ?? (status === 0 ? 'NETWORK_ERROR' : 'UNKNOWN_ERROR');
-        const message = error.response?.data?.error ?? error.message;
+        // A non-JSON error body (an edge 502, an HTML error page) leaves `data` as a string, so
+        // `data?.code` is undefined — fall back to the status map rather than to UNKNOWN_ERROR.
+        const body = error.response?.data;
+        const sentCode = typeof body === 'object' && body !== null ? body.code : undefined;
+        const code = sentCode
+          ?? (status === 0 ? 'NETWORK_ERROR' : CODE_BY_STATUS[status] ?? 'UNKNOWN_ERROR');
+        const sentMessage = typeof body === 'object' && body !== null ? body.error : undefined;
+        const message = sentMessage ?? error.message;
         const requestId = (error.response?.headers?.['x-request-id'] as string | undefined) ?? undefined;
         const retryAfter = error.response?.headers?.['retry-after'];
         const details = retryAfter ? { retryAfter: Number(retryAfter) } : undefined;

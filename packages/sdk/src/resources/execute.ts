@@ -66,6 +66,16 @@ export interface OpenedIntent {
 const DONE = ['completed', 'delivered', 'proven'];
 const FAILED = ['failed', 'error'];
 
+/**
+ * Proof fetches get a longer budget than the client's 30s default.
+ *
+ * Measured against the live gateway: fetching the Accumulate merkle receipt exceeded 30s and failed
+ * as `NETWORK_ERROR`. Retrieving evidence for an already-completed transaction is exactly the call
+ * that should wait rather than fail — nothing is pending on it, and the alternative is telling a
+ * caller their proof does not exist when it does. Override per call with `proof(id, { timeoutMs })`.
+ */
+const PROOF_TIMEOUT_MS = 120_000;
+
 export class ExecuteResource {
   constructor(
     private http: AxiosInstance,
@@ -195,21 +205,24 @@ export class ExecuteResource {
    * normal case for a governance or authorization transaction, and the case where a naive lookup returns
    * empty and looks like a bug.
    */
-  async proof(intentId: string): Promise<
+  async proof(
+    intentId: string,
+    { timeoutMs = PROOF_TIMEOUT_MS }: { timeoutMs?: number } = {},
+  ): Promise<
     | { kind: 'certen-proof'; proofId: string; proof: unknown; intent: TransactionResponse }
     | { kind: 'accumulate-receipt'; txHash: string; receipt: unknown; intent: TransactionResponse }
   > {
     const { data: intent } = await this.http.get(`/v1/transaction/${intentId}`);
     const proofId = (intent as { proof_id?: string }).proof_id;
     if (proofId) {
-      const { data: proof } = await this.http.get(`/v1/proof/${proofId}`);
+      const { data: proof } = await this.http.get(`/v1/proof/${proofId}`, { timeout: timeoutMs });
       return { kind: 'certen-proof', proofId, proof, intent };
     }
     const hash = String((intent as { accum_tx_hash?: string }).accum_tx_hash ?? '').match(/([a-f0-9]{64})/)?.[1];
     if (!hash) {
       throw new Error(`certen: intent ${intentId} has neither a proof_id nor an Accumulate transaction hash`);
     }
-    const { data: receipt } = await this.http.get(`/v1/proof/tx/${hash}/receipt`);
+    const { data: receipt } = await this.http.get(`/v1/proof/tx/${hash}/receipt`, { timeout: timeoutMs });
     return { kind: 'accumulate-receipt', txHash: hash, receipt, intent };
   }
 

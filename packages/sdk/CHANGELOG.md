@@ -1,5 +1,51 @@
 # Changelog — @certen.io/sdk
 
+## 0.4.0 — a reachable timeout, and error codes that match the documentation
+
+Both of these were found by running the SDK against the live gateway. Neither is visible against a
+mock that always answers JSON promptly, which is why neither was caught before.
+
+### Added — `timeoutMs` client option
+
+```ts
+const certen = new CertenClient({ apiKey, timeoutMs: 90_000 });
+```
+
+The per-request timeout was hardcoded at 30s with no way to change it, and the ceiling was reachable
+in ordinary use: `execute.proof()` falls back to fetching the Accumulate merkle receipt, which can
+take longer than 30s. The call failed as `NETWORK_ERROR` and the caller could do nothing about it —
+the SDK reported that a proof could not be retrieved when it existed and was simply slow.
+
+This bounds a single HTTP request. It is not `execute.wait()`, which polls to its own budget
+(default 360s).
+
+### Changed — `execute.proof()` gets its own budget, and accepts an override
+
+Proof fetches now allow 120s rather than the client default, and take an override:
+
+```ts
+await certen.execute.proof(intentId, { timeoutMs: 30_000 });
+```
+
+Retrieving evidence for an already-completed transaction is the call that should wait rather than
+fail: nothing is pending on it, and the alternative is telling a caller their proof does not exist
+when it does.
+
+### Fixed — errors no longer report codes outside the documented catalog
+
+An error response with no machine-readable `code` now maps to a documented code by HTTP status
+(`502/503/504 → BAD_GATEWAY`, `500 → INTERNAL_ERROR`, `404 → NOT_FOUND`, and so on). A `code` the
+gateway actually sends always wins; a status with no mapping still reports `UNKNOWN_ERROR`.
+
+Previously any non-JSON error body left `data.code` undefined and produced `UNKNOWN_ERROR`. That is
+not hypothetical — an edge-level 502 has a `text/plain` body, so **every edge 502 surfaced as
+`UNKNOWN_ERROR`**, and code branching on `BAD_GATEWAY`, exactly as `docs/errors.md` instructs,
+silently never matched.
+
+`isRetryable` is derived from the HTTP status and was always correct, so retry behaviour does not
+change. Only the reported `code` does. If you were special-casing `UNKNOWN_ERROR` to catch 5xx, you
+can now branch on the documented codes instead.
+
 ## 0.3.1 — documentation links that work off GitHub
 
 No code changes.

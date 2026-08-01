@@ -3,6 +3,18 @@
 export interface CertenClientOptions {
   apiKey: string;
   baseUrl?: string;
+  /**
+   * Per-request timeout in ms. Default 30_000.
+   *
+   * This was hardcoded, and the ceiling was reachable in normal use: `execute.proof()` falls back to
+   * fetching the Accumulate merkle receipt, which can take longer than 30s on a busy network — so the
+   * call failed as `NETWORK_ERROR` with no way for the caller to allow more time. Raise it when you
+   * are on a slow link or fetching proofs.
+   *
+   * This bounds a SINGLE HTTP request, not `execute.wait()`, which polls to its own `timeoutMs`
+   * budget (default 360s).
+   */
+  timeoutMs?: number;
 }
 
 // ---- Identity ----
