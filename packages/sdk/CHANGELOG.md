@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Fixed — `execute.transfer()` now works at all
+
+**Breaking: `TransferParams.adiUrl` is required.** Not breaking in practice — every call that
+omitted it failed, so there is no working code to break.
+
+`execute.transfer()` returned a bodyless `502` on every invocation. The cause was not the gateway
+being down: the upstream native-transfer path requires four fields that **do not appear in the
+transfer shape the API documents** — `adiUrl`, `id`, `initiatedBy` and `timestamp` — and omitting any
+one of them crashes it rather than returning a validation error. `adiUrl` is dereferenced with no
+null check (`TypeError`), and `new Date(intent.timestamp).toISOString()` throws `RangeError` on
+`undefined`. The equivalent multi-leg path defaults the last three for the caller; this one does not.
+
+The SDK now supplies all four: you pass `adiUrl`, and `id`, `initiatedBy` and `timestamp` are
+generated. Verified end-to-end against production — intent opened, signed externally, submitted,
+`anchoring` → `completed` in 94s, and the resulting Accumulate transaction confirmed `delivered`
+on kermit.
+
+This is a workaround for certenIO/accumulate-api-bridge#1. Once that path defaults the three
+generated fields, they become harmless no-ops rather than load-bearing.
+
+`execute.contractCall()` was never affected — it sends the multi-leg shape, which is handled
+correctly upstream.
+
 ### Changed — `Identity.can_sign` is now `boolean | null`
 
 The gateway changed what this field means, and the type follows.

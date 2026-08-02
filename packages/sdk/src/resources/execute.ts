@@ -1,4 +1,5 @@
 import { AxiosInstance } from 'axios';
+import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
 import type { ContractCall, TransactionIntent, TransactionResponse } from '../types.js';
 
@@ -42,6 +43,19 @@ export interface ProofGatedCallParams {
 
 export interface TransferParams {
   identityId: string;
+  /**
+   * The signing identity's ADI, e.g. `acc://your-org.acme`.
+   *
+   * REQUIRED. Its absence is why this method never worked: the upstream native-transfer path reads
+   * `intent.adiUrl` with no null check, so an intent without one threw upstream and came back as a
+   * bodyless `502` — which reads as "the gateway is down", not "you omitted a field". See
+   * certenIO/accumulate-api-bridge#1.
+   *
+   * Requiring it is not a breaking change in practice: every call that omitted it failed, so there
+   * is no working code to break. It is the only one of the four fields that path needs which the
+   * caller must supply — `id`, `initiatedBy` and `timestamp` are generated below.
+   */
+  adiUrl: string;
   fromChain: string;
   toChain: string;
   fromAddress: string;
@@ -118,6 +132,19 @@ export class ExecuteResource {
     return this.open({
       identity_id: p.identityId,
       intent: {
+        // The upstream native-transfer path requires adiUrl, id, initiatedBy AND timestamp, none of
+        // which appear in the transfer shape the API documents. Omitting any one of them produces a
+        // bodyless 502 rather than a validation error: `adiUrl` is dereferenced with no null check,
+        // and `new Date(intent.timestamp).toISOString()` throws RangeError on undefined. Verified
+        // field by field against the live gateway — see certenIO/accumulate-api-bridge#1.
+        //
+        // The multi-leg branch upstream already defaults id/initiatedBy/timestamp itself; this path
+        // does not, so the SDK supplies them. Once the upstream defaults them too, these become
+        // harmless no-ops rather than load-bearing.
+        adiUrl: p.adiUrl,
+        id: randomUUID(),
+        initiatedBy: p.adiUrl,
+        timestamp: Date.now(),
         fromChain: p.fromChain,
         toChain: p.toChain,
         fromAddress: p.fromAddress,

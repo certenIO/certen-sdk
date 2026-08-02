@@ -147,7 +147,7 @@ describe('execute.transfer', () => {
     const g = await gateway(okFlow);
     try {
       await clientFor(g.url).execute.transfer({
-        identityId: 'id-1', fromChain: 'accumulate', toChain: 'ethereum-sepolia',
+        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'ethereum-sepolia',
         fromAddress: 'acc://org.acme', toAddress: '0xBe00', amount: '4000', tokenSymbol: 'ETH',
         publicKey: PUBKEY, sign: (h) => `signed:${h}`,
       });
@@ -161,10 +161,26 @@ describe('execute.transfer', () => {
     try {
       const huge = '90071992547409910000';
       await clientFor(g.url).execute.transfer({
-        identityId: 'id-1', fromChain: 'accumulate', toChain: 'eth', fromAddress: 'a', toAddress: 'b',
+        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'eth', fromAddress: 'a', toAddress: 'b',
         amount: huge, publicKey: PUBKEY, sign: () => 'sig',
       });
       expect(g.seen[0].body.intent.amount).toBe(huge);
+    } finally { g.close(); }
+  });
+
+  it('sends intent.adiUrl — omitting it crashed the upstream native-transfer path', async () => {
+    // Regression for certenIO/accumulate-api-bridge#1. That code reads `intent.adiUrl.replace(...)`
+    // with no null check, so an intent without it threw a TypeError upstream and came back as a
+    // bodyless 502 — indistinguishable from the gateway being down. A mock that accepts any body
+    // cannot see this, which is why it was only caught against the live gateway.
+    const g = await gateway(okFlow);
+    try {
+      await clientFor(g.url).execute.transfer({
+        identityId: 'id-1', adiUrl: 'acc://seller.acme', fromChain: 'ethereum-sepolia',
+        toChain: 'ethereum-sepolia', fromAddress: '0xA', toAddress: '0xB', amount: '1',
+        publicKey: PUBKEY, sign: () => 'sig',
+      });
+      expect(g.seen[0].body.intent.adiUrl).toBe('acc://seller.acme');
     } finally { g.close(); }
   });
 });
