@@ -64,10 +64,18 @@ export interface Identity {
   key_page_url: string | null;
   status: string;
   /**
-   * Derived from the on-chain key page, NOT from the provisioning state machine — so it can be
-   * true while `status` is still `creating`. Check both before relying on an identity.
+   * Is this identity's key actually on its on-chain key page?
+   *
+   * `null` means the key page could not be read — **unknown, not usable**. Never treat null as a
+   * soft yes; an Accumulate outage is exactly when a caller most needs to be told "I don't know".
+   *
+   * Before 0.5.0 the gateway derived this from a database column (whether a `public_key` had been
+   * supplied), so it read `true` from the moment the identity row existed — including for an
+   * identity whose provisioning had failed halfway and whose on-chain key page was held by the
+   * CERTEN sponsor key rather than the customer's. It reported the reassuring answer on the one
+   * failure where the distinction matters. It now reflects the chain.
    */
-  can_sign?: boolean;
+  can_sign?: boolean | null;
   error_message?: string | null;
   credit_balance: number;
   chain_accounts: ChainAccount[];

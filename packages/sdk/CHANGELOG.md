@@ -1,5 +1,29 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased
+
+### Changed — `Identity.can_sign` is now `boolean | null`
+
+The gateway changed what this field means, and the type follows.
+
+It used to be derived from a database column — effectively "was a public key supplied" — so it read
+`true` from the moment the identity row existed. On 2026-08-01 an Accumulate outage killed
+provisioning between "create the ADI under the sponsor key" and "swap the customer's key in",
+leaving an ADI on chain held by the **CERTEN sponsor key** rather than the customer. The gateway
+reported `status: "error"` and `can_sign: true` for it. On the one failure where the distinction
+matters most, the field asserted the reassuring answer.
+
+It is now derived from the on-chain key page: is this identity's key hash actually on it?
+
+- `true` — the key is on the page. The identity can sign.
+- `false` — the page was read and the key is not on it.
+- **`null` — the page could not be read. Unknown, NOT usable.**
+
+**Treat `null` as "do not proceed".** It is deliberately not `true`: an Accumulate outage is exactly
+when a caller most needs to be told the truth is unavailable rather than handed an optimistic
+default. If you were doing `if (identity.can_sign)`, that still behaves correctly — `null` is falsy.
+If you were doing `if (identity.can_sign === false)`, add the null case.
+
 ## 0.4.0 — a reachable timeout, and error codes that match the documentation
 
 Both of these were found by running the SDK against the live gateway. Neither is visible against a
