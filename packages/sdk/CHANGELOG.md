@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Fixed — `execute.contractCall()` now works at all
+
+**Breaking, type-level: `contractAddresses` is an object, not `string[]`.**
+
+`execute.contractCall()` sent `contract_addresses: [contractCall.target]`. That field is an OBJECT
+naming the CERTEN deployment (`anchor`, `anchorV2`, `abstractAccount`, `entryPoint`, `factory`) — not
+your call target, and not a list. The endpoint rejected every such call with
+`400 /contract_addresses must be object`, so the method had never worked on any chain.
+
+It is no longer sent at all: the gateway applies the correct defaults. Pass `contractAddresses` only
+to target a non-standard deployment.
+
+Verified against production on base-sepolia: opened, signed and submitted, where the same call
+returned 400 before.
+
+### Fixed — `CreateIdentityParams.signingProvider` is an object
+
+Declared `string` while the endpoint's schema is `{ type: 'object' }`, so a provider name was
+rejected with a 400 naming a field the caller believed they had set correctly.
+
+### Changed — the contract fixture now pins property TYPES
+
+Both bugs above are the same class, and the contract test could not see either: it recorded property
+*names* only, so it confirmed `contract_addresses` was an allowed key while the SDK sent it in a
+shape the API rejects. The fixture now records each request property's JSON type and
+`contract.test.ts` asserts it, with `number`/`integer` handled the way JSON Schema does.
+
 ### Fixed — `execute.transfer()` now works at all
 
 **Breaking: `TransferParams.adiUrl` is required.** Not breaking in practice — every call that

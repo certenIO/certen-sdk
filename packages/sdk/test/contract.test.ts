@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { CertenClient } from '../src/index.js';
 
 interface Contract {
-  paths: Record<string, Record<string, { required: string[]; properties: string[]; query: string[] }>>;
+  paths: Record<string, Record<string, { required: string[]; properties: string[]; propertyTypes?: Record<string, string>; query: string[] }>>;
 }
 const CONTRACT: Contract = JSON.parse(
   readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/openapi-contract.json'), 'utf8'),
@@ -86,6 +86,45 @@ function assertMatchesSpec(req: { method: string; path: string; query: URLSearch
 
   const badQuery = [...req.query.keys()].filter((q) => !op.query.includes(q));
   expect(badQuery, `${tmpl} does not accept these query parameters`).toEqual([]);
+
+  // Types, not just names.
+  //
+  // A name-only check answers "may I send this key" but never "in what shape", and that gap let a
+  // real bug ship: `contract_addresses` is an object, the SDK declared `string[]` and sent
+  // `[target]`, so every execute.contractCall was rejected with `/contract_addresses must be
+  // object` while this test stayed green.
+  const typeErrors: string[] = [];
+  for (const [key, value] of Object.entries(req.body)) {
+    const declared = op.propertyTypes?.[key];
+    if (!declared || value === null || value === undefined) continue;
+    if (!satisfiesJsonType(value, declared)) {
+      typeErrors.push(`${key}: sent ${jsonTypeOf(value)}, schema says ${declared}`);
+    }
+  }
+  expect(typeErrors, `${tmpl} received values of the wrong JSON type`).toEqual([]);
+}
+
+/** JSON Schema's type names, which differ from `typeof` for arrays and null. */
+function jsonTypeOf(v: unknown): string {
+  if (Array.isArray(v)) return 'array';
+  if (v === null) return 'null';
+  return typeof v;
+}
+
+/**
+ * Is this value acceptable for the schema's declared type?
+ *
+ * Not string equality: JSON Schema's `number` accepts integers, so `credits: 50000` satisfies
+ * `number` even though it is a whole number. Only the reverse is narrowing — a float does not
+ * satisfy `integer`.
+ */
+function satisfiesJsonType(value: unknown, declared: string): boolean {
+  const actual = jsonTypeOf(value);
+  if (actual === declared) return true;
+  if (declared === 'number' && actual === 'number') return true;
+  if (declared === 'integer') return typeof value === 'number' && Number.isInteger(value);
+  if (declared === 'number') return typeof value === 'number';
+  return false;
 }
 
 describe('SDK requests match the API contract', () => {
@@ -121,7 +160,8 @@ describe('SDK requests match the API contract', () => {
   it('transaction.create carries a contract-call intent and the seat/page selectors', async () => {
     await certen.transaction.create({
       identityId: 'id-1',
-      contractAddresses: ['0xESCROBOT'],
+      // An OBJECT keyed by role — the endpoint rejects an array outright.
+      contractAddresses: { anchor: '0xANCHOR', abstractAccount: '0xACCT' },
       signerKeyPage: 'acc://panel.acme/book/2',
       signerPublicKey: 'ab'.repeat(32),
       intent: {

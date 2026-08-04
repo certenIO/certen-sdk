@@ -1,7 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
-import type { ContractCall, TransactionIntent, TransactionResponse } from '../types.js';
+import type { ContractAddresses, ContractCall, TransactionIntent, TransactionResponse } from '../types.js';
 
 /**
  * The proof-gated execution flow, as one call instead of four.
@@ -32,6 +32,11 @@ export interface ProofGatedCallParams {
   chain: string;
   chainId?: number;
   contractCall: ContractCall;
+  /**
+   * Override the CERTEN deployment addresses (anchor, abstractAccount, …). Omit unless you are
+   * pointing at a non-standard deployment — the gateway applies the correct defaults.
+   */
+  contractAddresses?: ContractAddresses;
   sign: SignFn;
   publicKey: string;
   /** Nominate a seat on the page. Defaults to `publicKey`. */
@@ -121,7 +126,13 @@ export class ExecuteResource {
     return this.open({
       identity_id: p.identityId,
       intent,
-      contract_addresses: [p.contractCall.target],
+      // NOT the call target. `contract_addresses` names the CERTEN deployment (anchor, anchorV2,
+      // abstractAccount, entryPoint, factory) and must be an OBJECT — this sent `[target]`, which
+      // the endpoint rejects with `/contract_addresses must be object`, so every contractCall
+      // failed with a 400 naming a field the caller never set. The gateway applies the right
+      // defaults when it is omitted, so omitting it is correct; `contractAddresses` overrides it
+      // only for a non-standard deployment.
+      contract_addresses: p.contractAddresses,
       signer_public_key: p.signerPublicKey ?? p.publicKey,
       signer_key_page: p.signerKeyPage,
     }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);

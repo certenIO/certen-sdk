@@ -131,6 +131,16 @@ output shape is a contract change — `packages/cli/test/conformance.test.ts` en
   `can_sign` is true before relying on the identity.
 - **`vote` is `approve` | `reject` | `abstain`** — lowercase string, not a number, not `accept`.
 - **Amounts are base units as strings.** A JSON number loses precision past 2^53.
+- **A fresh identity's abstract account has a zero balance.** A value transfer from it is accepted,
+  signed and submitted, then parks at `anchoring` forever because the execution leg cannot run on
+  chain. Fund it first. This is the most likely reason a hand-rolled end-to-end test "hangs" — the
+  API layer is behaving correctly and nothing reports the real cause.
+- **`contract_addresses` is an object keyed by role**, not a list of addresses, and it identifies the
+  CERTEN deployment rather than your call target. Omit it; the gateway defaults it correctly.
+- **The contract fixture pins property TYPES as well as names.** A name-only contract answers "may I
+  send this key" but never "in what shape" — which is how `contract_addresses` shipped as an array
+  against an object schema and broke every `execute.contractCall`. If you add a request field, the
+  fixture records its type and `contract.test.ts` enforces it.
 - **The config permission check is POSIX-only.** Windows has no POSIX mode bits, so `chmod` is a no-op
   and `statSync().mode` reports a synthesized value. Guard any new permission logic by platform.
 - **The gateway is much larger than the SDK.** It exposes 106 operations; the SDK wraps 24 of them.

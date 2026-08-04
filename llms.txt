@@ -39,6 +39,17 @@ const proof = await certen.execute.proof(intentId);   // hand this to your count
   into the signature preimage, so it is fixed when signing data is created: you cannot request signing data
   and pick the vote afterwards.
 - **Amounts are base units as STRINGS.** A JSON number loses precision past 2^53.
+- **A new identity's abstract account holds nothing.** `identity.create` provisions an abstract
+  account per linked chain, but with a zero balance. An intent that moves value from it is accepted,
+  signed and submitted normally — and then sits at `anchoring` forever, because the execution leg
+  cannot run on chain. **Fund the abstract account before transferring value.** Nothing in the API
+  response tells you this; the intent simply never reaches a terminal state.
+- **Any chain the gateway lists works.** `GET /v1/chains` returns them (ethereum-sepolia,
+  base-sepolia, arbitrum-sepolia, optimism-sepolia, polygon-amoy, and more). Chain names and
+  `chainId` are passed straight through — there is nothing Ethereum-specific in this SDK.
+- **`contract_addresses` is an OBJECT, not a list**, and you almost never set it. It names the CERTEN
+  deployment (`anchor`, `abstractAccount`, …), not your call target; the gateway supplies the right
+  defaults. Passing an array is rejected with `/contract_addresses must be object`.
 - **Errors are typed:** catch `CertenError` and branch on `.code`. **Retry ONLY the codes whose `retryable`
   is yes** — `RATE_LIMIT_EXCEEDED`, `INTERNAL_ERROR`, `BAD_GATEWAY`, `NETWORK_ERROR`. The SDK already retries
   those with backoff, so a second retry loop around it is wrong. Every other code is a condition that will

@@ -79,10 +79,22 @@ export function buildContract(spec, generatedFrom = 'spec/openapi.json') {
         if (Object.keys(nested).length > 0) responseShapes[code] = nested;
       }
 
+      // Property TYPES, not just names.
+      //
+      // Recording only names let a type mismatch through undetected: `contract_addresses` is an
+      // object, the SDK declared `string[]` and sent `[target]`, and every contractCall failed with
+      // `/contract_addresses must be object` — while this fixture happily confirmed the field name
+      // was allowed. A name-only contract answers "may I send this key", never "in what shape".
+      const propertyTypes = {};
+      for (const [name, sub] of Object.entries(bodySchema.properties ?? {})) {
+        if (sub?.type) propertyTypes[name] = sub.type;
+      }
+
       paths[path] ??= {};
       paths[path][method] = {
         required: bodySchema.required ?? [],
         properties: Object.keys(bodySchema.properties ?? {}),
+        propertyTypes,
         query,
         responses,
         responseShapes,

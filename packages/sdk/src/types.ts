@@ -31,7 +31,14 @@ export interface CreateIdentityParams {
   chains?: string[];
   credits?: number;
   signingMode?: 'external' | 'provider';
-  signingProvider?: string;
+  /**
+   * Provider configuration — an OBJECT.
+   *
+   * This was declared `string` while the endpoint's schema is `{ type: 'object' }`, so passing a
+   * provider name rejected with a 400 pointing at a field the caller believed they had set
+   * correctly. Open-ended because the schema is `additionalProperties: true`.
+   */
+  signingProvider?: Record<string, unknown>;
   idempotencyKey?: string;
   // No `webhookUrl`: POST /v1/identity does not accept one. Fastify strips unknown properties, so passing
   // it was a silent no-op. Set it with `identity.update()`, which does accept it.
@@ -150,6 +157,21 @@ export interface TransactionIntent {
   [k: string]: unknown;
 }
 
+/**
+ * Per-deployment CERTEN contract addresses, keyed by role.
+ *
+ * Open-ended because the gateway's schema is `additionalProperties: true` — a narrower type here
+ * than on the server would reject payloads the API accepts.
+ */
+export interface ContractAddresses {
+  anchor?: string;
+  anchorV2?: string;
+  abstractAccount?: string;
+  entryPoint?: string;
+  factory?: string;
+  [k: string]: unknown;
+}
+
 export interface ContractCall {
   target: string;
   functionSignature: string;
@@ -175,7 +197,18 @@ export interface CreateTransactionParams {
   identityId: string;
   /** REQUIRED by the API. */
   intent: TransactionIntent;
-  contractAddresses?: string[];
+  /**
+   * Per-deployment contract addresses. An OBJECT keyed by role, not a list.
+   *
+   * This was declared as `string[]`, and `execute.contractCall` sent `[target]`. The endpoint
+   * requires an object and rejects an array outright — `/contract_addresses must be object` — so
+   * every call carrying it failed with a 400 that named a field the caller never set by hand.
+   * The gateway applies sensible defaults when it is omitted, which is why omitting it works and
+   * is the right default.
+   *
+   * Only set this to point at a non-standard deployment of the CERTEN contracts.
+   */
+  contractAddresses?: ContractAddresses;
   proofClass?: string;
   /** Which key PAGE signs, e.g. `acc://org.acme/book/2`. Must be in the same book. */
   signerKeyPage?: string;

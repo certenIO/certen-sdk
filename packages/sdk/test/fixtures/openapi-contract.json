@@ -6,6 +6,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -15,6 +16,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -24,6 +26,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -37,6 +40,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -51,6 +55,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -88,6 +93,16 @@
           "signing_provider",
           "idempotency_key"
         ],
+        "propertyTypes": {
+          "name": "string",
+          "public_key_hash": "string",
+          "public_key": "string",
+          "credits": "number",
+          "chains": "array",
+          "signing_mode": "string",
+          "signing_provider": "object",
+          "idempotency_key": "string"
+        },
         "query": [],
         "responses": {
           "202": [
@@ -122,6 +137,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -158,6 +174,12 @@
           "webhook_url",
           "public_key"
         ],
+        "propertyTypes": {
+          "link_chains": "array",
+          "unlink_chains": "array",
+          "webhook_url": "string",
+          "public_key": "string"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -189,6 +211,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -205,6 +228,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -219,6 +243,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "identity"
         ],
@@ -251,6 +276,11 @@
           "plan",
           "webhook_url"
         ],
+        "propertyTypes": {
+          "name": "string",
+          "plan": "string",
+          "webhook_url": "string"
+        },
         "query": [],
         "responses": {
           "201": [
@@ -278,6 +308,10 @@
           "webhook_url",
           "webhook_secret"
         ],
+        "propertyTypes": {
+          "webhook_url": "string",
+          "webhook_secret": "string"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -302,6 +336,13 @@
           "rate_limit_rpm",
           "expires_at"
         ],
+        "propertyTypes": {
+          "name": "string",
+          "org_id": "string",
+          "permissions": "array",
+          "rate_limit_rpm": "number",
+          "expires_at": "string"
+        },
         "query": [],
         "responses": {
           "201": [
@@ -326,6 +367,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -354,6 +396,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -381,6 +424,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "resource_type",
           "action",
@@ -410,6 +454,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -419,6 +464,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "from",
           "to"
@@ -442,6 +488,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "status",
           "limit",
@@ -468,6 +515,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -494,6 +542,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -516,6 +565,13 @@
           "description",
           "skip_verification"
         ],
+        "propertyTypes": {
+          "url": "string",
+          "secret": "string",
+          "event_types": "array",
+          "description": "string",
+          "skip_verification": "boolean"
+        },
         "query": [],
         "responses": {
           "201": [
@@ -536,6 +592,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -563,6 +620,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -582,6 +640,15 @@
           "description",
           "is_active"
         ],
+        "propertyTypes": {
+          "url": "string",
+          "event_types": "array",
+          "description": [
+            "string",
+            "null"
+          ],
+          "is_active": "boolean"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -599,6 +666,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -610,6 +678,9 @@
         "properties": [
           "secret"
         ],
+        "propertyTypes": {
+          "secret": "string"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -626,6 +697,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -651,6 +723,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -677,6 +750,15 @@
           "signer_key_page",
           "signer_public_key"
         ],
+        "propertyTypes": {
+          "identity_id": "string",
+          "intent": "object",
+          "contract_addresses": "object",
+          "proof_class": "string",
+          "idempotency_key": "string",
+          "signer_key_page": "string",
+          "signer_public_key": "string"
+        },
         "query": [],
         "responses": {
           "201": [
@@ -711,6 +793,10 @@
           "signature",
           "public_key"
         ],
+        "propertyTypes": {
+          "signature": "string",
+          "public_key": "string"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -726,6 +812,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -760,6 +847,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit",
           "offset"
@@ -793,6 +881,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -813,6 +902,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -822,6 +912,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -831,6 +922,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -840,6 +932,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -853,6 +946,11 @@
           "expires_in_hours",
           "max_views"
         ],
+        "propertyTypes": {
+          "label": "string",
+          "expires_in_hours": "integer",
+          "max_views": "integer"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -862,6 +960,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit",
           "offset"
@@ -874,6 +973,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -883,6 +983,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -892,6 +993,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "family",
           "verified_only"
@@ -904,6 +1006,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -922,6 +1025,13 @@
           "signer_key_page",
           "signer_public_key"
         ],
+        "propertyTypes": {
+          "identity": "string",
+          "operations": "array",
+          "key_page_url": "string",
+          "signer_key_page": "string",
+          "signer_public_key": "string"
+        },
         "query": [],
         "responses": {
           "201": [
@@ -946,6 +1056,10 @@
           "signature",
           "public_key"
         ],
+        "propertyTypes": {
+          "signature": "string",
+          "public_key": "string"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -961,6 +1075,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -982,6 +1097,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "identity",
           "status",
@@ -1049,6 +1165,15 @@
           "signature",
           "public_key"
         ],
+        "propertyTypes": {
+          "type": "string",
+          "target_id": "string",
+          "identity": "string",
+          "signer_url": "string",
+          "vote": "string",
+          "signature": "string",
+          "public_key": "string"
+        },
         "query": [],
         "responses": {
           "201": [
@@ -1085,6 +1210,10 @@
           "signature",
           "public_key"
         ],
+        "propertyTypes": {
+          "signature": "string",
+          "public_key": "string"
+        },
         "query": [],
         "responses": {
           "200": [
@@ -1100,6 +1229,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -1118,6 +1248,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1127,6 +1258,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "201": [
@@ -1142,6 +1274,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -1167,6 +1300,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1176,6 +1310,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -1193,6 +1328,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1202,6 +1338,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1215,6 +1352,11 @@
           "scopes",
           "rate_limit_rpm"
         ],
+        "propertyTypes": {
+          "name": "string",
+          "scopes": "array",
+          "rate_limit_rpm": "number"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1224,6 +1366,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1233,6 +1376,7 @@
       "delete": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1242,6 +1386,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1256,6 +1401,10 @@
           "email",
           "role"
         ],
+        "propertyTypes": {
+          "email": "string",
+          "role": "string"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1265,6 +1414,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "status"
         ],
@@ -1276,6 +1426,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1285,6 +1436,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1294,6 +1446,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1303,6 +1456,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {
           "200": [
@@ -1321,6 +1475,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit",
           "offset"
@@ -1356,6 +1511,11 @@
           "sku",
           "leg_count"
         ],
+        "propertyTypes": {
+          "chain": "string",
+          "sku": "string",
+          "leg_count": "integer"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1365,6 +1525,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1374,6 +1535,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit",
           "offset"
@@ -1391,6 +1553,10 @@
           "chain",
           "amount_usd"
         ],
+        "propertyTypes": {
+          "chain": "string",
+          "amount_usd": "string"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1407,6 +1573,11 @@
           "address",
           "label"
         ],
+        "propertyTypes": {
+          "chain": "string",
+          "address": "string",
+          "label": "string"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1414,6 +1585,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1423,6 +1595,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit",
           "offset"
@@ -1435,6 +1608,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1444,6 +1618,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "tree_size"
         ],
@@ -1455,6 +1630,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1464,6 +1640,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit",
           "offset"
@@ -1476,6 +1653,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1485,6 +1663,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "first",
           "second"
@@ -1497,6 +1676,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1506,6 +1686,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1515,6 +1696,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1524,6 +1706,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1533,6 +1716,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1542,6 +1726,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1551,6 +1736,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "days"
         ],
@@ -1562,6 +1748,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "days"
         ],
@@ -1582,6 +1769,13 @@
           "effective_from",
           "items"
         ],
+        "propertyTypes": {
+          "version": "string",
+          "kind": "string",
+          "notes": "string",
+          "effective_from": "string",
+          "items": "array"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1600,6 +1794,13 @@
           "not_before",
           "not_after"
         ],
+        "propertyTypes": {
+          "provider_type": "string",
+          "public_key": "string",
+          "provider_config": "object",
+          "not_before": "string",
+          "not_after": "string"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1614,6 +1815,10 @@
           "reason",
           "compromised"
         ],
+        "propertyTypes": {
+          "reason": "string",
+          "compromised": "boolean"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1627,6 +1832,9 @@
         "properties": [
           "org_id"
         ],
+        "propertyTypes": {
+          "org_id": "string"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1636,6 +1844,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1650,6 +1859,10 @@
           "org_id",
           "register_address"
         ],
+        "propertyTypes": {
+          "org_id": "string",
+          "register_address": "boolean"
+        },
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1659,6 +1872,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "limit"
         ],
@@ -1670,6 +1884,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1679,6 +1894,7 @@
       "post": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1688,6 +1904,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "days"
         ],
@@ -1699,6 +1916,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "days"
         ],
@@ -1710,6 +1928,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "days",
           "limit",
@@ -1726,6 +1945,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
@@ -1735,6 +1955,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [
           "days",
           "bucket",
@@ -1748,6 +1969,7 @@
       "get": {
         "required": [],
         "properties": [],
+        "propertyTypes": {},
         "query": [],
         "responses": {},
         "responseShapes": {}
