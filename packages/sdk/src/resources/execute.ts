@@ -1,7 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
-import type { ContractAddresses, ContractCall, TransactionIntent, TransactionResponse } from '../types.js';
+import type { ContractAddresses, ContractCall, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
 
 /**
  * The proof-gated execution flow, as one call instead of four.
@@ -43,6 +43,11 @@ export interface ProofGatedCallParams {
   signerPublicKey?: string;
   /** Nominate which page of the book signs, e.g. `acc://panel.acme/book/2`. */
   signerKeyPage?: string;
+  /**
+   * Schedule the proof cycle: `on_demand` (default, ~60–110s) or `on_cadence` (batched, cheaper,
+   * slower). It changes when the proof is produced, never what it proves.
+   */
+  proofClass?: ProofClass;
   idempotencyKey?: string;
 }
 
@@ -72,6 +77,11 @@ export interface TransferParams {
   publicKey: string;
   signerPublicKey?: string;
   signerKeyPage?: string;
+  /**
+   * Schedule the proof cycle: `on_demand` (default, ~60–110s) or `on_cadence` (batched, cheaper,
+   * slower). It changes when the proof is produced, never what it proves.
+   */
+  proofClass?: ProofClass;
   idempotencyKey?: string;
 }
 
@@ -134,6 +144,7 @@ export class ExecuteResource {
       // only for a non-standard deployment.
       contract_addresses: p.contractAddresses,
       signer_public_key: p.signerPublicKey ?? p.publicKey,
+      proof_class: p.proofClass,
       signer_key_page: p.signerKeyPage,
     }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);
   }
@@ -164,6 +175,7 @@ export class ExecuteResource {
         tokenSymbol: p.tokenSymbol,
       },
       signer_public_key: p.signerPublicKey ?? p.publicKey,
+      proof_class: p.proofClass,
       signer_key_page: p.signerKeyPage,
     }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);
   }

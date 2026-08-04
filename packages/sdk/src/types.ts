@@ -153,6 +153,19 @@ export interface ListIdentitiesParams {
  * Left open (`[k: string]: unknown`) deliberately: the gateway's own schema is `additionalProperties: true`
  * here, and a narrower type in the SDK than on the server would reject payloads the API accepts.
  */
+/**
+ * How the proof cycle is scheduled. It changes WHEN the proof is produced, never what it proves.
+ *
+ * - `on_demand` (default) — starts immediately, completes in roughly 60–110 seconds. Use it for
+ *   anything a user or counterparty is waiting on.
+ * - `on_cadence` — batched with other proofs by the validators. Cheaper per proof, higher latency.
+ *   Use it for bulk settlement where nobody is watching the clock.
+ *
+ * A union rather than `string` because the two values are the whole vocabulary, and a typo previously
+ * passed the gateway's validation and failed downstream in the proof service, far from its cause.
+ */
+export type ProofClass = 'on_demand' | 'on_cadence';
+
 export interface TransactionIntent {
   [k: string]: unknown;
 }
@@ -209,7 +222,7 @@ export interface CreateTransactionParams {
    * Only set this to point at a non-standard deployment of the CERTEN contracts.
    */
   contractAddresses?: ContractAddresses;
-  proofClass?: string;
+  proofClass?: ProofClass;
   /** Which key PAGE signs, e.g. `acc://org.acme/book/2`. Must be in the same book. */
   signerKeyPage?: string;
   /** Which SEAT on the page signs, 64 hex. Defaults to the identity's bound key. */

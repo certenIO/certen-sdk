@@ -1,4 +1,4 @@
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { readFileSync } from 'node:fs';
 import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
@@ -51,6 +51,14 @@ export function registerTransactionCommands(program: Command): void {
     .option('--contract-address <addr...>', 'Contract addresses this intent touches')
     .option('--signer-key-page <url>', 'Which key page signs, e.g. acc://org.acme/book/2')
     .option('--signer-public-key <hex>', 'Which seat on the page signs (64 hex)')
+    // Validated here so a typo is caught before a request goes out, rather than surfacing from the
+    // proof service later with no obvious connection to the flag that caused it.
+    .addOption(
+      new Option(
+        '--proof-class <class>',
+        'When the proof runs: on_demand starts now (~60-110s); on_cadence batches it (cheaper, slower)',
+      ).choices(['on_demand', 'on_cadence']),
+    )
     .option('--idempotency-key <key>', 'Idempotency key (one is generated if omitted)')
     .option('--sign-with <key>', 'Local key: sign the returned hash and submit it in one step')
     .action(async (opts) => {
@@ -86,6 +94,7 @@ export function registerTransactionCommands(program: Command): void {
         intent,
         contractAddresses: opts.contractAddress,
         signerKeyPage: opts.signerKeyPage,
+        proofClass: opts.proofClass,
         signerPublicKey: opts.signerPublicKey ?? signer?.publicKey,
         idempotencyKey: opts.idempotencyKey,
       });

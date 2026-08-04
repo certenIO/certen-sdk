@@ -309,13 +309,27 @@ const WRITE_TOOLS: ToolDef[] = [
             'Either a native transfer ({fromChain,toChain,amount,fromAddress,toAddress,tokenSymbol}) '
             + 'or a multi-leg/contract-call intent ({adiUrl,legs:[...]}). Amounts are base units as STRINGS.',
         },
+        // An OBJECT keyed by role — not a list, and not the address being called. Declared as a string
+        // array, this invited exactly the payload the endpoint rejects with
+        // `/contract_addresses must be object`: the same bug that made every SDK contractCall fail with
+        // a 400 naming a field the caller never set by hand.
         contractAddresses: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Contract addresses this intent touches',
+          type: 'object',
+          description:
+            'Override the CERTEN deployment addresses (anchor, anchorV2, abstractAccount, entryPoint, '
+            + 'factory). OMIT unless targeting a non-standard deployment — the gateway applies the '
+            + 'correct defaults. This is NOT the contract you are calling.',
         },
         signerKeyPage: str('Which key page signs, e.g. acc://org.acme/book/2'),
         signerPublicKey: str('Which seat on the page signs, 64-char hex'),
+        proofClass: {
+          type: 'string',
+          enum: ['on_demand', 'on_cadence'],
+          description:
+            'When the proof cycle runs. `on_demand` (default) starts immediately and takes roughly '
+            + '60-110 seconds. `on_cadence` batches it with other proofs: cheaper, slower. Affects when '
+            + 'the proof is produced, never what it proves.',
+        },
         idempotencyKey: str('Idempotency key. One is generated if omitted — do not omit it on a retry.'),
         confirm: CONFIRM,
       },
@@ -326,9 +340,13 @@ const WRITE_TOOLS: ToolDef[] = [
       c.transaction.create({
         identityId: s(a, 'identityId'),
         intent: a.intent as never,
-        contractAddresses: Array.isArray(a.contractAddresses) ? (a.contractAddresses as string[]) : undefined,
+        // Pass through only when it is the object the endpoint expects; an array here is the caller
+        // misreading the field, and forwarding it just produces a confusing 400.
+        contractAddresses: (a.contractAddresses && typeof a.contractAddresses === 'object'
+          && !Array.isArray(a.contractAddresses)) ? (a.contractAddresses as never) : undefined,
         signerKeyPage: optS(a, 'signerKeyPage'),
         signerPublicKey: optS(a, 'signerPublicKey'),
+        proofClass: optS(a, 'proofClass') as never,
         idempotencyKey: optS(a, 'idempotencyKey'),
       } as never),
   },
