@@ -1,6 +1,45 @@
 # Changelog — @certen.io/sdk
 
-## Unreleased
+## 0.5.0 — balance, funding, and a 402 that carries its own fix
+
+### Added — `client.billing`
+
+Balance, commitments, and adding funds. Two methods worth reading the docstrings for:
+
+`obligations()` returns `remaining_usd` — spendable minus what pending intents will consume — and
+that, not `balance()`, is the number to gate work on. A multi-signature intent can wait weeks for
+quorum, so an account can hold a balance that is entirely committed and still be refused on its
+next call.
+
+`waitForPayment()` polls until a deposit is credited or its window closes, and RETURNS the terminal
+status rather than throwing on expiry. An expired payment is an ordinary outcome the caller should
+report, not an exception.
+
+Registering a payer address is deliberately absent: it asserts that deposits from a wallet belong to
+your organization, so it stays a signed-in owner/admin action in the portal rather than something a
+machine key can do.
+
+### Added — `CertenPaymentRequiredError`, and the response body on every error
+
+**Behavioural change: HTTP 402 no longer arrives as `CertenBadRequestError`.** Code that caught
+`CertenBadRequestError` to handle payment failures must catch `CertenPaymentRequiredError` instead.
+The two were worth separating: nothing is wrong with a refused request — it is priced, valid, and
+would succeed once funded — and a host product needs that distinction to choose between a top-up
+prompt and a validation message.
+
+The gateway mints a payment target with the refusal, and the SDK was discarding it: `details`
+carried only `retryAfter`, so a body containing an address, an exact amount, a reference and a
+deep link was reduced to a message string. `CertenError.body` now carries the parsed response for
+every error, and the 402 subclass reads it through typed accessors — `shortfallUsd`, `quoteId`,
+`resolution`, `portalUrl`, `cliCommand`, `pendingIntents`, `isCommitmentExceeded`, and a `summary`
+fit to show a person.
+
+`summary` exists so callers do not each re-derive the sentence and get the commitment case wrong:
+under `COMMITMENT_EXCEEDED`, waiting for pending intents to settle frees the same capacity, so
+advising only "add funds" is incomplete.
+
+Never retryable, and it must not be retried: only money changes the outcome.
+
 
 ### Fixed — `execute.contractCall()` now works at all
 

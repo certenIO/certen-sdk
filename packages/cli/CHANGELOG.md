@@ -1,5 +1,38 @@
 # Changelog — @certen.io/cli
 
+## 0.5.0 — money commands, and a refusal that tells you how to fix it
+
+### Added — `certen balance` and `certen fund`
+
+`balance` prints available, held, credit line, spendable, and **left to commit** — spendable minus
+what pending intents have already claimed. Showing only the balance would tell you that you can
+afford work that is already spoken for.
+
+`fund <amount> --chain <chain>` prints where to send stablecoin and waits until it is credited.
+It never touches a wallet or a key: signing and sending stay with you. `--no-wait` prints the
+details and exits; `--poll-interval` and `--timeout` control the wait. An uncredited or expired
+payment exits non-zero, because a funding script must not read one as paid.
+
+Every option is validated before the network call — a typo in `--timeout` used to open a real
+payment intent first.
+
+### Changed — a 402 now prints the way out
+
+A refusal for lack of funds shows the shortfall, the address, the exact amount, the reference, both
+`certen fund …` and the portal link, and the quote id to retry with — then states plainly that
+nothing was charged and no work was started. All on stderr; stdout is untouched.
+
+In `--json`, the failure envelope gains `shortfall_usd`, `quote_id` and `resolve` on payment
+failures only. They are absent on every other error rather than present as nulls. See
+docs/CLI-CONTRACT.md.
+
+### Fixed — the error reporter no longer flattens SDK errors
+
+`handleError` copied a `CertenError` into an object literal before reporting it. The values
+survived; the class identity did not — so a payment refusal could not be recognised and its payment
+target was silently dropped. The fields it copied are all readable on the instance, `isRetryable`
+getter included, so nothing was gained by the copy.
+
 ## 0.4.0 — `--json` is a machine contract
 
 Adds a stable, tested output contract for scripts and AI agents. **Human output is unchanged**: if

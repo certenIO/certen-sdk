@@ -743,6 +743,7 @@
         ],
         "properties": [
           "identity_id",
+          "quote_id",
           "intent",
           "contract_addresses",
           "proof_class",
@@ -752,6 +753,7 @@
         ],
         "propertyTypes": {
           "identity_id": "string",
+          "quote_id": "string",
           "intent": "object",
           "contract_addresses": "object",
           "proof_class": "string",
@@ -1410,6 +1412,76 @@
         "responseShapes": {}
       }
     },
+    "/v1/portal/funding": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/funding/intents": {
+      "post": {
+        "required": [
+          "chain",
+          "amount_usd"
+        ],
+        "properties": [
+          "chain",
+          "amount_usd"
+        ],
+        "propertyTypes": {
+          "chain": "string",
+          "amount_usd": "string"
+        },
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/funding/intents/{reference}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/funding/addresses": {
+      "post": {
+        "required": [
+          "chain",
+          "address"
+        ],
+        "properties": [
+          "chain",
+          "address",
+          "label"
+        ],
+        "propertyTypes": {
+          "chain": "string",
+          "address": "string",
+          "label": "string"
+        },
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/funding/addresses/{id}": {
+      "delete": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
     "/v1/admin/orgs": {
       "get": {
         "required": [],
@@ -1508,11 +1580,15 @@
         ],
         "properties": [
           "chain",
+          "additional_chains",
+          "proof_class",
           "sku",
           "leg_count"
         ],
         "propertyTypes": {
           "chain": "string",
+          "additional_chains": "array",
+          "proof_class": "string",
           "sku": "string",
           "leg_count": "integer"
         },

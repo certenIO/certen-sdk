@@ -1,5 +1,25 @@
 # Changelog — @certen.io/mcp
 
+## 0.2.0 — an agent can see what work costs, and explain a refusal
+
+### Added — `certen_billing_balance` and `certen_billing_obligations`
+
+Read tools, so an agent can say what work will cost and why a call was refused. The obligations
+description points at `remaining_usd` rather than the balance, for the same reason the SDK does:
+pending multi-signature intents can commit a balance for weeks.
+
+There is deliberately **no funding tool**, in either tier. Reading is explanation; opening a payment
+or registering a payer address is spending on the operator's behalf, and an agent able to do that
+would be an agent that can move money. Those stay on the portal and the CLI, where a person is
+present. The omission is recorded in the invariants at the top of `tools.ts` so it is not "completed"
+later by mistake.
+
+### Changed — a payment refusal is reported with its remedy
+
+A 402 used to reduce to a bare message, leaving an agent able only to say "it failed" and likely to
+retry — which cannot succeed until money moves. The error now carries the shortfall, the payment
+target, and an explicit instruction not to retry but to report the amount and link to its operator.
+
 ## 0.1.0 — initial release
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server for the CERTEN Gateway, so an AI
