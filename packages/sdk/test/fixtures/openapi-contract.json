@@ -1562,6 +1562,16 @@
         "responseShapes": {}
       }
     },
+    "/v1/billing/deposits/{reference}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
     "/v1/billing/deposit-addresses": {
       "post": {
         "required": [

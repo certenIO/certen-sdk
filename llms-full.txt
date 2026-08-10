@@ -157,6 +157,55 @@ Query parameters:
 Response 200 — Usage summary for the requested period:
   - `period`: { from, to }
 
+### certen.billing
+
+#### certen.billing.balance()
+
+Available, held, credit line, and spendable.
+
+GET /v1/billing/balance — Get the organization balance
+
+Current prepaid balance, funds held against in-flight work, and any granted postpay credit limit. `spendable_usd` is what may actually be spent right now (available + credit limit). Requires the billing:read scope.
+
+Response 200 — Default Response:
+  - `currency`: string
+  - `available_usd`: string
+  - `held_usd`: string
+  - `credit_limit_usd`: string
+  - `spendable_usd`: string
+  - `status`: "active" | "suspended" | "closed"
+
+#### certen.billing.obligations()
+
+Pending intents and what they will cost — including `remaining_usd`, the amount that may actually be committed to new work.
+
+GET /v1/billing/obligations — What pending intents will cost when they execute
+
+Every non-terminal intent and the price it will charge on execution, so an account can be kept solvent deliberately rather than by luck. This matters for multi-signature intents, which may wait hours or weeks for quorum: CERTEN does the expensive work — and charges — only once quorum is reached, by which time the originator is long gone. `uncovered_usd` is the portion NOT already reserved by a hold, i.e. the amount still needing balance behind it; `remaining_usd` is what is left to commit after those. Measured against spendable (available + credit limit), so an invoiced account reads correctly. Requires the billing:read scope.
+
+#### certen.billing.openPayment()
+
+Where to send stablecoin, optionally opening a single-use payment matched on the exact amount.
+
+POST /v1/billing/deposits — Get stablecoin deposit instructions
+
+Returns the CERTEN treasury address to send stablecoin to on the requested chain. Deposits are attributed to your organization in one of two ways: (a) you send from an address registered via POST /v1/billing/deposit-addresses — recommended, works for any amount and every future deposit; or (b) you supply `amount_usd` here, which opens a single-use deposit intent matched on the EXACT amount within its TTL. A deposit that matches neither is held as unattributed until an operator resolves it, so register an address if you can. Requires the billing:write scope.
+
+Request body:
+  - `chain`: string **required**
+  - `amount_usd`: string — Exact amount you will send, for one-off attribution without a registered address.
+
+#### certen.billing.payment()
+
+Status of a payment you opened.
+
+GET /v1/billing/deposits/{reference} — Check a one-time payment
+
+Status of a single payment intent you opened, so a client can wait for the credit rather than polling its balance and guessing. Scoped to your organization. Requires the billing:read scope.
+
+Path parameters:
+  - `reference`: string
+
 ### certen.execute
 
 #### certen.execute.contractCall()
@@ -708,7 +757,7 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 24 of the gateway's 106 operations. The rest are reachable only by
+The SDK wraps 28 of the gateway's 107 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -766,10 +815,8 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `DELETE /v1/portal/keys/{id}` — Revoke an API key
   - `GET /metrics` — Prometheus metrics
   - `GET /reference`
-  - `GET /v1/billing/balance` — Get the organization balance
   - `GET /v1/billing/deposit-addresses` — List registered deposit addresses
   - `GET /v1/billing/ledger` — List ledger entries
-  - `GET /v1/billing/obligations` — What pending intents will cost when they execute
   - `GET /v1/billing/payments` — List payments
   - `GET /v1/billing/receipts` — List receipts
   - `GET /v1/billing/receipts/{id}` — Get a receipt with its signature, log proof, and computation
@@ -790,7 +837,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `GET /v1/transparency/heads/{treeSize}` — Get the signed tree head at a size
   - `GET /v1/transparency/price-books` — List published price books
   - `POST /v1/billing/deposit-addresses` — Register a sending address for deposit attribution
-  - `POST /v1/billing/deposits` — Get stablecoin deposit instructions
   - `POST /v1/portal/invites` — Invite a teammate
   - `POST /v1/portal/keys` — Create an API key for your organization
   - `POST /v1/portal/keys/{id}/rotate` — Rotate an API key

@@ -7,6 +7,7 @@ import { GovernanceResource } from './resources/governance.js';
 import { PendingResource } from './resources/pending.js';
 import { SignResource } from './resources/sign.js';
 import { PortfolioResource } from './resources/portfolio.js';
+import { BillingResource } from './resources/billing.js';
 import { AdminResource } from './resources/admin.js';
 import { ExecuteResource } from './resources/execute.js';
 import type { CertenClientOptions } from './types.js';
@@ -88,6 +89,8 @@ export class CertenClient {
   public sign: SignResource;
   public portfolio: PortfolioResource;
   public admin: AdminResource;
+  /** Balance, commitments, and adding funds. See resources/billing.ts. */
+  public billing: BillingResource;
   /** The proof-gated execution flow as one call: open, sign, submit, poll, prove. See resources/execute.ts. */
   public execute: ExecuteResource;
 
@@ -214,6 +217,7 @@ export class CertenClient {
     this.sign = new SignResource(this.http);
     this.portfolio = new PortfolioResource(this.http);
     this.admin = new AdminResource(this.http);
+    this.billing = new BillingResource(this.http);
     this.execute = new ExecuteResource(this.http, generateIdempotencyKey);
   }
 }

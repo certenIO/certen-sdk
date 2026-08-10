@@ -26,6 +26,7 @@ import { registerPendingCommands } from './commands/pending.js';
 import { registerGovernanceCommands } from './commands/governance.js';
 import { registerPortfolioCommands } from './commands/portfolio.js';
 import { registerAdminCommands } from './commands/admin.js';
+import { registerBillingCommands } from './commands/billing.js';
 
 const VERSION = readVersion();
 
@@ -49,6 +50,7 @@ export function buildProgram(): Command {
   registerPendingCommands(program);
   registerGovernanceCommands(program);
   registerPortfolioCommands(program);
+  registerBillingCommands(program);
   registerAdminCommands(program);
 
   // Every command, not just the root. `exitOverride()` is NOT inherited by subcommands, so without

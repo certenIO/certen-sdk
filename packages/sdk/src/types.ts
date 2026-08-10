@@ -578,3 +578,69 @@ export interface UsageSummaryResponse {
   by_endpoint: { endpoint: string; count: number }[];
   daily: { date: string; count: number }[];
 }
+
+// ── Billing ────────────────────────────────────────────────────────────────
+//
+// Every amount is a fixed-6dp decimal STRING ("12.340000"), never a number.
+// Parsing money into a float loses cents at scale; compare and display the
+// string, or convert to an integer number of micro-dollars.
+
+export interface BalanceResponse {
+  currency: string;
+  available_usd: string;
+  held_usd: string;
+  credit_limit_usd: string;
+  /** available + credit line. NOT what may be committed — see ObligationsResponse. */
+  spendable_usd: string;
+  status: 'active' | 'suspended' | 'closed';
+}
+
+export interface Obligation {
+  intent_id: string;
+  status: string;
+  chain: string;
+  estimated_usd: string;
+  covered_by_hold: boolean;
+  created_at: string;
+}
+
+export interface ObligationsResponse {
+  pending_intents: number;
+  estimated_total_usd: string;
+  /** The part of the pending cost with no hold behind it yet. */
+  uncovered_usd: string;
+  spendable_usd: string;
+  /** Spendable minus uncovered commitments. The number to gate new work on. */
+  remaining_usd: string;
+  shortfall_usd: string;
+  enforcing: boolean;
+  obligations: Obligation[];
+}
+
+export interface DepositIntent {
+  reference: string;
+  amount_usd: string;
+  expires_at: string;
+}
+
+export interface DepositTarget {
+  chain: string;
+  chain_id: number;
+  token_symbol: string;
+  token_address: string;
+  token_decimals: number;
+  deposit_address: string;
+  min_confirmations: number;
+  /** Null when no amount was supplied — nothing was opened. */
+  deposit_intent: DepositIntent | null;
+  note: string;
+}
+
+export interface DepositIntentStatus {
+  reference: string;
+  status: 'open' | 'matched' | 'expired' | 'cancelled';
+  amount_usd: string;
+  expires_at: string;
+  matched_at: string | null;
+  payment_id: string | null;
+}
