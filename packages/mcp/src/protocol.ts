@@ -12,6 +12,8 @@
  * same reason.
  */
 
+import { CertenPaymentRequiredError } from '@certen.io/sdk';
+
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
 export const LATEST_PROTOCOL_VERSION = PROTOCOL_VERSIONS[0];
 
@@ -89,6 +91,37 @@ export async function dispatch(
     if (err instanceof RpcError) {
       return { jsonrpc: '2.0', id, error: { code: err.code, message: err.message, data: err.data } };
     }
+    // A payment refusal is reported with what it would take to settle.
+    //
+    // Reduced to a bare message, an agent can only say "it failed" — and is then
+    // liable to retry, which cannot succeed until money moves. With the shortfall
+    // and the target attached it can explain the situation accurately and hand the
+    // remedy to its operator. It still cannot act on it: there is no funding tool,
+    // by design.
+    if (err instanceof CertenPaymentRequiredError) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: RPC.INTERNAL_ERROR,
+          message: err.summary,
+          data: {
+            code: err.code,
+            status: err.status,
+            retryable: false,
+            shortfall_usd: err.shortfallUsd,
+            spendable_usd: err.spendableUsd,
+            pending_intents: err.pendingIntents,
+            quote_id: err.quoteId,
+            resolve: err.resolution,
+            remedy:
+              'Settling this is an operator action. Report the amount and the portal link; do not '
+              + 'retry, because the outcome cannot change until the account is funded.',
+          },
+        },
+      };
+    }
+
     return {
       jsonrpc: '2.0',
       id,

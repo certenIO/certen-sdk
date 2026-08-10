@@ -7,4 +7,6 @@ export {
   CertenRateLimitError,
   CertenBadRequestError,
   CertenServerError,
+  CertenPaymentRequiredError,
 } from './errors.js';
+export type { PaymentResolution } from './errors.js';

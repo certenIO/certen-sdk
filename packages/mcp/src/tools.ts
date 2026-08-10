@@ -17,6 +17,12 @@ import type { CertenClient } from '@certen.io/sdk';
  *      undo that.
  *   2. **Every write tool requires `confirm: true`.** Without it the tool returns a description of
  *      what it *would* do and changes nothing.
+ *
+ * There is deliberately NO funding tool, in either tier. Balance and obligations are readable so an
+ * agent can say what work will cost and why a call was refused — but opening a payment or
+ * registering a payer address is spending on the operator's behalf, and an agent that could do it
+ * would be an agent that can move money. Those stay on the portal and the CLI, where a human is
+ * present. Reading is explanation; the remedy belongs to the person.
  */
 
 export type Tier = 'read' | 'write';
@@ -104,6 +110,31 @@ const READ_TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     run: (c, a) => c.portfolio.get(optS(a, 'identityId')),
+  },
+  {
+    name: 'certen_billing_balance',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/balance',
+    description:
+      'What the organization can spend. `spendable_usd` is available balance plus any credit line. '
+      + 'Read certen_billing_obligations too before concluding work is affordable: pending intents '
+      + 'may have claimed this balance already.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.billing.balance(),
+  },
+  {
+    name: 'certen_billing_obligations',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/obligations',
+    description:
+      'Work already committed and what it will cost. `remaining_usd` is the amount that may actually '
+      + 'be committed to something new — spendable minus what pending intents will consume. Gate on '
+      + 'that, not on the balance: a multi-signature intent can wait weeks for quorum, so an account '
+      + 'can hold a balance that is entirely spoken for and still be refused on its next call.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.billing.obligations(),
   },
   {
     name: 'certen_transaction_get',

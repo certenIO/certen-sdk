@@ -87,14 +87,17 @@ function handleError(err: unknown): ExitCode {
   }
 
   if (err instanceof CertenError) {
-    // isRetryable is the SDK's own judgement — reuse it so both transports agree.
-    return emitFailure({
-      message: err.message,
-      code: err.code,
-      status: err.status,
-      requestId: err.requestId,
-      isRetryable: err.isRetryable,
-    });
+    // Pass the ERROR, not a copy of its fields.
+    //
+    // This used to flatten it into an object literal. The literal carried the same
+    // values but destroyed the class identity, so a 402 reached the reporter as an
+    // anonymous shape and its payment target was silently dropped — the refusal
+    // printed a code and a message while the fix sat unread on the error.
+    //
+    // Nothing is lost by passing the instance: message, code, status and requestId
+    // are all readable on it, and `isRetryable` is a getter, so the SDK's own retry
+    // judgement still reaches both transports.
+    return emitFailure(err);
   }
 
   return emitFailure(err);

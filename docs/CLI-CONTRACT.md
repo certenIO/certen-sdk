@@ -51,6 +51,36 @@ Failure:
 - **Everything else goes to stderr** — confirmations, hints, warnings, commander's own parse errors.
   stderr is free-form and is not a contract.
 
+#### Payment failures carry the fix
+
+A refusal for lack of funds (`status: 402`, code `PAYMENT_REQUIRED` or
+`COMMITMENT_EXCEEDED`) adds three keys, so an automated caller can settle and retry without
+parsing prose:
+
+```json
+{ "ok": false, "error": {
+  "code": "PAYMENT_REQUIRED", "message": "Payment required", "retryable": false, "status": 402,
+  "shortfall_usd": "0.230000",
+  "quote_id": "q-77",
+  "resolve": {
+    "payment_intent": "dep_9f2", "chain": "base", "to_address": "0x409E…",
+    "amount_usd": "0.230000", "expires_at": "…", "reused_existing": false,
+    "portal_url": "…/portal#funding?intent=dep_9f2",
+    "cli_command": "certen fund 0.230000 --chain base",
+    "note": "Send exactly …"
+  }
+} }
+```
+
+- These keys are **absent** on any other failure — they never appear as nulls.
+- `resolve` is `null` when the gateway could not offer a payment target (no chain configured for
+  deposits, for instance). The refusal is still valid; there is simply no one-step fix.
+- Send **exactly** `resolve.amount_usd`. Attribution matches the amount, so a different figure
+  will not credit automatically.
+- `retryable` is `false` and must be honoured: only money changes this outcome, so a retry loop
+  is pure load.
+- Re-send with `quote_id` once funded to keep the price you were quoted, before it expires.
+
 ### 3. Exit codes
 
 | Code | Meaning | What an automated caller should do |

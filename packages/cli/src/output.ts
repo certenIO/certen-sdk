@@ -1,3 +1,4 @@
+import { CertenPaymentRequiredError } from '@certen.io/sdk';
 import { getOutputFormat } from './config.js';
 import { CliError, EXIT, type ExitCode } from './errors.js';
 
@@ -107,6 +108,11 @@ export function emitFailure(err: unknown): ExitCode {
   const retryable = e instanceof CliError ? e.retryable : Boolean(e.isRetryable);
   const exitCode = resolveExitCode(e);
 
+  // A refusal for lack of funds is the one failure that carries its own fix, so it
+  // is rendered rather than reduced to a code and a message. The developer is
+  // already in a terminal; the next command belongs there, not in documentation.
+  const payment = err instanceof CertenPaymentRequiredError ? err : null;
+
   if (jsonMode) {
     flushed = true;
     process.stdout.write(
@@ -118,14 +124,56 @@ export function emitFailure(err: unknown): ExitCode {
           retryable,
           ...(e.status !== undefined ? { status: e.status } : {}),
           ...(e.requestId ? { requestId: e.requestId } : {}),
+          // Additive: a consumer that ignores unknown keys is unaffected, and one
+          // that wants to settle automatically no longer has to parse prose.
+          ...(payment
+            ? {
+              shortfall_usd: payment.shortfallUsd,
+              quote_id: payment.quoteId,
+              resolve: payment.resolution,
+            }
+            : {}),
         },
       })}\n`,
     );
   } else {
     console.error(code === 'UNKNOWN_ERROR' ? `Error: ${message}` : `Error [${code}]: ${message}`);
+    if (payment) emitPaymentFix(payment);
   }
 
   return exitCode;
+}
+
+/**
+ * Print the way out of a 402.
+ *
+ * All on stderr: it is guidance, not the result of the command, and a caller
+ * piping stdout must still get clean output (or, in JSON mode, exactly one
+ * envelope). The closing line matters as much as the address — a developer whose
+ * request was refused needs to know nothing was charged and nothing started.
+ */
+function emitPaymentFix(payment: CertenPaymentRequiredError): void {
+  console.error('');
+  console.error(`  ${payment.summary}`);
+
+  const r = payment.resolution;
+  if (r) {
+    console.error('');
+    console.error(`  Send exactly ${r.amount_usd} USD on ${r.chain} to:`);
+    console.error(`      ${r.to_address}`);
+    console.error(`  Reference ${r.payment_intent}`);
+    console.error('');
+    console.error(`  Or run:  ${r.cli_command}`);
+    console.error(`  Portal:  ${r.portal_url}`);
+  }
+
+  if (payment.quoteId) {
+    console.error('');
+    console.error(`  Then retry with --quote-id ${payment.quoteId} to keep this price.`);
+  }
+
+  console.error('');
+  console.error('  Nothing was charged and no work was started.');
 }
 
 function resolveExitCode(e: ErrorLike): ExitCode {

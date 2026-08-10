@@ -190,7 +190,14 @@ export class CertenClient {
           this.rateLimit.resetAt = Date.now() + Number(retryAfter) * 1000;
         }
 
-        const wrapped = CertenError.fromAxios(message, status, code, { requestId, details });
+        // The parsed body travels with the error. A 402 carries a payment target,
+        // and dropping the body reduced it to a message string the caller could
+        // only regex. Only objects are passed on: a string body (HTML error page)
+        // would give typed accessors something meaningless to read.
+        const parsedBody = typeof body === 'object' && body !== null ? body : undefined;
+        const wrapped = CertenError.fromAxios(message, status, code, {
+          requestId, details, body: parsedBody,
+        });
 
         // Retry transient failures with exponential backoff + jitter.
         if (cfg && wrapped.isRetryable) {
