@@ -74,9 +74,36 @@ indistinguishable from success, and a blind retry can open a second intent or bu
 ```bash
 npm install          # workspaces: the CLI resolves @certen.io/sdk from packages/sdk
 npm run build
-npm test             # SDK 77, CLI 26 — no network, no key
+npm test             # SDK 119, CLI 55, MCP 37 — no network, no key
 npm run typecheck
 ```
+
+### On Windows, trust the summary over npm's exit code
+
+`npm test` here can exit 1 while printing `119 passed` and a clean summary, with no error output from
+npm at all. It gets worse under load — measured on npm 10.9.2 / Node 22.14:
+
+| invocation | exit 0 | tests |
+|---|:--:|---|
+| `node node_modules/vitest/vitest.mjs run` | 6/6 | 119/119 passing |
+| `npm test` | 1/6 | 119/119 passing |
+| `npm test`, with four CPU hogs running | 0/6 | 119/119 passing |
+
+It is a load-sensitive race in npm's script runner, not a fault in the tests or the tools: the same
+npm is clean in a scratch package and in a scratch workspaces monorepo, and `--loglevel=silly` stops
+it reproducing. **CI runs on `ubuntu-latest` and is unaffected.**
+
+Where a trustworthy exit code matters locally — a hook, a script, a release step — invoke the tool
+directly instead of through npm:
+
+```bash
+node node_modules/vitest/vitest.mjs run    # from the repo root
+node scripts/prepublish-check.mjs          # from a package dir: build + tests, real exit code
+```
+
+`prepublishOnly` uses that script for this reason. Its previous form, `npm run build && npm test`,
+blocked a good release with a 105-byte log that ended mid-build — a false negative impossible to
+diagnose from the output.
 
 The SDK's requests are validated against a snapshot of the gateway's OpenAPI spec
 (`packages/sdk/test/contract.test.ts`). That guard exists because three methods once shipped in a state

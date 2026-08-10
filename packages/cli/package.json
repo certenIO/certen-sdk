@@ -38,7 +38,7 @@
     "typecheck": "tsc --noEmit",
     "//prepack": "Build before packing so the published bin can never point at a missing dist/index.js.",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "node ../../scripts/prepublish-check.mjs"
   },
   "publishConfig": {
     "access": "public"

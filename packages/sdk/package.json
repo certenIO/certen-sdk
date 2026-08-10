@@ -50,7 +50,7 @@
     "typecheck": "tsc --noEmit",
     "//prepack": "Build before packing so a published tarball can never carry a stale or missing dist/. That failure mode is nasty: the package installs cleanly and dies on first import.",
     "prepack": "npm run build",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "node ../../scripts/prepublish-check.mjs"
   },
   "publishConfig": {
     "access": "public"
