@@ -38,7 +38,7 @@ curl -X POST $CERTEN_API_URL/v1/transaction \
     "identity_id": "<uuid>",
     "intent": {
       "fromChain": "accumulate",
-      "toChain": "ethereum-sepolia",
+      "toChain": "base-sepolia",
       "fromAddress": "acc://your-org.acme",
       "toAddress": "0xBe00...9251",
       "amount": "4000",

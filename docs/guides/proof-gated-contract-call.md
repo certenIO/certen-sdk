@@ -30,7 +30,7 @@ curl -X POST $CERTEN_API_URL/v1/transaction \
       "adiUrl": "acc://buyer-bot.acme",
       "legs": [{
         "legId": "buy-1",
-        "chain": "ethereum-sepolia",
+        "chain": "base-sepolia",
         "fromAddress": "0x<the identity abstract account>",
         "toAddress": "0x9F452b98e33fF3F973a12ee9333B33082D824816",
         "amount": "1500000000000000",

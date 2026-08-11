@@ -23,7 +23,7 @@ const certen = new CertenClient({ apiKey: process.env.CERTEN_API_KEY! });
 // Open a proof-gated contract call, sign it, submit the signature — one call.
 const { intentId } = await certen.execute.contractCall({
   identityId, adiUrl: 'acc://seller-bot.acme', fromAddress: abstractAccount,
-  chain: 'ethereum-sepolia', chainId: 11155111,
+  chain: 'base-sepolia', chainId: 84532,
   contractCall: { target: escrobot, functionSignature: 'confirm(bytes32)', args: [orderId] },
   publicKey,
   sign: (hashHex) => ed25519Sign(hashHex),   // YOU hold the key

@@ -41,7 +41,7 @@ curl -X POST $CERTEN_API_URL/v1/identity \
     "name": "buyer-bot",
     "public_key": "<64 hex>",
     "public_key_hash": "<64 hex>",
-    "chains": ["ethereum-sepolia"],
+    "chains": ["base-sepolia"],
     "credits": 50000
   }'
 # → 202 { "identity": { "id": "<uuid>", "status": "provisioning", ... } }
