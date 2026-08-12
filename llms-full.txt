@@ -175,6 +175,21 @@ Response 200 — Default Response:
   - `spendable_usd`: string
   - `status`: "active" | "suspended" | "closed"
 
+#### certen.billing.quote()
+
+Price a piece of work before committing to it.
+
+POST /v1/quote — Price a proof-gated execution before submitting it
+
+Returns a single-use, expiring quote with a full breakdown and a `max_total_usd` cap that will not be exceeded even if gas moves during execution. Every input is published and the total is recomputable: the platform fee comes from a hash-identified price book, the FX rate from a signed observation, and the gas estimate from costs actually measured on that chain. Pass the returned `quote_id` to POST /v1/transaction to execute at this price. A quote must cover the WHOLE request: name every destination chain in `additional_chains` and the execution class in `proof_class`, or submission is refused as a mismatch. Requires billing:read.
+
+Request body:
+  - `chain`: string **required**
+  - `additional_chains`: string[] — Further destination chains this request will touch. Each is gated and gas-estimated in its own right, so the quote is the sum of the real work rather than one chain priced N times.
+  - `proof_class`: "on_demand" | "on_cadence" — Execution class to price for. on_cadence shares one anchor across a batch; on_demand pays for its own. A quote issued for one class cannot be spent on the other.
+  - `sku`: string
+  - `leg_count`: integer
+
 #### certen.billing.obligations()
 
 Pending intents and what they will cost — including `remaining_usd`, the amount that may actually be committed to new work.
@@ -760,7 +775,7 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 28 of the gateway's 112 operations. The rest are reachable only by
+The SDK wraps 29 of the gateway's 112 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -848,7 +863,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `POST /v1/portal/invites` — Invite a teammate
   - `POST /v1/portal/keys` — Create an API key for your organization
   - `POST /v1/portal/keys/{id}/rotate` — Rotate an API key
-  - `POST /v1/quote` — Price a proof-gated execution before submitting it
 
 **Proof**
   - `DELETE /v1/proof/shares/{shareId}` — Revoke a proof share link

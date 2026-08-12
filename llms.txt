@@ -79,7 +79,7 @@ certen --json transaction get <intent-id>
 
 ## Methods
 
-31 methods across 9 resources. Signatures and field-level detail: `llms-full.txt`.
+32 methods across 9 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.createOrg()` — Create organization
@@ -92,6 +92,7 @@ certen --json transaction get <intent-id>
 
 **certen.billing**
   - `certen.billing.balance()` — Available, held, credit line, and spendable.
+  - `certen.billing.quote()` — Price a piece of work before committing to it.
   - `certen.billing.obligations()` — Pending intents and what they will cost — including `remaining_usd`, the amount that may actually be committed to new work.
   - `certen.billing.openPayment()` — Where to send stablecoin, optionally opening a single-use payment matched on the exact amount.
   - `certen.billing.payment()` — Status of a payment you opened.
@@ -130,6 +131,6 @@ certen --json transaction get <intent-id>
   - `certen.transaction.get()` — Get a transaction intent status
   - `certen.transaction.list()` — List transaction intents
 
-The gateway exposes 112 operations; the SDK wraps 28 of them. Anything not listed
+The gateway exposes 112 operations; the SDK wraps 29 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.
