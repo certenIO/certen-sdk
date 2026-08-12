@@ -11,6 +11,7 @@ import { BillingResource } from './resources/billing.js';
 import { AdminResource } from './resources/admin.js';
 import { ExecuteResource } from './resources/execute.js';
 import { ChainsResource } from './resources/chains.js';
+import { ProofResource } from './resources/proof.js';
 import type { CertenClientOptions } from './types.js';
 
 /**
@@ -96,6 +97,8 @@ export class CertenClient {
   public execute: ExecuteResource;
   /** The public contract registry — which chains CERTEN is on, and where. Needs no API key. */
   public chains: ChainsResource;
+  /** Reading and sharing proofs. See resources/proof.ts. */
+  public proof: ProofResource;
 
   constructor(options: CertenClientOptions & {
     maxRetries?: number;
@@ -230,6 +233,7 @@ export class CertenClient {
     this.billing = new BillingResource(this.http);
     this.execute = new ExecuteResource(this.http, generateIdempotencyKey);
     this.chains = new ChainsResource(this.http);
+    this.proof = new ProofResource(this.http);
   }
 }
 

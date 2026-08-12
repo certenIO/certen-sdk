@@ -738,3 +738,66 @@ export interface ChainsListResponse {
 export interface ChainDetailResponse {
   chain: ChainEntry;
 }
+
+// ---- Proofs ----
+
+/**
+ * A proof artifact.
+ *
+ * Deliberately open: the shape is defined by the proof-service and the gateway documents it as
+ * `additionalProperties: true`. Pinning fields here would encode one version of a downstream
+ * contract this SDK does not own, and would start lying the first time it changed.
+ */
+export interface ProofArtifact {
+  [key: string]: unknown;
+}
+
+export interface ProofCustody {
+  [key: string]: unknown;
+}
+
+/**
+ * An Accumulate merkle inclusion receipt, read live from the network.
+ *
+ * `anchored` is the field that matters: a transaction can be `delivered` and not yet anchored, and
+ * only an anchored transaction has an inclusion proof a counterparty can check against a block
+ * root they obtained themselves.
+ */
+export interface ChainReceipt {
+  tx_hash: string;
+  status: string;
+  principal?: string | null;
+  tx_type?: string | null;
+  anchored: boolean;
+  chain_index?: number | null;
+  block_time?: string | null;
+  found?: boolean;
+  receipt?: {
+    start?: string;
+    end?: string;
+    anchor?: string;
+    entries?: unknown[];
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
+export interface ProofShare {
+  id?: string;
+  proof_id?: string;
+  /** Returned once, at creation. Later reads expose only `token_prefix`. */
+  token?: string;
+  token_prefix?: string;
+  url?: string;
+  label?: string | null;
+  expires_at?: string | null;
+  revoked_at?: string | null;
+  view_count?: number;
+  last_viewed_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ProofSharesResponse {
+  shares: ProofShare[];
+  [key: string]: unknown;
+}

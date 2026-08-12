@@ -30,6 +30,7 @@ import { registerBillingCommands } from './commands/billing.js';
 import { registerChainsCommands } from './commands/chains.js';
 import { registerWhoamiCommands } from './commands/whoami.js';
 import { registerDoctorCommands } from './commands/doctor.js';
+import { registerProofCommands } from './commands/proof.js';
 import { formatRootHelp } from './help-root.js';
 
 const VERSION = readVersion();
@@ -54,6 +55,7 @@ export function buildProgram(): Command {
   registerWhoamiCommands(program);
   registerIdentityCommands(program);
   registerTransactionCommands(program);
+  registerProofCommands(program);
   registerPendingCommands(program);
   registerGovernanceCommands(program);
   registerPortfolioCommands(program);
