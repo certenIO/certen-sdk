@@ -75,6 +75,27 @@ const NUMERIC_TO_SLUG: Record<string, SupportedChain> = {
 };
 
 /**
+ * Registry slug → numeric EVM chain id.
+ *
+ * `execute.contractCall` passes `chainId` straight through to the intent leg. Leaving it undefined
+ * makes the caller supply a number they already told us by naming the chain, so it is derived —
+ * from the cached registry when there is one, and from this table otherwise.
+ */
+export function chainIdFor(chain: string): number | undefined {
+  const slug = normalizeChain(chain);
+  for (const [numeric, mapped] of Object.entries(NUMERIC_TO_SLUG)) {
+    if (mapped === slug) return Number(numeric);
+  }
+  const cached = readChainCache()?.numeric;
+  if (cached) {
+    for (const [numeric, mapped] of Object.entries(cached)) {
+      if (mapped === slug) return Number(numeric);
+    }
+  }
+  return undefined;
+}
+
+/**
  * Resolve whatever the gateway called a chain into one canonical name.
  *
  * Anything unrecognised is returned unchanged: a value we cannot map is still the best label we

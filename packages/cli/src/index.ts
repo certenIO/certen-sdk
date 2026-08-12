@@ -31,6 +31,8 @@ import { registerChainsCommands } from './commands/chains.js';
 import { registerWhoamiCommands } from './commands/whoami.js';
 import { registerDoctorCommands } from './commands/doctor.js';
 import { registerProofCommands } from './commands/proof.js';
+import { registerCallCommands } from './commands/call.js';
+import { registerInitCommands } from './commands/init.js';
 import { formatRootHelp } from './help-root.js';
 
 const VERSION = readVersion();
@@ -48,6 +50,7 @@ export function buildProgram(): Command {
     // a global flag that may appear after a subcommand is not something commander models.
     .option('--json', 'Emit one JSON envelope on stdout; human output goes to stderr');
 
+  registerInitCommands(program);
   registerChainsCommands(program);
   registerAuthCommands(program);
   registerKeysCommands(program);
@@ -55,6 +58,7 @@ export function buildProgram(): Command {
   registerWhoamiCommands(program);
   registerIdentityCommands(program);
   registerTransactionCommands(program);
+  registerCallCommands(program);
   registerProofCommands(program);
   registerPendingCommands(program);
   registerGovernanceCommands(program);

@@ -6,6 +6,8 @@
  * on a hidden prompt inside a pipeline looks like a hang, which is the worst failure mode here.
  */
 
+import { UsageError } from './errors.js';
+
 const ENV_VAR = 'CERTEN_KEY_PASSPHRASE';
 
 export function passphraseFromEnv(): string | null {
@@ -104,8 +106,9 @@ export async function resolvePassphrase(encrypted: boolean, keyName: string): Pr
   if (fromEnv !== null) return fromEnv;
 
   if (!isInteractive()) {
-    throw new Error(
+    throw new UsageError(
       `Key "${keyName}" is encrypted and there is no TTY to prompt on. Set ${ENV_VAR}, or run this interactively.`,
+      'PASSPHRASE_REQUIRED',
     );
   }
 
@@ -126,8 +129,9 @@ export async function resolveNewPassphrase(noPassphrase: boolean): Promise<strin
   if (fromEnv !== null) return fromEnv;
 
   if (!isInteractive()) {
-    throw new Error(
+    throw new UsageError(
       `No TTY to prompt for a passphrase. Set ${ENV_VAR}, or pass --no-passphrase to store the key unencrypted.`,
+      'PASSPHRASE_REQUIRED',
     );
   }
 

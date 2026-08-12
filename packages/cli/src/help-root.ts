@@ -30,12 +30,12 @@ const GROUPS: Group[] = [
   {
     title: 'Get started',
     blurb: 'from nothing to a working setup',
-    commands: ['chains', 'auth', 'keys', 'doctor', 'whoami'],
+    commands: ['init', 'chains', 'auth', 'keys', 'doctor', 'whoami'],
   },
   {
     title: 'Build',
     blurb: 'identities, and the work they authorize',
-    commands: ['identity', 'tx', 'proof'],
+    commands: ['identity', 'call', 'tx', 'proof'],
   },
   {
     title: 'Approve',
@@ -57,9 +57,10 @@ const GROUPS: Group[] = [
 const QUICKSTART = `
   Three commands, start to finish:
 
-    certen auth login                          # paste or pipe an API key
-    certen keys generate --name dev            # your key, generated and kept here
-    certen identity create --name mybot --sign-with dev --chains base-sepolia
+    certen init                                # credential, key, identity, all checked
+    certen call --identity <id> --chain base-sepolia --to 0xContract \\
+        --fn 'confirm(bytes32)' --arg 0x... --sign-with dev --wait
+    certen proof get <intent-id>               # the evidence, to hand over
 
   Stuck? Run: certen doctor
 `;

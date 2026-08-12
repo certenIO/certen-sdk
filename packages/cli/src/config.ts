@@ -18,6 +18,38 @@ export interface CliConfig {
    * which key is selected without round-tripping through the keyring.
    */
   key_prefix?: string;
+  /**
+   * Identities this machine created, most recent last.
+   *
+   * The gateway has no identity collection route, and `/v1/portfolio` — the only cross-identity
+   * view — keys on ADI URL and does not return the UUID that every other command takes. So an id
+   * that is not written down when it is minted is unrecoverable: `certen identity create` printed
+   * it once, and after that the only copy was the user's scrollback.
+   *
+   * That is what made `init` unable to be idempotent in a useful way. It could see that
+   * identities existed and still had nothing to put after `--identity`.
+   */
+  identities?: Array<{ id: string; adi_url: string; chains: string[]; created_at: string }>;
+}
+
+/**
+ * Record an identity this machine created.
+ *
+ * Deduplicated on id, and appended rather than replaced, so creating a second identity does not
+ * make the first unfindable.
+ */
+export function rememberIdentity(entry: { id: string; adi_url: string; chains: string[] }): void {
+  const cfg = readConfig();
+  const identities = (cfg.identities ?? []).filter((i) => i.id !== entry.id);
+  identities.push({ ...entry, created_at: new Date().toISOString() });
+  cfg.identities = identities;
+  writeConfig(cfg);
+}
+
+/** The most recently created identity on this machine, if any. */
+export function lastIdentity(): { id: string; adi_url: string; chains: string[] } | undefined {
+  const all = readConfig().identities ?? [];
+  return all.length > 0 ? all[all.length - 1] : undefined;
 }
 
 export function readConfig(): CliConfig {

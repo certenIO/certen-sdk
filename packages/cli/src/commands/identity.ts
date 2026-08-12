@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CertenClient } from '@certen.io/sdk';
 import type { Identity, IdentityResponse } from '@certen.io/sdk';
-import { getApiKey, getApiUrl, getOutputFormat } from '../config.js';
+import { getApiKey, getApiUrl, getOutputFormat, rememberIdentity } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain, assertChains } from '../chains.js';
@@ -105,6 +105,9 @@ export function registerIdentityCommands(program: Command): void {
         credits: opts.credits,
       });
       const id = result.identity?.id;
+      // Recorded the moment it exists. The gateway has no identity list route and the portfolio
+      // view returns no UUIDs, so an id that is only printed is an id that can be lost.
+      if (id) rememberIdentity({ id, adi_url: result.identity.adi_url, chains: chains ?? [] });
 
       if (!wait || !id) {
         if (result.identity) printIdentity(result, result.identity);

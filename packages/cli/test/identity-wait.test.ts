@@ -98,7 +98,11 @@ function identity(over: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-const FAST = ['--poll-interval', '0.05', '--timeout', '0.05'];
+// 0.02 min = 1.2s. The wait budget is deliberately tiny; what is under test is the DECISION
+// at the deadline, never a duration. The explicit vitest timeout keeps process spawn overhead
+// from turning a passing assertion into a flake.
+const FAST = ['--poll-interval', '0.05', '--timeout', '0.02'];
+const SLOW_CASE = 20_000;
 
 describe('identity create --wait', () => {
   it('polls until the identity is active AND can sign, then reports the usable identity', async () => {
@@ -187,7 +191,7 @@ describe('identity create --wait', () => {
     } finally {
       await stub.close();
     }
-  });
+  }, SLOW_CASE);
 
   it('treats a timeout as neither success nor failure, and does not exit 0', async () => {
     const stub = await stubGateway((req, res) => {
@@ -207,7 +211,7 @@ describe('identity create --wait', () => {
     } finally {
       await stub.close();
     }
-  });
+  }, SLOW_CASE);
 
   it('does not wait in --json mode unless asked — one POST, no polling', async () => {
     const stub = await stubGateway((req, res) => {
