@@ -180,6 +180,19 @@ function resolveExitCode(e: ErrorLike): ExitCode {
   if (typeof e.exitCode === 'number') return e.exitCode as ExitCode;
   // status 0 is how the SDK reports "the request never reached the gateway".
   if (e.code === 'NETWORK_ERROR' || e.status === 0) return EXIT.UNREACHABLE;
+
+  // Falling through to FAILED is correct for a genuine operation failure and WRONG for a plain
+  // `throw new Error('you forgot a flag')`, which should be a usage error and exit 2. Several
+  // commands shipped that mistake, and it is invisible: both cases exit 1 and read identically.
+  // There is no safe way to guess here — a bare Error carries nothing to distinguish them — so
+  // the fix is at the throw site, and this makes the throw site findable rather than silent.
+  if (process.env.CERTEN_DEBUG === '1' && e.code === undefined) {
+    const name = (e as { constructor?: { name?: string } }).constructor?.name ?? 'unknown';
+    console.error(
+      `[certen debug] exit 1 from an untyped ${name} — if this is a wrong invocation it should `
+      + 'throw UsageError and exit 2.',
+    );
+  }
   return EXIT.FAILED;
 }
 

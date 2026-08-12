@@ -4,6 +4,8 @@ import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput } from '../output.js';
 import { resolveSigner } from '../signer.js';
+import { assertChain } from '../chains.js';
+import { CliError, UsageError, EXIT } from '../errors.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -71,6 +73,13 @@ export function registerTransactionCommands(program: Command): void {
       // Resolve (and unlock) the signer BEFORE opening the intent. Prompting for a passphrase
       // after the intent exists would leave an unsigned intent behind every time someone
       // mistypes it or hits Ctrl-C at the prompt.
+      // Chains are checked before the signer is unlocked, so a typo costs a message rather than a
+      // passphrase prompt followed by a gateway rejection.
+      if (opts.toChain) assertChain(opts.toChain, '--to-chain');
+      // `--from-chain` defaults to `accumulate`, which is not an EVM chain and is not in the
+      // supported set; only validate it when the caller named an EVM chain explicitly.
+      if (opts.fromChain && opts.fromChain !== 'accumulate') assertChain(opts.fromChain, '--from-chain');
+
       const signer = opts.signWith ? await resolveSigner(opts.signWith) : null;
 
       let intent: Record<string, unknown>;
@@ -78,10 +87,21 @@ export function registerTransactionCommands(program: Command): void {
         const raw = opts.intent.startsWith('@')
           ? readFileSync(opts.intent.slice(1), 'utf8')
           : opts.intent;
-        intent = JSON.parse(raw);
+        try {
+          intent = JSON.parse(raw);
+        } catch (err) {
+          const where = opts.intent.startsWith('@') ? opts.intent.slice(1) : '--intent';
+          throw new UsageError(
+            `${where} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+            'INVALID_INTENT_JSON',
+          );
+        }
       } else {
         if (!opts.to || !opts.amount) {
-          throw new Error('give --intent, or all of --to and --amount (plus --to-chain) for a simple transfer');
+          throw new UsageError(
+            'give --intent, or all of --to and --amount (plus --to-chain) for a simple transfer',
+            'INCOMPLETE_INTENT',
+          );
         }
         intent = {
           fromChain: opts.fromChain,
@@ -114,9 +134,14 @@ export function registerTransactionCommands(program: Command): void {
         // Provider mode (the gateway holds a key) returns no signing data. Printing the intent and
         // stopping is honest; pretending we signed something we never saw is not.
         printOutput(result as unknown as Record<string, unknown>);
-        throw new Error(
+        // Not a usage error: the invocation was well-formed and the gateway accepted it. The
+        // intent exists. This is an operation that could not be completed the way it was asked
+        // for, which is exactly what exit 1 means.
+        throw new CliError(
           'Intent opened but returned no hash to sign — this gateway is in provider mode for that '
           + 'identity, so --sign-with does not apply. The intent above was created.',
+          'NO_SIGNING_DATA',
+          EXIT.FAILED,
         );
       }
 
@@ -142,11 +167,14 @@ export function registerTransactionCommands(program: Command): void {
       let publicKey: string;
 
       if (opts.signWith) {
-        if (opts.signature) throw new Error('Pass either --sign-with or --signature, not both.');
+        if (opts.signature) {
+          throw new UsageError('Pass either --sign-with or --signature, not both.', 'CONFLICTING_SIGNING_FLAGS');
+        }
         if (!opts.hash) {
-          throw new Error(
+          throw new UsageError(
             '--sign-with needs --hash <hex> (the signing_data.hash_to_sign from `tx create`). '
             + 'Or use `tx create --sign-with` to do both in one step.',
+            'MISSING_HASH',
           );
         }
         const signer = await resolveSigner(opts.signWith);
@@ -154,7 +182,10 @@ export function registerTransactionCommands(program: Command): void {
         publicKey = signer.publicKey;
       } else {
         if (!opts.signature || !opts.publicKey) {
-          throw new Error('Provide --sign-with <key> --hash <hex>, or both --signature and --public-key.');
+          throw new UsageError(
+            'Provide --sign-with <key> --hash <hex>, or both --signature and --public-key.',
+            'MISSING_SIGNATURE',
+          );
         }
         signature = opts.signature;
         publicKey = opts.publicKey;

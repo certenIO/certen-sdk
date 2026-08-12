@@ -182,6 +182,25 @@ export function getApiUrl(): string {
   return cfg.api_url ?? DEFAULT_API_URL;
 }
 
+/**
+ * Where a human goes to do the things a machine key cannot — register a payer wallet, invite a
+ * teammate, revoke a key.
+ *
+ * Derived from the API URL rather than hardcoded, so a self-hosted gateway points at its own
+ * portal instead of at ours. `CERTEN_PORTAL_URL` overrides for a deployment that serves the two
+ * from different hosts.
+ *
+ * This exists because the funding hint printed the literal string "/portal" as an instruction — a
+ * bare path with no host, which is not somewhere anyone can go. The 402 handler had it right all
+ * along by reading `portal_url` off the error; there was simply nothing equivalent for the paths
+ * that have no error to read it from.
+ */
+export function getPortalUrl(): string {
+  const envUrl = process.env.CERTEN_PORTAL_URL;
+  if (envUrl) return envUrl;
+  return `${getApiUrl().replace(/\/+$/, '')}/portal`;
+}
+
 export function getOutputFormat(): 'table' | 'json' {
   const cfg = readConfig();
   return cfg.output ?? 'table';

@@ -1,8 +1,9 @@
 import { Command } from 'commander';
 import { CertenClient, type DepositIntentStatus } from '@certen.io/sdk';
-import { getApiKey, getApiUrl } from '../config.js';
+import { getApiKey, getApiUrl, getPortalUrl } from '../config.js';
 import { printOutput, human, hint, isJsonMode } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
+import { assertChain } from '../chains.js';
 
 /**
  * Money commands.
@@ -125,9 +126,11 @@ export function registerBillingCommands(program: Command): void {
           'INVALID_LEG_COUNT', EXIT.USAGE);
       }
 
+      const chain = assertChain(opts.chain);
+
       const client = await getClient();
       const q = await client.billing.quote({
-        chain: opts.chain,
+        chain,
         proofClass: opts.proofClass,
         legCount: legs,
       });
@@ -176,7 +179,7 @@ export function registerBillingCommands(program: Command): void {
     .command('fund')
     .argument('<amount>', 'Amount in USD to send, e.g. 25 or 25.50')
     .description('Get payment details for adding funds, and wait until they are credited')
-    .option('--chain <chain>', 'Chain to send stablecoin on (e.g. base)')
+    .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia')
     .option('--no-wait', 'Print the payment details and exit instead of waiting')
     .option('--timeout <minutes>', 'How long to wait for the deposit', '60')
     // Scripted callers legitimately want a different cadence — a CI job funding a
@@ -196,11 +199,16 @@ export function registerBillingCommands(program: Command): void {
       }
       if (!opts.chain) {
         throw new CliError(
-          'Which chain will you send on? Pass --chain (e.g. --chain base)',
+          'Which chain will you send on? Pass --chain (e.g. --chain base-sepolia)',
           'CHAIN_REQUIRED',
           EXIT.USAGE,
         );
       }
+      // Validated here, with the other pre-flight checks, for the reason the comment below gives:
+      // a wrong chain must not be discovered after a real payment intent has been opened against
+      // it. `base` and `base-sepolia` are different networks and money sent to the wrong one is
+      // not recoverable by anything this CLI can do.
+      const chain = assertChain(opts.chain);
 
       // Every option is validated BEFORE the network call. Checking after would
       // mean a typo in --timeout had already opened a real payment intent that the
@@ -223,7 +231,7 @@ export function registerBillingCommands(program: Command): void {
       }
 
       const client = await getClient();
-      const target = await client.billing.openPayment({ chain: opts.chain, amountUsd: amount });
+      const target = await client.billing.openPayment({ chain, amountUsd: amount });
       const intent = target.deposit_intent;
       if (!intent) {
         // Defensive: an amount was supplied, so the gateway should have opened one.
@@ -287,7 +295,7 @@ export function registerBillingCommands(program: Command): void {
           if (balance) human(`  Available now ${usd(balance.available_usd)}.`);
           human('');
           hint('Paying from this wallet again? Register it once in the portal and every '
-            + 'future deposit credits automatically: /portal');
+            + `future deposit credits automatically: ${getPortalUrl()}`);
         }
         return;
       }

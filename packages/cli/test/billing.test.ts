@@ -120,7 +120,7 @@ const OBLIGATIONS = {
 };
 const future = () => new Date(Date.now() + 3_600_000).toISOString();
 const TARGET = () => ({
-  chain: 'base', chain_id: 8453, token_symbol: 'USDC', token_address: '0xT',
+  chain: 'base-sepolia', chain_id: 84532, token_symbol: 'USDC', token_address: '0xT',
   token_decimals: 6, deposit_address: '0xTreasury', min_confirmations: 3,
   deposit_intent: { reference: 'dep_abc', amount_usd: '25.000000', expires_at: future() },
   note: 'send only USDC',
@@ -178,13 +178,13 @@ describe('certen balance', () => {
 describe('certen fund: validation before any network call', () => {
   // No stub at all — the discard port proves these never reach a gateway.
   it('rejects a non-numeric amount', async () => {
-    const r = await certen(['--json', 'fund', 'abc', '--chain', 'base']);
+    const r = await certen(['--json', 'fund', 'abc', '--chain', 'base-sepolia']);
     expect(r.code).toBe(2);
     expect((soleJson(r.stdout).error as Record<string, unknown>).code).toBe('INVALID_AMOUNT');
   });
 
   it('rejects zero, which would open a payment that can never match', async () => {
-    const r = await certen(['--json', 'fund', '0', '--chain', 'base']);
+    const r = await certen(['--json', 'fund', '0', '--chain', 'base-sepolia']);
     expect(r.code).toBe(2);
     expect((soleJson(r.stdout).error as Record<string, unknown>).code).toBe('INVALID_AMOUNT');
   });
@@ -196,7 +196,7 @@ describe('certen fund: validation before any network call', () => {
   });
 
   it('rejects a non-positive poll interval', async () => {
-    const r = await certen(['--json', 'fund', '25', '--chain', 'base', '--poll-interval', '0']);
+    const r = await certen(['--json', 'fund', '25', '--chain', 'base-sepolia', '--poll-interval', '0']);
     expect(r.code).toBe(2);
     expect((soleJson(r.stdout).error as Record<string, unknown>).code).toBe('INVALID_POLL_INTERVAL');
   });
@@ -206,7 +206,7 @@ describe('certen fund: payment details', () => {
   it('prints the target, makes exactly one request, and exits 0 with --no-wait', async () => {
     const stub = await stubGateway((_req, res) => json(res, 200, TARGET()));
     try {
-      const r = await certen(['--json', 'fund', '25', '--chain', 'base', '--no-wait'], stub.url);
+      const r = await certen(['--json', 'fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
       const data = soleJson(r.stdout).data as Record<string, unknown>;
       expect(r.code).toBe(0);
       expect(data.deposit_address).toBe('0xTreasury');
@@ -220,7 +220,7 @@ describe('certen fund: payment details', () => {
   it('shows the human the exact amount and the address', async () => {
     const stub = await stubGateway((_req, res) => json(res, 200, TARGET()));
     try {
-      const r = await certen(['fund', '25', '--chain', 'base', '--no-wait'], stub.url);
+      const r = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
       expect(r.stdout).toContain('0xTreasury');
       expect(r.stdout).toContain('25.000000 USDC');
       expect(r.stdout).toContain('exact amount');
@@ -238,7 +238,7 @@ describe('certen fund: waiting', () => {
     });
     try {
       const r = await certen(
-        ['--json', 'fund', '25', '--chain', 'base', '--poll-interval', '1'],
+        ['--json', 'fund', '25', '--chain', 'base-sepolia', '--poll-interval', '1'],
         stub.url,
       );
       expect(r.code).toBe(1);

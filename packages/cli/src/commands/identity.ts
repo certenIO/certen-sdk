@@ -1,8 +1,10 @@
 import { Command } from 'commander';
 import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
-import { printOutput } from '../output.js';
+import { printOutput, hint } from '../output.js';
 import { resolveSigner } from '../signer.js';
+import { assertChain, assertChains } from '../chains.js';
+import { UsageError } from '../errors.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -28,9 +30,17 @@ export function registerIdentityCommands(program: Command): void {
       let publicKeyHash: string | undefined = opts.publicKeyHash;
       let publicKey: string | undefined = opts.publicKey;
 
+      // Chains are validated BEFORE the signer is unlocked and before the request goes out. A
+      // typo'd chain used to reach the gateway and come back as a rejection with no visible link
+      // to the flag that caused it — after the passphrase prompt, which made the round trip worse.
+      const chains = opts.chains ? assertChains(opts.chains) : undefined;
+
       if (opts.signWith) {
         if (publicKeyHash || publicKey) {
-          throw new Error('Pass either --sign-with or --public-key-hash/--public-key, not both.');
+          throw new UsageError(
+            'Pass either --sign-with or --public-key-hash/--public-key, not both.',
+            'CONFLICTING_KEY_FLAGS',
+          );
         }
         const signer = await resolveSigner(opts.signWith);
         publicKeyHash = signer.publicKeyHash;
@@ -38,9 +48,10 @@ export function registerIdentityCommands(program: Command): void {
       }
 
       if (!publicKeyHash) {
-        throw new Error(
+        throw new UsageError(
           'Provide --sign-with <key>, or --public-key-hash <hash>. '
           + 'To make a key: certen keys generate --name dev',
+          'MISSING_SIGNING_KEY',
         );
       }
 
@@ -49,25 +60,55 @@ export function registerIdentityCommands(program: Command): void {
         name: opts.name,
         publicKeyHash,
         publicKey,
-        chains: opts.chains ? opts.chains.split(',') : undefined,
+        chains,
         credits: opts.credits,
       });
       printOutput(result as unknown as Record<string, unknown>);
+
+      // `create` returns 202 and provisioning continues in the background. Until Phase 1 adds
+      // --wait, the least this can do is say so — an identity used before `can_sign` is true fails
+      // at the last step of every flow, with an error that never mentions provisioning.
+      const id = (result as unknown as { identity?: { id?: string }; id?: string }).identity?.id
+        ?? (result as unknown as { id?: string }).id;
+      hint('');
+      hint('Provisioning continues in the background. Wait for status to be terminal AND can_sign true:');
+      hint(`  certen identity get ${id ?? '<id>'}`);
     });
 
   identity
     .command('list')
-    .description('(unavailable — the gateway has no identity list endpoint)')
-    .action(() => {
+    .description('List the identities in your organization (via the portfolio view)')
+    .action(async () => {
       // This called GET /v1/identities, which 404s: the gateway serves /v1/identity (POST) and
-      // /v1/identity/{id} (GET/PATCH/DELETE) and has no collection route. Failing with an explanation
-      // beats failing with a 404 the user has to go decode. Kept as a command so it explains itself
-      // rather than printing "unknown command".
-      throw new Error(
-        'The gateway has no identity list endpoint — GET /v1/identities does not exist. '
-        + 'Use `certen identity get <id>` for an identity you know, or `certen portfolio` for a '
-        + 'cross-identity view of the org.',
-      );
+      // /v1/identity/{id} (GET/PATCH/DELETE) and has no collection route. It then spent a release
+      // as a command whose only behaviour was to explain that it did not work — honest, but the
+      // user's actual question ("what identities do I have") was answerable the whole time from
+      // /v1/portfolio. So answer it, and note the one thing that view genuinely cannot give.
+      const client = await getClient();
+      const portfolio = await client.portfolio.get();
+      const identities = portfolio.identities ?? [];
+
+      if (identities.length === 0) {
+        printOutput([]);
+        hint('No identities yet. Create one: certen identity create --name <name> --sign-with <key>');
+        return;
+      }
+
+      printOutput(identities.map((i) => ({
+        adi_url: i.adi_url,
+        status: i.status,
+        credit_balance: i.credit_balance,
+        chains: i.chains?.length ?? 0,
+        pending_actions: i.pending_actions,
+      })));
+
+      // The gap is real and worth naming: /v1/portfolio keys identities by ADI URL and does not
+      // return the UUID that `identity get` takes. Someone who did not record the ID at create
+      // time cannot recover it here, and pretending otherwise would send them looking for a
+      // column that does not exist.
+      hint('');
+      hint('Note: the gateway has no identity collection route, so this comes from `certen portfolio`.');
+      hint('It shows ADI URLs, not the UUIDs `certen identity get` takes — those are printed at create time.');
     });
 
   identity
@@ -83,11 +124,12 @@ export function registerIdentityCommands(program: Command): void {
   identity
     .command('link-chain <id>')
     .description('Link a chain to an identity')
-    .requiredOption('--chain <chain>', 'Chain ID to link')
+    .requiredOption('--chain <chain>', 'Chain to link, e.g. base-sepolia')
     .action(async (id: string, opts) => {
+      const chain = assertChain(opts.chain);
       const client = await getClient();
       const result = await client.identity.update(id, {
-        linkChains: [opts.chain],
+        linkChains: [chain],
       });
       printOutput(result as unknown as Record<string, unknown>);
     });

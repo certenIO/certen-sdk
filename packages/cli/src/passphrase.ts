@@ -13,8 +13,27 @@ export function passphraseFromEnv(): string | null {
   return v && v.length > 0 ? v : null;
 }
 
-function isInteractive(): boolean {
+export function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+/**
+ * Read a secret from stdin when it is a pipe rather than a terminal.
+ *
+ * This is what makes `--api-key -` work: `echo $KEY | certen auth login --api-key -` keeps the
+ * secret out of shell history and out of the process table, which passing it as an argument
+ * cannot do. Only the first line is taken, so a trailing newline from `echo` is not part of the
+ * key.
+ */
+export function readSecretFromStdin(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let buf = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk: string) => { buf += chunk; });
+    process.stdin.on('end', () => resolve(buf.split(/\r?\n/)[0].trim()));
+    process.stdin.on('error', reject);
+    process.stdin.resume();
+  });
 }
 
 /**
@@ -117,6 +136,20 @@ export async function resolveNewPassphrase(noPassphrase: boolean): Promise<strin
   const second = await readHidden('Confirm passphrase: ');
   if (first !== second) throw new Error('Passphrases did not match. Nothing was written.');
   return first;
+}
+
+/**
+ * Prompt for a secret on the TTY without echoing it.
+ *
+ * Exported so `auth login` can ask for an API key the same way key commands ask for a passphrase.
+ * A key pasted at a hidden prompt never reaches shell history; one passed as `--api-key <value>`
+ * always does.
+ */
+export async function promptSecret(prompt: string): Promise<string> {
+  if (!isInteractive()) {
+    throw new Error('No TTY to prompt on.');
+  }
+  return readHidden(prompt);
 }
 
 export { ENV_VAR as PASSPHRASE_ENV_VAR };

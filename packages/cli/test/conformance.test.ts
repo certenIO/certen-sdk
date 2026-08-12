@@ -83,7 +83,9 @@ describe('CLI contract: stdout carries exactly one JSON envelope', () => {
   });
 
   it('emits a single parseable object on failure', () => {
-    const r = certen(['--json', 'identity', 'list']);
+    // `keys show` on a name that does not exist fails locally, with no network and no API key —
+    // which makes it the one failure this suite can provoke deterministically.
+    const r = certen(['--json', 'keys', 'show', 'nosuchkey']);
     const env = soleJson(r.stdout);
     expect(env.ok).toBe(false);
     expect(env.error).toMatchObject({ retryable: false });
@@ -94,6 +96,20 @@ describe('CLI contract: stdout carries exactly one JSON envelope', () => {
     // Exactly one line, and it parses. A stray line would break both assertions.
     expect(r.stdout.trim().split('\n')).toHaveLength(1);
     expect(() => JSON.parse(r.stdout.trim())).not.toThrow();
+  });
+
+  // Phase 0 / D3. `auth login` called process.exit(1) directly on a storage failure, which skips
+  // `emitFailure` entirely — the process exited non-zero with an EMPTY stdout, so a caller
+  // parsing the envelope got nothing to parse. Every failure path in this command must now
+  // produce an envelope like any other.
+  it('emits an envelope from auth login rather than exiting silently', () => {
+    // stdin is /dev/null in this harness, so `--api-key -` reads EOF: no key, and no TTY to
+    // prompt on. The failure is expected; the envelope is what is being asserted.
+    const r = certen(['--json', 'auth', 'login', '--api-key', '-']);
+    const env = soleJson(r.stdout);
+    expect(env.ok).toBe(false);
+    expect((env.error as { code: string }).code).toBe('NO_API_KEY');
+    expect(r.code).toBe(2);
   });
 
   it('keeps human notes off stdout in JSON mode', () => {
@@ -109,7 +125,7 @@ describe('CLI contract: exit codes', () => {
   });
 
   it('1 — the operation failed', () => {
-    const r = certen(['--json', 'identity', 'list']);
+    const r = certen(['--json', 'keys', 'show', 'nosuchkey']);
     expect(r.code).toBe(1);
     expect(soleJson(r.stdout).ok).toBe(false);
   });
@@ -130,6 +146,38 @@ describe('CLI contract: exit codes', () => {
     const r = certen(['--json', 'portfolio']);
     expect(r.code).toBe(2);
     expect((soleJson(r.stdout).error as { code: string }).code).toBe('NO_API_KEY');
+  });
+
+  // Phase 0 / D4. These commands raised a bare `throw new Error(...)` for a wrong invocation,
+  // which `resolveExitCode` has no way to distinguish from a rejected request — so "you forgot a
+  // flag" and "the gateway said no" both exited 1 and read identically to an automated caller.
+  // Each of these is a wrong INVOCATION and must exit 2.
+  it('2 — a wrong invocation of `identity create` is a usage error, not a failed request', () => {
+    const r = certen(['--json', 'identity', 'create', '--name', 'x']);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('MISSING_SIGNING_KEY');
+  });
+
+  it('2 — mutually exclusive signing flags are a usage error', () => {
+    const r = certen([
+      '--json', 'tx', 'sign', 'some-id',
+      '--sign-with', 'dev', '--signature', 'ab', '--public-key', 'cd',
+    ]);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('CONFLICTING_SIGNING_FLAGS');
+  });
+
+  it('2 — an unsupported chain is a usage error, raised before any network call', () => {
+    // No API key is configured in this environment, and NO_API_KEY is also exit 2 — so the code
+    // is what proves the chain check ran FIRST. That ordering is the point: `fund` must not open
+    // a real payment intent against a chain it was going to reject anyway.
+    const r = certen(['--json', 'fund', '25', '--chain', 'base']);
+    expect(r.code).toBe(2);
+    const err = soleJson(r.stdout).error as { code: string; message: string };
+    expect(err.code).toBe('UNSUPPORTED_CHAIN');
+    // The suggestion is the useful half of the refusal: `base` is a real mainnet, not a typo of
+    // nothing, so the CLI names the testnet rather than silently substituting it.
+    expect(err.message).toContain('base-sepolia');
   });
 
   it('3 — gateway unreachable, and the error says it is retryable', () => {
@@ -193,7 +241,7 @@ describe('CLI contract: table mode is unchanged for humans', () => {
   });
 
   it('reports failures as a human line on stderr and still exits non-zero', () => {
-    const r = certen(['identity', 'list']);
+    const r = certen(['keys', 'show', 'nosuchkey']);
     expect(r.code).toBe(1);
     expect(r.stdout.trim()).toBe('');
     expect(r.stderr).toContain('Error');
