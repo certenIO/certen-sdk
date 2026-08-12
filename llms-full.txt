@@ -221,6 +221,31 @@ Status of a single payment intent you opened, so a client can wait for the credi
 Path parameters:
   - `reference`: string
 
+### certen.chains
+
+#### certen.chains.list()
+
+Every network in the registry, with contract addresses and explorer links.
+
+GET /v1/chains — List the chains CERTEN is deployed on, with contract addresses
+
+The contract registry: anchor, account factory, and BLS/ZK verifier addresses per network, with explorer links and on-chain verification status. PUBLIC — no API key required. `verified: true` means the address was confirmed to carry contract bytecode via eth_getCode; non-EVM entries are transcribed from validator configuration and are not independently verified.
+
+Query parameters:
+  - `family`: string — Filter by family: evm, solana, move, near, ton, tron.
+  - `verified_only`: boolean — Only networks whose contracts are all on-chain verified.
+
+#### certen.chains.get()
+
+One network, by registry id (`base-sepolia`) or numeric EVM chain id (`84532`).
+
+GET /v1/chains/{id} — Get one chain and its contract addresses
+
+Accepts either the registry id (`ethereum-sepolia`) or the numeric EVM chain id (`11155111`). PUBLIC — no API key required.
+
+Path parameters:
+  - `id`: string
+
 ### certen.execute
 
 #### certen.execute.contractCall()
@@ -775,7 +800,7 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 29 of the gateway's 112 operations. The rest are reachable only by
+The SDK wraps 31 of the gateway's 112 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -841,8 +866,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `GET /v1/billing/receipts/{id}` — Get a receipt with its signature, log proof, and computation
   - `GET /v1/billing/receipts/{id}/proof` — Get the transparency-log inclusion proof for a receipt
   - `GET /v1/billing/receipts/verification-key` — Get the receipt verification key set
-  - `GET /v1/chains` — List the chains CERTEN is deployed on, with contract addresses
-  - `GET /v1/chains/{id}` — Get one chain and its contract addresses
   - `GET /v1/entitlement/current` — Current signed entitlement epoch
   - `GET /v1/entitlement/health` — Entitlement publisher health
   - `GET /v1/me` — Current portal user
