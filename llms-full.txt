@@ -248,6 +248,30 @@ Accepts either the registry id (`ethereum-sepolia`) or the numeric EVM chain id 
 Path parameters:
   - `id`: string
 
+### certen.device
+
+#### certen.device.start()
+
+Ask for a device code and the short user code a human types into the portal.
+
+POST /v1/portal/device — Start a CLI device authorization
+
+Allocates a device code and a short user code so a terminal can obtain its own API key without a human copying a secret. PUBLIC — the caller has no credential yet, which is the point. This grants nothing on its own: the request belongs to no organization until a signed-in owner or admin approves it, and the key is minted only when the device collects it with the device code. The device code is returned ONCE and stored only as an HMAC.
+
+Request body:
+  - `device_name`: string — What to call this device on the approval screen and on the minted key.
+
+#### certen.device.poll()
+
+Ask whether it has been approved yet, and collect the key when it has.
+
+GET /v1/portal/device/{deviceCode} — Poll a device authorization, and collect the key once approved
+
+Returns `pending`, `denied`, `expired`, or `approved`. On the FIRST call after approval it mints the API key and returns it — once, in this response. Subsequent calls report `claimed` and carry no key. PUBLIC: possession of the device code is the authorization, which is why it is 256 bits and stored only as an HMAC.
+
+Path parameters:
+  - `deviceCode`: string
+
 ### certen.execute
 
 #### certen.execute.contractCall()
@@ -908,7 +932,7 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 37 of the gateway's 112 operations. The rest are reachable only by
+The SDK wraps 39 of the gateway's 116 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -989,6 +1013,8 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `GET /v1/transparency/heads/{treeSize}` — Get the signed tree head at a size
   - `GET /v1/transparency/price-books` — List published price books
   - `POST /v1/billing/deposit-addresses` — Register a sending address for deposit attribution
+  - `POST /v1/portal/device/approve` — Approve a CLI device authorization
+  - `POST /v1/portal/device/deny` — Deny a CLI device authorization
   - `POST /v1/portal/funding/addresses` — Register a wallet you pay from
   - `POST /v1/portal/funding/intents` — Open a one-time payment
   - `POST /v1/portal/invites` — Invite a teammate

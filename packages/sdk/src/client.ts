@@ -12,6 +12,7 @@ import { AdminResource } from './resources/admin.js';
 import { ExecuteResource } from './resources/execute.js';
 import { ChainsResource } from './resources/chains.js';
 import { ProofResource } from './resources/proof.js';
+import { DeviceResource } from './resources/device.js';
 import type { CertenClientOptions } from './types.js';
 
 /**
@@ -99,6 +100,8 @@ export class CertenClient {
   public chains: ChainsResource;
   /** Reading and sharing proofs. See resources/proof.ts. */
   public proof: ProofResource;
+  /** Device authorization, so a terminal can obtain its own key. Needs no API key. */
+  public device: DeviceResource;
 
   constructor(options: CertenClientOptions & {
     maxRetries?: number;
@@ -234,6 +237,7 @@ export class CertenClient {
     this.execute = new ExecuteResource(this.http, generateIdempotencyKey);
     this.chains = new ChainsResource(this.http);
     this.proof = new ProofResource(this.http);
+    this.device = new DeviceResource(this.http);
   }
 }
 

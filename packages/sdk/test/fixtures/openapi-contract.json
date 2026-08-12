@@ -1482,6 +1482,62 @@
         "responseShapes": {}
       }
     },
+    "/v1/portal/device": {
+      "post": {
+        "required": [],
+        "properties": [
+          "device_name"
+        ],
+        "propertyTypes": {
+          "device_name": "string"
+        },
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/device/{deviceCode}": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/device/approve": {
+      "post": {
+        "required": [
+          "user_code"
+        ],
+        "properties": [
+          "user_code"
+        ],
+        "propertyTypes": {
+          "user_code": "string"
+        },
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/portal/device/deny": {
+      "post": {
+        "required": [
+          "user_code"
+        ],
+        "properties": [
+          "user_code"
+        ],
+        "propertyTypes": {
+          "user_code": "string"
+        },
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
     "/v1/admin/orgs": {
       "get": {
         "required": [],

@@ -801,3 +801,31 @@ export interface ProofSharesResponse {
   shares: ProofShare[];
   [key: string]: unknown;
 }
+
+// ---- Device authorization (RFC 8628) ----
+
+export interface DeviceAuthorization {
+  /** Returned ONCE. The gateway stores only its HMAC. Possession of it is the authorization. */
+  device_code: string;
+  /** The short code a human reads off the terminal and types into the portal. */
+  user_code: string;
+  verification_uri: string;
+  /** Prefills the portal field. Following it does NOT approve — approval is always a click. */
+  verification_uri_complete?: string;
+  expires_in: number;
+  /** Seconds. Poll no faster than this. */
+  interval: number;
+}
+
+export interface DeviceAuthorizationStatus {
+  status: 'pending' | 'approved' | 'denied' | 'expired' | 'claimed';
+  /** Present ONLY in the first response after approval, and never again. */
+  api_key?: string;
+  key_prefix?: string;
+  key_id?: string;
+  org_id?: string;
+  permissions?: string[];
+  interval?: number;
+  note?: string;
+  warning?: string;
+}

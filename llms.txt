@@ -79,7 +79,7 @@ certen --json transaction get <intent-id>
 
 ## Methods
 
-42 methods across 11 resources. Signatures and field-level detail: `llms-full.txt`.
+44 methods across 12 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.createOrg()` — Create organization
@@ -100,6 +100,10 @@ certen --json transaction get <intent-id>
 **certen.chains**
   - `certen.chains.list()` — Every network in the registry, with contract addresses and explorer links.
   - `certen.chains.get()` — One network, by registry id (`base-sepolia`) or numeric EVM chain id (`84532`).
+
+**certen.device**
+  - `certen.device.start()` — Ask for a device code and the short user code a human types into the portal.
+  - `certen.device.poll()` — Ask whether it has been approved yet, and collect the key when it has.
 
 **certen.execute**
   - `certen.execute.contractCall()` — Authorize an arbitrary contract call, gated on proof.
@@ -145,6 +149,6 @@ certen --json transaction get <intent-id>
   - `certen.transaction.get()` — Get a transaction intent status
   - `certen.transaction.list()` — List transaction intents
 
-The gateway exposes 112 operations; the SDK wraps 37 of them. Anything not listed
+The gateway exposes 116 operations; the SDK wraps 39 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { hostname, userInfo } from 'node:os';
+import { CertenClient, CertenError, type DeviceAuthorization, type DeviceAuthorizationStatus } from '@certen.io/sdk';
 import { getApiUrl, getPortalUrl, setApiKey, readConfig } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -17,35 +18,10 @@ import { CliError, UsageError, EXIT } from '../errors.js';
  * code, the human approves it in a portal session they already trust, and the CLI collects the
  * key over its own channel. **The key is never displayed and never pasted.**
  *
- * ── Why this talks HTTP directly instead of going through the SDK ───────────────────────────────
- *
- * `spec/openapi.json` is vendored from the DEPLOYED gateway, and `agentgen` fails if the SDK calls
- * an endpoint the vendored spec does not contain — a gate that exists to catch a wrong path or a
- * stale spec. These endpoints exist in the gateway source but are not deployed yet, so an SDK
- * resource for them would break that gate for everyone until a release happens.
- *
- * The correct sequence is: gateway ships → `npm run spec:refresh` → SDK resource → this file
- * becomes a thin wrapper. Until then, two `fetch` calls here keep the gate honest rather than
- * working around it.
+ * Approval and denial are not driven from here. They need a Firebase portal session, and the
+ * gateway refuses an approval carrying `X-API-Key` — so a machine key cannot escalate itself into
+ * minting more keys, and this command must not imply that it could.
  */
-
-interface DeviceStart {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  verification_uri_complete?: string;
-  expires_in: number;
-  interval: number;
-}
-
-interface DevicePoll {
-  status: 'pending' | 'approved' | 'denied' | 'expired' | 'claimed';
-  api_key?: string;
-  key_prefix?: string;
-  org_id?: string;
-  permissions?: string[];
-  note?: string;
-}
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => { setTimeout(r, ms); });
 
@@ -58,57 +34,39 @@ function deviceName(): string {
   }
 }
 
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    // Nothing was submitted, so this is exit 3 and a retry is safe.
-    throw new CliError(
-      `Could not reach ${url}: ${err instanceof Error ? err.message : String(err)}`,
-      'NETWORK_ERROR', EXIT.UNREACHABLE, true,
-    );
-  }
-  const text = await response.text();
-  if (!response.ok) {
-    if (response.status === 403) {
+/**
+ * Translate an SDK error into a CLI failure that names the cause.
+ *
+ * The two statuses worth distinguishing are the ones a user could otherwise misdiagnose: a 404
+ * means this gateway predates the feature, not that the code was mistyped, and a 403 means
+ * self-service is switched off rather than that anything was refused.
+ */
+function translate(err: unknown, url: string): never {
+  if (err instanceof CertenError) {
+    if (err.status === 0) {
+      // Nothing was submitted, so exit 3 and a retry is safe.
+      throw new CliError(`Could not reach ${url}: ${err.message}`, 'NETWORK_ERROR', EXIT.UNREACHABLE, true);
+    }
+    if (err.status === 403) {
       throw new CliError(
         'This gateway does not have self-service onboarding enabled, so it cannot authorize a '
         + `device. Mint a key in the portal instead: ${getPortalUrl()}`,
         'SELF_SERVICE_DISABLED', EXIT.FAILED,
       );
     }
-    if (response.status === 404) {
-      // Precise, because the alternative diagnosis — "my code is wrong" — sends someone in the
-      // wrong direction entirely.
+    if (err.status === 404) {
       throw new CliError(
-        `This gateway does not support device authorization (${url} returned 404). It is probably `
-        + `running a build from before the feature shipped. Mint a key at ${getPortalUrl()}`,
+        'This gateway does not support device authorization. It is probably running a build from '
+        + `before the feature shipped. Mint a key at ${getPortalUrl()}`,
         'DEVICE_FLOW_UNSUPPORTED', EXIT.FAILED,
       );
     }
     throw new CliError(
-      `${url} returned ${response.status}: ${text.slice(0, 200)}`,
-      'DEVICE_FLOW_FAILED', EXIT.FAILED, response.status >= 500,
+      `${url} returned ${err.status}: ${err.message}`,
+      'DEVICE_FLOW_FAILED', EXIT.FAILED, err.isRetryable,
     );
   }
-  return JSON.parse(text) as T;
-}
-
-async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  const text = await response.text();
-  if (!response.ok) {
-    throw new CliError(
-      `${url} returned ${response.status}: ${text.slice(0, 200)}`,
-      'DEVICE_FLOW_FAILED', EXIT.FAILED, response.status >= 500,
-    );
-  }
-  return JSON.parse(text) as T;
+  throw err;
 }
 
 /** Best effort. A browser that will not open is an inconvenience, never a failure. */
@@ -133,10 +91,12 @@ export async function runDeviceFlow(opts: {
   timeoutMs?: number;
 }): Promise<{ prefix: string; orgId?: string }> {
   const apiUrl = getApiUrl().replace(/\/+$/, '');
+  // These two calls are public; the key field is required by the constructor and unused by them.
+  const client = new CertenClient({ apiKey: 'device-flow', baseUrl: apiUrl });
 
-  const start = await postJson<DeviceStart>(`${apiUrl}/v1/portal/device`, {
-    device_name: deviceName(),
-  });
+  const start: DeviceAuthorization = await client.device
+    .start({ deviceName: deviceName() })
+    .catch((err: unknown) => translate(err, `${apiUrl}/v1/portal/device`));
 
   if (!isJsonMode()) {
     human('');
@@ -165,9 +125,9 @@ export async function runDeviceFlow(opts: {
 
     await sleep(intervalMs);
 
-    const poll = await getJson<DevicePoll>(
-      `${apiUrl}/v1/portal/device/${encodeURIComponent(start.device_code)}`,
-    );
+    const poll: DeviceAuthorizationStatus = await client.device
+      .poll(start.device_code)
+      .catch((err: unknown) => translate(err, `${apiUrl}/v1/portal/device`));
 
     if (poll.status === 'pending') {
       if (!announced && !isJsonMode()) {
