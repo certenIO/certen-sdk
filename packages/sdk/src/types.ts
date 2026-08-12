@@ -589,10 +589,56 @@ export interface BalanceResponse {
   currency: string;
   available_usd: string;
   held_usd: string;
+  /** The credit line IN FORCE. Zero once an expiring grant has lapsed. */
   credit_limit_usd: string;
   /** available + credit line. NOT what may be committed — see ObligationsResponse. */
   spendable_usd: string;
   status: 'active' | 'suspended' | 'closed';
+  /** Why service stopped. Without it `status: suspended` is unactionable. */
+  suspended_reason?: string | null;
+  /**
+   * The credit line, and the points at which it changes what you can do.
+   *
+   * `suspends_at_usd` is the one an autonomous caller needs: it is the drawdown
+   * at which work stops being accepted. Publishing it is what makes it possible
+   * to top up BEFORE being cut off rather than after.
+   */
+  credit?: {
+    kind: 'none' | 'trial' | 'comp' | 'terms';
+    label: string | null;
+    /** The limit as granted, before expiry. Differs from credit_limit_usd only for a lapsed grant. */
+    granted_limit_usd: string;
+    expires_at: string | null;
+    expired: boolean;
+    warns_at_usd: string;
+    suspends_at_usd: string;
+  };
+}
+
+/** A price, fixed at a moment, from published inputs. Free to ask for. */
+export interface QuoteResponse {
+  id: string;
+  sku: string;
+  chain: string;
+  chains?: string[] | null;
+  leg_count: number;
+  proof_class: 'on_demand' | 'on_cadence' | null;
+  platform_fee_usd: string;
+  gas_usd: string;
+  total_usd: string;
+  /** Ceiling CERTEN promises. Gas over this is absorbed, not passed on. */
+  max_total_usd: string;
+  expires_at: string;
+  computation?: {
+    /**
+     * Which cost history priced the gas.
+     *
+     * `class_thin` means the proof class has its own history but too little of
+     * it for the median to be stable — the price is indicative rather than firm.
+     */
+    gas_estimate_basis?: 'class_specific' | 'class_thin' | 'unclassified_fallback';
+    [k: string]: unknown;
+  };
 }
 
 export interface Obligation {

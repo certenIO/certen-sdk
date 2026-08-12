@@ -55,6 +55,8 @@ export function registerBillingCommands(program: Command): void {
         pending_intents: obligations.pending_intents,
         uncovered_usd: obligations.uncovered_usd,
         status: balance.status,
+        suspended_reason: balance.suspended_reason ?? null,
+        credit: balance.credit ?? null,
       });
 
       if (isJsonMode()) return;
@@ -79,9 +81,95 @@ export function registerBillingCommands(program: Command): void {
         human('  You cannot start new work until you add funds.');
         hint('certen fund <amount> --chain <chain>');
       }
+      // The two numbers an autonomous caller needs and could not previously see:
+      // when a trial ends, and the drawdown at which work stops being accepted.
+      // Publishing the threshold is what makes it possible to top up BEFORE
+      // being cut off instead of discovering it through a refusal.
+      const credit = balance.credit;
+      if (credit && credit.kind !== 'none') {
+        human('');
+        if (credit.expired) {
+          human(`  Your ${credit.kind} credit has EXPIRED (was ${usd(credit.granted_limit_usd)}).`);
+        } else if (credit.expires_at) {
+          const days = Math.max(0, Math.round((new Date(credit.expires_at).getTime() - Date.now()) / 86_400_000));
+          human(`  ${credit.label ?? credit.kind} — ${usd(credit.granted_limit_usd)}, ends in ${days} day(s).`);
+        } else {
+          human(`  ${credit.label ?? credit.kind} — ${usd(credit.granted_limit_usd)} credit line.`);
+        }
+        human(`  Warning at ${usd(credit.warns_at_usd)} drawn · service stops at ${usd(credit.suspends_at_usd)}.`);
+      }
+
       if (balance.status !== 'active') {
         human(`  Account status: ${balance.status}.`);
+        if (balance.suspended_reason) human(`  Reason: ${balance.suspended_reason}.`);
+        hint('certen fund <amount> --chain base-sepolia');
       }
+    });
+
+  program
+    .command('quote')
+    .description('What a piece of work will cost, before you commit to it')
+    .requiredOption('--chain <chain>', 'Chain the work executes on, e.g. base-sepolia')
+    .option('--proof-class <class>', 'on_cadence (batched, cheaper) or on_demand (immediate)', 'on_cadence')
+    .option('--legs <n>', 'Number of legs in the intent', '1')
+    .action(async (opts: { chain: string; proofClass: string; legs: string }) => {
+      if (opts.proofClass !== 'on_cadence' && opts.proofClass !== 'on_demand') {
+        throw new CliError(
+          `"${opts.proofClass}" is not a proof class. Use on_cadence or on_demand.`,
+          'INVALID_PROOF_CLASS', EXIT.USAGE,
+        );
+      }
+      const legs = Number(opts.legs);
+      if (!Number.isInteger(legs) || legs < 1) {
+        throw new CliError(`"${opts.legs}" is not a leg count. Use a whole number of 1 or more.`,
+          'INVALID_LEG_COUNT', EXIT.USAGE);
+      }
+
+      const client = await getClient();
+      const q = await client.billing.quote({
+        chain: opts.chain,
+        proofClass: opts.proofClass,
+        legCount: legs,
+      });
+
+      printOutput({
+        quote_id: q.id,
+        chain: q.chain,
+        proof_class: q.proof_class,
+        leg_count: q.leg_count,
+        platform_fee_usd: q.platform_fee_usd,
+        gas_usd: q.gas_usd,
+        total_usd: q.total_usd,
+        max_total_usd: q.max_total_usd,
+        expires_at: q.expires_at,
+        gas_estimate_basis: q.computation?.gas_estimate_basis ?? null,
+      });
+
+      if (isJsonMode()) return;
+
+      human('');
+      human(`  ${q.chain}  ${q.proof_class ?? 'unclassified'}  ${q.leg_count} leg(s)`);
+      human('');
+      human(`  Platform fee   ${usd(q.platform_fee_usd)}`);
+      human(`  Gas            ${usd(q.gas_usd)}`);
+      human(`  Total          ${usd(q.total_usd)}`);
+      human(`  Capped at      ${usd(q.max_total_usd)}   (gas above this is on us)`);
+      human('');
+
+      // A thin basis is a real caveat, not a footnote: it means the median
+      // behind this gas figure rests on very few observations and can move
+      // materially. Saying so is the difference between a price and a guess
+      // presented as a price.
+      if (q.computation?.gas_estimate_basis === 'class_thin') {
+        human('  Note: this gas estimate comes from a small sample for this proof class,');
+        human('  so it may move as more of this class executes.');
+        human('');
+      } else if (q.computation?.gas_estimate_basis === 'unclassified_fallback') {
+        human('  Note: no cost history for this proof class yet — priced from mixed history.');
+        human('');
+      }
+
+      hint(`Lock this price: pass quote_id=${q.id} on the transaction (expires ${q.expires_at}).`);
     });
 
   program

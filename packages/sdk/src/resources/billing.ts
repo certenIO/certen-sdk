@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import type {
   BalanceResponse,
+  QuoteResponse,
   ObligationsResponse,
   DepositTarget,
   DepositIntentStatus,
@@ -29,6 +30,35 @@ export class BillingResource {
   /** Available, held, credit line, and spendable. Requires `billing:read`. */
   async balance(): Promise<BalanceResponse> {
     const { data } = await this.http.get('/v1/billing/balance');
+    return data;
+  }
+
+  /**
+   * Price a piece of work before committing to it.
+   *
+   * Free, and the answer binds: pass the returned `id` as `quote_id` on the
+   * transaction and that is the price, regardless of what gas does in between.
+   * A quote is single-use and expires, so ask when you are ready to act.
+   *
+   * Worth checking `computation.gas_estimate_basis` on a cost-plus chain. A
+   * `class_thin` basis means the proof class has its own cost history but too
+   * little of it for the median to be stable — the number is indicative, and
+   * can move materially as more of that class executes.
+   */
+  async quote(params: {
+    chain: string;
+    proofClass?: 'on_demand' | 'on_cadence';
+    legCount?: number;
+    sku?: string;
+    additionalChains?: string[];
+  }): Promise<QuoteResponse> {
+    const { data } = await this.http.post('/v1/quote', {
+      chain: params.chain,
+      proof_class: params.proofClass,
+      leg_count: params.legCount ?? 1,
+      sku: params.sku,
+      additional_chains: params.additionalChains,
+    });
     return data;
   }
 
