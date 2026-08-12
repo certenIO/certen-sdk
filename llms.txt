@@ -58,16 +58,33 @@ const proof = await certen.execute.proof(intentId);   // hand this to your count
   `proof_id`. That is the normal case for governance and authorization transactions — an empty lookup there
   is not a bug.
 
+## Diagnosing a setup
+`client.doctor()` returns an ordered list of checks and never throws for a failed one. Run it before
+concluding that something is broken in your own code — most of what it catches is invisible until it
+surfaces somewhere unrelated:
+```ts
+const report = await certen.doctor();
+if (!report.ok) console.error(report.checks.filter(c => c.status === 'fail'));
+```
+It catches, in order: gateway unreachable · credential rejected (401) or merely unscoped (403) · no active
+identity · **an abstract account with no gas**, which makes a value transfer park at `anchoring` forever ·
+a balance entirely committed to pending intents · an expired trial.
+
 ## CLI (no code required)
 ```
 npm install -g @certen.io/cli
-certen --json identity get <id>
-certen --json transaction get <intent-id>
+certen login                    # device authorization — no key is ever copied by hand
+certen init                     # signing key, identity, funding; idempotent
+certen call --identity <id> --chain base-sepolia --to 0x… --fn 'confirm(bytes32)' --arg 0x…     --sign-with dev --wait
+certen proof get <intent-id>
+certen doctor                   # names the one thing blocking you
 ```
 - **`--json` emits exactly one envelope object on stdout**, nothing else. Human output goes to stderr.
   Success is `{"ok":true,"data":{...}}`; failure is `{"ok":false,"error":{"code","message","retryable"}}`.
 - **Exit codes:** `0` ok · `1` operation failed · `2` usage error · `3` gateway unreachable. Branch on these
   without parsing text.
+- A failure that still produced a result carries it under `error.details` — `certen --json doctor` returns
+  every check that way, so signalling the failure never costs you the diagnosis.
 - Failures carry the same codes and `retryable` flag as the SDK, so the retry decision is identical either way.
 - `certen --help --json` returns the whole command tree (commands, flags, types) in one call.
 

@@ -13,6 +13,7 @@ import { ExecuteResource } from './resources/execute.js';
 import { ChainsResource } from './resources/chains.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
+import { runDoctor, type DoctorReport } from './doctor.js';
 import type { CertenClientOptions } from './types.js';
 
 /**
@@ -102,6 +103,17 @@ export class CertenClient {
   public proof: ProofResource;
   /** Device authorization, so a terminal can obtain its own key. Needs no API key. */
   public device: DeviceResource;
+
+  /**
+   * Diagnose this setup and say what is blocking it.
+   *
+   * Never throws for a failed check — a diagnosis that cannot report a broken setup is useless.
+   * `report.ok` is false when something failed; warnings do not clear it and do not set it.
+   * See doctor.ts for what each check exists to catch.
+   */
+  doctor(): Promise<DoctorReport> {
+    return runDoctor(this);
+  }
 
   constructor(options: CertenClientOptions & {
     maxRetries?: number;

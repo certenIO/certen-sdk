@@ -43,6 +43,15 @@ export interface ToolDef {
   description: string;
   /** The gateway operation this reaches, as `METHOD /path` — checked against the vendored spec. */
   endpoint: string;
+  /**
+   * Further operations a COMPOSITE tool reaches, in the same `METHOD /path` form.
+   *
+   * A tool that answers one question by making several calls would otherwise understate what it
+   * touches, and `endpoint` alone would quietly become a half-truth as soon as the first composite
+   * tool landed. Every entry here is checked against the vendored spec and against the read-tier
+   * scope rule exactly as `endpoint` is, so declaring more can only ever constrain a tool further.
+   */
+  alsoReaches?: string[];
   inputSchema: {
     type: 'object';
     properties: Record<string, unknown>;
@@ -244,6 +253,131 @@ const READ_TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     run: (c, a) => c.execute.wait(s(a, 'intentId'), { timeoutMs: optN(a, 'timeoutMs') ?? 360_000 }),
+  },
+  {
+    name: 'certen_chains_list',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/chains',
+    description:
+      'Which chains CERTEN is deployed on, with the anchor, account-factory and verifier contract '
+      + 'addresses per network and whether each was confirmed on chain. Needs no API key, so it is '
+      + 'also the cheapest way to check the gateway is reachable. Use it to resolve a chain name '
+      + 'before naming one in an intent, rather than guessing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        family: str('Filter by family: evm, solana, move, near, ton, tron'),
+        verifiedOnly: {
+          type: 'boolean',
+          description:
+            'Only networks whose contracts are all on-chain verified. Non-EVM entries are '
+            + 'transcribed from validator config and can never satisfy this — that is accurate, '
+            + 'not an omission.',
+        },
+      },
+      additionalProperties: false,
+    },
+    run: (c, a) => c.chains.list({
+      family: optS(a, 'family'),
+      verifiedOnly: a.verifiedOnly === true ? true : undefined,
+    }),
+  },
+  {
+    name: 'certen_doctor',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/chains',
+    alsoReaches: ['GET /v1/billing/balance', 'GET /v1/billing/obligations', 'GET /v1/portfolio'],
+    description:
+      'Diagnose this setup and report what is blocking it, as an ordered list of checks. Run this '
+      + 'FIRST when something is failing for a reason that is not obvious — most of what it catches '
+      + 'is invisible until it surfaces far from its cause: a key with no billing scope, an org with '
+      + 'no active identity, an abstract account with no gas (which makes a transfer park at '
+      + '"anchoring" forever), or a balance entirely committed to pending intents. Never throws for '
+      + 'a failed check; read report.ok and the per-check status.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.doctor(),
+  },
+  {
+    name: 'certen_whoami',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/balance',
+    description:
+      'What standing the configured credential has: whether the gateway accepts it, the account '
+      + 'status, what is spendable, and any credit line with its expiry. The organization NAME and '
+      + 'the role of the caller are deliberately absent — no API-key-authenticated endpoint '
+      + 'returns either, and reporting a guess would be worse than reporting nothing.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: async (c) => {
+      const balance = await c.billing.balance();
+      return {
+        account_status: balance.status,
+        spendable_usd: balance.spendable_usd,
+        available_usd: balance.available_usd,
+        held_usd: balance.held_usd,
+        credit: balance.credit ?? null,
+        suspended_reason: balance.suspended_reason ?? null,
+        organization: 'not exposed to API keys — visible only in the portal',
+      };
+    },
+  },
+  {
+    name: 'certen_proof_receipt',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/proof/tx/{txHash}/receipt',
+    description:
+      'The Accumulate merkle inclusion receipt for a transaction, read from the network rather than '
+      + 'from the proof-service. This is the read that works when certen_proof_get does not: the two '
+      + 'are served by independent systems, so a 5xx from the proof-service does NOT mean the proof '
+      + 'is missing. It is also the only route for governance and key-page authorizations, which '
+      + 'carry no proof_id by design. `anchored` is the field that matters — a delivered but '
+      + 'unanchored transaction has no inclusion proof yet.',
+    inputSchema: {
+      type: 'object',
+      properties: { txHash: str('Accumulate transaction hash (64 hex)') },
+      required: ['txHash'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.proof.receipt(s(a, 'txHash')),
+  },
+  {
+    name: 'certen_proof_verify',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/proof/tx/{txHash}/receipt',
+    description:
+      'Check a proof and report EXACTLY what was and was not verified. Returns three separate '
+      + 'judgements — inclusion, authorization, outcome — of which this can establish only the '
+      + 'first, and only as something the gateway asserted. Use this instead of concluding '
+      + '"verified" from a successful proof fetch: a valid proof of the WRONG call is still a valid '
+      + 'proof, and asking the gateway is not independent verification. The result carries '
+      + 'independent:false to make that explicit.',
+    inputSchema: {
+      type: 'object',
+      properties: { txHash: str('Accumulate transaction hash (64 hex)') },
+      required: ['txHash'],
+      additionalProperties: false,
+    },
+    run: async (c, a) => {
+      const receipt = await c.proof.receipt(s(a, 'txHash'));
+      const inclusion = Boolean(receipt.anchored && receipt.receipt?.anchor);
+      return {
+        checked: {
+          inclusion: inclusion ? 'asserted by the gateway' : 'NOT ESTABLISHED — not anchored, or no anchor in the receipt',
+          authorization: 'NOT CHECKED — compare the operation against your own record of what was agreed',
+          outcome: 'NOT CHECKED — read the destination chain for the execution and its events',
+        },
+        anchored: receipt.anchored,
+        anchor: receipt.receipt?.anchor ?? null,
+        tx_hash: receipt.tx_hash,
+        independent: false,
+        note: 'To verify without trusting CERTEN: query an Accumulate node directly and check this '
+          + 'receipt against roots you fetch yourself, and read the execution on the destination chain.',
+      };
+    },
   },
 ];
 

@@ -85,19 +85,54 @@ describe('tool invariants', () => {
     }
   });
 
-  it('no read tool reaches a write-only endpoint', () => {
+  it('every ADDITIONAL endpoint a composite tool reaches also exists in the spec', () => {
+    // `endpoint` alone becomes a half-truth the moment a tool answers one question with several
+    // calls. Checking `alsoReaches` identically is what keeps the declaration honest rather than
+    // decorative — declaring more can then only ever constrain a tool further.
+    for (const t of ALL_TOOLS) {
+      for (const extra of t.alsoReaches ?? []) {
+        expect(specOp(extra), `${t.name} -> ${extra}`).toBeDefined();
+      }
+    }
+  });
+
+  it('a tool that calls more than one endpoint declares every one of them', () => {
+    // Enforced by name for the composites that exist, because there is no way to derive the call
+    // graph from a closure. If a new composite lands, it belongs in this list.
+    const composites: Record<string, number> = { certen_doctor: 3 };
+    for (const [name, count] of Object.entries(composites)) {
+      const tool = ALL_TOOLS.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool!.alsoReaches ?? [], `${name} declares its extra endpoints`).toHaveLength(count);
+    }
+  });
+
+  it('no read tool reaches a write-only endpoint, including via alsoReaches', () => {
     // The gateway states required scopes in prose, and inconsistently: sometimes backticked,
     // sometimes as "the `x:read` or `x:write` scope". A read endpoint therefore legitimately
     // mentions :write as an alternative — so the test is "does a :read scope grant access", not
     // "is :write mentioned anywhere". A genuinely write-only endpoint names only :write and fails.
     for (const t of READ_TOOLS) {
-      const description = specOp(t.endpoint)?.description ?? '';
-      const scopes = [...description.matchAll(/`?([a-z]+:(?:read|write|admin))`?/g)].map((m) => m[1]);
-      if (scopes.length === 0) continue;
-      expect(
-        scopes.some((sc) => sc.endsWith(':read')),
-        `${t.name} -> ${t.endpoint} requires only ${scopes.join(', ')}`,
-      ).toBe(true);
+      for (const endpoint of [t.endpoint, ...(t.alsoReaches ?? [])]) {
+        const description = specOp(endpoint)?.description ?? '';
+        const scopes = [...description.matchAll(/`?([a-z]+:(?:read|write|admin))`?/g)].map((m) => m[1]);
+        if (scopes.length === 0) continue;
+        expect(
+          scopes.some((sc) => sc.endsWith(':read')),
+          `${t.name} -> ${endpoint} requires only ${scopes.join(', ')}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('no read tool reaches an admin endpoint, even one with an :admin_read scope', () => {
+    // The admin surface enumerates credentials and sits in the WRITE tier for that reason. A read
+    // tool that quietly reached /v1/admin/* would move that capability across the tier boundary
+    // without moving the tool, which is the failure the tier split exists to prevent.
+    for (const t of READ_TOOLS) {
+      for (const endpoint of [t.endpoint, ...(t.alsoReaches ?? [])]) {
+        expect(endpoint.includes('/v1/admin/'), `${t.name} -> ${endpoint}`).toBe(false);
+      }
     }
   });
 
@@ -116,6 +151,33 @@ describe('tool invariants', () => {
     for (const t of ALL_TOOLS) {
       expect(t.description.length, t.name).toBeGreaterThan(40);
     }
+  });
+
+  it('the diagnostic and proof tools are read-tier and non-mutating', () => {
+    // Every one of these answers a question. None of them changes anything, so none may drift into
+    // the write tier or acquire a confirmation gate.
+    for (const name of [
+      'certen_doctor', 'certen_chains_list', 'certen_whoami',
+      'certen_proof_get', 'certen_proof_receipt', 'certen_proof_verify',
+    ]) {
+      const tool = ALL_TOOLS.find((t) => t.name === name);
+      expect(tool, name).toBeDefined();
+      expect(tool!.tier, name).toBe('read');
+      expect(tool!.mutates, name).toBe(false);
+    }
+  });
+
+  it('the verify tool refuses to imply independent verification', () => {
+    // An agent that reads "proof fetched" as "proof verified" is the failure mode this tool exists
+    // to prevent, so the description has to say what it cannot establish, not just what it can.
+    const verify = ALL_TOOLS.find((t) => t.name === 'certen_proof_verify')!;
+    expect(verify.description).toMatch(/not independent verification/i);
+    expect(verify.description).toMatch(/WRONG call/);
+  });
+
+  it('the receipt tool explains that a proof-service failure is not a missing proof', () => {
+    const receipt = ALL_TOOLS.find((t) => t.name === 'certen_proof_receipt')!;
+    expect(receipt.description).toMatch(/does NOT mean the proof is missing/i);
   });
 
   it('the long-running wait tool warns about its duration', () => {

@@ -7,6 +7,23 @@ authority.
 **Creation is asynchronous.** `POST /v1/identity` returns `202` and provisioning continues in the background.
 Code that assumes a synchronous `201` will race.
 
+---
+
+## The short version
+
+If you are not integrating against the raw API, the CLI does all of this, waits for the identity to
+become genuinely usable, and tells you what is still missing:
+
+```bash
+npm install -g @certen.io/cli
+certen login    # device authorization — you never copy an API key
+certen init     # key, identity, chains, funding — created and checked
+```
+
+`certen init` is idempotent: it creates only what is missing and reuses the identity it recorded on
+a previous run. Everything below is what it does on your behalf, and what to do instead if you are
+building the same flow yourself.
+
 ```bash
 export CERTEN_API_URL="https://gateway.kompendium.co"
 export API_KEY="ck_live_..."
@@ -59,6 +76,17 @@ curl "$CERTEN_API_URL/v1/identity/<uuid>" -H "X-API-Key: $API_KEY"
 Poll until `status` is terminal, then **verify `can_sign` is true before building anything on it**. That one
 field is the difference between an identity that works and one that will fail at the last step of every
 flow. If provisioning failed, `error_message` says why; provisioning retries on transient faults.
+
+`can_sign` has three values, not two. `null` means the on-chain key page **could not be read** — unknown,
+not usable. Never round it up to a soft yes: an Accumulate outage is exactly when that distinction matters
+most, and an identity reported ready on a `null` is one that fails at signing time with no explanation.
+
+The CLI encodes all three outcomes:
+
+```bash
+certen identity create --name buyer-bot --sign-with dev --chains base-sepolia --wait
+# waits for status terminal AND can_sign === true; exits non-zero on false OR null
+```
 
 Subscribe to [webhooks](https://gateway.kompendium.co/reference) instead of polling if you are onboarding more than a handful.
 
