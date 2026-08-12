@@ -79,7 +79,7 @@ certen --json transaction get <intent-id>
 
 ## Methods
 
-34 methods across 10 resources. Signatures and field-level detail: `llms-full.txt`.
+42 methods across 11 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.createOrg()` — Create organization
@@ -125,6 +125,16 @@ certen --json transaction get <intent-id>
 **certen.portfolio**
   - `certen.portfolio.get()` — Get a portfolio of identities and balances
 
+**certen.proof**
+  - `certen.proof.get()` — The proof artifact for a proof id.
+  - `certen.proof.byTxHash()` — The proof artifact for a transaction hash, where the proof-service indexed one.
+  - `certen.proof.receipt()` — The Accumulate merkle inclusion receipt for a transaction, read from the network.
+  - `certen.proof.bundle()` — The full bundle.
+  - `certen.proof.custody()` — The custody chain for a proof.
+  - `certen.proof.share()` — Mint a shareable link, so a counterparty can fetch the bundle without an API key of yours.
+  - `certen.proof.shares()` — Every share link this organization has created, including revoked and expired ones.
+  - `certen.proof.revokeShare()` — Revoke a share link.
+
 **certen.sign**
   - `certen.sign.create()` — Sign or vote on a multi-signature transaction
   - `certen.sign.submitSignature()` — Submit signature for an external sign request
@@ -135,6 +145,6 @@ certen --json transaction get <intent-id>
   - `certen.transaction.get()` — Get a transaction intent status
   - `certen.transaction.list()` — List transaction intents
 
-The gateway exposes 112 operations; the SDK wraps 31 of them. Anything not listed
+The gateway exposes 112 operations; the SDK wraps 37 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

@@ -659,6 +659,112 @@ Response 200 — Portfolio entries with per-chain balances and pending counts, p
   - `identities`: { adi_url, status, credit_balance, chains, pending_actions }[]
   - `total_chains`: number
 
+### certen.proof
+
+#### certen.proof.get()
+
+The proof artifact for a proof id.
+
+GET /v1/proof/{id} — Get proof by proof ID
+
+Retrieve the cryptographic proof artifact for a proof ID, proxied from the proof-service. The proof payload is defined by the downstream service. Requires the proof:read scope.
+
+Path parameters:
+  - `id`: string
+
+#### certen.proof.byTxHash()
+
+The proof artifact for a transaction hash, where the proof-service indexed one.
+
+GET /v1/proof/tx/{txHash} — Get proof by transaction hash
+
+Retrieve the cryptographic proof artifact for a given Accumulate transaction hash, proxied from the proof-service. The proof payload is defined by the downstream service. Requires the proof:read scope.
+
+Path parameters:
+  - `txHash`: string
+
+#### certen.proof.receipt()
+
+The Accumulate merkle inclusion receipt for a transaction, read from the network.
+
+GET /v1/proof/tx/{txHash}/receipt — Get the on-chain merkle receipt for a transaction
+
+Retrieve the Accumulate-native cryptographic receipt (merkle inclusion proof) for a transaction hash, read directly from the network. Works for ANY delivered transaction — including key-page/governance multi-signature authorization transactions that the Certen proof-service does not index. The receipt proves the transaction hash is anchored under a BVN/DN merkle root via the returned merkle path. Requires the proof:read scope.
+
+Path parameters:
+  - `txHash`: string
+
+Response 200 — Chain receipt for the transaction:
+  - `tx_hash`: string
+  - `status`: string
+  - `principal`: string
+  - `tx_type`: string
+  - `anchored`: boolean
+  - `chain_index`: integer
+  - `block_time`: string
+  - `receipt`: object
+
+#### certen.proof.bundle()
+
+The full bundle.
+
+GET /v1/proof/{id}/bundle — Download proof bundle
+
+Retrieve the proof bundle for a proof ID, proxied from the proof-service. When the downstream returns a binary bundle the response is streamed as application/octet-stream (Content-Disposition attachment); otherwise the bundle is returned as JSON. No success response schema is declared so the raw binary body is passed through unmodified. Requires the proof:read scope.
+
+Path parameters:
+  - `id`: string
+
+#### certen.proof.custody()
+
+The custody chain for a proof.
+
+GET /v1/proof/{id}/custody — Get proof custody chain
+
+Retrieve the custody chain for a proof ID, proxied from the proof-service. The custody payload is defined by the downstream service. Requires the proof:read scope.
+
+Path parameters:
+  - `id`: string
+
+#### certen.proof.share()
+
+Mint a shareable link, so a counterparty can fetch the bundle without an API key of yours.
+
+POST /v1/proof/{id}/share — Create a shareable link for a proof
+
+Mint a time-boxed, revocable link that lets someone WITHOUT a Certen account fetch this proof bundle. The raw token is returned ONCE and is not recoverable afterwards — store the url or mint a new share. Requires the proof:read scope.
+
+Path parameters:
+  - `id`: string
+
+Request body:
+  - `label`: string — Who this was shared with, and why. Shown when listing shares.
+  - `expires_in_hours`: integer — How long the link stays valid. Defaults to 168h (7 days) and is capped at 2160h (90 days); both are deployment-configurable.
+  - `max_views`: integer — Optional redemption ceiling. Omit for unlimited until expiry.
+
+#### certen.proof.shares()
+
+Every share link this organization has created, including revoked and expired ones.
+
+GET /v1/proof/shares — List proof share links created by your organization
+
+Newest first. Never returns tokens — only their prefixes. Requires the proof:read scope.
+
+Query parameters:
+  - `limit`: integer
+  - `offset`: integer
+
+#### certen.proof.revokeShare()
+
+Revoke a share link.
+
+DELETE /v1/proof/shares/{shareId} — Revoke a proof share link
+
+Takes effect immediately. Requires the proof:read scope.
+
+Path parameters:
+  - `shareId`: string
+
 ### certen.sign
 
 #### certen.sign.create()
@@ -800,7 +906,7 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 31 of the gateway's 112 operations. The rest are reachable only by
+The SDK wraps 37 of the gateway's 112 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -888,11 +994,5 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `POST /v1/portal/keys/{id}/rotate` — Rotate an API key
 
 **Proof**
-  - `DELETE /v1/proof/shares/{shareId}` — Revoke a proof share link
-  - `GET /v1/proof/{id}/bundle` — Download proof bundle
-  - `GET /v1/proof/{id}/custody` — Get proof custody chain
   - `GET /v1/proof/shared/{token}` — Fetch a shared proof bundle
-  - `GET /v1/proof/shares` — List proof share links created by your organization
-  - `GET /v1/proof/tx/{txHash}` — Get proof by transaction hash
-  - `POST /v1/proof/{id}/share` — Create a shareable link for a proof
 
