@@ -46,7 +46,11 @@ export function registerTransactionCommands(program: Command): void {
     .option('--to-chain <chain>', 'Destination chain, e.g. ethereum-sepolia')
     .option('--from <address>', 'Source address (the identity ADI or its abstract account)')
     .option('--to <address>', 'Destination address')
-    .option('--amount <amount>', 'Amount in base units (wei) — pass as a string')
+    // WHOLE units, not base units. "1" is one ETH. This said "base units (wei)"
+    // until 2026-08-11 — the inverse, and inverted in the dangerous direction:
+    // someone passing "1" to mean one wei moves a whole ETH, which on a funded
+    // account succeeds silently.
+    .option('--amount <amount>', 'Amount in whole units — "1" = 1 ETH, "0.5" = half. Pass as a string')
     .option('--token <symbol>', 'Token symbol')
     .option('--contract-address <addr...>', 'Contract addresses this intent touches')
     .option('--signer-key-page <url>', 'Which key page signs, e.g. acc://org.acme/book/2')
