@@ -11,6 +11,7 @@ import { isInteractive, promptSecret, readSecretFromStdin, resolveNewPassphrase 
 import { assertChains, SUPPORTED_CHAINS, normalizeChain } from '../chains.js';
 import { waitForIdentity, parseWaitBudget, IDENTITY_WAIT } from '../wait.js';
 import { faucetFor } from '../funding-guard.js';
+import { runDeviceFlow } from './signup.js';
 
 /**
  * `certen init` — the whole onboarding path as one command.
@@ -97,32 +98,46 @@ export function registerInitCommands(program: Command): void {
             'NO_API_KEY',
           );
         }
-        say(`  1. API key      none found. Mint one at ${getPortalUrl()}`);
-        say('');
-        const entered = process.stdin.isTTY
-          ? await promptSecret('     Paste your API key (hidden): ')
-          : await readSecretFromStdin();
-        if (!entered) throw new UsageError('No API key entered.', 'NO_API_KEY');
+        say('  1. API key      none found — authorizing this machine in the portal.');
 
-        // Verified before it is stored, exactly as `auth login` does — a key that does not work
-        // must not be written and then tripped over by every step below.
-        const probe = new CertenClient({ apiKey: entered, baseUrl: apiUrl });
+        // The device flow, not a paste prompt. This is the step that used to send people to a
+        // browser to copy a secret back by hand; running it here is the whole point of Phase 5.
+        // Falls back to a hidden paste prompt only when the gateway cannot do device auth.
         try {
-          await probe.billing.balance();
+          const granted = await runDeviceFlow({ browser: true, keyring: readConfig().storage === 'keyring' });
+          apiKey = await getApiKey();
+          steps.push({ step: 'api key', status: 'created', detail: `${granted.prefix}... authorized` });
+          say('                  authorized.');
         } catch (err) {
-          if (err instanceof CertenError && err.status === 401) {
-            throw new UsageError(
-              `That API key was rejected by ${apiUrl}. Nothing was saved.`,
-              'INVALID_API_KEY',
-            );
+          const code = (err as { code?: string }).code;
+          if (code !== 'DEVICE_FLOW_UNSUPPORTED' && code !== 'SELF_SERVICE_DISABLED') throw err;
+
+          say(`                  this gateway cannot authorize devices. Mint a key at ${getPortalUrl()}`);
+          const entered = process.stdin.isTTY
+            ? await promptSecret('     Paste your API key (hidden): ')
+            : await readSecretFromStdin();
+          if (!entered) throw new UsageError('No API key entered.', 'NO_API_KEY');
+
+          // Verified before it is stored, exactly as `auth login` does — a key that does not work
+          // must not be written and then tripped over by every step below.
+          const probe = new CertenClient({ apiKey: entered, baseUrl: apiUrl });
+          try {
+            await probe.billing.balance();
+          } catch (probeErr) {
+            if (probeErr instanceof CertenError && probeErr.status === 401) {
+              throw new UsageError(
+                `That API key was rejected by ${apiUrl}. Nothing was saved.`,
+                'INVALID_API_KEY',
+              );
+            }
+            if (probeErr instanceof CertenError && probeErr.status === 0) throw probeErr;
+            // 403 and other statuses mean the credential is real; carry on.
           }
-          if (err instanceof CertenError && err.status === 0) throw err;
-          // 403 and other statuses mean the credential is real; carry on.
+          await setApiKey(entered, readConfig().storage === 'keyring');
+          apiKey = entered;
+          steps.push({ step: 'api key', status: 'created', detail: `${entered.substring(0, 12)}... saved` });
+          say('     saved.');
         }
-        await setApiKey(entered, readConfig().storage === 'keyring');
-        apiKey = entered;
-        steps.push({ step: 'api key', status: 'created', detail: `${entered.substring(0, 12)}... saved` });
-        say('     saved.');
       }
 
       const client = new CertenClient({ apiKey, baseUrl: apiUrl });

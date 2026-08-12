@@ -30,7 +30,7 @@ const GROUPS: Group[] = [
   {
     title: 'Get started',
     blurb: 'from nothing to a working setup',
-    commands: ['init', 'chains', 'auth', 'keys', 'doctor', 'whoami'],
+    commands: ['login', 'signup', 'init', 'chains', 'auth', 'keys', 'doctor', 'whoami'],
   },
   {
     title: 'Build',
@@ -55,9 +55,10 @@ const GROUPS: Group[] = [
 ];
 
 const QUICKSTART = `
-  Three commands, start to finish:
+  From nothing to a proof:
 
-    certen init                                # credential, key, identity, all checked
+    certen login                               # approve this machine in the portal
+    certen init                                # key, identity, funding — all checked
     certen call --identity <id> --chain base-sepolia --to 0xContract \\
         --fn 'confirm(bytes32)' --arg 0x... --sign-with dev --wait
     certen proof get <intent-id>               # the evidence, to hand over
