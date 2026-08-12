@@ -3132,7 +3132,7 @@
                             },
                             "amount": {
                               "type": "string",
-                              "description": "Native value in base units (wei); \"0\" for a pure contract call"
+                              "description": "Native value in WHOLE UNITS, not base units — \"1\" means 1 ETH, \"0.5\" means half. api-bridge multiplies by the chain's decimals. Use \"0\" for a pure contract call. This field said \"base units (wei)\" until 2026-08-11, which was the exact inverse: an integrator following it and sending \"1\" for one wei moves a whole ETH, and on a funded account that succeeds silently."
                             },
                             "contractCall": {
                               "type": "object",
@@ -6713,6 +6713,51 @@
                         "suspended",
                         "closed"
                       ]
+                    },
+                    "suspended_reason": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "credit": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "trial",
+                            "comp",
+                            "terms"
+                          ]
+                        },
+                        "label": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "granted_limit_usd": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expired": {
+                          "type": "boolean"
+                        },
+                        "warns_at_usd": {
+                          "type": "string"
+                        },
+                        "suspends_at_usd": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }

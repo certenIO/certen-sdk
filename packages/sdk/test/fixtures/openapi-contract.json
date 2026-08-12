@@ -1537,10 +1537,24 @@
             "held_usd",
             "credit_limit_usd",
             "spendable_usd",
-            "status"
+            "status",
+            "suspended_reason",
+            "credit"
           ]
         },
-        "responseShapes": {}
+        "responseShapes": {
+          "200": {
+            "credit": [
+              "kind",
+              "label",
+              "granted_limit_usd",
+              "expires_at",
+              "expired",
+              "warns_at_usd",
+              "suspends_at_usd"
+            ]
+          }
+        }
       }
     },
     "/v1/billing/ledger": {
