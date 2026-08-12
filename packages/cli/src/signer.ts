@@ -1,5 +1,6 @@
 import { getKeyInfo, signHash } from './keystore.js';
 import { resolvePassphrase } from './passphrase.js';
+import { UsageError } from './errors.js';
 
 /**
  * Bridge a local key into the shape the rest of the CLI needs.
@@ -39,19 +40,27 @@ export async function resolveSignature(opts: {
   publicKey?: string;
   hash?: string;
 }): Promise<{ signature: string; publicKey: string }> {
+  // These are wrong invocations and must exit 2, not 1. As bare Errors they were indistinguishable
+  // from a rejected request, which is the exact confusion the exit-code taxonomy exists to prevent.
   if (opts.signWith) {
     if (opts.signature) {
-      throw new Error('Pass either --sign-with or --signature, not both.');
+      throw new UsageError('Pass either --sign-with or --signature, not both.', 'CONFLICTING_SIGNING_FLAGS');
     }
     if (!opts.hash) {
-      throw new Error('--sign-with needs the hash to sign; this command did not supply one.');
+      throw new UsageError(
+        '--sign-with needs the hash to sign; this command did not supply one. Pass --hash <hex>.',
+        'MISSING_HASH',
+      );
     }
     const signer = await resolveSigner(opts.signWith);
     return { signature: signer.sign(opts.hash), publicKey: signer.publicKey };
   }
 
   if (!opts.signature || !opts.publicKey) {
-    throw new Error('Provide --sign-with <key>, or both --signature <hex> and --public-key <hex>.');
+    throw new UsageError(
+      'Provide --sign-with <key>, or both --signature <hex> and --public-key <hex>.',
+      'MISSING_SIGNATURE',
+    );
   }
   return { signature: opts.signature, publicKey: opts.publicKey };
 }

@@ -53,6 +53,8 @@ export function registerKeysCommands(program: Command): void {
       const all = listKeys();
       if (all.length === 0) {
         human(`(no keys in ${KEYS_DIR})`);
+        console.error('');
+        console.error('Next: certen keys generate --name dev');
         return;
       }
       printOutput(all.map((k) => ({

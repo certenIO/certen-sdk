@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
-import { printOutput } from '../output.js';
+import { printOutput, hint, isJsonMode } from '../output.js';
 import { resolveSignature } from '../signer.js';
 
 async function getClient(): Promise<CertenClient> {
@@ -49,6 +49,21 @@ export function registerPendingCommands(program: Command): void {
         vote: opts.vote,
       });
       printOutput(result as unknown as Record<string, unknown>);
+
+      if (isJsonMode()) return;
+      // This command creates a sign REQUEST; it does not cast the vote. The two-step shape is not
+      // obvious from the name, and stopping here leaves the approval uncast.
+      const r = result as unknown as {
+        sign_request_id?: string;
+        signing_data?: { hash_to_sign?: string; data_for_signature?: string };
+      };
+      const requestId = r.sign_request_id;
+      const hash = r.signing_data?.data_for_signature ?? r.signing_data?.hash_to_sign;
+      if (requestId && hash) {
+        hint('');
+        hint('This opened a sign request — the vote is not cast until the signature is submitted:');
+        hint(`  certen pending submit ${requestId} --sign-with <key> --hash ${hash}`);
+      }
     });
 
   pending

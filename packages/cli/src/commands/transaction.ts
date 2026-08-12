@@ -2,10 +2,12 @@ import { Command, Option } from 'commander';
 import { readFileSync } from 'node:fs';
 import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
-import { printOutput } from '../output.js';
+import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain } from '../chains.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
+import { assertFundedForValue } from '../funding-guard.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -31,6 +33,34 @@ function hashToSign(result: unknown): string | undefined {
 function intentIdOf(result: unknown): string | undefined {
   const r = result as { intent_id?: string; intentId?: string };
   return r.intent_id ?? r.intentId;
+}
+
+/**
+ * Name the next command once an intent has settled.
+ *
+ * The proof is what the intent was FOR — it is the artifact handed to a counterparty — and until
+ * now nothing in the CLI ever mentioned it. `certen proof` arrives in Phase 3; the hint points at
+ * it either way, because the sequence is the thing worth teaching and the command is imminent.
+ */
+function emitTerminalHints(result: Record<string, unknown>, intentId: string): void {
+  if (isJsonMode()) return;
+  const status = String(result.status ?? '');
+  const proofId = result.proof_id as string | undefined;
+
+  if (['completed', 'delivered', 'proven'].includes(status)) {
+    human('');
+    human(`  Intent ${intentId} is ${status}.`);
+    hint('');
+    hint(proofId
+      ? `Next: certen proof get ${proofId}`
+      : `Next: certen proof get ${intentId}`);
+    return;
+  }
+
+  if (status && status !== 'failed' && status !== 'error') {
+    hint('');
+    hint(`Still ${status}. Follow it with: certen tx status ${intentId} --wait`);
+  }
 }
 
 export function registerTransactionCommands(program: Command): void {
@@ -67,6 +97,11 @@ export function registerTransactionCommands(program: Command): void {
     )
     .option('--idempotency-key <key>', 'Idempotency key (one is generated if omitted)')
     .option('--sign-with <key>', 'Local key: sign the returned hash and submit it in one step')
+    .option('--wait', 'Wait for the proof cycle to reach a terminal state (default off with --json)')
+    .option('--no-wait', 'Return as soon as the signature is submitted')
+    .option('--timeout <minutes>', `How long to wait (default ${TX_WAIT.timeoutMin})`)
+    .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
+    .option('--force', 'Submit even if the abstract account has no gas to execute with')
     .action(async (opts) => {
       const client = await getClient();
 
@@ -79,6 +114,9 @@ export function registerTransactionCommands(program: Command): void {
       // `--from-chain` defaults to `accumulate`, which is not an EVM chain and is not in the
       // supported set; only validate it when the caller named an EVM chain explicitly.
       if (opts.fromChain && opts.fromChain !== 'accumulate') assertChain(opts.fromChain, '--from-chain');
+
+      const wait = resolveWait();
+      const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
 
       const signer = opts.signWith ? await resolveSigner(opts.signWith) : null;
 
@@ -112,6 +150,12 @@ export function registerTransactionCommands(program: Command): void {
           tokenSymbol: opts.token,
         };
       }
+
+      // Checked after the intent is assembled and BEFORE it is opened: an intent that cannot
+      // execute should never exist. See funding-guard.ts for why this only ever refuses on a
+      // positively observed zero.
+      const executionChain = (intent.toChain ?? intent.to_chain ?? opts.toChain) as string | undefined;
+      await assertFundedForValue(client, opts.identity, executionChain, intent, Boolean(opts.force));
 
       const result = await client.transaction.create({
         identityId: opts.identity,
@@ -149,7 +193,17 @@ export function registerTransactionCommands(program: Command): void {
         signature: signer.sign(hash),
         publicKey: signer.publicKey,
       });
-      printOutput(signed as unknown as Record<string, unknown>);
+
+      if (!wait) {
+        printOutput(signed as unknown as Record<string, unknown>);
+        hint('');
+        hint(`The proof cycle runs now (60-110s). Check with: certen tx status ${intentId}`);
+        return;
+      }
+
+      const final = await waitForTransaction(client, intentId, budget);
+      printOutput(final);
+      emitTerminalHints(final, intentId);
     });
 
   tx
@@ -198,11 +252,27 @@ export function registerTransactionCommands(program: Command): void {
 
   tx
     .command('status <id>')
-    .description('Get transaction status')
-    .action(async (id: string) => {
+    .description('Get transaction status, optionally waiting for it to settle')
+    // `status` defaults to a single read in BOTH modes — unlike `create`. Asking "what is it now"
+    // and asking "tell me when it is done" are different questions, and a status command that
+    // silently blocked for seven minutes would be the wrong answer to the first one.
+    .option('--wait', 'Poll until the intent reaches a terminal state')
+    .option('--timeout <minutes>', `How long to wait with --wait (default ${TX_WAIT.timeoutMin})`)
+    .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
+    .action(async (id: string, opts: { wait?: boolean; timeout?: string; pollInterval?: string }) => {
+      const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
       const client = await getClient();
-      const result = await client.transaction.get(id);
-      printOutput(result as unknown as Record<string, unknown>);
+
+      if (!opts.wait) {
+        const result = await client.transaction.get(id);
+        printOutput(result as unknown as Record<string, unknown>);
+        emitTerminalHints(result as unknown as Record<string, unknown>, id);
+        return;
+      }
+
+      const final = await waitForTransaction(client, id, budget);
+      printOutput(final);
+      emitTerminalHints(final, id);
     });
 
   tx
