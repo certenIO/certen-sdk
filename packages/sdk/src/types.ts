@@ -690,3 +690,51 @@ export interface DepositIntentStatus {
   matched_at: string | null;
   payment_id: string | null;
 }
+
+// ---- Chains (public contract registry) ----
+
+/**
+ * One deployed contract.
+ *
+ * `verified` means the address was confirmed to carry bytecode via `eth_getCode`. Non-EVM entries
+ * are transcribed from validator configuration and are never independently verified — so `false`
+ * there means "not checkable this way", not "suspect".
+ */
+export interface ContractEntry {
+  address: string;
+  verified?: boolean;
+  /** Only present for EVM families; other explorers differ enough that a guessed path would 404. */
+  explorer_url?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * A network in the registry.
+ *
+ * The casing is mixed on the wire and that is not a mistake here: the gateway serialises its
+ * static registry (`chainId`, `displayName`) and adds its own fields (`explorer_url`) around it.
+ * Renaming either side in this type would describe a response the gateway does not send.
+ */
+export interface ChainEntry {
+  id: string;
+  chainId: number | null;
+  family: string;
+  displayName: string;
+  environment: string;
+  explorer: string;
+  status: string;
+  contracts: Record<string, ContractEntry>;
+  [key: string]: unknown;
+}
+
+export interface ChainsListResponse {
+  version: string;
+  last_updated: string;
+  accumulate: { network: string; environment: string; api: string; explorer: string };
+  count: number;
+  chains: ChainEntry[];
+}
+
+export interface ChainDetailResponse {
+  chain: ChainEntry;
+}

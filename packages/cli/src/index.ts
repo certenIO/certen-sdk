@@ -27,6 +27,10 @@ import { registerGovernanceCommands } from './commands/governance.js';
 import { registerPortfolioCommands } from './commands/portfolio.js';
 import { registerAdminCommands } from './commands/admin.js';
 import { registerBillingCommands } from './commands/billing.js';
+import { registerChainsCommands } from './commands/chains.js';
+import { registerWhoamiCommands } from './commands/whoami.js';
+import { registerDoctorCommands } from './commands/doctor.js';
+import { formatRootHelp } from './help-root.js';
 
 const VERSION = readVersion();
 
@@ -43,8 +47,11 @@ export function buildProgram(): Command {
     // a global flag that may appear after a subcommand is not something commander models.
     .option('--json', 'Emit one JSON envelope on stdout; human output goes to stderr');
 
+  registerChainsCommands(program);
   registerAuthCommands(program);
   registerKeysCommands(program);
+  registerDoctorCommands(program);
+  registerWhoamiCommands(program);
   registerIdentityCommands(program);
   registerTransactionCommands(program);
   registerPendingCommands(program);
@@ -58,6 +65,11 @@ export function buildProgram(): Command {
   // stdout stayed empty, no envelope was ever emitted, and a usage error was indistinguishable from
   // a failed request. Every nested command has to opt in explicitly.
   applyExitOverride(program);
+
+  // Grouped by journey stage rather than alphabetically. Applied AFTER every command is
+  // registered, so nothing can be missing from the listing it builds. Subcommand help is
+  // untouched — see help-root.ts.
+  program.configureHelp({ formatHelp: formatRootHelp });
   return program;
 }
 

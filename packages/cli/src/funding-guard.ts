@@ -1,5 +1,6 @@
 import type { CertenClient } from '@certen.io/sdk';
 import { CliError, EXIT } from './errors.js';
+import { normalizeChain } from './chains.js';
 
 /**
  * The zero-balance abstract account guard.
@@ -60,9 +61,14 @@ async function fundingFor(
 ): Promise<ChainFunding | null> {
   try {
     const portfolio = await client.portfolio.get(identityId);
+    // Both sides are normalized: the gateway returns `chain_id` as a slug on some chain accounts
+    // and as a numeric EVM id on others, in the same response. Comparing raw strings matched the
+    // slug entries and silently skipped the numeric ones — so the guard did nothing on exactly
+    // the accounts it was written to protect.
+    const want = normalizeChain(chain);
     for (const identity of portfolio.identities ?? []) {
       for (const c of identity.chains ?? []) {
-        if (c.chain_id !== chain) continue;
+        if (normalizeChain(c.chain_id) !== want) continue;
         // The native balance is the one that pays for execution. A token balance on the same
         // account does not make the execution leg runnable.
         const native = (c.balances ?? []).find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
@@ -103,9 +109,10 @@ export async function assertFundedForValue(
   if (balance === null) return;
   if (Number(balance) > 0) return;
 
-  const faucet = faucetFor(chain);
+  const named = normalizeChain(chain);
+  const faucet = faucetFor(named);
   throw new CliError(
-    `The abstract account ${funding.address} on ${chain} holds no ${chain.includes('sepolia') ? 'testnet ' : ''}`
+    `The abstract account ${funding.address} on ${named} holds no ${named.includes('sepolia') ? 'testnet ' : ''}`
     + 'gas. This intent would be accepted, signed and submitted, and would then park at "anchoring" '
     + 'forever, because the execution leg cannot run on chain.\n'
     + `  Fund it first${faucet ? `: ${faucet}` : '.'}\n`

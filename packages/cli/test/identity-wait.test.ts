@@ -270,6 +270,15 @@ describe('identity create --wait', () => {
   });
 });
 
+/**
+ * Every invocation below passes `--from`.
+ *
+ * That is not incidental: the live gateway rejects a native transfer without `fromAddress`
+ * ("Native transfer intent is missing required field(s): fromAddress"), so a case that omitted it
+ * would be asserting the guard's behaviour on an intent shape that can never succeed anyway.
+ * These cases were written against a stub that accepted anything, and only running the CLI
+ * against the real gateway showed the difference.
+ */
 describe('the zero-balance abstract account guard', () => {
   const portfolio = (balance: string): Record<string, unknown> => ({
     identities: [{
@@ -297,7 +306,7 @@ describe('the zero-balance abstract account guard', () => {
     try {
       const r = await certen(
         ['--json', 'tx', 'create', '--identity', ID, '--to-chain', 'base-sepolia',
-          '--to', '0xRecipient', '--amount', '1'],
+          '--from', '0xAbstract', '--to', '0xRecipient', '--amount', '1'],
         stub.url,
       );
       expect(r.code).toBe(1);
@@ -322,7 +331,7 @@ describe('the zero-balance abstract account guard', () => {
     try {
       const r = await certen(
         ['--json', 'tx', 'create', '--identity', ID, '--to-chain', 'base-sepolia',
-          '--to', '0xRecipient', '--amount', '1', '--force'],
+          '--from', '0xAbstract', '--to', '0xRecipient', '--amount', '1', '--force'],
         stub.url,
       );
       expect(r.code).toBe(0);
@@ -340,7 +349,7 @@ describe('the zero-balance abstract account guard', () => {
     try {
       const r = await certen(
         ['--json', 'tx', 'create', '--identity', ID, '--to-chain', 'base-sepolia',
-          '--to', '0xRecipient', '--amount', '1'],
+          '--from', '0xAbstract', '--to', '0xRecipient', '--amount', '1'],
         stub.url,
       );
       expect(r.code).toBe(0);
@@ -360,7 +369,7 @@ describe('the zero-balance abstract account guard', () => {
     try {
       const r = await certen(
         ['--json', 'tx', 'create', '--identity', ID, '--to-chain', 'base-sepolia',
-          '--to', '0xRecipient', '--amount', '1'],
+          '--from', '0xAbstract', '--to', '0xRecipient', '--amount', '1'],
         stub.url,
       );
       expect(r.code).toBe(0);

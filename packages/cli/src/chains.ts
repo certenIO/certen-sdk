@@ -14,6 +14,9 @@
  * keeps this as the offline fallback — which is why the export is a function, not the array.
  */
 
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { UsageError } from './errors.js';
 
 /** The chains this product targets. Deliberately testnet-only. */
@@ -51,6 +54,103 @@ const ALIASES: Record<string, SupportedChain> = {
 
 export function supportedChains(): readonly string[] {
   return SUPPORTED_CHAINS;
+}
+
+/**
+ * Numeric EVM chain id → registry slug, for the chains this CLI targets.
+ *
+ * **This is not a convenience.** `GET /v1/portfolio` returns `chain_id` as a slug for some chain
+ * accounts and as a numeric EVM id for others — both spellings appear in the same response, on
+ * the same organization. Anything comparing `chain_id` to a slug therefore silently misses every
+ * numeric entry, which is exactly how the unfunded-account guard came to skip the chain it was
+ * written to protect.
+ *
+ * The cache below extends this at runtime; the constant is what makes it work offline and on a
+ * first run.
+ */
+const NUMERIC_TO_SLUG: Record<string, SupportedChain> = {
+  11155111: 'ethereum-sepolia',
+  84532: 'base-sepolia',
+  421614: 'arbitrum-sepolia',
+};
+
+/**
+ * Resolve whatever the gateway called a chain into one canonical name.
+ *
+ * Anything unrecognised is returned unchanged: a value we cannot map is still the best label we
+ * have for it, and inventing one would be worse than showing what arrived.
+ */
+export function normalizeChain(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '';
+  const raw = String(value).trim();
+  if (isSupportedChain(raw)) return raw;
+  if (NUMERIC_TO_SLUG[raw]) return NUMERIC_TO_SLUG[raw];
+  const fromCache = readChainCache()?.numeric?.[raw];
+  return fromCache ?? raw;
+}
+
+// ── the registry cache ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * `GET /v1/chains` is public and its answer is static for hours at a time, so it is cached rather
+ * than fetched on every validation. The cache does NOT widen the supported set — that is a product
+ * decision, not a gateway fact — it exists so a refusal can tell the truth about WHY a real chain
+ * is being refused: "the gateway serves optimism-sepolia, but this CLI targets these three" reads
+ * very differently from "optimism-sepolia is not a chain", and only one of them is accurate.
+ */
+const CACHE_FILE = join(homedir(), '.certen', 'chains.json');
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface ChainCache {
+  fetched_at: string;
+  /** Registry ids the gateway reported, e.g. ['ethereum-sepolia', 'solana-devnet', ...]. */
+  ids: string[];
+  /** Numeric EVM chain id → registry slug, so a numeric `chain_id` can be resolved live. */
+  numeric?: Record<string, string>;
+}
+
+export function readChainCache(): ChainCache | null {
+  try {
+    if (!existsSync(CACHE_FILE)) return null;
+    const parsed = JSON.parse(readFileSync(CACHE_FILE, 'utf-8')) as ChainCache;
+    if (!Array.isArray(parsed.ids)) return null;
+    return parsed;
+  } catch {
+    // A corrupt cache is not an error worth surfacing — it just means we fall back to the
+    // constant, which is what would have happened had the file never existed.
+    return null;
+  }
+}
+
+export function chainCacheIsFresh(cache: ChainCache | null): boolean {
+  if (!cache) return false;
+  const age = Date.now() - new Date(cache.fetched_at).getTime();
+  return Number.isFinite(age) && age >= 0 && age < CACHE_TTL_MS;
+}
+
+export function writeChainCache(entries: Array<{ id: string; chainId: number | null }>): void {
+  try {
+    const numeric: Record<string, string> = {};
+    for (const entry of entries) {
+      if (entry.chainId !== null && entry.chainId !== undefined) numeric[String(entry.chainId)] = entry.id;
+    }
+    mkdirSync(join(homedir(), '.certen'), { recursive: true });
+    writeFileSync(CACHE_FILE, JSON.stringify({
+      fetched_at: new Date().toISOString(),
+      ids: entries.map((e) => e.id),
+      numeric,
+    }, null, 2));
+  } catch {
+    // Best effort. Failing to cache must never fail the command that triggered it.
+  }
+}
+
+export const CHAIN_CACHE_FILE = CACHE_FILE;
+
+/** Does the gateway serve this chain, as far as the cache knows? Absent cache means "no idea". */
+function gatewayKnows(chain: string): boolean {
+  const cache = readChainCache();
+  return cache ? cache.ids.includes(chain) : false;
 }
 
 export function isSupportedChain(value: string): boolean {
@@ -101,6 +201,17 @@ export function assertChain(value: string, flag = '--chain'): string {
   if (isSupportedChain(chain)) return chain;
 
   if (process.env[OVERRIDE_ENV_VAR] === '1') return chain;
+
+  // A chain the gateway really serves gets a different sentence from one that does not exist.
+  // Telling someone `optimism-sepolia` "is not a chain" would be false, and would send them
+  // looking for a typo they did not make.
+  if (gatewayKnows(chain)) {
+    throw new UsageError(
+      `The gateway serves "${chain}", but this CLI targets ${SUPPORTED_CHAINS.join(', ')}. `
+      + `Set ${OVERRIDE_ENV_VAR}=1 to use it anyway.`,
+      'UNSUPPORTED_CHAIN',
+    );
+  }
 
   const suggestion = nearestChain(chain);
   const lines = [

@@ -3,6 +3,7 @@ import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, isJsonMode } from '../output.js';
 import { faucetFor } from '../funding-guard.js';
+import { normalizeChain } from '../chains.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -33,7 +34,9 @@ export function registerPortfolioCommands(program: Command): void {
       for (const identity of result.identities) {
         for (const chain of identity.chains ?? []) {
           const native = (chain.balances ?? []).find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
-          if (native && Number(native.balance) === 0) empty.push(chain.chain_id);
+          // Normalized: the same chain arrives as a slug on one account and a numeric EVM id on
+          // another, so the raw values would list one chain twice.
+          if (native && Number(native.balance) === 0) empty.push(normalizeChain(chain.chain_id));
         }
       }
       if (empty.length > 0) {

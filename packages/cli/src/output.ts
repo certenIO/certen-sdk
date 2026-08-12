@@ -91,6 +91,7 @@ interface ErrorLike {
   requestId?: string;
   isRetryable?: boolean;
   exitCode?: number;
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -124,6 +125,9 @@ export function emitFailure(err: unknown): ExitCode {
           retryable,
           ...(e.status !== undefined ? { status: e.status } : {}),
           ...(e.requestId ? { requestId: e.requestId } : {}),
+          // A failure that still produced a result carries it, rather than throwing the result
+          // away in order to signal the failure. See CliError.details.
+          ...(e.details ? { details: e.details } : {}),
           // Additive: a consumer that ignores unknown keys is unaffected, and one
           // that wants to settle automatically no longer has to parse prose.
           ...(payment

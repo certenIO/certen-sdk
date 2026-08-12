@@ -31,13 +31,33 @@ export class CliError extends Error {
   readonly code: string;
   readonly exitCode: ExitCode;
   readonly retryable: boolean;
+  /**
+   * Structured payload carried alongside the failure.
+   *
+   * Some commands fail and still have a result worth handing over — `doctor` is the case this
+   * exists for: the diagnosis ran successfully and every check it performed is exactly what an
+   * automated caller wants, but "a check failed" must still be a non-zero exit or CI treats a
+   * broken setup as a working one. Discarding the checks to signal the failure would make the
+   * machine interface strictly less useful than the human one.
+   *
+   * Additive, and rendered under `error.details`. A consumer that ignores unknown keys is
+   * unaffected, which is the same property the 402 payment fields rely on.
+   */
+  readonly details?: Record<string, unknown>;
 
-  constructor(message: string, code: string, exitCode: ExitCode = EXIT.FAILED, retryable = false) {
+  constructor(
+    message: string,
+    code: string,
+    exitCode: ExitCode = EXIT.FAILED,
+    retryable = false,
+    details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'CliError';
     this.code = code;
     this.exitCode = exitCode;
     this.retryable = retryable;
+    this.details = details;
   }
 }
 

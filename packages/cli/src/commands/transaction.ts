@@ -135,9 +135,23 @@ export function registerTransactionCommands(program: Command): void {
           );
         }
       } else {
-        if (!opts.to || !opts.amount) {
+        // `--from` belongs in this list. The gateway rejects a native transfer without
+        // `fromAddress` ("Native transfer intent is missing required field(s): fromAddress"), so
+        // omitting it was always a failure — just one that cost a round trip and arrived phrased
+        // in the API's field names rather than the flags the user typed.
+        const missing = [
+          !opts.toChain && '--to-chain',
+          !opts.from && '--from',
+          !opts.to && '--to',
+          !opts.amount && '--amount',
+        ].filter(Boolean);
+
+        if (missing.length > 0) {
           throw new UsageError(
-            'give --intent, or all of --to and --amount (plus --to-chain) for a simple transfer',
+            `A simple transfer needs ${missing.join(', ')}. `
+            + 'Give all of --to-chain, --from, --to and --amount, or pass --intent for a '
+            + 'multi-leg or contract-call intent. '
+            + '--from is the identity\'s abstract account on the source chain (certen portfolio shows it).',
             'INCOMPLETE_INTENT',
           );
         }
