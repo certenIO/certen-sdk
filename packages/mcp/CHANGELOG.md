@@ -1,5 +1,29 @@
 # Changelog — @certen.io/mcp
 
+## 0.3.0 — an agent can diagnose its own broken setup
+
+### Added — five read-tier tools
+
+`certen_doctor`, `certen_chains_list`, `certen_whoami`, `certen_proof_receipt` and
+`certen_proof_verify`.
+
+`certen_proof_verify` exists to stop an agent concluding "verified" from a successful proof fetch.
+It reports three separate judgements — inclusion, authorization, outcome — establishes only the
+first, and only as something the gateway asserted, and returns `independent: false` to say so.
+
+`certen_proof_receipt` reads the Accumulate merkle receipt directly, which is the read that works
+when `certen_proof_get` does not: the proof-service and Accumulate fail independently.
+
+### Added — `alsoReaches` on a tool definition
+
+A composite tool reaches several endpoints, and `endpoint` alone would have understated what it
+touches. Every entry is checked against the vendored spec and the read-tier scope rule exactly as
+`endpoint` is, so declaring more can only constrain a tool further. A new invariant also asserts no
+read-tier tool reaches `/v1/admin/*`.
+
+Writes remain gated behind `CERTEN_MCP_ALLOW_WRITES=1`; no tool accepts key material; `signup` is
+deliberately not a tool, because account creation is a human act.
+
 ## 0.2.0 — an agent can see what work costs, and explain a refusal
 
 ### Added — `certen_billing_balance` and `certen_billing_obligations`

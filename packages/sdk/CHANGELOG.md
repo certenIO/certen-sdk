@@ -1,5 +1,49 @@
 # Changelog — @certen.io/sdk
 
+## 0.6.0 — diagnosis, proofs, device authorization, and a guard that refuses to strand your money
+
+### Added — `client.doctor()`
+
+An ordered list of checks that **never throws for a failed check** — a diagnosis that cannot report
+a broken setup is useless. Read `report.ok` and the per-check status. It catches, in order: gateway
+unreachable, a credential rejected (401) or merely unscoped (403), no active identity, an abstract
+account with no gas, a balance entirely committed to pending intents, an expired trial, and intents
+that anchored but never executed.
+
+The check list is the same length however far the run got, so a skipped check is visibly skipped
+rather than absent. `CREDENTIALLED_CHECKS` is exported for callers that need to mark the same set.
+
+### Added — `client.proof`, `client.chains`, `client.device`
+
+`proof` covers the artifact, the bundle, custody, share links, and the Accumulate merkle receipt.
+**A 5xx from the proof-service does not mean the proof is missing** — that service and Accumulate
+fail independently, and the receipt keeps working when the proof-service does not.
+
+`chains` is the public contract registry and needs no API key, which makes it usable before a
+credential exists. `device` is the RFC 8628 device authorization grant, so a terminal can obtain its
+own key without a human copying a secret.
+
+### Added — `identity.createAndWait()`
+
+`create()` returns 202 and provisioning continues, so its response says nothing about whether the
+identity works. This waits for `status` terminal AND `can_sign === true`, and distinguishes all
+three values of `can_sign`: `false` is a failure, `null` is UNKNOWN and never rounds up to ready,
+and a timeout is neither success nor failure.
+
+### Behavioural change — `execute.transfer` and `execute.contractCall` refuse an unfunded account
+
+An intent that moves value from an empty abstract account is accepted, signed and submitted — every
+call returns success — and then parks at `anchoring` forever, because the execution leg cannot run
+on chain. Nothing in any API response says so.
+
+Both methods now check first and throw `CertenUnfundedAccountError` before submitting. **The check
+refuses only on a positively observed zero balance**: if the balance cannot be read, the intent
+proceeds, because a guard that blocked on missing data would break real work every time the
+portfolio view lagged. Opt out with `skipFundingCheck: true`.
+
+It also normalizes the two spellings the gateway uses for a chain id — `GET /v1/portfolio` returns a
+slug on some chain accounts and a numeric EVM id on others, in the same response.
+
 ## 0.5.0 — balance, funding, and a 402 that carries its own fix
 
 ### Added — `client.billing`

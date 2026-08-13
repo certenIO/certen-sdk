@@ -1,7 +1,7 @@
 {
   "name": "@certen.io/sdk",
-  "version": "0.5.0",
-  "description": "TypeScript client for the CERTEN Gateway API — proof-gated cross-chain execution on Accumulate",
+  "version": "0.6.0",
+  "description": "TypeScript client for the CERTEN Gateway API \u2014 proof-gated cross-chain execution on Accumulate",
   "license": "MIT",
   "type": "module",
   "keywords": [
@@ -35,7 +35,7 @@
       "default": "./dist/index.js"
     }
   },
-  "//files": "Only the build output and docs. src/ and test/ stay in the repo — declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
+  "//files": "Only the build output and docs. src/ and test/ stay in the repo \u2014 declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
   "files": [
     "dist/",
     "README.md",

@@ -1,5 +1,47 @@
 # Changelog — @certen.io/cli
 
+## 0.6.0 — from eighteen steps to four
+
+### Added — `certen login` / `certen signup`
+
+The device authorization grant. The CLI prints a short code, you approve it in a portal session you
+already trust, and the key arrives over the CLI's own channel. **The secret is never displayed and
+never passes through a clipboard or shell history.** Requires a gateway that serves
+`/v1/portal/device`; against an older one it says so and points at the portal.
+
+### Added — `certen init`, `call`, `proof`, `chains`, `whoami`, `doctor`, `identity retire`
+
+`init` creates only what is missing, waits until the identity can actually sign, and records the id
+so a later run reuses it rather than burning org quota. `call` is a proof-gated contract call in one
+command — it derives the ADI URL, the abstract account and the numeric chain id from the identity,
+and type-checks `--arg` against the Solidity signature before anything is sent. `proof` retrieves,
+bundles, shares and verifies. `doctor` names the one thing blocking you and the command that fixes
+it.
+
+### Behavioural change — usage errors now exit 2
+
+A wrong invocation used to exit 1, indistinguishable from a rejected request. Several commands threw
+untyped errors; they now exit 2 as the contract always specified. Scripts branching on any non-zero
+exit are unaffected; scripts that treated 1 as "the gateway said no" should re-check.
+
+### Behavioural change — `auth login` verifies the key before saving it
+
+A typo'd or revoked key used to be written and then surface as an opaque 401 at whatever command ran
+next. It is now checked first and **not saved if rejected**. A 403 means the key is real but
+unscoped and is accepted with a note. `--api-key -` reads from stdin; omitting it prompts.
+
+### Behavioural change — human mode waits by default
+
+`identity create` and `tx create` poll to a usable state. `--json` keeps the old fire-and-forget
+default so existing scripts do not silently start blocking.
+
+### Added — the unfunded-account guard, and `error.details`
+
+A value transfer from an empty abstract account is refused before submitting, naming the faucet;
+`--force` overrides. And a failure that still produced a result carries it under `error.details` —
+`certen --json doctor` returns every check that way, so signalling the failure never costs you the
+diagnosis. See docs/CLI-CONTRACT.md.
+
 ## 0.5.0 — money commands, and a refusal that tells you how to fix it
 
 ### Added — `certen balance` and `certen fund`
