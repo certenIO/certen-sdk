@@ -4,20 +4,19 @@
  *
  *   "build": "node ../../scripts/build-package.mjs"
  *
- * This exists because the obvious form does not work:
+ * It replaces the shell-chained form:
  *
  *   "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc"
  *
- * On Windows npm the `&&` never runs the second command. The script therefore DELETED dist/ and
- * exited 1 without compiling anything — so `npm run build` did not merely fail, it destroyed the
- * build output and left the package unimportable. Every later `vitest run` then executed against a
- * missing or half-written dist and reported dozens of failures that had nothing to do with the code,
- * which is a very expensive way to learn that a build script is broken.
+ * What this buys is small and real: the clean and the compile are one step that cannot half-run, and
+ * a build is failed if it somehow leaves no `dist/` behind. No shell chaining, so it behaves the
+ * same wherever it runs.
  *
- * The same trap has now cost this repo three times: the prepublish gate (fixed by routing through
- * node), the gateway's `spec:dump`, and this. The rule is simple — never chain commands with `&&`
- * inside an npm script in this repo. Spawn them from node, where the exit code and the sequencing
- * are both real, on every platform.
+ * **It is NOT here because `&&` is broken.** That was claimed during a long debugging session in
+ * August 2026 and it was wrong: `&&` in an npm script works fine. The scripts appeared to stop after
+ * their first command because a corrupt global npm install was returning early from every `npm run`
+ * on that machine — see AGENTS.md for the signature and the fix. Once npm was repaired, the original
+ * `&&` form worked. Keep this script for the reasons above, not out of fear of a shell operator.
  */
 import { rmSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';

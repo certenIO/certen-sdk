@@ -32,11 +32,12 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 | `node scripts/test-all.mjs` | all three, one vitest process — 409 tests | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in all three | no |
 | `node scripts/build-all.mjs` | compiles all three, sdk first | no |
-| `npm test` / `npm run typecheck` / `npm run build` | delegate to the above; **do not trust on Windows** | no |
+| `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |
 | `npm test --workspace packages/<pkg>` | one package, as CI invokes it | no |
 
-Prefer the `node scripts/*` forms locally. They return the true exit code and cannot be abandoned
-partway — see the Windows note below.
+The npm forms and the `node scripts/*` forms do the same work; the npm ones are what CI invokes. If
+npm ever starts returning immediately with exit 1 while the work continues in the background, read
+the Windows note below before believing any test result.
 
 Nothing in the suite reaches the network or needs an API key. If a test wants either, that is a bug in
 the test.
@@ -48,45 +49,54 @@ passed, which makes the root command look like a failure and run only the SDK su
 suite by name for exactly this reason. If `npm test` at the root reports a failure with no failing
 test in the output, this is what you are looking at.
 
-**On Windows, `npm run <script>` ABANDONS anything that takes more than a couple of seconds.** This
-is measured, not inferred. Driving npm directly from node — no shell, no wrapper — with a script that
-sleeps for a known time and then exits 0:
+**If `npm run <anything>` starts returning exit 1 immediately while the work carries on in the
+background, suspect a corrupt global npm install.** That happened here, and it cost a lot of time
+before it was identified, so the signature is worth recording.
 
-| child sleeps | npm returned after | npm status | child had finished |
-|---|---|---|---|
-| 1000ms | 4057ms | 0 | yes |
-| 4000ms | 2548ms | 1 | **no** |
-| 8000ms | 3371ms | 1 | **no** |
+Symptoms: `npm run build` returns after ~3s with exit 1 while `tsc` is still compiling; a check made
+straight afterwards finds a half-written `dist/` and every later `vitest run` reports dozens of
+import and type errors that have nothing to do with the code. npm's own log stops at the script
+banner and never prints its `verbose exit` epilogue.
 
-npm gives up ~2.5–4s after it starts, regardless of the child. A fast script finishes inside that
-window and reports correctly; a slow one is left running while npm returns 1. Its own log stops at
-the script banner — it never reaches its `verbose exit` epilogue. Same on npm 10.9.2 and npm 11, from
-PowerShell and from Git Bash. It is not npm config, `script-shell`, `foreground-scripts`, the update
-notifier, audit, or fund; each was tested. Defender has no ASR rules and logged no detections.
+Cause: two npm copies exist on a typical Windows machine — the one bundled with Node, and a global
+one under `%APPDATA%
+pm
+ode_modules
+pm`. npm's shim prefers the global copy whenever one is
+present, so a corrupt global install captures every `npm run` while `npm --version` still answers
+normally. Both copies reported 10.9.2 with identical dependency trees and identical `npmrc` files;
+only their behaviour differed:
 
-So on Windows this is not a cosmetic exit code — **`npm test` can return while vitest is still
-running, and `npm run build` can return mid-compile.** A check made immediately afterwards sees a
-half-written `dist/` and reports failures that have nothing to do with the code.
+| | waits for its child | exit code |
+|---|---|---|
+| bundled | yes | correct |
+| corrupt global | no — gives up after ~2–3s | always 1 |
 
-**Run the node scripts directly. They are synchronous and return the true exit code:**
+Diagnosing it without changing anything: run the same script through each copy directly,
+`node "<path to that copy>/bin/npm-cli.js" run <script>`, and compare. Or set
+`npm_config_prefix` to a directory containing no npm, which forces the shim onto the bundled copy —
+if the problem disappears, the global install is the culprit.
+
+Fix: `npm install -g npm@<version matching your Node>` to replace it. `npm@latest` may refuse on an
+older Node, and that refusal is clean — it installs nothing. Repaired on 2026-08-13 by reinstalling
+npm@10.9.2; `npm run build`, `npm run typecheck` and `npm test` have all returned correct exit codes
+since.
+
+The `node scripts/*` forms remain the most direct way to run these, and are what to reach for if npm
+ever looks suspect again:
 
 ```
-node scripts/build-all.mjs        # what `npm run build` delegates to
-node scripts/test-all.mjs         # what `npm test` delegates to
-node scripts/typecheck-all.mjs    # what `npm run typecheck` delegates to
+node scripts/build-all.mjs
+node scripts/test-all.mjs
+node scripts/typecheck-all.mjs
 ```
 
-CI runs on Linux, where npm behaves, and is unaffected — the npm scripts are kept because that is
-what CI and every other platform invoke.
-
-(Two real bugs lived behind this and are fixed. The per-package build was
-`node -e "rmSync('dist')" && tsc`; the `&&` never ran its second command under Windows npm, so
-`npm run build` deleted `dist/` and compiled nothing, leaving the package unimportable. The root
-scripts were `npm run <x> --workspaces`, which stops at the first workspace reporting failure — and
-since every script "failed", they ran one package and skipped two. Both now route through
-`scripts/*.mjs`, which spawn `tsc`/`vitest` directly: one level of nesting, never two, because
-npm -> node -> node -> tsc died partway through non-deterministically. Never chain commands with
-`&&` inside an npm script in this repo.)
+Two things were blamed along the way and should not be: `&&` inside an npm script, and
+`npm run <x> --workspaces`. Both were tested after the repair and both work correctly. They appeared
+broken only because the corrupt npm returned early from every script, which makes a chained command
+look like it never ran and makes `--workspaces` stop after the first package. The repo now uses
+`scripts/build-all.mjs`, `test-all.mjs` and `typecheck-all.mjs` for smaller, genuine reasons — stated
+in each file — not because the npm forms are unsafe.
 
 `packages/cli/test/keystore.test.ts` takes ~6 seconds on its own — it runs real scrypt key
 derivation. `conformance.test.ts` takes ~11s because it spawns the built CLI as a subprocess per

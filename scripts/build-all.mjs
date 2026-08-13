@@ -5,25 +5,26 @@
  *   npm run build
  *   node scripts/build-all.mjs
  *
- * Replaces `npm run build --workspaces`, which does not work on Windows npm: it stops after the
- * first workspace and exits non-zero, so a repo-root build left `cli` and `mcp` uncompiled while
- * reporting a failure that named nothing.
+ * Replaces `npm run build --workspaces`. That form also works — it is NOT broken, despite a claim to
+ * the contrary made while chasing a corrupt global npm install (see AGENTS.md). What this adds is
+ * modest and deliberate: the dependency order is stated here rather than depending on the order of
+ * the `workspaces` array, and a package that compiles to nothing fails instead of passing quietly.
  *
- * The order is not alphabetical and matters: `cli` and `mcp` compile against `sdk`'s emitted
- * `.d.ts`, so building them first typechecks against whatever happened to be on disk from last
- * time. That is the failure mode where a breaking SDK change looks fine locally and breaks in CI.
+ * The order matters and is not alphabetical: `cli` and `mcp` compile against `sdk`'s emitted
+ * `.d.ts`, so building them first typechecks against whatever happened to be on disk from last time.
+ * That is the failure mode where a breaking SDK change looks fine locally and breaks in CI. The
+ * `workspaces` array currently happens to be in the right order; this does not depend on it staying
+ * that way.
  *
- * **It spawns `tsc` directly — one level of nesting, never two.** An earlier version of this file
- * called the per-package script, which then spawned `tsc`: npm -> node -> node -> tsc. Under Windows
- * npm that died partway through, non-deterministically, leaving one or more packages unbuilt with
- * its log truncated mid-line and no error reported — sometimes after the first package, sometimes
- * before any. Reproduced repeatedly at three levels and never once at two. So the rule is the
- * nesting depth, not npm as such: keep this loop spawning the compiler itself.
+ * It spawns `tsc` directly rather than delegating to the per-package script, which would put another
+ * node process in the chain. That is a simplicity choice, not a workaround: fewer processes, one
+ * place that decides the order, and the exit code comes straight back.
  *
- * For the same reason, do not reintroduce `"build": "… && …"` in any package.json here. The `&&`
- * never runs its second command under Windows npm — the per-package scripts used to be
- * `node -e "rmSync('dist')" && tsc`, so `npm run build` deleted `dist/` and compiled nothing,
- * leaving the package unimportable and every later test run failing against a missing build.
+ * (An earlier revision of this comment blamed process nesting for builds that died partway through.
+ * That was wrong. The real cause was a corrupt global npm install capturing every `npm run` — see
+ * AGENTS.md. The nesting was never the problem, and the correlation that suggested it was an
+ * accident of which npm copy each probe happened to invoke.)
+ *
  */
 import { spawnSync } from 'node:child_process';
 import { rmSync, existsSync } from 'node:fs';
