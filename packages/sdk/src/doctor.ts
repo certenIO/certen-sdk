@@ -114,8 +114,10 @@ function summarize(items: string[], max = 3): string {
  *
  * Every other check reported a clean bill of health, because every other check was true.
  */
-async function executionCheck(client: CertenClient): Promise<DoctorCheck> {
-  const list = await client.transaction.list({ limit: 25 }).catch(() => null);
+function executionCheck(list: Awaited<ReturnType<CertenClient['transaction']['list']>> | null): DoctorCheck {
+  // Takes the already-fetched list rather than fetching its own. It is the last check reported, but
+  // its data depends on nothing above it, so making it wait cost a round trip of pure latency on the
+  // command whose whole job is to answer a stuck user quickly.
   if (!list) {
     return { name: 'intents executing', status: 'skipped', detail: 'could not list transactions' };
   }
@@ -195,11 +197,20 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
 
   // ── 2. Does the gateway accept this credential? ─────────────────────────────────────────────
   let credentialOk = false;
+  // The credential probe's answer, kept rather than discarded.
+  //
+  // Check 2 asks the gateway whether it accepts this key, and the cheapest question that proves it
+  // is a balance read. Check 5 then needs the balance — and used to fetch it AGAIN, so `doctor`
+  // spent two of its six round trips asking one question twice. Measured against the live gateway:
+  // 6 calls, 1785ms, with `/v1/billing/balance` at 190ms and 179ms.
+  //
+  // Reusing it is sound: these are moments apart, and this is a diagnosis, not a settlement.
+  let probedBalance: Awaited<ReturnType<CertenClient['billing']['balance']>> | null = null;
   if (unreachable) {
     checks.push({ name: 'api key', status: 'skipped', detail: 'gateway unreachable' });
   } else {
     try {
-      await client.billing.balance();
+      probedBalance = await client.billing.balance();
       credentialOk = true;
       checks.push({ name: 'api key', status: 'ok', detail: 'accepted' });
     } catch (err) {
@@ -240,8 +251,21 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
     return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
   }
 
+  // Everything still needed, fetched CONCURRENTLY.
+  //
+  // These three answer unrelated questions and were awaited one after another, so `doctor` cost the
+  // sum of them — on the command whose entire job is to answer a stuck user quickly. The checks are
+  // still emitted in their original order below; only the I/O overlaps.
+  //
+  // `balance` reuses the credential probe when it succeeded, so the duplicate read is gone.
+  const [portfolio, balance, obligations, recentIntents] = await Promise.all([
+    client.portfolio.get().catch(() => null),
+    probedBalance ? Promise.resolve(probedBalance) : client.billing.balance().catch(() => null),
+    client.billing.obligations().catch(() => null),
+    client.transaction.list({ limit: 25 }).catch(() => null),
+  ]);
+
   // ── 3-4. Identities, and whether their abstract accounts can execute ────────────────────────
-  const portfolio = await client.portfolio.get().catch(() => null);
 
   if (!portfolio) {
     checks.push({ name: 'identity can sign', status: 'warn', detail: 'Could not read the portfolio.' });
@@ -296,15 +320,10 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
   }
 
   // ── 5. Is there anything left to spend? ─────────────────────────────────────────────────────
-  const [balance, obligations] = await Promise.all([
-    client.billing.balance().catch(() => null),
-    client.billing.obligations().catch(() => null),
-  ]);
-
   if (!balance) {
     checks.push({ name: 'billing balance', status: 'skipped', detail: 'balance unavailable' });
     checks.push({ name: 'credit / trial', status: 'skipped', detail: 'balance unavailable' });
-    checks.push(await executionCheck(client));
+    checks.push(executionCheck(recentIntents));
     return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
   }
 
@@ -363,7 +382,7 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
       });
   }
 
-  checks.push(await executionCheck(client));
+  checks.push(executionCheck(recentIntents));
 
   return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
 }

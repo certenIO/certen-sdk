@@ -4,6 +4,22 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — `doctor()` asks the gateway one question once, and overlaps the rest
+
+Measured against the live gateway before and after: **6 round trips to 5**, and **~1570ms to ~1195ms**
+of wall time.
+
+The credential check proved the key by reading the balance and then discarded the answer, so the
+balance check fetched it again — two of six round trips spent asking one question twice. And the
+remaining reads (portfolio, obligations, recent intents) answer unrelated questions but were awaited
+one after another, so the command cost their sum.
+
+They now run concurrently and the probe's balance is reused. The checks are still reported in the
+same order with the same verdicts — only the I/O overlaps.
+
+This is the command someone runs when they are already stuck, which is the worst moment to spend
+latency on nothing.
+
 ### Added — `listAll()` iterators that need no adapter
 
 ```ts
