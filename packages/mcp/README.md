@@ -25,6 +25,15 @@ Claude Desktop / any MCP client (`claude_desktop_config.json`):
 }
 ```
 
+## It also serves the documentation
+
+Nine MCP *resources*, so an agent can read the rules rather than guess them: the quickstart, the full
+API digest, the error catalogue, the CLI JSON contract, and five task guides (onboarding an identity,
+signing while holding your own key, proof-gating a contract call, M-of-N panels, verifying a proof).
+
+An agent finds them with `resources/list`. A human configuring the server would not have known they
+were there, which is why they are listed here — they are the fastest answer to "what can this do".
+
 ## Two things this server will not do
 
 **It will not sign.** There is no code path that accepts a private key, a mnemonic or a passphrase —

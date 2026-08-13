@@ -17,10 +17,13 @@ async function getClient(): Promise<CertenClient> {
  * Pull the hash to sign out of an intent response.
  *
  * The gateway returns snake_case on the wire (`signing_data.hash_to_sign`), which is what the
- * live OpenAPI spec documents and what `execute.ts` reads. The SDK's `TransactionResponse` type
- * declares camelCase `signingData.dataToSign` and `return data` performs no transformation, so
- * the declared type does not describe the value. Both spellings are accepted here rather than
- * betting on which one a given gateway build emits.
+ * spec documents, what `execute.ts` reads, and — since the SDK's `CreateTransactionResponse` was
+ * corrected — what the declared type says too. The camelCase branch below is retained only as a
+ * tolerance for an older gateway build, NOT because the SDK type disagrees; it no longer does.
+ *
+ * (This comment previously claimed the SDK declared `signingData.dataToSign`. That was true once
+ * and is not now. A comment describing a bug that has been fixed is worse than no comment: it
+ * argues for defensive code nobody can justify from the current source.)
  */
 function hashToSign(result: unknown): string | undefined {
   const r = result as {
