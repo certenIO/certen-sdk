@@ -176,6 +176,10 @@ export function registerCallCommands(program: Command): void {
         proofClass: opts.proofClass,
         idempotencyKey: opts.idempotencyKey,
         sign: (hashHex) => signer.sign(hashHex),
+        // The SDK runs the same guard. It is skipped here because the check above already ran and
+        // produces the better refusal — it names the faucet for this chain and the --force flag —
+        // and letting both run would cost a second portfolio lookup for an answer already known.
+        skipFundingCheck: true,
       });
 
       if (!wait) {

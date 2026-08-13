@@ -2,9 +2,16 @@ import { AxiosInstance } from 'axios';
 import { omitUndefined } from '../internal.js';
 import type {
   CreateIdentityParams,
+  Identity,
   IdentityResponse,
   UpdateIdentityParams,
 } from '../types.js';
+import { CertenError } from '../errors.js';
+
+/** Statuses provisioning is still in flight in. Anything else is treated as terminal. */
+const IN_FLIGHT = ['provisioning', 'pending', 'creating'];
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => { setTimeout(r, ms); });
 
 export class IdentityResource {
   constructor(private http: AxiosInstance) {}
@@ -43,6 +50,84 @@ export class IdentityResource {
   async get(id: string): Promise<IdentityResponse> {
     const { data } = await this.http.get(`/v1/identity/${id}`);
     return data;
+  }
+
+  /**
+   * Create an identity and wait until it is genuinely usable.
+   *
+   * `create()` returns `202` and provisioning continues, so the response it gives back says nothing
+   * about whether the identity works. Every integration then writes the same poll loop, and the
+   * ones that do not write it hand around an identity that fails at the last step of every flow.
+   *
+   * "Usable" is `status` terminal AND `can_sign === true`, and those fail for different reasons:
+   *
+   * - `can_sign === false` — provisioning finished, but the on-chain key page is not held by your
+   *   key. The identity exists, consumes org quota, and can never sign.
+   * - `can_sign === null` — the key page could not be READ. That is UNKNOWN, not a soft yes, and an
+   *   Accumulate outage is exactly when the distinction matters most. This keeps polling, and says
+   *   plainly that it could not determine the answer if the budget runs out.
+   *
+   * A timeout is neither success nor failure — provisioning may still complete — so it throws
+   * rather than returning something a caller could mistake for a ready identity.
+   */
+  async createAndWait(
+    params: CreateIdentityParams,
+    { timeoutMs = 300_000, intervalMs = 3_000, onPoll }: {
+      timeoutMs?: number;
+      intervalMs?: number;
+      onPoll?: (identity: Identity) => void;
+    } = {},
+  ): Promise<Identity> {
+    const created = await this.create(params);
+    const id = created.identity?.id;
+    if (!id) {
+      throw new CertenError('certen: the gateway accepted the identity but returned no id', 0, 'NO_IDENTITY_ID');
+    }
+
+    const deadline = Date.now() + timeoutMs;
+    let last: Identity | undefined;
+
+    while (Date.now() < deadline) {
+      const { identity } = await this.get(id);
+      last = identity;
+      onPoll?.(identity);
+
+      if (!IN_FLIGHT.includes(identity.status)) {
+        if (identity.can_sign === true) return identity;
+
+        if (identity.can_sign === false) {
+          throw new CertenError(
+            `certen: identity ${id} finished provisioning as "${identity.status}" but cannot sign — `
+            + 'its key page is not held by your key'
+            + (identity.error_message ? `: ${identity.error_message}` : ''),
+            0, 'IDENTITY_CANNOT_SIGN',
+          );
+        }
+        if (identity.status === 'error') {
+          throw new CertenError(
+            `certen: identity ${id} failed to provision`
+            + (identity.error_message ? `: ${identity.error_message}` : ''),
+            0, 'IDENTITY_PROVISIONING_FAILED',
+          );
+        }
+        // Terminal status with can_sign null: the key page was unreadable. Keep asking — this is
+        // usually transient — and fall through to the unknown-answer error if it never resolves.
+      }
+
+      await sleep(intervalMs);
+    }
+
+    if (last && !IN_FLIGHT.includes(last.status) && last.can_sign == null) {
+      throw new CertenError(
+        `certen: identity ${id} is "${last.status}" but whether it can sign could not be determined `
+        + '— the on-chain key page was unreadable for the whole wait',
+        0, 'IDENTITY_CAN_SIGN_UNKNOWN',
+      );
+    }
+    throw new CertenError(
+      `certen: identity ${id} is still "${last?.status ?? 'unknown'}" after ${timeoutMs}ms — it may yet finish`,
+      0, 'IDENTITY_WAIT_TIMEOUT',
+    );
   }
 
   /** Link or unlink chains, set a webhook, or supply a `publicKey` to repair an identity created without one. */

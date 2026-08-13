@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
+import { assertFundedForValue } from '../funding.js';
 import type { ContractAddresses, ContractCall, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
 
 /**
@@ -49,6 +50,14 @@ export interface ProofGatedCallParams {
    */
   proofClass?: ProofClass;
   idempotencyKey?: string;
+  /**
+   * Submit even if the abstract account is known to hold no gas.
+   *
+   * The guard refuses only on a POSITIVELY OBSERVED zero balance, because an intent that moves
+   * value from an empty account is accepted, signed, submitted, and then parks at `anchoring`
+   * forever with nothing reporting why. Set this when you are deliberately exercising that path.
+   */
+  skipFundingCheck?: boolean;
 }
 
 export interface TransferParams {
@@ -83,6 +92,8 @@ export interface TransferParams {
    */
   proofClass?: ProofClass;
   idempotencyKey?: string;
+  /** Submit even if the abstract account is known to hold no gas. See ProofGatedCallParams. */
+  skipFundingCheck?: boolean;
 }
 
 export interface OpenedIntent {
@@ -118,6 +129,16 @@ export class ExecuteResource {
    * signature is in — which on an M-of-N page is not the same as executed. Follow with `wait()`.
    */
   async contractCall(p: ProofGatedCallParams): Promise<OpenedIntent> {
+    // Before the intent exists, not after: an intent that can never execute should never be
+    // opened. A call forwarding no value is unaffected — the guard checks the amount first.
+    if (!p.skipFundingCheck) {
+      await assertFundedForValue(this.http, {
+        identityId: p.identityId,
+        chain: p.chain,
+        amount: p.contractCall.value,
+      });
+    }
+
     const intent: TransactionIntent = {
       adiUrl: p.adiUrl,
       legs: [{
@@ -151,6 +172,15 @@ export class ExecuteResource {
 
   /** Authorize a native transfer, gated on proof. Same flow, simpler intent. */
   async transfer(p: TransferParams): Promise<OpenedIntent> {
+    if (!p.skipFundingCheck) {
+      await assertFundedForValue(this.http, {
+        identityId: p.identityId,
+        // The abstract account that pays is the one on the chain the value lands on.
+        chain: p.toChain,
+        amount: p.amount,
+      });
+    }
+
     return this.open({
       identity_id: p.identityId,
       intent: {

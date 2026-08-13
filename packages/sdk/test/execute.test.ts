@@ -48,6 +48,20 @@ const okFlow = (e: Req) => (e.path === '/v1/transaction' && e.method === 'POST' 
 
 const clientFor = (url: string) => new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
 
+/**
+ * The request that OPENED the intent.
+ *
+ * Found by shape rather than by index: a value-moving call now reads the portfolio first, to refuse
+ * an intent from an abstract account known to hold no gas. Indexing into `seen` assumed that check
+ * did not exist, and would break again the next time anything is added ahead of the POST.
+ */
+const openReq = (g: { seen: Req[] }): Req =>
+  g.seen.find((e) => e.path === '/v1/transaction' && e.method === 'POST')!;
+
+/** The request that SUBMITTED the signature, found the same way and for the same reason. */
+const submitReq = (g: { seen: Req[] }): Req =>
+  g.seen.find((e) => e.path.endsWith('/signature') && e.method === 'POST')!;
+
 const CALL = {
   identityId: 'id-1',
   adiUrl: 'acc://seller-bot.acme',
@@ -85,7 +99,7 @@ describe('execute.contractCall', () => {
         ...CALL,
         contractCall: { target: '0xE', functionSignature: 'buy(bytes32)', args: ['0xa'], value: '1500000000000000' },
       });
-      const leg = g.seen[0].body.intent.legs[0];
+      const leg = openReq(g).body.intent.legs[0];
       expect(leg.amount).toBe('1500000000000000');
       expect(leg.contractCall.value).toBe('1500000000000000');
     } finally { g.close(); }
@@ -97,7 +111,7 @@ describe('execute.contractCall', () => {
       await clientFor(g.url).execute.contractCall({
         ...CALL, contractCall: { target: '0xE', functionSignature: 'x()' },
       });
-      expect(g.seen[0].headers['idempotency-key']).toMatch(/.+/);
+      expect(openReq(g).headers['idempotency-key']).toMatch(/.+/);
     } finally { g.close(); }
   });
 
@@ -107,7 +121,7 @@ describe('execute.contractCall', () => {
       await clientFor(g.url).execute.contractCall({
         ...CALL, idempotencyKey: 'mine-1', contractCall: { target: '0xE', functionSignature: 'x()' },
       });
-      expect(g.seen[0].headers['idempotency-key']).toBe('mine-1');
+      expect(openReq(g).headers['idempotency-key']).toBe('mine-1');
     } finally { g.close(); }
   });
 
@@ -120,8 +134,8 @@ describe('execute.contractCall', () => {
         signerKeyPage: 'acc://panel.acme/book/2',
         contractCall: { target: '0xE', functionSignature: 'x()' },
       });
-      expect(g.seen[0].body.signer_public_key).toBe('22'.repeat(32));
-      expect(g.seen[0].body.signer_key_page).toBe('acc://panel.acme/book/2');
+      expect(openReq(g).body.signer_public_key).toBe('22'.repeat(32));
+      expect(openReq(g).body.signer_key_page).toBe('acc://panel.acme/book/2');
       // The signature must come from the nominated seat, not the default key.
       expect(g.seen[1].body.public_key).toBe('22'.repeat(32));
     } finally { g.close(); }
@@ -151,8 +165,8 @@ describe('execute.transfer', () => {
         fromAddress: 'acc://org.acme', toAddress: '0xBe00', amount: '4000', tokenSymbol: 'ETH',
         publicKey: PUBKEY, sign: (h) => `signed:${h}`,
       });
-      expect(g.seen[0].body.intent).toMatchObject({ toAddress: '0xBe00', amount: '4000' });
-      expect(g.seen[1].body.signature).toBe(`signed:${HASH}`);
+      expect(openReq(g).body.intent).toMatchObject({ toAddress: '0xBe00', amount: '4000' });
+      expect(submitReq(g).body.signature).toBe(`signed:${HASH}`);
     } finally { g.close(); }
   });
 
@@ -164,7 +178,7 @@ describe('execute.transfer', () => {
         identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'eth', fromAddress: 'a', toAddress: 'b',
         amount: huge, publicKey: PUBKEY, sign: () => 'sig',
       });
-      expect(g.seen[0].body.intent.amount).toBe(huge);
+      expect(openReq(g).body.intent.amount).toBe(huge);
     } finally { g.close(); }
   });
 
@@ -180,7 +194,7 @@ describe('execute.transfer', () => {
         toChain: 'ethereum-sepolia', fromAddress: '0xA', toAddress: '0xB', amount: '1',
         publicKey: PUBKEY, sign: () => 'sig',
       });
-      expect(g.seen[0].body.intent.adiUrl).toBe('acc://seller.acme');
+      expect(openReq(g).body.intent.adiUrl).toBe('acc://seller.acme');
     } finally { g.close(); }
   });
 });
@@ -199,7 +213,7 @@ describe('execute.cosign', () => {
       });
       expect(g.seen[0].body.vote).toBe('approve');
       expect(g.seen[0].body.type).toBe('pending_tx');
-      expect(g.seen[1].body.signature).toBe(`signed:${HASH}`);
+      expect(submitReq(g).body.signature).toBe(`signed:${HASH}`);
       expect(out).toMatchObject({ is_ready: true });
     } finally { g.close(); }
   });

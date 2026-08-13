@@ -96,8 +96,10 @@ export function registerWhoamiCommands(program: Command): void {
       }
 
       human('');
-      human('  Organization name and your role are not available to an API key.');
-      human(`  They live in the portal: ${getPortalUrl()}`);
+      human('  Organization name, your role, and team management are not available to an API key.');
+      human('  Inviting a teammate needs a signed-in portal session — deliberately, since a leaked');
+      human('  machine key must not be able to add people to your organization.');
+      human(`  ${getPortalUrl()}`);
 
       hint('');
       hint('Check the whole setup end to end: certen doctor');
