@@ -1,7 +1,7 @@
 {
   "name": "@certen.io/sdk",
   "version": "0.6.0",
-  "description": "TypeScript client for the CERTEN Gateway API \u2014 proof-gated cross-chain execution on Accumulate",
+  "description": "TypeScript client for the CERTEN Gateway API — proof-gated cross-chain execution on Accumulate",
   "license": "MIT",
   "type": "module",
   "keywords": [
@@ -35,7 +35,7 @@
       "default": "./dist/index.js"
     }
   },
-  "//files": "Only the build output and docs. src/ and test/ stay in the repo \u2014 declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
+  "//files": "Only the build output and docs. src/ and test/ stay in the repo — declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
   "files": [
     "dist/",
     "README.md",
@@ -44,13 +44,14 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "//prepack": "Build before packing so a published tarball can never carry a stale or missing dist/. That failure mode is nasty: the package installs cleanly and dies on first import.",
     "prepack": "npm run build",
-    "prepublishOnly": "node ../../scripts/prepublish-check.mjs"
+    "prepublishOnly": "node ../../scripts/prepublish-check.mjs",
+    "//build": "dist/ is gitignored and tsc does not prune outputs whose source was deleted, so a stale artifact survives forever locally and ships on a local publish. CI never sees it. Clean first so both produce the same tarball."
   },
   "publishConfig": {
     "access": "public"

@@ -25,13 +25,14 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "bundle-docs": "node scripts/bundle-docs.mjs",
     "//prepack": "Build AND bundle the docs before packing. Without bundle-docs the published package serves zero resources, because llms.txt and docs/ live outside this package root and npm's `files` cannot reach outside it.",
     "prepack": "npm run bundle-docs && npm run build",
-    "prepublishOnly": "node ../../scripts/prepublish-check.mjs"
+    "prepublishOnly": "node ../../scripts/prepublish-check.mjs",
+    "//build": "dist/ is gitignored and tsc does not prune outputs whose source was deleted, so a stale artifact survives forever locally and ships on a local publish. CI never sees it. Clean first so both produce the same tarball."
   },
   "//dependencies": "The SDK is the only runtime dependency. MCP's stdio transport is newline-delimited JSON-RPC 2.0 \u2014 a small, stable surface implemented directly in src/protocol.ts. For a server that can authorize value-bearing operations, every avoided transitive dependency is avoided supply-chain risk.",
   "dependencies": {

@@ -33,12 +33,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "//prepack": "Build before packing so the published bin can never point at a missing dist/index.js.",
     "prepack": "npm run build",
-    "prepublishOnly": "node ../../scripts/prepublish-check.mjs"
+    "prepublishOnly": "node ../../scripts/prepublish-check.mjs",
+    "//build": "dist/ is gitignored and tsc does not prune outputs whose source was deleted, so a stale artifact survives forever locally and ships on a local publish. CI never sees it. Clean first so both produce the same tarball."
   },
   "publishConfig": {
     "access": "public"
