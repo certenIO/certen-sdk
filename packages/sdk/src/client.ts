@@ -263,12 +263,19 @@ function generateIdempotencyKey(): string {
 }
 
 /**
- * Async iterator helper for paginated list endpoints. Round-2 #40:
- * `paginateWithTotal` exposes `{ item, index, total }` for progress UIs that
- * need to render "27 of 412". When the server doesn't return `total`, the
- * yielded object's `total` is undefined.
+ * Async iterator helper for paginated list endpoints.
  *
- * Use `paginate(...)` for the simple item-only form.
+ * **Prefer the `listAll()` method on the resource** — `certen.transaction.listAll()`,
+ * `certen.pending.listAll()`. They call this internally and need no adapter.
+ *
+ * This takes a callback returning `{ items }`, and no SDK method returns that shape: `list()`
+ * returns `{ transactions }`, `shares()` returns `{ shares }`. So using it directly meant writing
+ * the adapter that should have shipped with it. Since 0.7.0 that adapter lives on the resources,
+ * and this stays exported for list endpoints the SDK does not model yet, and for callers paginating
+ * their own API.
+ *
+ * `paginateWithTotal` exposes `{ item, index, total }` for progress UIs that need to render
+ * "27 of 412". When the server does not return `total`, the yielded object's `total` is undefined.
  */
 export async function* paginate<T>(
   fetchPage: (limit: number, offset: number) => Promise<{ items: T[]; total?: number }>,

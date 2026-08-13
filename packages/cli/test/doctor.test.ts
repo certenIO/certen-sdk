@@ -200,6 +200,9 @@ describe('certen chains', () => {
     }
   });
 
+  // Two subprocess spawns where every other case here makes one, against vitest's 5s default. It
+  // passed alone and failed inside the full suite under load — a flake that says nothing about the
+  // behaviour under test, which is the resolution, never a duration.
   it('resolves one chain by registry id and by numeric chain id alike', async () => {
     const stub = await stubGateway(healthy());
     try {
@@ -210,7 +213,7 @@ describe('certen chains', () => {
     } finally {
       await stub.close();
     }
-  });
+  }, 20_000);
 
   it('reports an unknown chain as a failed lookup, not a broken gateway', async () => {
     const stub = await stubGateway(healthy());

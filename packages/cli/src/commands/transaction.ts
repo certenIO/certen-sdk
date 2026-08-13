@@ -297,8 +297,28 @@ export function registerTransactionCommands(program: Command): void {
     .description('List transactions')
     .option('--limit <n>', 'Max results', parseInt)
     .option('--offset <n>', 'Offset', parseInt)
+    // Paging by hand is the kind of arithmetic a CLI should absorb. Without this, answering "how
+    // many intents failed this month" from the terminal meant a loop incrementing --offset and
+    // knowing when to stop — and getting that wrong reads as "there were none".
+    .option('--all', 'Fetch every page, not just the first')
     .action(async (opts) => {
       const client = await getClient();
+
+      if (opts.all) {
+        if (opts.offset !== undefined) {
+          throw new UsageError(
+            '--all starts from the beginning, so --offset has no meaning with it. Use one or the other.',
+            'CONFLICTING_PAGING_FLAGS',
+          );
+        }
+        const transactions = [];
+        // --limit is the PAGE size here, not a cap: the whole point of --all is that the caller
+        // stops thinking about page boundaries.
+        for await (const tx of client.transaction.listAll(opts.limit ?? 100)) transactions.push(tx);
+        printOutput({ transactions } as unknown as Record<string, unknown>);
+        return;
+      }
+
       const result = await client.transaction.list({
         limit: opts.limit,
         offset: opts.offset,

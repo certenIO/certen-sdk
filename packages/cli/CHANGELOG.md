@@ -3,6 +3,14 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen tx list --all`
+
+Fetches every page instead of the first. Answering "how many intents failed this month" previously
+meant a shell loop incrementing `--offset` and knowing when to stop; getting that wrong reads as
+"there were none".
+
+With `--all`, `--limit` is the page size rather than a cap, and `--offset` is rejected — `--all`
+starts from the beginning, so the two together have no coherent meaning.
 
 ### Breaking — `certen identity` JSON output is no longer wrapped
 

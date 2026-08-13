@@ -4,6 +4,31 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `listAll()` iterators that need no adapter
+
+```ts
+for await (const tx of certen.transaction.listAll()) { … }
+for await (const action of certen.pending.listAll({ identity })) { … }
+for await (const { item, index, total } of certen.admin.auditLogAll({ from })) { … }
+```
+
+`paginate` has been exported since 0.2.0 and composed with nothing this SDK ships: it takes a
+callback returning `{ items }`, and no method returns that shape — `list()` returns
+`{ transactions }`, `shares()` returns `{ shares }`. Using it meant hand-writing the adapter it
+should have contained, in every caller:
+
+```ts
+paginate((limit, offset) =>
+  certen.transaction.list({ limit, offset }).then((r) => ({ items: r.transactions })))
+```
+
+An exported helper that cannot be used as shipped is worse than none, because it reads as a solved
+problem. `paginate` and `paginateWithTotal` remain exported for endpoints the SDK does not model and
+for paginating your own API.
+
+`auditLogAll` yields `{ item, index, total }` rather than bare entries — that endpoint returns a real
+total, and an audit export is long enough to want a progress line and long enough that a silent
+early stop matters.
 
 ### Breaking — identity and deposit responses are no longer wrapped
 

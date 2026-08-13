@@ -1,4 +1,5 @@
 import { AxiosInstance } from 'axios';
+import { paginateWithTotal } from '../client.js';
 import type {
   CreateOrgParams,
   OrgResponse,
@@ -6,6 +7,7 @@ import type {
   ApiKeyResponse,
   ApiKeyListItem,
   AuditLogResponse,
+  AuditLogEntry,
   UsageSummaryResponse,
 } from '../types.js';
 
@@ -71,6 +73,34 @@ export class AdminResource {
       },
     });
     return data;
+  }
+
+  /**
+   * Every audit-log entry matching the filters, a page at a time.
+   *
+   * ```ts
+   * for await (const { item, index, total } of certen.admin.auditLogAll({ from })) {
+   *   process.stdout.write(`${index + 1} of ${total}`);
+   * }
+   * ```
+   *
+   * Yields `{ item, index, total }` rather than bare entries — unlike the other `listAll`s, because
+   * this endpoint DOES return a total and an audit export is the case where a caller genuinely
+   * needs it: these run long enough to want a progress line, and long enough that a silent early
+   * stop matters. Reading the full log by hand meant tracking the offset against
+   * `pagination.total`, which is the arithmetic this exists to stop people writing.
+   */
+  auditLogAll(
+    params?: Omit<Parameters<AdminResource['getAuditLog']>[0], 'limit' | 'offset'>,
+    pageSize = 100,
+  ): AsyncIterableIterator<{ item: AuditLogEntry; index: number; total: number | undefined }> {
+    return paginateWithTotal<AuditLogEntry>(
+      async (limit, offset) => {
+        const page = await this.getAuditLog({ ...params, limit, offset });
+        return { items: page.entries ?? [], total: page.pagination?.total };
+      },
+      pageSize,
+    );
   }
 
   async getUsage(params?: { from?: string; to?: string }): Promise<UsageSummaryResponse> {

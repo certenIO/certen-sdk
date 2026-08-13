@@ -1,5 +1,6 @@
 import { AxiosInstance } from 'axios';
 import { omitUndefined } from '../internal.js';
+import { paginate } from '../client.js';
 import type {
   CreateTransactionParams,
   CreateTransactionResponse,
@@ -64,5 +65,31 @@ export class TransactionResource {
       },
     });
     return data;
+  }
+
+  /**
+   * Every transaction, fetched a page at a time.
+   *
+   * ```ts
+   * for await (const tx of certen.transaction.listAll()) { … }
+   * ```
+   *
+   * The `paginate` helper has been exported since 0.2.0, but it takes a callback returning
+   * `{ items }` and NO method on this SDK returns that shape — `list()` returns `{ transactions }`.
+   * So the helper could not be used without first hand-writing the adapter it should have contained:
+   *
+   * ```ts
+   * paginate((limit, offset) =>
+   *   certen.transaction.list({ limit, offset }).then((r) => ({ items: r.transactions })))
+   * ```
+   *
+   * Exporting a helper that composes with nothing it ships beside is worse than not exporting one:
+   * it reads as a solved problem. The adapter lives here now, once, instead of in every caller.
+   */
+  listAll(pageSize = 100): AsyncIterableIterator<TransactionResponse> {
+    return paginate<TransactionResponse>(
+      async (limit, offset) => ({ items: (await this.list({ limit, offset })).transactions ?? [] }),
+      pageSize,
+    );
   }
 }
