@@ -25,7 +25,7 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "build": "node ../../scripts/build-package.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "bundle-docs": "node scripts/bundle-docs.mjs",

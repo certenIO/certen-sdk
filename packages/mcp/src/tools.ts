@@ -63,6 +63,7 @@ export interface ToolDef {
 
 const str = (description: string) => ({ type: 'string', description });
 const num = (description: string) => ({ type: 'number', description });
+const bool = (description: string) => ({ type: 'boolean', description });
 
 /** Every write tool carries this, and refuses to act without it. */
 const CONFIRM = {
@@ -390,30 +391,58 @@ const WRITE_TOOLS: ToolDef[] = [
     mutates: true,
     endpoint: 'POST /v1/identity',
     description:
-      'Provision a new identity. Consumes organization identity quota and is asynchronous: this '
-      + 'returns 202 and provisioning continues. Poll certen_identity_get until the status is '
-      + 'terminal and can_sign is true.',
+      'Provision a new identity. Consumes organization identity quota. '
+      + 'By default this WAITS until the identity is genuinely usable — provisioned AND able to '
+      + 'sign — which takes a minute or two of real on-chain work. Pass wait:false to get the 202 '
+      + 'back immediately, then poll certen_identity_get until status is terminal AND can_sign is '
+      + 'true (can_sign has three values: true, false, and null meaning "could not check" — never '
+      + 'treat null as usable). '
+      + 'Both publicKey and publicKeyHash are required: the hash alone cannot sign, and an identity '
+      + 'created without the key is rejected.',
     inputSchema: {
       type: 'object',
       properties: {
         name: str('Identity name — must be unique in the org'),
         publicKeyHash: str('sha256 of the RAW 32-byte public key, hex'),
-        publicKey: str('Public key, 64-char hex'),
+        publicKey: str('Public key, 64-char hex. REQUIRED — the hash alone cannot sign.'),
         chains: { type: 'array', items: { type: 'string' }, description: 'Chains to link' },
         credits: num('Initial credits'),
+        wait: bool('Wait until the identity can actually sign (default true)'),
+        timeoutMs: num('How long to wait when wait is true (default 300000)'),
         confirm: CONFIRM,
       },
-      required: ['name', 'publicKeyHash', 'confirm'],
+      // `publicKey` is REQUIRED, matching the gateway.
+      //
+      // It was optional here while the gateway rejects an external identity that lacks it — so an
+      // agent following this schema made a call that could only ever 400. The gateway added that
+      // rejection because the hash alone produces an identity that can never sign, cannot be
+      // repaired, and still consumes the org's quota; advertising it as optional handed agents the
+      // exact mistake the gateway had just been taught to refuse.
+      required: ['name', 'publicKeyHash', 'publicKey', 'confirm'],
       additionalProperties: false,
     },
-    run: (c, a) =>
-      c.identity.create({
+    // Waits by default.
+    //
+    // `create` returns 202 and provisioning continues, so its response says nothing about whether
+    // the identity works. The instruction "poll certen_identity_get until terminal and can_sign is
+    // true" is several more tool calls, and it asks the agent to re-implement a contract it can get
+    // wrong in a way that is invisible: `can_sign` is three-valued, and reading null as false — or
+    // as ready — produces an identity that fails at the last step of every later flow.
+    //
+    // `createAndWait` already encodes that correctly, including distinguishing a timeout (provisioning
+    // may yet finish) from a genuine failure. One call, and the agent gets an identity it can use.
+    run: (c, a) => {
+      const params = {
         name: s(a, 'name'),
         publicKeyHash: s(a, 'publicKeyHash'),
         publicKey: optS(a, 'publicKey'),
         chains: Array.isArray(a.chains) ? (a.chains as string[]) : undefined,
         credits: optN(a, 'credits'),
-      }),
+      };
+      return a.wait === false
+        ? c.identity.create(params)
+        : c.identity.createAndWait(params, { timeoutMs: optN(a, 'timeoutMs') ?? 300_000 });
+    },
   },
   {
     name: 'certen_identity_update',

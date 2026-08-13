@@ -599,8 +599,8 @@ Compound method that provisions the entire CERTEN/Accumulate identity stack in a
 
 Request body:
   - `name`: string **required**
-  - `public_key_hash`: string
-  - `public_key`: string
+  - `public_key_hash`: string — sha256 of the RAW 32-byte public key, hex. REQUIRED for signing_mode "external" (the default).
+  - `public_key`: string — The public key itself, 64-char hex. REQUIRED for signing_mode "external" (the default) — the hash alone cannot sign, because the signing preimage is computed for a specific key. An identity created without it can never sign, cannot be repaired except by supplying the matching key via PATCH, and still consumes the org's identity quota. Omit both key fields only when signing_mode is "provider", where the gateway generates and holds the key.
   - `credits`: number — Accumulate credits to fund the new key page with. Credits are dollar-pegged (1 credit = $0.01) and an intent write costs 0.1 credit. Defaults to 500 (~5,000 write-backs); raise it for high-volume identities.
   - `chains`: string[]
   - `signing_mode`: "external" | "provider"

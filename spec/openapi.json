@@ -282,11 +282,13 @@
                   },
                   "public_key_hash": {
                     "type": "string",
-                    "pattern": "^[a-fA-F0-9]{64}$"
+                    "pattern": "^[a-fA-F0-9]{64}$",
+                    "description": "sha256 of the RAW 32-byte public key, hex. REQUIRED for signing_mode \"external\" (the default)."
                   },
                   "public_key": {
                     "type": "string",
-                    "pattern": "^[a-fA-F0-9]{64}$"
+                    "pattern": "^[a-fA-F0-9]{64}$",
+                    "description": "The public key itself, 64-char hex. REQUIRED for signing_mode \"external\" (the default) — the hash alone cannot sign, because the signing preimage is computed for a specific key. An identity created without it can never sign, cannot be repaired except by supplying the matching key via PATCH, and still consumes the org's identity quota. Omit both key fields only when signing_mode is \"provider\", where the gateway generates and holds the key."
                   },
                   "credits": {
                     "type": "number",

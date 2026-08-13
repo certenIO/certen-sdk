@@ -20,7 +20,7 @@
   },
   "//scripts": "spec:refresh is the only step that touches the network. Everything else is derived from the vendored spec/openapi.json, so tests and CI stay offline and deterministic.",
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "node scripts/build-all.mjs",
     "test": "npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "spec:refresh": "node tools/agentgen/refresh-spec.mjs",

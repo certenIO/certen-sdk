@@ -200,3 +200,48 @@ describe('tool invariants', () => {
     expect(wait.description).toMatch(/60-110 seconds/i);
   });
 });
+
+/**
+ * A tool must not advertise a call the API will reject.
+ *
+ * `certen_identity_create` required `name` and `publicKeyHash` and left `publicKey` optional — while
+ * the gateway rejects an external identity that has no `public_key`, because the hash alone cannot
+ * sign. So an agent following the tool's own schema made a call that could only ever 400.
+ *
+ * It came from the spec: `POST /v1/identity` declares `required: ['name']` and said nothing more,
+ * since the real rule depends on the signing mode and JSON Schema was not expressing it. Anything
+ * generated from that spec inherits the same gap. The MCP tool only ever creates EXTERNAL
+ * identities — it exposes no `signing_mode` — so for this tool both key fields are unconditionally
+ * required, and saying so is the whole fix.
+ */
+describe('tool schemas describe calls that can actually succeed', () => {
+  it('every required parameter is a parameter the tool declares', () => {
+    // A `required` entry with no matching property makes a tool uncallable: the client cannot
+    // satisfy it, and nothing else would notice.
+    for (const t of ALL_TOOLS) {
+      const schema = t.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
+      const declared = Object.keys(schema.properties ?? {});
+      for (const req of schema.required ?? []) {
+        expect(declared, `${t.name} requires "${req}" but does not declare it`).toContain(req);
+      }
+    }
+  });
+
+  it('creating an identity requires the public key, not only its hash', () => {
+    const tool = ALL_TOOLS.find((t) => t.name === 'certen_identity_create')!;
+    const schema = tool.inputSchema as { required?: string[] };
+    expect(schema.required).toContain('publicKey');
+    expect(schema.required).toContain('publicKeyHash');
+  });
+
+  it('the identity tool says that it waits, and what can_sign: null means', () => {
+    // Waiting by default replaces "poll certen_identity_get until terminal and can_sign is true" —
+    // several more tool calls, and a contract an agent can get wrong invisibly, since reading a null
+    // `can_sign` as either false or ready produces an identity that fails at the last step of every
+    // later flow.
+    const tool = ALL_TOOLS.find((t) => t.name === 'certen_identity_create')!;
+    expect(tool.description).toMatch(/WAITS/);
+    expect(tool.description).toMatch(/can_sign/);
+    expect(tool.description).toMatch(/null/);
+  });
+});

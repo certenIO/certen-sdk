@@ -4,6 +4,26 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Fixed — `certen_identity_create` no longer advertises a call that cannot succeed
+
+The tool required `name` and `publicKeyHash` and marked `publicKey` optional, while the gateway
+REJECTS an external identity that has no `public_key` — the hash alone cannot sign. An agent
+following the tool's own schema made a call that could only ever return 400.
+
+Both key fields are now required. The gateway's OpenAPI is also at fault and has been corrected: it
+declared `required: ['name']` with no descriptions, so anything generated from it inherits the same
+gap.
+
+### Changed — creating an identity WAITS by default
+
+`create` returns 202 and provisioning continues, so the old instruction was "poll
+certen_identity_get until status is terminal and can_sign is true". That is several more tool calls,
+and it asks an agent to re-implement a contract it can get wrong invisibly: `can_sign` is
+three-valued, and reading `null` as either false or ready yields an identity that fails at the last
+step of every later flow.
+
+One call now returns an identity that can actually sign. Pass `wait: false` for the old behaviour.
+
 ### Breaking — identity tool results are no longer wrapped
 
 Identity results carried the identity under an `identity` key. It is now at the top level, matching

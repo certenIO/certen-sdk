@@ -45,6 +45,20 @@ passed, which makes the root command look like a failure and run only the SDK su
 suite by name for exactly this reason. If `npm test` at the root reports a failure with no failing
 test in the output, this is what you are looking at.
 
+**On Windows, build with `node scripts/build-all.mjs`, not `npm run build`.** Measured on Windows
+npm: the root build dies partway through the SECOND package, exits 1, truncates its own log mid-line,
+and leaves `packages/cli/dist` and `packages/mcp/dist` absent — with no error explaining any of it.
+Every subsequent `vitest run` then executes against a missing `dist` and reports dozens of failures
+that have nothing to do with the code. Running the same script directly builds all three and exits 0.
+
+If a test run suddenly fails in bulk with import or type errors, check that all three `dist`
+directories exist before believing any of it.
+
+(The per-package scripts used to be `node -e "rmSync('dist')" && tsc`. The `&&` never ran under
+Windows npm, so `npm run build` deleted `dist/` and compiled nothing — a build command that made the
+package unimportable. Both the root and per-package scripts now route through node. Never chain
+commands with `&&` inside an npm script in this repo.)
+
 `packages/cli/test/keystore.test.ts` takes ~6 seconds on its own — it runs real scrypt key
 derivation. `conformance.test.ts` takes ~11s because it spawns the built CLI as a subprocess per
 case. Neither is hung.
