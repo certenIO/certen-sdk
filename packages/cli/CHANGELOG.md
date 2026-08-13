@@ -3,6 +3,15 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Changed — `certen call` no longer reads the same balances twice
+
+It fetched the identity (it needs `can_sign` before prompting for a passphrase), then fetched
+`/v1/portfolio` for balances the identity response had already returned — a round trip on the
+critical path of the main flow, for numbers it was holding.
+
+The guard now takes those balances when the caller has them, and still reads the portfolio when the
+gateway sends none, so an older gateway does not silently lose the guard.
+
 ### Added — `certen tx list --all`
 
 Fetches every page instead of the first. Answering "how many intents failed this month" previously

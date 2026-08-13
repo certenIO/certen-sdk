@@ -30,15 +30,21 @@ const CLI = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'index.j
 const run = promisify(execFile);
 
 type Handler = (req: http.IncomingMessage, res: http.ServerResponse, body: string) => void;
-interface Stub { url: string; posts: () => number; close: () => Promise<void> }
+interface Stub { url: string; posts: () => number;
+  paths: () => string[]; close: () => Promise<void> }
 
 async function stubGateway(handler: Handler): Promise<Stub> {
   let posts = 0;
+  // Every request path, so a test can assert what was NOT fetched. Counting only POSTs made a
+  // redundant GET invisible, and a redundant GET on the critical path is exactly the kind of cost
+  // that accretes unnoticed.
+  const paths: string[] = [];
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
       if (req.method === 'POST') posts += 1;
+      paths.push(`${req.method} ${(req.url ?? '').split('?')[0]}`);
       try { handler(req, res, body); } catch { res.statusCode = 500; res.end('{}'); }
     });
   });
@@ -46,6 +52,7 @@ async function stubGateway(handler: Handler): Promise<Stub> {
   return {
     url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     posts: () => posts,
+    paths: () => paths,
     close: () => new Promise<void>((resolve) => {
       server.closeAllConnections?.();
       server.close(() => resolve());
@@ -308,6 +315,64 @@ describe('certen call derives what the gateway silently requires', () => {
       expect(r.code).toBe(1);
       expect((soleJson(r.stdout).error as { code: string }).code).toBe('ABSTRACT_ACCOUNT_UNFUNDED');
       expect(stub.posts()).toBe(0);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('reuses the balances from the identity it already fetched, instead of reading them twice', async () => {
+    // `GET /v1/identity/{id}` already returns per-chain balances, and `certen call` must fetch the
+    // identity anyway — it needs `can_sign` before prompting for a passphrase. Reading the same
+    // numbers again from /v1/portfolio was a round trip on the critical path of the main flow, for
+    // nothing.
+    const withBalances = {
+      ...identityBody(),
+      balances: [{ chain_id: 'ethereum-sepolia', address: ABSTRACT, token: 'ETH', balance: '0' }],
+    };
+    const stub = await stubGateway((req, res, body) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url === `/v1/identity/${ID}`) return json(res, 200, withBalances);
+      return gateway()(req, res, body);
+    });
+    try {
+      const r = await certen(
+        ['--json', 'call', '--identity', ID, '--chain', 'ethereum-sepolia',
+          '--to', ADDR, '--fn', 'deposit()', '--value', '1000', '--sign-with', 'dev'],
+        stub.url,
+        { withKey: 'dev' },
+      );
+      // The guard still fires — a zero balance is still refused, from the reused numbers.
+      expect(r.code).toBe(1);
+      expect((soleJson(r.stdout).error as { code: string }).code).toBe('ABSTRACT_ACCOUNT_UNFUNDED');
+      // And the portfolio was never asked for.
+      expect(stub.paths().filter((x) => x.includes('/v1/portfolio'))).toEqual([]);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('still reads the portfolio when the gateway sends no balances', async () => {
+    // A gateway older than 2026-08, or one that omits the field, must not silently disable the
+    // guard — that is the failure this guard exists to prevent, arriving by a different route.
+    const stub = await stubGateway(gateway({
+      '/v1/portfolio': {
+        identities: [{
+          adi_url: 'acc://v9-195727.acme', status: 'active', credit_balance: 500, pending_actions: 0,
+          chains: [{ chain_id: 'ethereum-sepolia', address: ABSTRACT, deployed: true, balances: [{ token: 'ETH', balance: '0' }] }],
+        }],
+        total_chains: 1,
+      },
+    }));
+    try {
+      const r = await certen(
+        ['--json', 'call', '--identity', ID, '--chain', 'ethereum-sepolia',
+          '--to', ADDR, '--fn', 'deposit()', '--value', '1000', '--sign-with', 'dev'],
+        stub.url,
+        { withKey: 'dev' },
+      );
+      expect(r.code).toBe(1);
+      expect((soleJson(r.stdout).error as { code: string }).code).toBe('ABSTRACT_ACCOUNT_UNFUNDED');
+      expect(stub.paths().some((x) => x.includes('/v1/portfolio'))).toBe(true);
     } finally {
       await stub.close();
     }

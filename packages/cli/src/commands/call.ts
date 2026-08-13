@@ -156,8 +156,11 @@ export function registerCallCommands(program: Command): void {
 
       // A payable call forwards value from the abstract account, so it needs gas there for the
       // same reason a transfer does.
+      // The identity fetched above already carries per-chain balances, so this reuses them instead
+      // of reading the same numbers again from /v1/portfolio.
       await assertFundedForValue(
         client, opts.identity, chain, { amount: opts.value }, Boolean(opts.force),
+        identity.balances,
       );
 
       const signer = await resolveSigner(opts.signWith);

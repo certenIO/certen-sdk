@@ -54,6 +54,34 @@ interface ChainFunding {
  * Returns null whenever the answer is not knowable, which the caller must treat as "do not
  * block" rather than as zero.
  */
+/**
+ * Per-chain balances as `GET /v1/identity/{id}` already returns them.
+ *
+ * Accepted so a caller that has just fetched the identity does not pay for a second read of the
+ * same numbers — see the note on `assertFundedForValue`.
+ */
+export type KnownBalances = Array<{
+  chain_id: string;
+  address: string;
+  token?: string;
+  balance: string;
+}>;
+
+function fromKnown(balances: KnownBalances, chain: string): ChainFunding | null {
+  const want = normalizeChain(chain);
+  const onChain = balances.filter((b) => normalizeChain(b.chain_id) === want);
+  if (onChain.length === 0) return null;
+  // The NATIVE balance is what pays for execution; a token balance on the same account does not
+  // make the execution leg runnable.
+  const native = onChain.find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
+  return {
+    address: onChain[0].address,
+    balance: native ? native.balance : null,
+    // Not reported by this endpoint, and not read by anything: the guard decides on the balance.
+    deployed: true,
+  };
+}
+
 async function fundingFor(
   client: CertenClient,
   identityId: string,
@@ -99,10 +127,21 @@ export async function assertFundedForValue(
   chain: string | undefined,
   intent: Record<string, unknown>,
   force: boolean,
+  /**
+   * Balances the caller has ALREADY fetched, from `identity.get()`.
+   *
+   * `GET /v1/identity/{id}` returns a `balances` array carrying the same chain, address and native
+   * balance this guard reads out of `/v1/portfolio`. `certen call` fetches the identity first (it
+   * needs `can_sign` before prompting for a passphrase) and then paid for a second read of numbers
+   * it was already holding — a round trip on the critical path of the main flow, for nothing.
+   *
+   * Omit it and the portfolio is fetched as before; `certen tx create` has no identity in hand.
+   */
+  known?: KnownBalances,
 ): Promise<void> {
   if (force || !chain || !movesValue(intent)) return;
 
-  const funding = await fundingFor(client, identityId, chain);
+  const funding = known ? fromKnown(known, chain) : await fundingFor(client, identityId, chain);
   if (!funding) return;
 
   const balance = funding.balance;
