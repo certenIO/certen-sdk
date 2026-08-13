@@ -150,7 +150,7 @@ number.
 ```bash
 certen chains                                    # what CERTEN is deployed on (no API key needed)
 certen whoami                                    # which key, which gateway, what standing
-certen identity get <id> | list | link-chain <id> --chain <chain>
+certen identity get <id> | list | link-chain <id> --chain <chain> | retire <id> --yes
 certen portfolio                                 # balances across every identity and chain
 certen tx status <id> --wait | tx list
 certen balance | quote --chain <chain> | fund <amount> --chain <chain>

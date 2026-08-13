@@ -339,6 +339,53 @@ describe('certen call derives what the gateway silently requires', () => {
   });
 });
 
+describe('certen identity retire', () => {
+  it('refuses without --yes, and sends nothing', async () => {
+    const stub = await stubGateway(gateway());
+    try {
+      const r = await certen(['--json', 'identity', 'retire', ID], stub.url);
+      // The required flag IS the confirmation. No y/N prompt: an identity a live integration
+      // depends on must not be retirable by an accidental Enter.
+      expect(r.code).toBe(2);
+      expect((soleJson(r.stdout).error as { code: string }).code).toBe('USAGE_ERROR');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('retires with --yes and forgets the id locally', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'certen-retire-'));
+    const retiring = (req: http.IncomingMessage, res: http.ServerResponse, body: string): void => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url === '/v1/identity' && req.method === 'POST') return json(res, 202, identityBody());
+      if (url === `/v1/identity/${ID}` && req.method === 'DELETE') {
+        return json(res, 200, { deleted: true, id: ID, adi_url: 'acc://v9-195727.acme' });
+      }
+      return gateway()(req, res, body);
+    };
+    const stub = await stubGateway(retiring);
+    try {
+      // Seed the local record the way `identity create` would.
+      const env = envFor(home, stub.url);
+      await spawn(['identity', 'create', '--name', 'x', '--public-key-hash', 'a'.repeat(64), '--no-wait'], env, home);
+      const before = JSON.parse(readFileSync(join(home, '.certen', 'config.json'), 'utf8'));
+      expect((before.identities ?? []).length).toBeGreaterThan(0);
+
+      const r = await spawn(['identity', 'retire', ID, '--yes'], env, home);
+      expect(r.code).toBe(0);
+      // The distinction that matters if someone retired for security reasons rather than tidiness.
+      expect(r.stdout + r.stderr).toMatch(/not a way to revoke a key/);
+
+      const after = JSON.parse(readFileSync(join(home, '.certen', 'config.json'), 'utf8'));
+      // Left in place, `certen init` would keep offering to reuse an identity the gateway no
+      // longer tracks.
+      expect((after.identities ?? []).some((i: { id: string }) => i.id === ID)).toBe(false);
+    } finally {
+      await stub.close();
+    }
+  });
+});
+
 describe('certen init is idempotent against real quota', () => {
   function initGateway(): Handler {
     return (req, res, body) => {

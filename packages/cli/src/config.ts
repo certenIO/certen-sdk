@@ -52,6 +52,20 @@ export function lastIdentity(): { id: string; adi_url: string; chains: string[] 
   return all.length > 0 ? all[all.length - 1] : undefined;
 }
 
+/**
+ * Drop a retired identity from the local record.
+ *
+ * Without this, `certen init` would keep offering to reuse an identity the gateway no longer
+ * tracks. It recovers on its own — the lookup 404s and it creates a fresh one — but silently
+ * doing the right thing after an avoidable round trip is worse than not recording a dead id.
+ */
+export function forgetIdentity(id: string): void {
+  const cfg = readConfig();
+  if (!cfg.identities?.some((i) => i.id === id)) return;
+  cfg.identities = cfg.identities.filter((i) => i.id !== id);
+  writeConfig(cfg);
+}
+
 export function readConfig(): CliConfig {
   if (!existsSync(CONFIG_FILE)) {
     return {};

@@ -140,17 +140,36 @@ Full detail: [verify-a-proof.md](verify-a-proof.md).
 
 ---
 
-## The one silent failure to know about
+## When an intent stalls at `anchoring`
 
-An abstract account with no gas.
+`anchoring` means the authorization is done — written to Accumulate and anchored — and the
+execution leg on the destination chain has not completed. There are **two** reasons it can sit
+there, and they need different responses.
 
-A value transfer from an empty abstract account is accepted, signed and submitted — every step
-reports success — and then parks at `anchoring` forever, because the execution leg cannot run on
-chain. Nothing in any API response says so.
+**1. The abstract account has no gas.** The intent is accepted, signed and submitted — every step
+reports success — and then parks forever, because the execution cannot pay for itself. Nothing in
+any API response says so.
 
 The CLI and the SDK both refuse before submitting, and name the faucet. `--force` (CLI) and
-`skipFundingCheck: true` (SDK) override it. `certen doctor` reports it as a warning rather than a
-failure, because a contract call that forwards no value is unaffected.
+`skipFundingCheck: true` (SDK) override it. `certen doctor` reports an empty account as a warning
+rather than a failure, because a call forwarding no value is unaffected.
+
+**2. Nothing is executing.** The authorization anchored correctly and no executor picked it up.
+Observed in practice on a deployment where the gateway was healthy and the cross-chain executor was
+not running at all.
+
+Tell them apart without guessing:
+
+```bash
+certen proof get <intent-id>     # anchored: true  → the authorization is fine
+```
+
+Then read the destination chain. If the receipt is anchored and the funded account shows no
+execution and no state change, the authorization half succeeded and the execution half never ran —
+which is an infrastructure question, not something to fix in your integration.
+
+This is exactly the split `certen proof verify` reports, and why it refuses to call a fetched proof
+"verified": inclusion can be established from the receipt, **outcome cannot**.
 
 ---
 

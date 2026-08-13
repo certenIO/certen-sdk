@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CertenClient } from '@certen.io/sdk';
 import type { Identity, IdentityResponse } from '@certen.io/sdk';
-import { getApiKey, getApiUrl, getOutputFormat, rememberIdentity } from '../config.js';
+import { getApiKey, getApiUrl, getOutputFormat, rememberIdentity, forgetIdentity } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain, assertChains } from '../chains.js';
@@ -221,6 +221,35 @@ export function registerIdentityCommands(program: Command): void {
         hint('Whether this identity can sign is UNKNOWN — its on-chain key page could not be read.');
         hint('Treat it as unusable until that resolves.');
       }
+    });
+
+  identity
+    .command('retire <id>')
+    .description('Retire an identity, freeing the org quota slot it occupies')
+    .requiredOption('--yes', 'Confirm. There is no prompt — see below')
+    .action(async (id: string) => {
+      // No y/N prompt: the required --yes IS the confirmation, matching `keys delete`. An identity
+      // that a live integration depends on should not be retirable by an accidental Enter.
+      const client = await getClient();
+
+      // Resolved first so the confirmation message names what is being retired. An id pasted from
+      // the wrong terminal is the mistake worth catching, and it is invisible until something says
+      // the ADI out loud.
+      const before = await client.identity.get(id).then((r) => r.identity).catch(() => null);
+
+      const result = await client.identity.retire(id);
+      // Dropped from the local record too, so `certen init` does not offer to reuse it.
+      forgetIdentity(id);
+      printOutput(result as unknown as Record<string, unknown>);
+
+      if (isJsonMode()) return;
+      human('');
+      human(`  Retired ${before?.adi_url ?? id}. The org quota slot is free.`);
+      human('');
+      // The distinction people get wrong, and the one that matters if they were retiring for
+      // security reasons rather than housekeeping.
+      human('  This is a soft delete INSIDE CERTEN. The on-chain ADI, its key book and its key page');
+      human('  still exist on Accumulate and are untouched. Retiring is not a way to revoke a key.');
     });
 
   identity
