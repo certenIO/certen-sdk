@@ -275,29 +275,45 @@ export interface CreateTransactionResponse {
   signing_mode?: 'external' | 'provider';
   /** Absent in provider mode — there is nothing for you to sign. */
   signing_data?: IntentSigningData;
-  submit_url?: string;
-  tx_hash?: string;
-  proof_id?: string;
+  submit_url?: string | null;
+  /**
+   * Null on an idempotent replay of an intent that has not been submitted yet — the echo carries
+   * the stored row, and these columns are null until the transaction reaches Accumulate.
+   */
+  tx_hash?: string | null;
+  proof_id?: string | null;
   /** True when this is an idempotent replay echoing the original intent. */
   idempotent?: boolean;
 }
 
-/** Response to `GET /v1/transaction/{id}`. */
+/**
+ * Response to `GET /v1/transaction/{id}`.
+ *
+ * The `| null` on several fields is not defensive typing. The gateway declared them
+ * `type: 'string'` in its response schema, and fast-json-stringify coerces a null to `""` rather
+ * than rejecting it — so a transaction with no proof reported `proof_id: ""`, on all 205 intents in
+ * the production table. The gateway now declares those fields nullable and returns a real null, and
+ * these types say so. A caller writing `tx.proof_id != null` gets the right answer on both, which
+ * was not true of `""`.
+ */
 export interface TransactionResponse {
   intent_id: string;
   identity_id: string;
   status: string;
   intent_type?: string;
-  accum_tx_hash?: string;
-  proof_id?: string;
-  proof_bundle_url?: string;
+  /** Null until the intent has been submitted to Accumulate. */
+  accum_tx_hash?: string | null;
+  /** Null until the proof cycle completes. Absent is the same as null here. */
+  proof_id?: string | null;
+  proof_bundle_url?: string | null;
   error_message?: string | null;
   created_at: string;
   updated_at?: string;
-  completed_at?: string;
+  /** Null while the transaction is still in flight — the gateway has always sent a real null here. */
+  completed_at?: string | null;
   proof?: {
     id: string;
-    bundle_url?: string;
+    bundle_url?: string | null;
     layers?: unknown;
     governance?: unknown;
     attestations?: unknown;
