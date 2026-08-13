@@ -312,9 +312,9 @@ Response 201 — Intent created. External mode returns signing_data + submit_url
   - `status`: string
   - `signing_mode`: "external" | "provider"
   - `signing_data`: { request_id, transaction_hash, hash_to_sign }
-  - `submit_url`: string
-  - `tx_hash`: string
-  - `proof_id`: string
+  - `submit_url`: null,string
+  - `tx_hash`: null,string
+  - `proof_id`: null,string
   - `idempotent`: boolean
 
 POST /v1/transaction/{id}/signature — Submit signature for a transaction intent
@@ -332,7 +332,7 @@ Request body:
 Response 200 — Signature accepted and the signed transaction was submitted to Accumulate:
   - `intent_id`: string
   - `status`: string
-  - `tx_hash`: string
+  - `tx_hash`: null,string
 
 #### certen.execute.transfer()
 
@@ -362,9 +362,9 @@ Response 201 — Intent created. External mode returns signing_data + submit_url
   - `status`: string
   - `signing_mode`: "external" | "provider"
   - `signing_data`: { request_id, transaction_hash, hash_to_sign }
-  - `submit_url`: string
-  - `tx_hash`: string
-  - `proof_id`: string
+  - `submit_url`: null,string
+  - `tx_hash`: null,string
+  - `proof_id`: null,string
   - `idempotent`: boolean
 
 POST /v1/transaction/{id}/signature — Submit signature for a transaction intent
@@ -382,7 +382,7 @@ Request body:
 Response 200 — Signature accepted and the signed transaction was submitted to Accumulate:
   - `intent_id`: string
   - `status`: string
-  - `tx_hash`: string
+  - `tx_hash`: null,string
 
 #### certen.execute.cosign()
 
@@ -448,10 +448,10 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `identity_id`: string
   - `status`: string
   - `intent_type`: string
-  - `accum_tx_hash`: string
-  - `proof_id`: string
-  - `proof_bundle_url`: string
-  - `error_message`: string
+  - `accum_tx_hash`: null,string
+  - `proof_id`: null,string
+  - `proof_bundle_url`: null,string
+  - `error_message`: null,string
   - `created_at`: any
   - `updated_at`: any
   - `completed_at`: any
@@ -476,10 +476,10 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `identity_id`: string
   - `status`: string
   - `intent_type`: string
-  - `accum_tx_hash`: string
-  - `proof_id`: string
-  - `proof_bundle_url`: string
-  - `error_message`: string
+  - `accum_tx_hash`: null,string
+  - `proof_id`: null,string
+  - `proof_bundle_url`: null,string
+  - `error_message`: null,string
   - `created_at`: any
   - `updated_at`: any
   - `completed_at`: any
@@ -876,9 +876,9 @@ Response 201 — Intent created. External mode returns signing_data + submit_url
   - `status`: string
   - `signing_mode`: "external" | "provider"
   - `signing_data`: { request_id, transaction_hash, hash_to_sign }
-  - `submit_url`: string
-  - `tx_hash`: string
-  - `proof_id`: string
+  - `submit_url`: null,string
+  - `tx_hash`: null,string
+  - `proof_id`: null,string
   - `idempotent`: boolean
 
 #### certen.transaction.submitSignature()
@@ -898,7 +898,7 @@ Request body:
 Response 200 — Signature accepted and the signed transaction was submitted to Accumulate:
   - `intent_id`: string
   - `status`: string
-  - `tx_hash`: string
+  - `tx_hash`: null,string
 
 #### certen.transaction.get()
 
@@ -915,10 +915,10 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `identity_id`: string
   - `status`: string
   - `intent_type`: string
-  - `accum_tx_hash`: string
-  - `proof_id`: string
-  - `proof_bundle_url`: string
-  - `error_message`: string
+  - `accum_tx_hash`: null,string
+  - `proof_id`: null,string
+  - `proof_bundle_url`: null,string
+  - `error_message`: null,string
   - `created_at`: any
   - `updated_at`: any
   - `completed_at`: any

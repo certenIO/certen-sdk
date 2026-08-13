@@ -3259,13 +3259,22 @@
                       }
                     },
                     "submit_url": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "tx_hash": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "proof_id": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "idempotent": {
                       "type": "boolean"
@@ -3385,7 +3394,10 @@
                       "type": "string"
                     },
                     "tx_hash": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     }
                   }
                 }
@@ -3496,16 +3508,28 @@
                       "type": "string"
                     },
                     "accum_tx_hash": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "proof_id": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "proof_bundle_url": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "error_message": {
-                      "type": "string"
+                      "type": [
+                        "null",
+                        "string"
+                      ]
                     },
                     "created_at": {},
                     "updated_at": {},
@@ -3518,7 +3542,10 @@
                           "type": "string"
                         },
                         "bundle_url": {
-                          "type": "string"
+                          "type": [
+                            "null",
+                            "string"
+                          ]
                         },
                         "layers": {},
                         "governance": {},
@@ -3613,13 +3640,22 @@
                             "type": "string"
                           },
                           "accum_tx_hash": {
-                            "type": "string"
+                            "type": [
+                              "null",
+                              "string"
+                            ]
                           },
                           "proof_id": {
-                            "type": "string"
+                            "type": [
+                              "null",
+                              "string"
+                            ]
                           },
                           "error_message": {
-                            "type": "string"
+                            "type": [
+                              "null",
+                              "string"
+                            ]
                           },
                           "created_at": {},
                           "updated_at": {},
