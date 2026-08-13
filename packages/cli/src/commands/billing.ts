@@ -136,7 +136,7 @@ export function registerBillingCommands(program: Command): void {
       });
 
       printOutput({
-        quote_id: q.id,
+        quote_id: q.quote_id,
         chain: q.chain,
         proof_class: q.proof_class,
         leg_count: q.leg_count,
@@ -172,7 +172,7 @@ export function registerBillingCommands(program: Command): void {
         human('');
       }
 
-      hint(`Lock this price: pass quote_id=${q.id} on the transaction (expires ${q.expires_at}).`);
+      hint(`Lock this price: pass quote_id=${q.quote_id} on the transaction (expires ${q.expires_at}).`);
     });
 
   program
@@ -180,6 +180,11 @@ export function registerBillingCommands(program: Command): void {
     .argument('<amount>', 'Amount in USD to send, e.g. 25 or 25.50')
     .description('Get payment details for adding funds, and wait until they are credited')
     .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia')
+    // `--wait` is accepted although waiting is already the default, because every other
+    // long-running command (`identity create`, `tx create`, `call`) takes it. Someone who learned
+    // the flag there types it here and, without this, meets "unknown option" on a command that was
+    // about to do exactly what they asked.
+    .option('--wait', 'Wait for the deposit to be credited (the default)')
     .option('--no-wait', 'Print the payment details and exit instead of waiting')
     .option('--timeout <minutes>', 'How long to wait for the deposit', '60')
     // Scripted callers legitimately want a different cadence — a CI job funding a
@@ -266,7 +271,11 @@ export function registerBillingCommands(program: Command): void {
         human('');
       }
 
-      if (!opts.wait) {
+      // `opts.wait !== false`, not `!opts.wait`. Declaring BOTH `--wait` and `--no-wait` makes
+      // commander default the value to undefined rather than true, so the plain `!` test silently
+      // stopped this command waiting at all — it printed the payment details and exited 0 on a
+      // deposit nobody was watching. Caught by the expiry case in test/billing.test.ts.
+      if (opts.wait === false) {
         hint('certen fund --no-wait was used; check later with certen balance');
         return;
       }

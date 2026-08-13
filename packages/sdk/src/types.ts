@@ -617,7 +617,17 @@ export interface BalanceResponse {
 
 /** A price, fixed at a moment, from published inputs. Free to ask for. */
 export interface QuoteResponse {
-  id: string;
+  /**
+   * The id to pass back as `quote_id` to lock this price.
+   *
+   * The wire field is `quote_id`, not `id`. This type declared `id`, so every read of it was
+   * `undefined` — `certen quote` printed an empty id and then advised passing it, which is the one
+   * thing a quote exists to enable. `id` is kept as an optional alias so any caller that already
+   * reads it keeps compiling, but `quote_id` is the field the gateway actually sends.
+   */
+  quote_id: string;
+  /** @deprecated The gateway sends `quote_id`. Always undefined in practice. */
+  id?: string;
   sku: string;
   chain: string;
   chains?: string[] | null;
@@ -680,6 +690,27 @@ export interface DepositTarget {
   /** Null when no amount was supplied — nothing was opened. */
   deposit_intent: DepositIntent | null;
   note: string;
+}
+
+/**
+ * A payment the gateway has seen and, usually, credited.
+ *
+ * `attribution` says HOW it was credited: `registered_address` means the sending wallet is a
+ * known payer for the organization, and the payment never needed a deposit intent at all.
+ */
+export interface PaymentRecord {
+  id?: string;
+  rail?: string;
+  status?: string;
+  amount_usd?: string;
+  chain?: string;
+  token_symbol?: string;
+  from_address?: string;
+  tx_hash?: string;
+  confirmations?: number;
+  attribution?: string;
+  created_at?: string;
+  [key: string]: unknown;
 }
 
 export interface DepositIntentStatus {

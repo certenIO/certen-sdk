@@ -5,6 +5,7 @@ import type {
   ObligationsResponse,
   DepositTarget,
   DepositIntentStatus,
+  PaymentRecord,
 } from '../types.js';
 
 /**
@@ -94,6 +95,19 @@ export class BillingResource {
    * same window moves the balance too, so inferring from it reports the wrong
    * payment as matched.
    */
+  /**
+   * Payments the gateway has seen, most recent first.
+   *
+   * Distinct from a deposit INTENT. A payment can be credited without ever matching an intent —
+   * see `waitForPayment` — so this is the record that says whether money actually arrived.
+   */
+  async payments(params: { limit?: number } = {}): Promise<{ payments: PaymentRecord[] }> {
+    const { data } = await this.http.get('/v1/billing/payments', {
+      params: { limit: params.limit ?? 10 },
+    });
+    return data;
+  }
+
   async payment(reference: string): Promise<DepositIntentStatus> {
     const { data } = await this.http.get(
       `/v1/billing/deposits/${encodeURIComponent(reference)}`,
@@ -107,6 +121,20 @@ export class BillingResource {
    * Returns the terminal status rather than throwing on expiry — an expired
    * payment is an ordinary outcome the caller should report, not an error. Only a
    * genuine transport or auth failure throws.
+   *
+   * **It watches the payment feed as well as the intent, and that is not belt-and-braces.** The
+   * gateway has two attribution paths: matching a deposit intent by exact amount, and recognising
+   * a REGISTERED payer address. When the sending wallet is registered, the payment is credited
+   * within seconds by address and the intent it was opened against is never touched — it stays
+   * `open` until it expires.
+   *
+   * Watching only the intent therefore reported "not credited" on money that had already arrived,
+   * after making the caller wait the full hour for it. Observed live: 1 USDC credited in seconds
+   * with `attribution: registered_address`, while the intent sat `open` with `matched_at: null`.
+   *
+   * On that path the returned status is synthesised with `status: 'matched'` and the credited
+   * payment's id, because from the caller's point of view the money arrived — which is the
+   * question they asked.
    */
   async waitForPayment(
     reference: string,
@@ -120,13 +148,51 @@ export class BillingResource {
     const timeoutMs = opts.timeoutMs ?? 60 * 60 * 1_000;
     const deadline = Date.now() + timeoutMs;
 
+    // Payments already credited before this wait started are not evidence for it. Anything at or
+    // after this instant is.
+    const since = Date.now();
+
     for (;;) {
       const status = await this.payment(reference);
       opts.onPoll?.(status);
       if (status.status !== 'open') return status;
+
+      const credited = await this.creditedSince(since, status.amount_usd);
+      if (credited) {
+        const matched: DepositIntentStatus = {
+          ...status,
+          status: 'matched',
+          matched_at: credited.created_at ?? new Date().toISOString(),
+          payment_id: credited.id ?? null,
+        };
+        opts.onPoll?.(matched);
+        return matched;
+      }
+
       if (new Date(status.expires_at).getTime() <= Date.now()) return status;
       if (Date.now() >= deadline) return status;
       await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+
+  /**
+   * A credited payment of this amount that arrived after `since`, if there is one.
+   *
+   * Returns null on any failure: an unavailable payments feed must never turn a wait that would
+   * otherwise have succeeded into an error, and the intent poll above remains the primary signal.
+   */
+  private async creditedSince(since: number, amountUsd: string): Promise<PaymentRecord | null> {
+    try {
+      const { payments } = await this.payments({ limit: 10 });
+      return (payments ?? []).find((p) => {
+        if (p.status !== 'credited') return false;
+        if (String(p.amount_usd) !== String(amountUsd)) return false;
+        const at = Date.parse(String(p.created_at ?? ''));
+        // A missing timestamp cannot be placed in time, so it is not treated as evidence.
+        return Number.isFinite(at) && at >= since - 60_000;
+      }) ?? null;
+    } catch {
+      return null;
     }
   }
 }

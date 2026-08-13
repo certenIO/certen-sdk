@@ -212,9 +212,19 @@ Request body:
   - `chain`: string **required**
   - `amount_usd`: string — Exact amount you will send, for one-off attribution without a registered address.
 
-#### certen.billing.payment()
+#### certen.billing.payments()
 
-Status of a payment you opened.
+Payments the gateway has seen, most recent first.
+
+GET /v1/billing/payments — List payments
+
+Payments received for this organization across every rail (stablecoin deposits, card, wire). A payment moves pending -> confirmed -> credited; only `credited` payments have moved the balance. Requires the billing:read scope.
+
+Query parameters:
+  - `limit`: integer
+  - `offset`: integer
+
+#### certen.billing.payment()
 
 GET /v1/billing/deposits/{reference} — Check a one-time payment
 
@@ -932,7 +942,7 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 39 of the gateway's 116 operations. The rest are reachable only by
+The SDK wraps 40 of the gateway's 116 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -993,7 +1003,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `GET /reference`
   - `GET /v1/billing/deposit-addresses` — List registered deposit addresses
   - `GET /v1/billing/ledger` — List ledger entries
-  - `GET /v1/billing/payments` — List payments
   - `GET /v1/billing/receipts` — List receipts
   - `GET /v1/billing/receipts/{id}` — Get a receipt with its signature, log proof, and computation
   - `GET /v1/billing/receipts/{id}/proof` — Get the transparency-log inclusion proof for a receipt

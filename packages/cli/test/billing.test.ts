@@ -250,3 +250,20 @@ describe('certen fund: waiting', () => {
   });
 
 });
+
+describe('certen fund: flag surface', () => {
+  it('accepts --wait even though waiting is already the default', async () => {
+    // Every other long-running command takes `--wait`. Rejecting it here met someone who had
+    // learned the flag elsewhere with "unknown option", on a command that was about to do exactly
+    // what they asked. Pointed at the discard port so nothing is opened: reaching the network at
+    // all proves the flag parsed.
+    const r = await certen(['--json', 'fund', '1', '--chain', 'base-sepolia', '--wait']);
+    expect(r.code).not.toBe(2);
+    expect(r.stdout).not.toContain('USAGE_ERROR');
+  });
+
+  it('still rejects a genuinely unknown flag', async () => {
+    const r = await certen(['--json', 'fund', '1', '--chain', 'base-sepolia', '--wiat']);
+    expect(r.code).toBe(2);
+  });
+});

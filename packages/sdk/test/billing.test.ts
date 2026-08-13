@@ -98,15 +98,22 @@ describe('billing.payment', () => {
 describe('billing.waitForPayment', () => {
   it('polls until the payment is matched', async () => {
     const expires = new Date(Date.now() + 3_600_000).toISOString();
-    const srv = await startServer((_req, res, n) => json(res, 200, {
-      intent: {
-        reference: 'dep_abc',
-        status: n >= 3 ? 'matched' : 'open',
-        amount_usd: '25.000000', expires_at: expires,
-        matched_at: n >= 3 ? new Date().toISOString() : null,
-        payment_id: n >= 3 ? 'pay_1' : null,
-      },
-    }));
+    // Counts INTENT polls only: `waitForPayment` also reads the payments feed each tick, and a
+    // shared counter made the response sequence depend on how many endpoints it happened to call.
+    let polls = 0;
+    const srv = await startServer((req, res) => {
+      if (!(req.url ?? '').includes('/deposits/')) return json(res, 200, { payments: [] });
+      polls += 1;
+      return json(res, 200, {
+        intent: {
+          reference: 'dep_abc',
+          status: polls >= 3 ? 'matched' : 'open',
+          amount_usd: '25.000000', expires_at: expires,
+          matched_at: polls >= 3 ? new Date().toISOString() : null,
+          payment_id: polls >= 3 ? 'pay_1' : null,
+        },
+      });
+    });
     try {
       const seen: string[] = [];
       const final = await client(srv.url).billing.waitForPayment('dep_abc', {
@@ -136,16 +143,21 @@ describe('billing.waitForPayment', () => {
   it('stops once the expiry has passed even while the status still reads open', async () => {
     // The gateway marks intents expired on a sweep, so `open` past its expiry is a
     // normal transient state. Without this the loop would spin to the timeout.
-    const srv = await startServer((_req, res) => json(res, 200, {
-      intent: {
-        reference: 'dep_abc', status: 'open', amount_usd: '25.000000',
-        expires_at: new Date(Date.now() - 1000).toISOString(), matched_at: null, payment_id: null,
-      },
-    }));
+    const srv = await startServer((req, res) => {
+      if (!(req.url ?? '').includes('/deposits/')) return json(res, 200, { payments: [] });
+      return json(res, 200, {
+        intent: {
+          reference: 'dep_abc', status: 'open', amount_usd: '25.000000',
+          expires_at: new Date(Date.now() - 1000).toISOString(), matched_at: null, payment_id: null,
+        },
+      });
+    });
     try {
       const final = await client(srv.url).billing.waitForPayment('dep_abc', { intervalMs: 5 });
       expect(final.status).toBe('open');
-      expect(srv.recorded).toHaveLength(1);
+      // Exactly one INTENT poll — the point is that it does not spin to the timeout. The payments
+      // feed is read alongside it and is not what this case measures.
+      expect(srv.recorded.filter((r) => r.path.includes('/deposits/'))).toHaveLength(1);
     } finally { await srv.close(); }
   });
 
@@ -190,5 +202,144 @@ describe('billing reads', () => {
         ['/v1/billing/balance', '/v1/billing/obligations'],
       );
     } finally { await srv.close(); }
+  });
+});
+
+describe('billing.quote', () => {
+  it('surfaces the id under the name the gateway actually sends', async () => {
+    // The wire field is `quote_id`. The type declared `id`, so every read was undefined: the CLI
+    // printed an empty id and then advised passing it as `quote_id=` — disabling the one thing a
+    // quote exists for, locking the price. Asserted on the real field name so a rename upstream
+    // fails here rather than silently blanking the value again.
+    const s = await startServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        quote_id: 'q-abc-123',
+        sku: 'proof', chain: 'base-sepolia', proof_class: 'on_cadence', leg_count: 1,
+        platform_fee_usd: '0.350000', gas_usd: '0.000000',
+        total_usd: '0.350000', max_total_usd: '0.525000',
+        expires_at: '2026-08-13T09:18:18.486Z',
+      }));
+    });
+    try {
+      const q = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+        .billing.quote({ chain: 'base-sepolia' });
+      expect(q.quote_id).toBe('q-abc-123');
+      expect(q.total_usd).toBe('0.350000');
+    } finally {
+      await s.close();
+    }
+  });
+});
+
+describe('waitForPayment and the registered-address path', () => {
+  /**
+   * Reproduces what happened live. The gateway has two ways to attribute money: matching a deposit
+   * intent by exact amount, and recognising a REGISTERED payer address. On the second path the
+   * payment is credited within seconds and the intent is never touched — it stays `open` until it
+   * expires an hour later.
+   *
+   * Watching only the intent therefore reported "not credited" on money that had already arrived,
+   * after making the caller wait the full hour. Observed: 1 USDC credited with
+   * `attribution: registered_address` while the intent sat `open` with `matched_at: null`.
+   */
+  const OPEN = {
+    intent: {
+      reference: 'dep_x', status: 'open', amount_usd: '1.000000',
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+      matched_at: null, payment_id: null,
+    },
+  };
+
+  it('resolves as matched when the payment credits by registered address', async () => {
+    let polls = 0;
+    const s = await startServer((req, res) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url.startsWith('/v1/billing/deposits/')) {
+        polls += 1;
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(OPEN));
+      }
+      // The payment shows up credited, attributed by address, never touching the intent.
+      return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        payments: [{
+          id: 'pay-1', status: 'credited', amount_usd: '1.000000',
+          attribution: 'registered_address', created_at: new Date().toISOString(),
+        }],
+      }));
+    });
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+        .billing.waitForPayment('dep_x', { intervalMs: 10, timeoutMs: 5_000 });
+      // From the caller's point of view the money arrived, which is the question they asked.
+      expect(out.status).toBe('matched');
+      expect(out.payment_id).toBe('pay-1');
+      expect(polls).toBeLessThan(5);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('ignores a credited payment of a DIFFERENT amount', async () => {
+    const s = await startServer((req, res) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url.startsWith('/v1/billing/deposits/')) {
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+          intent: { ...OPEN.intent, expires_at: new Date(Date.now() + 50).toISOString() },
+        }));
+      }
+      return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        payments: [{ id: 'pay-2', status: 'credited', amount_usd: '25.000000', created_at: new Date().toISOString() }],
+      }));
+    });
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+        .billing.waitForPayment('dep_x', { intervalMs: 10, timeoutMs: 3_000 });
+      // Someone else's deposit must never satisfy this one.
+      expect(out.status).toBe('open');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('does not treat a payment that predates the wait as evidence', async () => {
+    const s = await startServer((req, res) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url.startsWith('/v1/billing/deposits/')) {
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+          intent: { ...OPEN.intent, expires_at: new Date(Date.now() + 50).toISOString() },
+        }));
+      }
+      return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+        payments: [{
+          id: 'pay-old', status: 'credited', amount_usd: '1.000000',
+          created_at: new Date(Date.now() - 86_400_000).toISOString(),
+        }],
+      }));
+    });
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+        .billing.waitForPayment('dep_x', { intervalMs: 10, timeoutMs: 3_000 });
+      expect(out.status).toBe('open');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('an unavailable payments feed never breaks a wait that would otherwise work', async () => {
+    const s = await startServer((req, res) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url.startsWith('/v1/billing/deposits/')) {
+        return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
+          intent: { ...OPEN.intent, status: 'matched', matched_at: new Date().toISOString(), payment_id: 'p9' },
+        }));
+      }
+      return res.writeHead(500, { 'content-type': 'application/json' }).end('{}');
+    });
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+        .billing.waitForPayment('dep_x', { intervalMs: 10, timeoutMs: 3_000 });
+      expect(out.status).toBe('matched');
+    } finally {
+      await s.close();
+    }
   });
 });

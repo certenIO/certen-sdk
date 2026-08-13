@@ -96,7 +96,7 @@ certen doctor                   # names the one thing blocking you
 
 ## Methods
 
-44 methods across 12 resources. Signatures and field-level detail: `llms-full.txt`.
+45 methods across 12 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.createOrg()` — Create organization
@@ -112,7 +112,8 @@ certen doctor                   # names the one thing blocking you
   - `certen.billing.quote()` — Price a piece of work before committing to it.
   - `certen.billing.obligations()` — Pending intents and what they will cost — including `remaining_usd`, the amount that may actually be committed to new work.
   - `certen.billing.openPayment()` — Where to send stablecoin, optionally opening a single-use payment matched on the exact amount.
-  - `certen.billing.payment()` — Status of a payment you opened.
+  - `certen.billing.payments()` — Payments the gateway has seen, most recent first.
+  - `certen.billing.payment()` — Check a one-time payment
 
 **certen.chains**
   - `certen.chains.list()` — Every network in the registry, with contract addresses and explorer links.
@@ -166,6 +167,6 @@ certen doctor                   # names the one thing blocking you
   - `certen.transaction.get()` — Get a transaction intent status
   - `certen.transaction.list()` — List transaction intents
 
-The gateway exposes 116 operations; the SDK wraps 39 of them. Anything not listed
+The gateway exposes 116 operations; the SDK wraps 40 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.
