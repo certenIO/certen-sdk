@@ -55,6 +55,21 @@ describe('tool tiers', () => {
   });
 });
 
+describe('the README describes the server that exists', () => {
+  it('quotes the real tool counts', () => {
+    // These went stale twice — once before the diagnostic tools were added and again when they
+    // were. A number in prose has no way of noticing it is wrong, so it is asserted instead. If
+    // this fails, update the README rather than the expectation.
+    const readme = readFileSync(join(REPO_ROOT, 'packages', 'mcp', 'README.md'), 'utf8');
+    const read = readme.match(/# (\d+) read tools/);
+    const all = readme.match(/# (\d+) tools/);
+    expect(read, 'README states a read-tool count').not.toBeNull();
+    expect(all, 'README states a total tool count').not.toBeNull();
+    expect(Number(read![1])).toBe(READ_TOOLS.length);
+    expect(Number(all![1])).toBe(ALL_TOOLS.length);
+  });
+});
+
 describe('tool invariants', () => {
   it('every mutating tool requires confirm:true', () => {
     for (const t of ALL_TOOLS.filter((x) => x.mutates)) {

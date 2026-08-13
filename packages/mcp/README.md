@@ -39,8 +39,8 @@ registered cannot be called by a confused model, a prompt injection, or a bug. A
 with "please don't call this" in its description can be called by all three.
 
 ```bash
-certen-mcp                              # 8 read tools
-CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 21 tools
+certen-mcp                              # 15 read tools
+CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 28 tools
 ```
 
 Every tool that changes something additionally requires `confirm: true`. Called without it, the tool
