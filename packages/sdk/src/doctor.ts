@@ -76,9 +76,13 @@ const STALL_AFTER_MS = 15 * 60_000;
 /**
  * Numeric EVM chain id → registry slug, for chains where the portfolio may report either.
  *
- * `GET /v1/portfolio` returns `chain_id` as a slug on some chain accounts and as a numeric EVM id
- * on others, in the same response. Anything that compares or de-duplicates on that field must
- * normalize first, or it reports one chain twice and finds no faucet for the numeric copy.
+ * `GET /v1/portfolio` used to return `chain_id` as a slug on some chain accounts and as a numeric
+ * EVM id on others, in the same response. Anything that compares or de-duplicates on that field
+ * had to normalize first, or it reported one chain twice and found no faucet for the numeric copy.
+ *
+ * The gateway now canonicalizes on write and has backfilled the old rows. This is kept because the
+ * SDK is versioned independently of the gateway and may be pointed at an older one — and `doctor`
+ * of all things must not be the command that misreports when talking to an older peer.
  */
 const NUMERIC_CHAIN_IDS: Record<string, string> = {
   11155111: 'ethereum-sepolia',

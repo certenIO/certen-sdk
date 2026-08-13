@@ -49,10 +49,15 @@ export class CertenUnfundedAccountError extends CertenError {
 /**
  * Numeric EVM chain id → registry slug.
  *
- * `GET /v1/portfolio` returns `chain_id` as a slug on some chain accounts and as a numeric EVM id
- * on others, in the same response. Comparing raw strings matched the slug entries and silently
- * skipped the numeric ones — so this guard did nothing on exactly the accounts it was written to
- * protect, until both sides were normalized.
+ * `GET /v1/portfolio` used to return `chain_id` as a slug on some chain accounts and as a numeric
+ * EVM id on others, in the same response, because the gateway stored whatever the caller sent.
+ * Comparing raw strings matched the slug entries and silently skipped the numeric ones — so this
+ * guard did nothing on exactly the accounts it was written to protect.
+ *
+ * The gateway now canonicalizes on write and has backfilled the old rows, so a current gateway
+ * returns slugs only. This stays anyway, and not out of superstition: the SDK is versioned
+ * independently and is routinely pointed at a gateway older than itself. A guard that silently
+ * stops guarding against an older peer is worse than no guard, because nothing signals the gap.
  */
 const NUMERIC_CHAIN_IDS: Record<string, string> = {
   11155111: 'ethereum-sepolia',

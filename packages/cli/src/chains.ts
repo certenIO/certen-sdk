@@ -59,11 +59,15 @@ export function supportedChains(): readonly string[] {
 /**
  * Numeric EVM chain id → registry slug, for the chains this CLI targets.
  *
- * **This is not a convenience.** `GET /v1/portfolio` returns `chain_id` as a slug for some chain
- * accounts and as a numeric EVM id for others — both spellings appear in the same response, on
- * the same organization. Anything comparing `chain_id` to a slug therefore silently misses every
+ * **This is not a convenience.** `GET /v1/portfolio` used to return `chain_id` as a slug for some
+ * chain accounts and as a numeric EVM id for others — both spellings in the same response, on the
+ * same organization. Anything comparing `chain_id` to a slug therefore silently missed every
  * numeric entry, which is exactly how the unfunded-account guard came to skip the chain it was
  * written to protect.
+ *
+ * The gateway now canonicalizes on write and has backfilled the old rows, so a current gateway
+ * sends slugs only. Kept regardless: the CLI ships on its own cadence and is frequently newer than
+ * the gateway it talks to, and the failure this prevents is silent.
  *
  * The cache below extends this at runtime; the constant is what makes it work offline and on a
  * first run.
