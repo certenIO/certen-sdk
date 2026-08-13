@@ -99,7 +99,7 @@ describe('tool invariants', () => {
   it('a tool that calls more than one endpoint declares every one of them', () => {
     // Enforced by name for the composites that exist, because there is no way to derive the call
     // graph from a closure. If a new composite lands, it belongs in this list.
-    const composites: Record<string, number> = { certen_doctor: 3 };
+    const composites: Record<string, number> = { certen_doctor: 4 };
     for (const [name, count] of Object.entries(composites)) {
       const tool = ALL_TOOLS.find((t) => t.name === name);
       expect(tool, name).toBeDefined();

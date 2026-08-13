@@ -84,6 +84,7 @@ function gateway(over: Record<string, unknown> = {}): (req: http.IncomingMessage
     if (url === '/v1/billing/balance') return json(res, 200, BALANCE);
     if (url === '/v1/billing/obligations') return json(res, 200, OBLIGATIONS);
     if (url === '/v1/portfolio') return json(res, 200, PORTFOLIO);
+    if (url === '/v1/transactions') return json(res, 200, { transactions: [] });
     return json(res, 404, {});
   };
 }
@@ -104,7 +105,7 @@ describe('a healthy setup', () => {
       const report = await client(stub.url).doctor();
       expect(report.ok).toBe(true);
       expect(report.unreachable).toBe(false);
-      expect(report.checks).toHaveLength(6);
+      expect(report.checks).toHaveLength(7);
       expect(report.checks.every((c) => c.status === 'ok')).toBe(true);
     } finally {
       await stub.close();
@@ -119,9 +120,9 @@ describe('it never throws, whatever is broken', () => {
     expect(report.unreachable).toBe(true);
     expect(report.ok).toBe(false);
     // Same length as a healthy run. A caller must not have to branch on how far it got.
-    expect(report.checks).toHaveLength(6);
+    expect(report.checks).toHaveLength(7);
     expect(byName(report.checks, 'gateway reachable').status).toBe('fail');
-    expect(report.checks.filter((c) => c.status === 'skipped')).toHaveLength(5);
+    expect(report.checks.filter((c) => c.status === 'skipped')).toHaveLength(6);
   });
 
   it('returns a report when the credential is rejected', async () => {
@@ -132,7 +133,7 @@ describe('it never throws, whatever is broken', () => {
       const report = await client(stub.url).doctor();
       expect(report.ok).toBe(false);
       expect(byName(report.checks, 'api key').status).toBe('fail');
-      expect(report.checks).toHaveLength(6);
+      expect(report.checks).toHaveLength(7);
     } finally {
       await stub.close();
     }
@@ -274,6 +275,80 @@ describe('the checks that catch silent failures', () => {
       const report = await client(stub.url).doctor();
       expect(report.ok).toBe(false);
       expect(byName(report.checks, 'billing balance').detail).toMatch(/arrears/);
+    } finally {
+      await stub.close();
+    }
+  });
+});
+
+describe('the execution check', () => {
+  const stalledRow = (status: string, minutesAgo: number) => ({
+    intent_id: 'intent-stuck',
+    status,
+    updated_at: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+  });
+
+  it('warns when intents have been awaiting execution too long', async () => {
+    const stub = await startServer(gateway({
+      '/v1/transactions': { transactions: [stalledRow('anchoring', 120)] },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      const check = byName(report.checks, 'intents executing');
+      expect(check.status).toBe('warn');
+      expect(check.detail).toMatch(/awaiting execution/);
+      // Everything the caller controls is fine, so this must not read as their failure.
+      expect(check.detail).toMatch(/not your integration/);
+      expect(report.ok).toBe(true);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('never flags signing_required — that one waits on a HUMAN', async () => {
+    // A multi-signature panel can legitimately sit here for weeks. Flagging it would cry wolf on
+    // the one state that is supposed to sit still.
+    const stub = await startServer(gateway({
+      '/v1/transactions': { transactions: [stalledRow('signing_required', 60 * 24 * 7)] },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      expect(byName(report.checks, 'intents executing').status).toBe('ok');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('does not flag an intent that is merely recent', async () => {
+    // A proof cycle is 60-110s. Anything inside the threshold is working, not stalled.
+    const stub = await startServer(gateway({
+      '/v1/transactions': { transactions: [stalledRow('anchoring', 2)] },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      expect(byName(report.checks, 'intents executing').status).toBe('ok');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('is quiet when there are no intents at all', async () => {
+    const stub = await startServer(gateway());
+    try {
+      expect(byName((await client(stub.url).doctor()).checks, 'intents executing').detail)
+        .toBe('no intents yet');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('names an intent to investigate with', async () => {
+    const stub = await startServer(gateway({
+      '/v1/transactions': { transactions: [stalledRow('anchoring', 90)] },
+    }));
+    try {
+      const check = byName((await client(stub.url).doctor()).checks, 'intents executing');
+      expect(check.fix).toContain('certen proof get intent-stuck');
     } finally {
       await stub.close();
     }

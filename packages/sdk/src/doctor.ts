@@ -45,7 +45,25 @@ const CREDENTIALLED = [
   'abstract accounts funded',
   'billing balance',
   'credit / trial',
+  'intents executing',
 ] as const;
+
+/**
+ * States in which an intent is waiting on the PLATFORM to do something.
+ *
+ * `signing_required` is deliberately absent. That state means the intent is waiting on a human
+ * co-signer, and on a multi-signature panel that legitimately takes hours or weeks — flagging it as
+ * stalled would cry wolf on the one state that is supposed to sit still.
+ */
+const AWAITING_EXECUTION = ['anchoring', 'submitted', 'executing', 'proving'];
+
+/**
+ * How long before "still working" becomes "not working".
+ *
+ * A proof cycle is 60–110 seconds of real validator work and `execute.wait()` budgets 360s. Fifteen
+ * minutes is far enough past both that a queue backlog is not mistaken for a stall.
+ */
+const STALL_AFTER_MS = 15 * 60_000;
 
 /**
  * Numeric EVM chain id → registry slug, for chains where the portfolio may report either.
@@ -71,6 +89,66 @@ function normalizeChain(value: string | number | null | undefined): string {
 function summarize(items: string[], max = 3): string {
   if (items.length <= max) return items.join(', ');
   return `${items.slice(0, max).join(', ')} and ${items.length - max} more`;
+}
+
+/**
+ * Is anything actually EXECUTING?
+ *
+ * The check that exists because everything above it can pass while the platform still does no work.
+ * A proof-gated intent has two halves: the authorization, which the gateway writes to Accumulate and
+ * anchors, and the execution on the destination chain. The first can succeed perfectly while the
+ * second never runs — observed on a deployment where the gateway was healthy, the account was
+ * funded, the authorization anchored correctly, and no cross-chain executor was deployed at all.
+ *
+ * Every other check reported a clean bill of health, because every other check was true.
+ */
+async function executionCheck(client: CertenClient): Promise<DoctorCheck> {
+  const list = await client.transaction.list({ limit: 25 }).catch(() => null);
+  if (!list) {
+    return { name: 'intents executing', status: 'skipped', detail: 'could not list transactions' };
+  }
+
+  const rows = ((list as unknown as { transactions?: Array<Record<string, unknown>> }).transactions
+    ?? (list as unknown as { intents?: Array<Record<string, unknown>> }).intents
+    ?? []);
+  if (rows.length === 0) {
+    return { name: 'intents executing', status: 'ok', detail: 'no intents yet' };
+  }
+
+  const now = Date.now();
+  const stalled = rows.filter((r) => {
+    if (!AWAITING_EXECUTION.includes(String(r.status ?? ''))) return false;
+    const since = Date.parse(String(r.updated_at ?? r.created_at ?? ''));
+    return Number.isFinite(since) && now - since > STALL_AFTER_MS;
+  });
+
+  if (stalled.length === 0) {
+    return {
+      name: 'intents executing',
+      status: 'ok',
+      detail: `${rows.length} recent intent(s), none stalled`,
+    };
+  }
+
+  const oldest = stalled
+    .map((r) => now - Date.parse(String(r.updated_at ?? r.created_at)))
+    .sort((a, b) => b - a)[0];
+  const hours = Math.round(oldest / 3_600_000);
+  const age = hours >= 1 ? `${hours}h` : `${Math.round(oldest / 60_000)}m`;
+  const example = String(stalled[0].intent_id ?? stalled[0].id ?? '<id>');
+
+  return {
+    name: 'intents executing',
+    // A warning, not a failure: the caller's own setup is fine, and saying "you have a problem"
+    // about someone else's infrastructure would be wrong. But it must be visible, because until it
+    // resolves no proof-gated call this account makes will complete.
+    status: 'warn',
+    detail: `${stalled.length} intent(s) awaiting execution for over ${age}. The authorization `
+      + 'anchored; the execution leg has not completed. This is usually the cross-chain executor, '
+      + 'not your integration.',
+    fix: `certen proof get ${example} — if anchored:true and the destination chain shows no change, `
+      + 'the authorization succeeded and execution never ran.',
+  };
 }
 
 /**
@@ -214,6 +292,7 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
   if (!balance) {
     checks.push({ name: 'billing balance', status: 'skipped', detail: 'balance unavailable' });
     checks.push({ name: 'credit / trial', status: 'skipped', detail: 'balance unavailable' });
+    checks.push(await executionCheck(client));
     return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
   }
 
@@ -271,6 +350,8 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
         detail: `${credit.label ?? credit.kind}${days !== null ? `, ${days} day(s) left` : ''}`,
       });
   }
+
+  checks.push(await executionCheck(client));
 
   return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
 }

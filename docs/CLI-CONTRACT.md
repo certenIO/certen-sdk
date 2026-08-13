@@ -51,6 +51,34 @@ Failure:
 - **Everything else goes to stderr** — confirmations, hints, warnings, commander's own parse errors.
   stderr is free-form and is not a contract.
 
+#### A failure that still produced a result carries it
+
+Some commands fail and nonetheless have an answer worth handing over. `certen doctor` is the case
+this exists for: the diagnosis ran successfully and every check it performed is exactly what an
+automated caller wants — but "a check failed" must still be a non-zero exit, or CI treats a broken
+setup as a working one. Discarding the checks in order to signal the failure would make the machine
+interface strictly less useful than the human one.
+
+So the failure envelope may carry an additive `details` object:
+
+```json
+{ "ok": false, "error": {
+  "code": "DOCTOR_CHECKS_FAILED", "message": "2 check(s) failed: api key, local signing key",
+  "retryable": false,
+  "details": { "checks": [ { "name": "gateway reachable", "status": "ok", "detail": "…" } ] }
+} }
+```
+
+- `details` appears only when a command has something structured to report alongside the failure.
+- Its **shape is per-command**, documented by that command, and is not part of this contract beyond
+  the guarantee that it is a JSON object.
+- It is additive: a consumer that ignores unknown keys is unaffected. This is the same property the
+  402 payment fields below rely on.
+
+`certen doctor` is currently the only command that uses it. Its `details.checks` is the same array
+`--json doctor` returns under `data.checks` on a successful run, so a caller can read one shape
+regardless of outcome.
+
 #### Payment failures carry the fix
 
 A refusal for lack of funds (`status: 402`, code `PAYMENT_REQUIRED` or

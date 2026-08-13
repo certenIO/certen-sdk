@@ -288,7 +288,7 @@ const READ_TOOLS: ToolDef[] = [
     tier: 'read',
     mutates: false,
     endpoint: 'GET /v1/chains',
-    alsoReaches: ['GET /v1/billing/balance', 'GET /v1/billing/obligations', 'GET /v1/portfolio'],
+    alsoReaches: ['GET /v1/billing/balance', 'GET /v1/billing/obligations', 'GET /v1/portfolio', 'GET /v1/transactions'],
     description:
       'Diagnose this setup and report what is blocking it, as an ordered list of checks. Run this '
       + 'FIRST when something is failing for a reason that is not obvious — most of what it catches '

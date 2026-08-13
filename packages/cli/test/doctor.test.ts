@@ -169,6 +169,7 @@ function healthy(over: Record<string, unknown> = {}): Handler {
     if (url === '/v1/billing/balance') return json(res, 200, BALANCE);
     if (url === '/v1/billing/obligations') return json(res, 200, OBLIGATIONS);
     if (url === '/v1/portfolio') return json(res, 200, PORTFOLIO);
+    if (url === '/v1/transactions') return json(res, 200, { transactions: [] });
     if (url === '/v1/admin/usage') return json(res, 403, { error: { message: 'no scope' } });
     return json(res, 404, {});
   };
@@ -231,7 +232,7 @@ describe('certen doctor', () => {
       expect(r.code).toBe(0);
       const data = soleJson(r.stdout).data as { ok: boolean; checks: Array<{ name: string; status: string }> };
       expect(data.ok).toBe(true);
-      expect(data.checks).toHaveLength(7);
+      expect(data.checks).toHaveLength(8);
       expect(data.checks.every((c) => c.status === 'ok' || c.status === 'warn')).toBe(true);
     } finally {
       await stub.close();
@@ -248,8 +249,8 @@ describe('certen doctor', () => {
       expect(r.code).toBe(1);
       const checks = (soleJson(r.stdout).error as { details: { checks: Array<{ name: string; status: string }> } })
         .details.checks;
-      expect(checks).toHaveLength(7);
-      expect(checks.filter((c) => c.status === 'skipped')).toHaveLength(4);
+      expect(checks).toHaveLength(8);
+      expect(checks.filter((c) => c.status === 'skipped')).toHaveLength(5);
     } finally {
       await stub.close();
     }
@@ -264,7 +265,7 @@ describe('certen doctor', () => {
       // The whole point of the `details` key: a caller must not have to choose between knowing
       // that something is broken and knowing what.
       expect(err.details?.checks).toBeDefined();
-      expect((err.details!.checks as unknown[]).length).toBe(7);
+      expect((err.details!.checks as unknown[]).length).toBe(8);
     } finally {
       await stub.close();
     }
