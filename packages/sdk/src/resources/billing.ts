@@ -122,19 +122,24 @@ export class BillingResource {
    * payment is an ordinary outcome the caller should report, not an error. Only a
    * genuine transport or auth failure throws.
    *
-   * **It watches the payment feed as well as the intent, and that is not belt-and-braces.** The
-   * gateway has two attribution paths: matching a deposit intent by exact amount, and recognising
-   * a REGISTERED payer address. When the sending wallet is registered, the payment is credited
-   * within seconds by address and the intent it was opened against is never touched — it stays
-   * `open` until it expires.
+   * **It watches the payment feed as well as the intent, and that is not belt-and-braces.**
    *
-   * Watching only the intent therefore reported "not credited" on money that had already arrived,
-   * after making the caller wait the full hour for it. Observed live: 1 USDC credited in seconds
-   * with `attribution: registered_address`, while the intent sat `open` with `matched_at: null`.
+   * It began as a workaround for a gateway bug: the gateway closed a deposit intent only when the
+   * payment had been attributed BY that intent, and since attribution tries a registered payer
+   * address first — and the funding flow registers the sender — a paid intent was never closed.
+   * Observed live: 1 USDC credited in seconds with `attribution: registered_address` while the
+   * intent sat `open` with `matched_at: null`, until it expired an hour later. Watching only the
+   * intent reported "not credited" on money that had already arrived. The gateway now closes the
+   * intent on credit regardless of how the org was identified.
+   *
+   * The feed watch stays, for two reasons that outlive that bug. The SDK is versioned separately
+   * and is regularly pointed at an older gateway, where the old behaviour is still live. And the
+   * intent can only ever report money that matched it: a deposit for the wrong amount, or one sent
+   * before the intent was opened, still credits the balance and still answers the caller's actual
+   * question — did my money arrive.
    *
    * On that path the returned status is synthesised with `status: 'matched'` and the credited
-   * payment's id, because from the caller's point of view the money arrived — which is the
-   * question they asked.
+   * payment's id, because from the caller's point of view the money arrived.
    */
   async waitForPayment(
     reference: string,
