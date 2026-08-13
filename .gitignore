@@ -10,5 +10,13 @@ packages/mcp/bundled/
 # with NPM_TOKEN as a repository secret; see .github/workflows/release.yml
 .npmrc
 
+# Nor an .env. Nothing here reads one today, which is exactly why it was never ignored — and why a
+# single `git add -A` after someone drops one in would have committed it. The gateway repo had its
+# `.env` entry quietly REMOVED by an injected commit in June 2026 and went 37 days uncovered; this
+# is the same hole, closed before anything falls into it.
+.env
+.env.*
+!.env.example
+
 *.log
 .DS_Store
