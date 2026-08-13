@@ -29,11 +29,14 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `npm test --workspace packages/sdk` | SDK — 83 tests | no |
-| `npm test --workspace packages/cli` | CLI — 40 tests (14 are CLI-contract conformance) | no |
-| `npm test --workspace packages/mcp` | MCP — 37 tests | no |
-| `npm test` | all three via `--workspaces` | no |
-| `npm run typecheck` | `tsc --noEmit` in all three | no |
+| `node scripts/test-all.mjs` | all three, one vitest process — 409 tests | no |
+| `node scripts/typecheck-all.mjs` | `tsc --noEmit` in all three | no |
+| `node scripts/build-all.mjs` | compiles all three, sdk first | no |
+| `npm test` / `npm run typecheck` / `npm run build` | delegate to the above; **do not trust on Windows** | no |
+| `npm test --workspace packages/<pkg>` | one package, as CI invokes it | no |
+
+Prefer the `node scripts/*` forms locally. They return the true exit code and cannot be abandoned
+partway — see the Windows note below.
 
 Nothing in the suite reaches the network or needs an API key. If a test wants either, that is a bug in
 the test.
@@ -45,30 +48,45 @@ passed, which makes the root command look like a failure and run only the SDK su
 suite by name for exactly this reason. If `npm test` at the root reports a failure with no failing
 test in the output, this is what you are looking at.
 
-**On Windows, `npm run <script>` exits 1 even when the script succeeded.** Measured: a four-line
-script that busy-waits and calls `process.exit(0)` returns 0 from npm when it finishes in under a
-second and 1 when it takes more than about two — on npm 10.9.2 and npm 11 alike, from PowerShell and
-from Git Bash. `node <script>` always returns the right code. It is not npm config, `script-shell`,
-`foreground-scripts`, the update notifier, audit or fund; it is something about this environment, and
-nothing in this repo can correct it.
+**On Windows, `npm run <script>` ABANDONS anything that takes more than a couple of seconds.** This
+is measured, not inferred. Driving npm directly from node — no shell, no wrapper — with a script that
+sleeps for a known time and then exits 0:
 
-So on Windows: **do not read npm's exit code. Read what the command printed and what it produced.**
-`npm run build` prints `all packages built` and leaves three populated `dist/` directories when it
-worked, whatever it then claims. The same goes for `npm test` — vitest's own summary is the answer,
-not npm's status. CI runs on Linux and is unaffected.
+| child sleeps | npm returned after | npm status | child had finished |
+|---|---|---|---|
+| 1000ms | 4057ms | 0 | yes |
+| 4000ms | 2548ms | 1 | **no** |
+| 8000ms | 3371ms | 1 | **no** |
 
-Under some Windows shells npm additionally returns BEFORE the script finishes, so a check run
-immediately afterwards sees a half-written `dist/`. If a test run fails in bulk with import or type
-errors, confirm all three `dist/` directories are populated before believing any of it — and prefer
-`node scripts/build-all.mjs`, which is synchronous and returns the true exit code.
+npm gives up ~2.5–4s after it starts, regardless of the child. A fast script finishes inside that
+window and reports correctly; a slow one is left running while npm returns 1. Its own log stops at
+the script banner — it never reaches its `verbose exit` epilogue. Same on npm 10.9.2 and npm 11, from
+PowerShell and from Git Bash. It is not npm config, `script-shell`, `foreground-scripts`, the update
+notifier, audit, or fund; each was tested. Defender has no ASR rules and logged no detections.
 
-(The per-package scripts used to be `node -e "rmSync('dist')" && tsc`. The `&&` never ran its second
-command under Windows npm, so `npm run build` deleted `dist/` and compiled nothing, leaving the
-package unimportable. The root script was `npm run build --workspaces`, which stops at the first
-workspace that reports failure — and since every script "failed", it built one package. Both now
-route through `scripts/build-all.mjs`, which spawns `tsc` directly: one level of nesting, never two,
-because npm -> node -> node -> tsc died partway through non-deterministically. Never chain commands
-with `&&` inside an npm script in this repo.)
+So on Windows this is not a cosmetic exit code — **`npm test` can return while vitest is still
+running, and `npm run build` can return mid-compile.** A check made immediately afterwards sees a
+half-written `dist/` and reports failures that have nothing to do with the code.
+
+**Run the node scripts directly. They are synchronous and return the true exit code:**
+
+```
+node scripts/build-all.mjs        # what `npm run build` delegates to
+node scripts/test-all.mjs         # what `npm test` delegates to
+node scripts/typecheck-all.mjs    # what `npm run typecheck` delegates to
+```
+
+CI runs on Linux, where npm behaves, and is unaffected — the npm scripts are kept because that is
+what CI and every other platform invoke.
+
+(Two real bugs lived behind this and are fixed. The per-package build was
+`node -e "rmSync('dist')" && tsc`; the `&&` never ran its second command under Windows npm, so
+`npm run build` deleted `dist/` and compiled nothing, leaving the package unimportable. The root
+scripts were `npm run <x> --workspaces`, which stops at the first workspace reporting failure — and
+since every script "failed", they ran one package and skipped two. Both now route through
+`scripts/*.mjs`, which spawn `tsc`/`vitest` directly: one level of nesting, never two, because
+npm -> node -> node -> tsc died partway through non-deterministically. Never chain commands with
+`&&` inside an npm script in this repo.)
 
 `packages/cli/test/keystore.test.ts` takes ~6 seconds on its own — it runs real scrypt key
 derivation. `conformance.test.ts` takes ~11s because it spawns the built CLI as a subprocess per
