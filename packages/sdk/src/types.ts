@@ -89,8 +89,23 @@ export interface Identity {
   created_at: string;
 }
 
-export interface IdentityResponse {
-  identity: Identity;
+/**
+ * What the identity endpoints return: the identity's own fields, plus the joined sub-resources.
+ *
+ * `extends Identity` rather than `{ identity: Identity }`. The gateway used to nest the identity
+ * under an `identity` key on create, read and update, which made those the odd ones out —
+ * `GET /v1/transaction/{id}` returns its fields bare and nests only the joined `proof`, and most of
+ * the surface does the same. Two shapes for one idea meant a caller had to memorise which reads
+ * were wrapped and which were bare, with no rule available to learn.
+ *
+ * Flattened in the gateway's 2026-08 break, taken while there were no external integrators — the
+ * only moment it is cheap. `governance`, `balances` and `pending` stay nested, because that IS the
+ * convention: a response carries its own fields bare and names anything joined onto it.
+ *
+ * **Migrating:** `result.identity.id` becomes `result.id`. If you need the identity alone, it is
+ * structurally the same object — `const identity: Identity = result`.
+ */
+export interface IdentityResponse extends Identity {
   signing_mode?: string;
   signing_provider?: unknown;
   /** Only on create, and only once — the URL stops working after it is read. */
@@ -519,13 +534,18 @@ export interface CreateOrgParams {
   webhookUrl?: string;
 }
 
+/**
+ * The organization's own fields, at the top level.
+ *
+ * Nested under `organization` until the gateway's 2026-08 break — one of four operations that
+ * wrapped their resource while the rest of the surface returned it bare. See the note on
+ * `IdentityResponse`.
+ */
 export interface OrgResponse {
-  organization: {
-    id: string;
-    name: string;
-    plan: string;
-    created_at: string;
-  };
+  id: string;
+  name: string;
+  plan: string;
+  created_at: string;
 }
 
 export interface CreateApiKeyParams {

@@ -91,7 +91,8 @@ export function registerCallCommands(program: Command): void {
 
       // Resolve the identity BEFORE unlocking the signer: if the identity cannot sign, prompting
       // for a passphrase first would be asking for a secret in order to fail.
-      const { identity } = await client.identity.get(opts.identity);
+      // The response IS the identity now — it is no longer nested under an `identity` key.
+      const identity = await client.identity.get(opts.identity);
 
       if (identity.can_sign === false) {
         throw new CliError(

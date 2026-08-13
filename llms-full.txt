@@ -73,7 +73,10 @@ Request body:
   - `webhook_url`: string
 
 Response 201 — Organization created:
-  - `organization`: { id, name, plan, created_at }
+  - `id`: string
+  - `name`: string
+  - `plan`: string
+  - `created_at`: string
 
 #### certen.admin.createApiKey()
 
@@ -156,6 +159,10 @@ Query parameters:
 
 Response 200 — Usage summary for the requested period:
   - `period`: { from, to }
+  - `total_requests`: number
+  - `successful_requests`: number
+  - `by_endpoint`: { endpoint, count }[]
+  - `daily`: { date, count }[]
 
 ### certen.billing
 
@@ -232,6 +239,14 @@ Status of a single payment intent you opened, so a client can wait for the credi
 
 Path parameters:
   - `reference`: string
+
+Response 200 — The deposit intent. Poll until `status` leaves `open`:
+  - `reference`: string
+  - `status`: string — open | matched | expired | cancelled.
+  - `amount_usd`: string
+  - `expires_at`: any
+  - `matched_at`: any
+  - `payment_id`: null,string
 
 ### certen.chains
 
@@ -593,7 +608,15 @@ Request body:
   - `idempotency_key`: string
 
 Response 202 — Identity provisioning ACCEPTED. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and takes minutes on Accumulate; the response returns immediately with identity.status "provisioning" and a status_url. Poll GET /v1/identity/{id} until status becomes "active" (or "error"). For provider signing mode the one-shot mnemonic_retrieval URL is included here:
-  - `identity`: { id, adi_url, book_url, key_page_url, status, chain_accounts, credit_balance, created_at }
+  - `id`: string
+  - `adi_url`: string
+  - `book_url`: string
+  - `key_page_url`: string
+  - `status`: string
+  - `chain_accounts`: object[]
+  - `credit_balance`: number
+  - `created_at`: any
+  - `status_url`: string
   - `signing_mode`: string
   - `signing_provider`: object
   - `mnemonic_retrieval`: { url, expires_in }
@@ -611,7 +634,16 @@ Path parameters:
   - `id`: string
 
 Response 200 — The identity plus any requested enrichments (governance, balances, pending):
-  - `identity`: { id, adi_url, book_url, key_page_url, status, can_sign, error_message, credit_balance, chain_accounts, created_at }
+  - `id`: string
+  - `adi_url`: string
+  - `book_url`: null,string
+  - `key_page_url`: null,string
+  - `status`: string — provisioning | active | error. Creation is async — poll until terminal.
+  - `can_sign`: null,boolean — False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as "do not proceed", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches.
+  - `error_message`: null,string — Why provisioning failed, when status is "error".
+  - `credit_balance`: number
+  - `chain_accounts`: object[]
+  - `created_at`: any
   - `signing_mode`: string
   - `signing_provider`: object
   - `governance`: object
@@ -636,7 +668,16 @@ Request body:
   - `public_key`: string
 
 Response 200 — The updated identity, re-fetched with default enrichments (same shape as GET /v1/identity/:id):
-  - `identity`: { id, adi_url, book_url, key_page_url, status, can_sign, error_message, credit_balance, chain_accounts, created_at }
+  - `id`: string
+  - `adi_url`: string
+  - `book_url`: null,string
+  - `key_page_url`: null,string
+  - `status`: string — provisioning | active | error. Creation is async — poll until terminal.
+  - `can_sign`: null,boolean — False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as "do not proceed", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches.
+  - `error_message`: null,string — Why provisioning failed, when status is "error".
+  - `credit_balance`: number
+  - `chain_accounts`: object[]
+  - `created_at`: any
   - `signing_mode`: string
   - `signing_provider`: object
   - `governance`: object

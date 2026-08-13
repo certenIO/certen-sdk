@@ -107,19 +107,19 @@ const ABSTRACT = '0xe293e95Ec1471155d977448B99B0922C2828cAcB';
 
 /** Numeric chain_id on the account, as the live gateway really returns for ethereum-sepolia. */
 function identityBody(over: Record<string, unknown> = {}): Record<string, unknown> {
+  // Flat: the gateway returns the identity's own fields at the top level, with any joined
+  // sub-resources beside them. It was nested under `identity` until the 2026-08 break.
   return {
-    identity: {
-      id: ID,
-      adi_url: 'acc://v9-195727.acme',
-      book_url: 'acc://v9-195727.acme/book',
-      key_page_url: 'acc://v9-195727.acme/book/1',
-      status: 'active',
-      can_sign: true,
-      credit_balance: 500,
-      chain_accounts: [{ chain_id: '11155111', address: ABSTRACT, status: 'deployed' }],
-      created_at: '2026-01-01T00:00:00Z',
-      ...over,
-    },
+    id: ID,
+    adi_url: 'acc://v9-195727.acme',
+    book_url: 'acc://v9-195727.acme/book',
+    key_page_url: 'acc://v9-195727.acme/book/1',
+    status: 'active',
+    can_sign: true,
+    credit_balance: 500,
+    chain_accounts: [{ chain_id: '11155111', address: ABSTRACT, status: 'deployed' }],
+    created_at: '2026-01-01T00:00:00Z',
+    ...over,
   };
 }
 

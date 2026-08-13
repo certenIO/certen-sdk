@@ -112,7 +112,10 @@ export class BillingResource {
     const { data } = await this.http.get(
       `/v1/billing/deposits/${encodeURIComponent(reference)}`,
     );
-    return data.intent as DepositIntentStatus;
+    // The response IS the intent. It used to arrive under an `intent` key with nothing beside it,
+    // so the wrapper carried no information — the clearest case of the inconsistency the gateway's
+    // 2026-08 break removed.
+    return data as DepositIntentStatus;
   }
 
   /**

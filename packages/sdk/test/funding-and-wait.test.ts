@@ -193,19 +193,18 @@ describe('the funding guard refuses before anything is submitted', () => {
 describe('identity.createAndWait', () => {
   const ID = 'id-9';
   function identity(over: Record<string, unknown>): unknown {
+    // Flat since the 2026-08 break — the identity is no longer nested under an `identity` key.
     return {
-      identity: {
-        id: ID,
-        adi_url: 'acc://mybot.acme',
-        book_url: null,
-        key_page_url: null,
-        status: 'provisioning',
-        can_sign: null,
-        credit_balance: 500,
-        chain_accounts: [],
-        created_at: '2026-01-01T00:00:00Z',
-        ...over,
-      },
+      id: ID,
+      adi_url: 'acc://mybot.acme',
+      book_url: null,
+      key_page_url: null,
+      status: 'provisioning',
+      can_sign: null,
+      credit_balance: 500,
+      chain_accounts: [],
+      created_at: '2026-01-01T00:00:00Z',
+      ...over,
     };
   }
 

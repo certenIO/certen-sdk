@@ -1,5 +1,37 @@
 # Changelog — @certen.io/cli
 
+## 0.7.0 — one response shape
+
+**Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+
+### Breaking — `certen identity` JSON output is no longer wrapped
+
+`certen --json identity get <id>` and `certen --json identity create` returned the identity nested
+under an `identity` key. It is now at the top level, matching every other command and the API.
+
+```bash
+# before
+certen --json identity get "$ID" | jq -r '.data.identity.can_sign'
+# after
+certen --json identity get "$ID" | jq -r '.data.can_sign'
+```
+
+The envelope itself (`{ ok, data }` / `{ ok, error }`) and the exit codes are unchanged, as is table
+output, which was never a contract. See `docs/CLI-CONTRACT.md`.
+
+### Fixed — `certen tx status --json` reports absent fields as `null`
+
+`proof_id`, `proof_bundle_url`, `accum_tx_hash` and `error_message` came back as `""` when the
+gateway had no value, so `.proof_id != null` was true for a transaction with no proof. They are now
+`null`. A script testing `if .proof_id then` is unaffected; one testing `!= null` was wrong before
+and is right now.
+
+### Fixed — `can_sign` distinguishes "cannot sign" from "could not check"
+
+An unreadable key page reported `can_sign: false`. It now reports `null`, and the table prints
+`unknown`. The two have different fixes: one is repairable with `certen identity update
+--public-key`, the other is a retry.
+
 ## 0.6.0 — from eighteen steps to four
 
 ### Added — `certen login` / `certen signup`

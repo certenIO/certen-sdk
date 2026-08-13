@@ -83,10 +83,11 @@ describe('billing.openPayment', () => {
 });
 
 describe('billing.payment', () => {
-  it('unwraps the intent envelope and URL-encodes the reference', async () => {
-    const srv = await startServer((_req, res) => json(res, 200, {
-      intent: { reference: 'dep/a b', status: 'open', amount_usd: '25.000000', expires_at: 'x', matched_at: null, payment_id: null },
-    }));
+  it('reads the intent straight from the body and URL-encodes the reference', async () => {
+    // No envelope to unwrap any more: the response IS the intent.
+    const srv = await startServer((_req, res) => json(res, 200,
+      { reference: 'dep/a b', status: 'open', amount_usd: '25.000000', expires_at: 'x', matched_at: null, payment_id: null },
+    ));
     try {
       const s = await client(srv.url).billing.payment('dep/a b');
       expect(srv.recorded[0].path).toBe('/v1/billing/deposits/dep%2Fa%20b');
@@ -105,13 +106,11 @@ describe('billing.waitForPayment', () => {
       if (!(req.url ?? '').includes('/deposits/')) return json(res, 200, { payments: [] });
       polls += 1;
       return json(res, 200, {
-        intent: {
-          reference: 'dep_abc',
-          status: polls >= 3 ? 'matched' : 'open',
-          amount_usd: '25.000000', expires_at: expires,
-          matched_at: polls >= 3 ? new Date().toISOString() : null,
-          payment_id: polls >= 3 ? 'pay_1' : null,
-        },
+        reference: 'dep_abc',
+        status: polls >= 3 ? 'matched' : 'open',
+        amount_usd: '25.000000', expires_at: expires,
+        matched_at: polls >= 3 ? new Date().toISOString() : null,
+        payment_id: polls >= 3 ? 'pay_1' : null,
       });
     });
     try {
@@ -129,10 +128,8 @@ describe('billing.waitForPayment', () => {
     // An expired payment is an ordinary outcome the caller must report, not an
     // exception. Throwing would make callers treat it as a transport failure.
     const srv = await startServer((_req, res) => json(res, 200, {
-      intent: {
-        reference: 'dep_abc', status: 'expired', amount_usd: '25.000000',
-        expires_at: new Date(Date.now() - 1000).toISOString(), matched_at: null, payment_id: null,
-      },
+      reference: 'dep_abc', status: 'expired', amount_usd: '25.000000',
+      expires_at: new Date(Date.now() - 1000).toISOString(), matched_at: null, payment_id: null,
     }));
     try {
       const final = await client(srv.url).billing.waitForPayment('dep_abc', { intervalMs: 5 });
@@ -146,10 +143,8 @@ describe('billing.waitForPayment', () => {
     const srv = await startServer((req, res) => {
       if (!(req.url ?? '').includes('/deposits/')) return json(res, 200, { payments: [] });
       return json(res, 200, {
-        intent: {
-          reference: 'dep_abc', status: 'open', amount_usd: '25.000000',
-          expires_at: new Date(Date.now() - 1000).toISOString(), matched_at: null, payment_id: null,
-        },
+        reference: 'dep_abc', status: 'open', amount_usd: '25.000000',
+        expires_at: new Date(Date.now() - 1000).toISOString(), matched_at: null, payment_id: null,
       });
     });
     try {
@@ -163,10 +158,8 @@ describe('billing.waitForPayment', () => {
 
   it('gives up at the timeout and returns the last status', async () => {
     const srv = await startServer((_req, res) => json(res, 200, {
-      intent: {
-        reference: 'dep_abc', status: 'open', amount_usd: '25.000000',
-        expires_at: new Date(Date.now() + 3_600_000).toISOString(), matched_at: null, payment_id: null,
-      },
+      reference: 'dep_abc', status: 'open', amount_usd: '25.000000',
+      expires_at: new Date(Date.now() + 3_600_000).toISOString(), matched_at: null, payment_id: null,
     }));
     try {
       const final = await client(srv.url).billing.waitForPayment('dep_abc', {
@@ -243,11 +236,9 @@ describe('waitForPayment and the registered-address path', () => {
    * `attribution: registered_address` while the intent sat `open` with `matched_at: null`.
    */
   const OPEN = {
-    intent: {
-      reference: 'dep_x', status: 'open', amount_usd: '1.000000',
-      expires_at: new Date(Date.now() + 3_600_000).toISOString(),
-      matched_at: null, payment_id: null,
-    },
+    reference: 'dep_x', status: 'open', amount_usd: '1.000000',
+    expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+    matched_at: null, payment_id: null,
   };
 
   it('resolves as matched when the payment credits by registered address', async () => {
@@ -283,7 +274,7 @@ describe('waitForPayment and the registered-address path', () => {
       const url = (req.url ?? '').split('?')[0];
       if (url.startsWith('/v1/billing/deposits/')) {
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
-          intent: { ...OPEN.intent, expires_at: new Date(Date.now() + 50).toISOString() },
+          ...OPEN, expires_at: new Date(Date.now() + 50).toISOString(),
         }));
       }
       return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
@@ -305,7 +296,7 @@ describe('waitForPayment and the registered-address path', () => {
       const url = (req.url ?? '').split('?')[0];
       if (url.startsWith('/v1/billing/deposits/')) {
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
-          intent: { ...OPEN.intent, expires_at: new Date(Date.now() + 50).toISOString() },
+          ...OPEN, expires_at: new Date(Date.now() + 50).toISOString(),
         }));
       }
       return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
@@ -329,7 +320,7 @@ describe('waitForPayment and the registered-address path', () => {
       const url = (req.url ?? '').split('?')[0];
       if (url.startsWith('/v1/billing/deposits/')) {
         return res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({
-          intent: { ...OPEN.intent, status: 'matched', matched_at: new Date().toISOString(), payment_id: 'p9' },
+          ...OPEN, status: 'matched', matched_at: new Date().toISOString(), payment_id: 'p9',
         }));
       }
       return res.writeHead(500, { 'content-type': 'application/json' }).end('{}');

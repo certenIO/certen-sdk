@@ -166,6 +166,30 @@ for attempt in 1 2 3; do
 done
 ```
 
+## Release note — 0.7.0 (breaking for `--json` consumers)
+
+`certen --json identity get` and `certen --json identity create` no longer nest the identity under an
+`identity` key. Its fields are at the top level of `data`, matching every other command and the API
+itself:
+
+```bash
+certen --json identity get "$ID" | jq -r '.data.can_sign'     # was .data.identity.can_sign
+```
+
+The envelope (`{ ok, data }` / `{ ok, error }`), the exit codes, and every rule above are unchanged.
+Table output is unchanged too — it was never a contract.
+
+This tracks a gateway change made while there are no external integrators; see the gateway's
+`docs/api-conventions.md` for the rule it settles. **A 0.7.x CLI requires a gateway from 2026-08 or
+later**, and a 0.6.x CLI cannot read a current one.
+
+Two `--json` field fixes ship with it, both of which make an absent value readable:
+
+- `proof_id`, `proof_bundle_url`, `accum_tx_hash` and `error_message` are `null` when there is no
+  value. They were `""`, so `.proof_id != null` was true for a transaction that had no proof.
+- `can_sign` is `null` when the on-chain key page could not be read, where it was previously `false`.
+  "Cannot sign" and "could not check" have different fixes.
+
 ## Release note — 0.4.0 (tagged and published by a human)
 
 `packages/cli/package.json` is bumped to 0.4.0; publishing happens when someone pushes a `cli-v0.4.0`

@@ -82,19 +82,19 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
 const ID = '11111111-2222-3333-4444-555555555555';
 
 function identity(over: Record<string, unknown> = {}): Record<string, unknown> {
+  // Flat: the identity's own fields at the top level, as the gateway has returned them since the
+  // 2026-08 break.
   return {
-    identity: {
-      id: ID,
-      adi_url: 'acc://mybot.acme',
-      book_url: 'acc://mybot.acme/book',
-      key_page_url: 'acc://mybot.acme/book/1',
-      status: 'provisioning',
-      can_sign: null,
-      credit_balance: 500,
-      chain_accounts: [{ chain_id: 'base-sepolia', address: '0xAbstract', status: 'deployed' }],
-      created_at: '2026-01-01T00:00:00Z',
-      ...over,
-    },
+    id: ID,
+    adi_url: 'acc://mybot.acme',
+    book_url: 'acc://mybot.acme/book',
+    key_page_url: 'acc://mybot.acme/book/1',
+    status: 'provisioning',
+    can_sign: null,
+    credit_balance: 500,
+    chain_accounts: [{ chain_id: 'base-sepolia', address: '0xAbstract', status: 'deployed' }],
+    created_at: '2026-01-01T00:00:00Z',
+    ...over,
   };
 }
 
@@ -121,10 +121,10 @@ describe('identity create --wait', () => {
         stub.url,
       );
       expect(r.code).toBe(0);
-      // Same envelope shape as the no-wait response, with a refreshed identity — a consumer
-      // must not have to branch on which flags were passed to find the status.
-      const data = soleJson(r.stdout).data as { identity: { status: string; can_sign: boolean } };
-      expect(data.identity).toMatchObject({ status: 'active', can_sign: true });
+      // Same shape as the no-wait response, with refreshed fields — a consumer must not have to
+      // branch on which flags were passed to find the status.
+      const data = soleJson(r.stdout).data as { status: string; can_sign: boolean };
+      expect(data).toMatchObject({ status: 'active', can_sign: true });
       // The 202 is not also emitted: one payload, one envelope.
       expect(r.stdout.trim().split('\n')).toHaveLength(1);
     } finally {
@@ -226,8 +226,8 @@ describe('identity create --wait', () => {
       expect(r.code).toBe(0);
       // Exactly one request: the create. A script written against the old behaviour keeps it.
       expect(stub.hits()).toBe(1);
-      const data = soleJson(r.stdout).data as { identity: { status: string } };
-      expect(data.identity.status).toBe('provisioning');
+      const data = soleJson(r.stdout).data as { status: string };
+      expect(data.status).toBe('provisioning');
     } finally {
       await stub.close();
     }

@@ -25,18 +25,25 @@ async function getClient(): Promise<CertenClient> {
  * Table output is explicitly not a contract (docs/CLI-CONTRACT.md), which is what makes this
  * divergence safe.
  */
-function printIdentity(response: IdentityResponse, identity: Identity): void {
+function printIdentity(response: IdentityResponse): void {
+  // One parameter, not two. It took a `response` and an `identity` back when the gateway nested the
+  // identity inside the response; now that the response carries those fields itself, passing both
+  // would be passing the same object twice — and the JSON branch below re-attached the inner object
+  // under an `identity` key, reintroducing the shape on the machine interface after the API had
+  // dropped it.
   if (isJsonMode() || getOutputFormat() === 'json') {
-    printOutput({ ...response, identity } as unknown as Record<string, unknown>);
+    printOutput({ ...response } as unknown as Record<string, unknown>);
     return;
   }
   printOutput({
-    id: identity.id,
-    adi_url: identity.adi_url,
-    status: identity.status,
-    can_sign: identity.can_sign ?? 'unknown',
-    key_page_url: identity.key_page_url ?? '-',
-    credit_balance: identity.credit_balance,
+    id: response.id,
+    adi_url: response.adi_url,
+    status: response.status,
+    // `?? 'unknown'` is load-bearing: `can_sign` is three-valued and null means the key page could
+    // not be read. Printing an empty cell would read as "no".
+    can_sign: response.can_sign ?? 'unknown',
+    key_page_url: response.key_page_url ?? '-',
+    credit_balance: response.credit_balance,
   });
 }
 
@@ -104,13 +111,13 @@ export function registerIdentityCommands(program: Command): void {
         chains,
         credits: opts.credits,
       });
-      const id = result.identity?.id;
+      const id = result.id;
       // Recorded the moment it exists. The gateway has no identity list route and the portfolio
       // view returns no UUIDs, so an id that is only printed is an id that can be lost.
-      if (id) rememberIdentity({ id, adi_url: result.identity.adi_url, chains: chains ?? [] });
+      if (id) rememberIdentity({ id, adi_url: result.adi_url, chains: chains ?? [] });
 
       if (!wait || !id) {
-        if (result.identity) printIdentity(result, result.identity);
+        if (result.id) printIdentity(result);
         else printOutput(result as unknown as Record<string, unknown>);
         hint('');
         hint('Provisioning continues in the background. It is not usable until status is terminal');
@@ -122,11 +129,14 @@ export function registerIdentityCommands(program: Command): void {
       // Waiting means the printed result is the one the user can act on, not the 202. Emitting
       // both would put two payloads in the --json envelope for no benefit.
       //
-      // The SHAPE stays identical to the no-wait response — the create envelope with a refreshed
-      // `identity` — because a consumer must not have to parse two different layouts depending on
-      // which flags were passed. Printing the bare identity here would have done exactly that.
+      // The SHAPE stays identical to the no-wait response, because a consumer must not have to
+      // parse two different layouts depending on which flags were passed.
       const identity = await waitForIdentity(client, id, budget);
-      printIdentity(result, identity);
+      // Merged, not replaced. `result` carries fields that only the create returns —
+      // `mnemonic_retrieval`, `status_url`, `warning` — and `identity` carries the refreshed state.
+      // Printing `identity` alone would drop the one-shot mnemonic URL for provider-mode
+      // identities, which cannot be recovered afterwards.
+      printIdentity({ ...result, ...identity });
 
       if (isJsonMode()) return;
 
@@ -198,10 +208,10 @@ export function registerIdentityCommands(program: Command): void {
       const client = await getClient();
       // No `--include`: the route takes no query parameters. It used to be sent and silently ignored.
       const result = await client.identity.get(id);
-      printIdentity(result, result.identity);
+      printIdentity(result);
 
       if (isJsonMode()) return;
-      const identity = result.identity;
+      const identity = result;
 
       // `can_sign` is the field that decides whether this identity is usable, and reading it out
       // of a printed blob is exactly the step people skip. State the conclusion.
@@ -235,7 +245,7 @@ export function registerIdentityCommands(program: Command): void {
       // Resolved first so the confirmation message names what is being retired. An id pasted from
       // the wrong terminal is the mistake worth catching, and it is invisible until something says
       // the ADI out loud.
-      const before = await client.identity.get(id).then((r) => r.identity).catch(() => null);
+      const before = await client.identity.get(id).catch(() => null);
 
       const result = await client.identity.retire(id);
       // Dropped from the local record too, so `certen init` does not offer to reuse it.

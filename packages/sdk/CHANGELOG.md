@@ -1,5 +1,67 @@
 # Changelog — @certen.io/sdk
 
+## 0.7.0 — one response shape, and nulls that stay null
+
+**Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
+this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+
+### Breaking — identity and deposit responses are no longer wrapped
+
+The gateway used to nest the resource under a single key on some endpoints and return it bare on
+others, with no rule distinguishing them. Four operations were the odd ones out and have been
+flattened.
+
+```ts
+// before
+const { identity } = await client.identity.get(id);
+identity.can_sign;
+
+// after — the response IS the identity, with its sub-resources beside it
+const identity = await client.identity.get(id);
+identity.can_sign;
+identity.governance;          // unchanged: a joined sub-resource stays named
+```
+
+Affects `identity.create()`, `identity.get()`, `identity.update()`, `billing.payment()` and
+`admin.createOrg()`. `IdentityResponse` now `extends Identity`, so an `IdentityResponse` is usable
+anywhere an `Identity` was. `OrgResponse` carries `id` / `name` / `plan` / `created_at` directly.
+
+`createAndWait()` and `execute.*` are unaffected — they return the same values as before.
+
+The change is breaking, and was taken deliberately while there are no external integrators. The
+alternatives were to break real callers later or to carry both shapes indefinitely. See the
+gateway's `docs/api-conventions.md`.
+
+### Fixed — a field with no value is `null`, not `""`
+
+`proof_id`, `proof_bundle_url`, `accum_tx_hash` and `error_message` were typed `string` and arrived
+as `""` when the gateway had no value. The gateway declared them `type: 'string'`, and its serializer
+coerces a null to an empty string rather than rejecting it — so `proof_id` was `""` on all 205
+intents in the production table, meaning every transaction response ever served.
+
+`""` is falsy, so `if (tx.proof_id)` happened to work. `tx.proof_id != null` did not: it is **true**
+for `""`, and that caller went on to request a proof by empty id. Worse for `error_message`, where a
+completed transaction reported an error message that was merely empty rather than absent.
+
+These are now `string | null` and the gateway sends a real null.
+
+### Fixed — `can_sign: null` is no longer reported as `false`
+
+`can_sign` is three-valued: `true`, `false`, and `null` meaning *the on-chain key page could not be
+read*. The gateway declared it `type: 'boolean'`, and the serializer turned that null into `false` —
+collapsing "we could not check" into "this identity cannot sign".
+
+It rounded down rather than up, so nobody was told they could sign when they could not. What was
+lost is the distinction: "definitively cannot sign, repair with `identity.update({ publicKey })`"
+and "we could not check, retry" have different fixes, and callers were shown the first when the
+truth was the second.
+
+### Changed — `waitForPayment` no longer depends on watching the payments feed
+
+The gateway now closes a deposit intent when its payment credits, however the payer was identified.
+The feed watch is kept — the SDK is versioned independently and may be pointed at an older gateway,
+and a deposit for the wrong amount still credits your balance without ever matching the intent.
+
 ## 0.6.0 — diagnosis, proofs, device authorization, and a guard that refuses to strand your money
 
 ### Added — `client.doctor()`

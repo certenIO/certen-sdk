@@ -1,5 +1,21 @@
 # Changelog — @certen.io/mcp
 
+## 0.4.0 — one response shape
+
+**Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
+
+### Breaking — identity tool results are no longer wrapped
+
+Identity results carried the identity under an `identity` key. It is now at the top level, matching
+the API and every other tool. An agent reading `result.identity.can_sign` must read
+`result.can_sign`.
+
+### Fixed — absent fields are `null` rather than `""` or `false`
+
+`proof_id` and friends are `null` when there is no value, and `can_sign` is `null` — not `false` —
+when the on-chain key page could not be read. An agent deciding whether an identity is usable was
+previously told a definite "no" in a case that was actually "unknown".
+
 ## 0.3.0 — an agent can diagnose its own broken setup
 
 ### Added — five read-tier tools

@@ -79,7 +79,7 @@ export class IdentityResource {
     } = {},
   ): Promise<Identity> {
     const created = await this.create(params);
-    const id = created.identity?.id;
+    const id = created.id;
     if (!id) {
       throw new CertenError('certen: the gateway accepted the identity but returned no id', 0, 'NO_IDENTITY_ID');
     }
@@ -88,7 +88,9 @@ export class IdentityResource {
     let last: Identity | undefined;
 
     while (Date.now() < deadline) {
-      const { identity } = await this.get(id);
+      // The response IS the identity (plus its joined sub-resources) since the gateway flattened
+      // these endpoints; it no longer arrives under an `identity` key.
+      const identity = await this.get(id);
       last = identity;
       onPoll?.(identity);
 

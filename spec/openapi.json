@@ -332,37 +332,34 @@
                   "type": "object",
                   "additionalProperties": true,
                   "properties": {
-                    "identity": {
-                      "type": "object",
-                      "additionalProperties": true,
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "adi_url": {
-                          "type": "string"
-                        },
-                        "book_url": {
-                          "type": "string"
-                        },
-                        "key_page_url": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string"
-                        },
-                        "chain_accounts": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "additionalProperties": true
-                          }
-                        },
-                        "credit_balance": {
-                          "type": "number"
-                        },
-                        "created_at": {}
+                    "id": {
+                      "type": "string"
+                    },
+                    "adi_url": {
+                      "type": "string"
+                    },
+                    "book_url": {
+                      "type": "string"
+                    },
+                    "key_page_url": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "chain_accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
                       }
+                    },
+                    "credit_balance": {
+                      "type": "number"
+                    },
+                    "created_at": {},
+                    "status_url": {
+                      "type": "string"
                     },
                     "signing_mode": {
                       "type": "string"
@@ -494,47 +491,53 @@
                   "type": "object",
                   "additionalProperties": true,
                   "properties": {
-                    "identity": {
-                      "type": "object",
-                      "additionalProperties": true,
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "adi_url": {
-                          "type": "string"
-                        },
-                        "book_url": {
-                          "type": "string"
-                        },
-                        "key_page_url": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string",
-                          "description": "provisioning | active | error. Creation is async — poll until terminal."
-                        },
-                        "can_sign": {
-                          "type": "boolean",
-                          "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches."
-                        },
-                        "error_message": {
-                          "type": "string",
-                          "description": "Why provisioning failed, when status is \"error\"."
-                        },
-                        "credit_balance": {
-                          "type": "number"
-                        },
-                        "chain_accounts": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "additionalProperties": true
-                          }
-                        },
-                        "created_at": {}
+                    "id": {
+                      "type": "string"
+                    },
+                    "adi_url": {
+                      "type": "string"
+                    },
+                    "book_url": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "key_page_url": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "provisioning | active | error. Creation is async — poll until terminal."
+                    },
+                    "can_sign": {
+                      "type": [
+                        "null",
+                        "boolean"
+                      ],
+                      "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as \"do not proceed\", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches."
+                    },
+                    "error_message": {
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "description": "Why provisioning failed, when status is \"error\"."
+                    },
+                    "credit_balance": {
+                      "type": "number"
+                    },
+                    "chain_accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
                       }
                     },
+                    "created_at": {},
                     "signing_mode": {
                       "type": "string"
                     },
@@ -661,47 +664,53 @@
                   "type": "object",
                   "additionalProperties": true,
                   "properties": {
-                    "identity": {
-                      "type": "object",
-                      "additionalProperties": true,
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "adi_url": {
-                          "type": "string"
-                        },
-                        "book_url": {
-                          "type": "string"
-                        },
-                        "key_page_url": {
-                          "type": "string"
-                        },
-                        "status": {
-                          "type": "string",
-                          "description": "provisioning | active | error. Creation is async — poll until terminal."
-                        },
-                        "can_sign": {
-                          "type": "boolean",
-                          "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches."
-                        },
-                        "error_message": {
-                          "type": "string",
-                          "description": "Why provisioning failed, when status is \"error\"."
-                        },
-                        "credit_balance": {
-                          "type": "number"
-                        },
-                        "chain_accounts": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "additionalProperties": true
-                          }
-                        },
-                        "created_at": {}
+                    "id": {
+                      "type": "string"
+                    },
+                    "adi_url": {
+                      "type": "string"
+                    },
+                    "book_url": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "key_page_url": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "provisioning | active | error. Creation is async — poll until terminal."
+                    },
+                    "can_sign": {
+                      "type": [
+                        "null",
+                        "boolean"
+                      ],
+                      "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as \"do not proceed\", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches."
+                    },
+                    "error_message": {
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "description": "Why provisioning failed, when status is \"error\"."
+                    },
+                    "credit_balance": {
+                      "type": "number"
+                    },
+                    "chain_accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
                       }
                     },
+                    "created_at": {},
                     "signing_mode": {
                       "type": "string"
                     },
@@ -1102,23 +1111,17 @@
                   "type": "object",
                   "additionalProperties": true,
                   "properties": {
-                    "organization": {
-                      "type": "object",
-                      "additionalProperties": true,
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "type": "string"
-                        },
-                        "plan": {
-                          "type": "string"
-                        },
-                        "created_at": {
-                          "type": "string"
-                        }
-                      }
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "plan": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "type": "string"
                     }
                   }
                 }
@@ -1885,6 +1888,42 @@
                         },
                         "to": {
                           "type": "string"
+                        }
+                      }
+                    },
+                    "total_requests": {
+                      "type": "number"
+                    },
+                    "successful_requests": {
+                      "type": "number"
+                    },
+                    "by_endpoint": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "endpoint": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    },
+                    "daily": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "number"
+                          }
                         }
                       }
                     }
@@ -7397,12 +7436,33 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "The deposit intent. Poll until `status` leaves `open`.",
             "content": {
               "application/json": {
                 "schema": {
+                  "description": "The deposit intent. Poll until `status` leaves `open`.",
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "properties": {
+                    "reference": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "open | matched | expired | cancelled."
+                    },
+                    "amount_usd": {
+                      "type": "string"
+                    },
+                    "expires_at": {},
+                    "matched_at": {},
+                    "payment_id": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  }
                 }
               }
             }

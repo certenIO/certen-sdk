@@ -106,7 +106,15 @@
         "query": [],
         "responses": {
           "202": [
-            "identity",
+            "id",
+            "adi_url",
+            "book_url",
+            "key_page_url",
+            "status",
+            "chain_accounts",
+            "credit_balance",
+            "created_at",
+            "status_url",
             "signing_mode",
             "signing_provider",
             "mnemonic_retrieval",
@@ -115,16 +123,6 @@
         },
         "responseShapes": {
           "202": {
-            "identity": [
-              "id",
-              "adi_url",
-              "book_url",
-              "key_page_url",
-              "status",
-              "chain_accounts",
-              "credit_balance",
-              "created_at"
-            ],
             "mnemonic_retrieval": [
               "url",
               "expires_in"
@@ -141,7 +139,16 @@
         "query": [],
         "responses": {
           "200": [
-            "identity",
+            "id",
+            "adi_url",
+            "book_url",
+            "key_page_url",
+            "status",
+            "can_sign",
+            "error_message",
+            "credit_balance",
+            "chain_accounts",
+            "created_at",
             "signing_mode",
             "signing_provider",
             "governance",
@@ -149,22 +156,7 @@
             "pending"
           ]
         },
-        "responseShapes": {
-          "200": {
-            "identity": [
-              "id",
-              "adi_url",
-              "book_url",
-              "key_page_url",
-              "status",
-              "can_sign",
-              "error_message",
-              "credit_balance",
-              "chain_accounts",
-              "created_at"
-            ]
-          }
-        }
+        "responseShapes": {}
       },
       "patch": {
         "required": [],
@@ -183,7 +175,16 @@
         "query": [],
         "responses": {
           "200": [
-            "identity",
+            "id",
+            "adi_url",
+            "book_url",
+            "key_page_url",
+            "status",
+            "can_sign",
+            "error_message",
+            "credit_balance",
+            "chain_accounts",
+            "created_at",
             "signing_mode",
             "signing_provider",
             "governance",
@@ -191,22 +192,7 @@
             "pending"
           ]
         },
-        "responseShapes": {
-          "200": {
-            "identity": [
-              "id",
-              "adi_url",
-              "book_url",
-              "key_page_url",
-              "status",
-              "can_sign",
-              "error_message",
-              "credit_balance",
-              "chain_accounts",
-              "created_at"
-            ]
-          }
-        }
+        "responseShapes": {}
       },
       "delete": {
         "required": [],
@@ -284,19 +270,13 @@
         "query": [],
         "responses": {
           "201": [
-            "organization"
+            "id",
+            "name",
+            "plan",
+            "created_at"
           ]
         },
-        "responseShapes": {
-          "201": {
-            "organization": [
-              "id",
-              "name",
-              "plan",
-              "created_at"
-            ]
-          }
-        }
+        "responseShapes": {}
       }
     },
     "/v1/admin/org/{id}/webhook": {
@@ -471,7 +451,11 @@
         ],
         "responses": {
           "200": [
-            "period"
+            "period",
+            "total_requests",
+            "successful_requests",
+            "by_endpoint",
+            "daily"
           ]
         },
         "responseShapes": {
@@ -479,6 +463,14 @@
             "period": [
               "from",
               "to"
+            ],
+            "by_endpoint": [
+              "endpoint",
+              "count"
+            ],
+            "daily": [
+              "date",
+              "count"
             ]
           }
         }
@@ -1714,7 +1706,16 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "reference",
+            "status",
+            "amount_usd",
+            "expires_at",
+            "matched_at",
+            "payment_id"
+          ]
+        },
         "responseShapes": {}
       }
     },

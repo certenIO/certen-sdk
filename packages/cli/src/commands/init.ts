@@ -188,7 +188,7 @@ export function registerInitCommands(program: Command): void {
       // from it produced a closing command with an unfillable `<id>` placeholder.
       const remembered = opts.name ? undefined : lastIdentity();
       const reusable = remembered
-        ? await client.identity.get(remembered.id).then((r) => r.identity).catch(() => null)
+        ? await client.identity.get(remembered.id).catch(() => null)
         : null;
 
       if (reusable && reusable.can_sign === true) {
@@ -211,7 +211,7 @@ export function registerInitCommands(program: Command): void {
           chains,
         });
 
-        const id = created.identity?.id;
+        const id = created.id;
         if (!id) {
           throw new CliError('The gateway accepted the identity but returned no id.', 'NO_IDENTITY_ID', EXIT.FAILED);
         }

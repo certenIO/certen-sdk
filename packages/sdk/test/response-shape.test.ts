@@ -112,8 +112,14 @@ describe('response types match the API', () => {
   });
 
   it('GET /v1/identity/{id}', () => {
+    // The identity's own fields are top-level now — `IdentityResponse extends Identity` — so every
+    // one of them has to be declared in the spec, not just the wrapper key that used to stand in
+    // for all of them. That is the point of this check: before the flatten, `identity: {}` satisfied
+    // it while saying nothing about what was inside.
     const sample: Record<keyof IdentityResponse, unknown> = {
-      identity: {}, signing_mode: 'external', signing_provider: {}, mnemonic_retrieval: undefined,
+      id: 'i', adi_url: 'acc://x.acme', book_url: null, key_page_url: null, status: 'active',
+      can_sign: true, error_message: null, credit_balance: 0, chain_accounts: [], created_at: 'now',
+      signing_mode: 'external', signing_provider: {}, mnemonic_retrieval: undefined,
       warning: undefined, governance: undefined, balances: undefined, pending: undefined,
     };
     // mnemonic_retrieval/warning appear on create, not on get — check each against its own response.
@@ -122,11 +128,15 @@ describe('response types match the API', () => {
   });
 
   it('the identity object itself', () => {
+    // Checked against the RESPONSE's own properties, not a nested `identity` object — there is no
+    // longer one to look inside. That is the improvement: these keys are now declared on the
+    // response itself, so the spec describes them individually instead of hiding them behind a
+    // wrapper it said nothing about.
     const identity = {
       id: 'i', adi_url: 'a', book_url: null, key_page_url: null, status: 's',
       can_sign: true, error_message: null, credit_balance: 0, chain_accounts: [], created_at: 'c',
     };
-    declaredKeysExistInSpec(identity, specNested('/v1/identity/{id}', 'get', '200', 'identity'), 'Identity');
+    declaredKeysExistInSpec(identity, specProps('/v1/identity/{id}', 'get', '200'), 'Identity');
   });
 
   it('DELETE /v1/identity/{id}', () => {
@@ -222,13 +232,8 @@ describe('response types match the API', () => {
   });
 
   it('POST /v1/admin/org', () => {
-    const sample: Record<keyof OrgResponse, unknown> = { organization: {} };
+    const sample: Record<keyof OrgResponse, unknown> = { id: 'i', name: 'n', plan: 'p', created_at: 'c' };
     declaredKeysExistInSpec(sample, specProps('/v1/admin/org', 'post', '201'), 'OrgResponse');
-    declaredKeysExistInSpec(
-      { id: 'i', name: 'n', plan: 'p', created_at: 'c' },
-      specNested('/v1/admin/org', 'post', '201', 'organization'),
-      'OrgResponse.organization',
-    );
   });
 
   it('POST /v1/admin/api-keys', () => {

@@ -118,8 +118,8 @@ export async function waitForIdentity(
   say('Provisioning. This takes a minute or two on Accumulate.');
 
   while (Date.now() < deadline) {
-    const response = await client.identity.get(id);
-    const identity = response.identity;
+    // The response IS the identity — the gateway no longer nests it under an `identity` key.
+    const identity = await client.identity.get(id);
     last = identity;
     say(`Status: ${identity.status}.`);
 
