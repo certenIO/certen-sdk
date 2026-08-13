@@ -514,6 +514,15 @@ export interface ChainBalance {
 }
 
 export interface PortfolioIdentity {
+  /**
+   * The UUID the other identity routes take.
+   *
+   * Added in the gateway's 2026-08 release. There is no identity collection endpoint, so
+   * `portfolio.get()` is the only way to enumerate an org's identities — and without the id it
+   * could not answer the question people actually reach for it with, since the UUID is shown once
+   * at create time and every other route is keyed by it. Absent when talking to an older gateway.
+   */
+  id?: string;
   adi_url: string;
   status: string;
   credit_balance: number;

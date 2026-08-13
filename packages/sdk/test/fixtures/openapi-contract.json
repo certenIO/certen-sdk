@@ -242,6 +242,7 @@
         "responseShapes": {
           "200": {
             "identities": [
+              "id",
               "adi_url",
               "status",
               "credit_balance",

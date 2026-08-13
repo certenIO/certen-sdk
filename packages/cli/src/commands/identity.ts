@@ -173,7 +173,13 @@ export function registerIdentityCommands(program: Command): void {
       // /v1/identity/{id} (GET/PATCH/DELETE) and has no collection route. It then spent a release
       // as a command whose only behaviour was to explain that it did not work — honest, but the
       // user's actual question ("what identities do I have") was answerable the whole time from
-      // /v1/portfolio. So answer it, and note the one thing that view genuinely cannot give.
+      // /v1/portfolio.
+      //
+      // It then spent a release answering that question WITHOUT the ids, because the portfolio view
+      // withheld them — so anyone who had lost the UUID printed at create time could see their
+      // identity listed and still not act on it. The gateway now returns `id` there (it had it in
+      // hand all along), and this command is finally a complete answer rather than a partial one
+      // with a footnote.
       const client = await getClient();
       const portfolio = await client.portfolio.get();
       const identities = portfolio.identities ?? [];
@@ -184,7 +190,10 @@ export function registerIdentityCommands(program: Command): void {
         return;
       }
 
+      // `id` first: it is the field every other command takes as an argument, so it is the one a
+      // reader is scanning for.
       printOutput(identities.map((i) => ({
+        id: i.id ?? '—',
         adi_url: i.adi_url,
         status: i.status,
         credit_balance: i.credit_balance,
@@ -192,13 +201,14 @@ export function registerIdentityCommands(program: Command): void {
         pending_actions: i.pending_actions,
       })));
 
-      // The gap is real and worth naming: /v1/portfolio keys identities by ADI URL and does not
-      // return the UUID that `identity get` takes. Someone who did not record the ID at create
-      // time cannot recover it here, and pretending otherwise would send them looking for a
-      // column that does not exist.
-      hint('');
-      hint('Note: the gateway has no identity collection route, so this comes from `certen portfolio`.');
-      hint('It shows ADI URLs, not the UUIDs `certen identity get` takes — those are printed at create time.');
+      // A gateway older than 2026-08 does not return `id` here, and the CLI ships independently of
+      // it. Say so only when it is actually true — a permanent caveat about a fixed problem trains
+      // people to skip the notes that matter.
+      if (identities.some((i) => !i.id)) {
+        hint('');
+        hint('This gateway does not return identity ids in the portfolio view, so `id` reads "—".');
+        hint('Upgrade the gateway, or use the id printed when the identity was created.');
+      }
     });
 
   identity

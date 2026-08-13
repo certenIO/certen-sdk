@@ -993,6 +993,9 @@
                         "type": "object",
                         "additionalProperties": true,
                         "properties": {
+                          "id": {
+                            "type": "string"
+                          },
                           "adi_url": {
                             "type": "string"
                           },
