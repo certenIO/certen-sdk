@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { CertenClient, type DoctorCheck } from '@certen.io/sdk';
+import { CertenClient, CREDENTIALLED_CHECKS, type DoctorCheck } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
@@ -25,22 +25,6 @@ import { normalizeChain } from '../chains.js';
  */
 
 type Check = DoctorCheck;
-
-/**
- * Checks that cannot run without a working credential.
- *
- * Must mirror the SDK's own list. When this drifted, a machine with no API key still showed a
- * verdict for the missing check — derived from the SDK's placeholder-key probe rather than from
- * anything real. Kept as a name list rather than an index range so adding a check in the middle
- * cannot silently shift it.
- */
-const CREDENTIALLED_CHECKS = [
-  'identity can sign',
-  'abstract accounts funded',
-  'billing balance',
-  'credit / trial',
-  'intents executing',
-] as const;
 
 /**
  * Replace the SDK's generic remedies with the command that performs them here.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import http from 'http';
 import { AddressInfo } from 'net';
-import { CertenClient } from '../src/index.js';
+import { CertenClient, CREDENTIALLED_CHECKS } from '../src/index.js';
 
 /**
  * `client.doctor()`.
@@ -278,6 +278,38 @@ describe('the checks that catch silent failures', () => {
     } finally {
       await stub.close();
     }
+  });
+});
+
+describe('the credentialled-check list is single-sourced', () => {
+  it('names exactly the checks that are skipped when the credential is rejected', async () => {
+    // The list is exported so the CLI can mark the same checks skipped — it knows things the SDK
+    // cannot, like whether a key is configured on this machine at all. It kept a private copy once,
+    // the two drifted, and a machine with no API key showed a verdict for the check that had been
+    // added to only one of them. This asserts the exported list IS the set the SDK skips, so a new
+    // check that forgets to join the list fails here rather than in a user's terminal.
+    const stub = await startServer(gateway({
+      '/v1/billing/balance': { __status: 401, __body: { error: { message: 'nope' } } },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      const skipped = report.checks.filter((c) => c.status === 'skipped').map((c) => c.name);
+      expect(skipped).toEqual([...CREDENTIALLED_CHECKS]);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('covers every check that comes after the credential', () => {
+    // Any check added below the credential gate must be in the list, or it will run against a
+    // credential the gateway already rejected.
+    expect([...CREDENTIALLED_CHECKS]).toEqual([
+      'identity can sign',
+      'abstract accounts funded',
+      'billing balance',
+      'credit / trial',
+      'intents executing',
+    ]);
   });
 });
 

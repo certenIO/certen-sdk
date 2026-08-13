@@ -39,8 +39,16 @@ export interface DoctorReport {
   checks: DoctorCheck[];
 }
 
-/** Checks that cannot run without a working credential, in the order they are reported. */
-const CREDENTIALLED = [
+/**
+ * Checks that cannot run without a working credential, in the order they are reported.
+ *
+ * Exported because the CLI needs the same list: it knows things the SDK cannot (whether a key is
+ * configured on this machine at all) and has to mark the same checks skipped. It kept its own copy
+ * once, the two drifted, and a machine with no API key showed a verdict for the check that had been
+ * added to only one of them. One list, imported, makes that impossible rather than merely
+ * discouraged.
+ */
+export const CREDENTIALLED_CHECKS = [
   'identity can sign',
   'abstract accounts funded',
   'billing balance',
@@ -222,7 +230,7 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
   }
 
   if (!credentialOk) {
-    for (const name of CREDENTIALLED) {
+    for (const name of CREDENTIALLED_CHECKS) {
       checks.push({ name, status: 'skipped', detail: 'needs a working API key' });
     }
     return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
