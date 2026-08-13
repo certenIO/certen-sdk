@@ -14,21 +14,35 @@ import { CertenClient } from '@certen.io/sdk';
 
 const certen = new CertenClient({ apiKey: process.env.CERTEN_API_KEY! });
 
-const { intent_id, signing_data, submit_url } = await certen.transaction.create({
-  identity_id: identityId,
-  intent: {
-    fromChain: 'accumulate',
-    toChain: 'ethereum-sepolia',
-    fromAddress: 'acc://your-org.acme',
-    toAddress: '0xBe00…9251',
-    amount: '4000',
-    tokenSymbol: 'ETH',
-  },
+// One call: opens the intent, signs what comes back, submits the signature.
+const { intentId } = await certen.execute.transfer({
+  identityId,
+  adiUrl: 'acc://your-org.acme',
+  fromChain: 'accumulate',
+  toChain: 'base-sepolia',
+  fromAddress: abstractAccount,      // the identity's account on the destination chain
+  toAddress: '0xBe00…9251',
+  amount: '0.001',                   // WHOLE units, as a string
+  sign: (hashHex) => ed25519Sign(hashHex),   // YOU hold the key
 });
 
-// You hold the key. Sign the bytes the gateway hands you.
-const signature = sign(signing_data.hash_to_sign);
-await certen.transaction.submitSignature(intent_id, { signature, public_key: publicKey });
+await certen.execute.wait(intentId);                 // ~60-110s of real validator work
+const proof = await certen.execute.proof(intentId);  // hand this to your counterparty
+```
+
+Prefer `execute.*` — it is the same flow every integration writes, with the details that are easy to
+get wrong already handled. The raw resources are there when you need to drive the steps yourself:
+
+```ts
+const opened = await certen.transaction.create({ identityId, intent });
+// `signing_data` is absent in provider mode, where the gateway holds the key and there is
+// nothing for you to sign.
+const hash = opened.signing_data?.hash_to_sign;
+if (!hash) throw new Error('provider mode: no signature required from you');
+await certen.transaction.submitSignature(opened.intent_id, {
+  signature: ed25519Sign(hash),
+  publicKey,
+});
 ```
 
 **Your key never leaves your process.** The gateway computes what must be signed and you decide whether to
