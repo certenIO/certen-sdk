@@ -4,6 +4,37 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — the evidence trail: `ledger`, `receipts`, `receipt`, `receiptProof`, `verificationKeys`
+
+"What was I charged, and can I prove it?" The gateway has answered this from the start — an
+append-only double-entry ledger, ed25519-signed receipts, RFC 6962 inclusion proofs against
+Accumulate-anchored tree heads — and none of it had a client surface. For an audit or finance
+function, evidence reachable only by hand-rolling HTTP may as well not exist.
+
+- `ledger()` / `ledgerAll()` — every balance change, newest first. Corrections are new REVERSING
+  entries, never edits.
+- `receipts()` / `receiptsAll()` — each carries `signed` and `logged`; `logged` is what decides
+  whether a proof can be fetched at all.
+- `receipt(id)` — signature, computation inputs, and the gateway's own `verification` block.
+- `receiptProof(id)` — the inclusion proof. **Store it with the receipt**: it stays valid forever
+  against a head pinned on Accumulate, so the evidence outlives CERTEN's cooperation.
+- `verificationKeys()` — the public keys, so a signature can be checked without trusting the
+  response that carried it.
+
+Read `covering_head`, not `head`, when asking whether a receipt is anchored. `head` is the head at
+that tree size and may not itself be anchored, while a later anchored root still commits to the
+leaf — so `head.anchor_status` reads "unanchored" for every receipt between anchors.
+
+Verified against a real signed receipt from a running gateway using only what these methods return:
+the digest recomputes from `body`, the ed25519 signature verifies against the published key, the
+salted leaf hash matches, and the six-node audit path folds to `root_hash`. Nothing from the
+gateway's own `verification` block was used — that block is CERTEN checking CERTEN, and its worth
+is only that every check in it is reproducible, which is now what the SDK makes possible.
+
+The list endpoints report no total and no `has_more`, so `ledgerAll()` and `receiptsAll()` infer
+termination from a short page. That lives here once rather than in every caller that gets it subtly
+wrong and reports a partial ledger as complete.
+
 ### Added — `billing.registerPayerAddress()` and `billing.payerAddresses()`
 
 Register the wallet you pay from once, and every future deposit from it credits automatically — no

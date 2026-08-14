@@ -454,3 +454,147 @@ describe('billing.registerPayerAddress', () => {
     }
   });
 });
+
+describe('the evidence trail', () => {
+  const ENTRY = {
+    id: 'le_1', account: 'available', amount_usd: '-5.000000', kind: 'capture',
+    ref_type: 'identity', ref_id: 'id_1', memo: 'identity.provision',
+    created_at: '2026-08-14T00:00:00.000Z',
+  };
+  const SUMMARY = {
+    id: 'rc_1', receipt_number: '1041', type: 'charge', amount_usd: '5.000000',
+    currency: 'USD', ref_type: 'identity', ref_id: 'id_1',
+    digest: 'd1', signed: true, logged: true, issued_at: '2026-08-14T00:00:00.000Z',
+  };
+
+  it('reads the ledger — the record that says where the money went', async () => {
+    const s = await startServer((req, res) => json(res, 200, { entries: [ENTRY] }));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.ledger();
+      expect(s.recorded[0].path).toBe('/v1/billing/ledger?limit=50&offset=0');
+      expect(out.entries[0].amount_usd).toBe('-5.000000');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('walks every ledger entry, stopping on a short page', async () => {
+    // The endpoint returns no total and no has_more, so termination is inferred from page length.
+    // Getting that wrong reports a partial ledger as complete — which for a reconciliation is worse
+    // than failing outright.
+    const s = await startServer((req, res, n) => {
+      if (n === 1) return json(res, 200, { entries: Array.from({ length: 2 }, (_, i) => ({ ...ENTRY, id: `a${i}` })) });
+      return json(res, 200, { entries: [{ ...ENTRY, id: 'b0' }] });
+    });
+    try {
+      const seen: string[] = [];
+      for await (const e of new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.ledgerAll(2)) seen.push(e.id);
+      expect(seen).toEqual(['a0', 'a1', 'b0']);
+      expect(s.recorded).toHaveLength(2);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('lists receipts and says which are signed and logged', async () => {
+    // `logged` is what decides whether a proof can be fetched at all; without it a caller asking
+    // for one gets a 404 and cannot tell "not yet" from "wrong id".
+    const s = await startServer((req, res) => json(res, 200, { receipts: [SUMMARY] }));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.receipts({ limit: 2 });
+      expect(s.recorded[0].path).toBe('/v1/billing/receipts?limit=2&offset=0');
+      expect(out.receipts[0]).toMatchObject({ signed: true, logged: true });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('fetches one receipt with its signature and computation intact', async () => {
+    const FULL = {
+      ...SUMMARY, entry_group_id: 'eg_1', body: { amount_microusd: '5000000' },
+      signature: 'sig', key_id: 'k1', algorithm: 'ed25519',
+      price_book_hash: 'pbh', computation: { gas_microusd: '0' }, leaf_seq: 22065,
+      verification: { signature: 'ok' },
+    };
+    const s = await startServer((req, res) => json(res, 200, FULL));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.receipt('rc_1');
+      expect(s.recorded[0].path).toBe('/v1/billing/receipts/rc_1');
+      // Handed back whole. Reshaping any of it would break the one thing that makes it evidence:
+      // the digest must be reproducible from `body` exactly as sent.
+      expect(out).toEqual(FULL);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('fetches the inclusion proof, and asks for the newest anchored head by default', async () => {
+    const PROOF = {
+      receipt_id: 'rc_1', leaf_hash: 'lh', leaf_salt: 'salt', leaf_index: 3,
+      tree_size: 22100, root_hash: 'rh', audit_path: ['p1', 'p2'],
+      head: { tree_size: 22100, root_hash: 'rh', signature: 's', key_id: 'k',
+        anchor_status: 'pending', anchor_tx_hash: null, anchor_account_url: null,
+        anchor_block_time: null },
+      covering_head: { tree_size: 22400, root_hash: 'rh2', signature: 's', key_id: 'k',
+        anchor_status: 'anchored', anchor_tx_hash: '0xabc', anchor_account_url: 'acc://x',
+        anchor_block_time: '2026-08-14T01:00:00.000Z', timestamp_attested: true,
+        is_same_head: false },
+    };
+    const s = await startServer((req, res) => json(res, 200, PROOF));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.receiptProof('rc_1');
+      // No tree_size query: the default is the newest ANCHORED head, and a proof against an
+      // unanchored head is only as good as CERTEN's word.
+      expect(s.recorded[0].path).toBe('/v1/billing/receipts/rc_1/proof');
+      // The distinction a verifier must not miss: this receipt's own head is NOT anchored, and
+      // reading only `head.anchor_status` would report it as unproven when it is covered.
+      expect(out.head?.anchor_status).toBe('pending');
+      expect(out.covering_head?.anchor_status).toBe('anchored');
+      expect(out.covering_head?.timestamp_attested).toBe(true);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('pins a proof to a tree size when one is given', async () => {
+    const s = await startServer((req, res) => json(res, 200, { receipt_id: 'rc_1' }));
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.receiptProof('rc_1', { treeSize: 22065 });
+      expect(s.recorded[0].path).toBe('/v1/billing/receipts/rc_1/proof?tree_size=22065');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('reads the verification keys', async () => {
+    const s = await startServer((req, res) =>
+      json(res, 200, { keys: [{ key_id: 'k1', algorithm: 'ed25519', public_key: 'pk' }] }));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.verificationKeys();
+      expect(s.recorded[0].path).toBe('/v1/billing/receipts/verification-key');
+      expect(out.keys[0].key_id).toBe('k1');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('reports a receipt that is not yet logged as 404 rather than inventing a proof', async () => {
+    const s = await startServer((req, res) =>
+      json(res, 404, { error: 'Receipt is not in the transparency log', code: 'NOT_FOUND' }));
+    try {
+      await expect(
+        new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+          .billing.receiptProof('rc_1'),
+      ).rejects.toMatchObject({ status: 404 });
+    } finally {
+      await s.close();
+    }
+  });
+});

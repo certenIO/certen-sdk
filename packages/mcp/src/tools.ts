@@ -184,6 +184,102 @@ const READ_TOOLS: ToolDef[] = [
     run: (c) => c.billing.balance(),
   },
   {
+    name: 'certen_billing_ledger',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/ledger',
+    description:
+      'Every balance change on this organization, newest first — the append-only double-entry record '
+      + 'behind the balance. Use it to answer "where did my money go" and to reconcile a period. '
+      + 'Corrections appear as new REVERSING entries rather than edits, so a negative entry beside a '
+      + 'positive one of the same size is a correction, not a duplicate charge. Amounts are signed: '
+      + 'negative leaves the account.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: num('How many entries. Default 50, max 200.'),
+        offset: num('Skip this many, for paging.'),
+      },
+      additionalProperties: false,
+    },
+    run: (c, a) => c.billing.ledger({ limit: optN(a, 'limit'), offset: optN(a, 'offset') }),
+  },
+  {
+    name: 'certen_billing_receipts',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/receipts',
+    description:
+      'Signed receipts for every charge, payment, refund and adjustment, newest first. Each carries '
+      + '`signed` and `logged`: `logged` means it is in the transparency log and an inclusion proof '
+      + 'can be fetched, and certen_billing_receipt will return one only for those. Use this to find '
+      + 'a receipt id, then certen_billing_receipt for the evidence.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: num('How many receipts. Default 50, max 200.'),
+        offset: num('Skip this many, for paging.'),
+      },
+      additionalProperties: false,
+    },
+    run: (c, a) => c.billing.receipts({ limit: optN(a, 'limit'), offset: optN(a, 'offset') }),
+  },
+  {
+    name: 'certen_billing_receipt',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/receipts/{id} (+ /proof)',
+    description:
+      'One receipt with its evidence: the ed25519 signature (CERTEN issued this), the computation '
+      + 'inputs (the amount follows from measured gas, a hashed price book and a signed FX rate), '
+      + 'and — with includeProof — the transparency-log inclusion proof (CERTEN did not later hide '
+      + 'or edit it). Do NOT present the `verification` block as independent confirmation: it is '
+      + 'CERTEN checking its own work, and its value is only that each check is reproducible from '
+      + 'published data. When reporting whether a receipt is anchored, read `proof.covering_head`, '
+      + 'NOT `proof.head` — the head at this tree size may not itself be anchored while a later '
+      + 'anchored root still commits to the leaf, so `head` reads "unanchored" for any receipt '
+      + 'between anchors. Trust `anchor_block_time` as exact only when `timestamp_attested` is true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        receiptId: str('Receipt id, from certen_billing_receipts'),
+        includeProof: bool('Also fetch the inclusion proof. Only for receipts with logged: true.'),
+      },
+      required: ['receiptId'],
+      additionalProperties: false,
+    },
+    run: async (c, a) => {
+      const id = s(a, 'receiptId');
+      const receipt = await c.billing.receipt(id);
+      if (a.includeProof !== true) return receipt;
+      // Folded into one tool rather than two: an agent asking "prove this charge" wants both, and
+      // a missing proof is an ordinary state (not yet logged) that must not lose it the receipt.
+      try {
+        return { ...receipt, proof: await c.billing.receiptProof(id) };
+      } catch {
+        return {
+          ...receipt,
+          proof: null,
+          proof_unavailable:
+            'Not in the transparency log yet. The receipt and its signature stand; an inclusion '
+            + 'proof becomes available once it is logged.',
+        };
+      }
+    },
+  },
+  {
+    name: 'certen_billing_verification_keys',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/receipts/verification-key',
+    description:
+      'The public keys receipts and transparency tree heads are signed with, so a signature can be '
+      + 'checked without trusting the response that carried it. Unauthenticated by design — a '
+      + 'verification key obtainable only by asking CERTEN could not settle a dispute with CERTEN.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.billing.verificationKeys(),
+  },
+  {
     name: 'certen_billing_payer_addresses',
     tier: 'read',
     mutates: false,

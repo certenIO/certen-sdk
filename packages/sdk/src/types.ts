@@ -666,6 +666,129 @@ export interface PricingCatalog {
 }
 
 /**
+ * One line of the append-only, double-entry ledger.
+ *
+ * Every balance change has an entry here, and corrections appear as new REVERSING groups rather
+ * than edits — so the history is what happened, not what it was later decided should have happened.
+ * This is the record that answers "where did my money go".
+ */
+export interface LedgerEntry {
+  id: string;
+  /** e.g. `available`, `held`, `revenue_platform_fee`, `recovery_gas`. */
+  account: string;
+  /** Signed. Negative leaves the account. */
+  amount_usd: string;
+  /** e.g. `capture`, `hold`, `release`, `deposit`, `reversal`. */
+  kind: string;
+  ref_type: string | null;
+  ref_id: string | null;
+  memo: string | null;
+  created_at: string;
+}
+
+/** A receipt as it appears in a list — enough to find the one you want. */
+export interface ReceiptSummary {
+  id: string;
+  /** Monotonic per organization. A string because it can exceed 2^53. */
+  receipt_number: string;
+  /** `charge`, `payment`, `refund`, `adjustment`. */
+  type: string;
+  amount_usd: string;
+  currency: string;
+  ref_type: string | null;
+  ref_id: string | null;
+  digest: string;
+  /** Whether an ed25519 signature exists. Fetch the receipt to check it. */
+  signed: boolean;
+  /** Whether it has been written to the transparency log. Only then is a proof available. */
+  logged: boolean;
+  issued_at: string;
+}
+
+/**
+ * A receipt with its evidence.
+ *
+ * Three independent layers, and they answer different challenges:
+ *   - `signature` — CERTEN issued this. Verify against `billing.verificationKeys()`.
+ *   - the transparency log — CERTEN did not later hide or edit it. See `receiptProof()`.
+ *   - `computation` — the amount is a consequence of measured on-chain gas, a hashed price book and
+ *     a signed FX rate, not an assertion.
+ *
+ * `verification` is the gateway checking its own work, which is worth exactly nothing on its own;
+ * its value is that every check in it is reproducible by you from published data.
+ */
+export interface Receipt extends ReceiptSummary {
+  entry_group_id: string | null;
+  /** The canonical JSON that was signed and hashed. Reproduce `digest` from this. */
+  body: unknown;
+  signature: string | null;
+  key_id: string | null;
+  algorithm: 'ed25519' | null;
+  /** Ties the charge to a published price book. */
+  price_book_hash: string | null;
+  computation: unknown;
+  /** Position in the transparency log. Null until it has been logged. */
+  leaf_seq: number | null;
+  verification?: unknown;
+}
+
+/** A signed tree head, and where it is anchored on Accumulate. */
+export interface TransparencyHead {
+  tree_size: number;
+  root_hash: string;
+  signature: string | null;
+  key_id: string | null;
+  anchor_status: string;
+  anchor_tx_hash: string | null;
+  anchor_account_url: string | null;
+  anchor_block_time: string | null;
+  anchor_block_time_source?: string | null;
+  /**
+   * True only when `anchor_block_time` is the minor block's own timestamp. When false the time is a
+   * loose upper bound; trusting it as exact would overstate what the anchor proves.
+   */
+  timestamp_attested?: boolean;
+  is_same_head?: boolean;
+}
+
+/**
+ * An RFC 6962 inclusion proof: this receipt is a leaf of the log at `tree_size`.
+ *
+ * **Keep it with the receipt.** It stays valid forever against that head, which is itself pinned on
+ * Accumulate — so the evidence survives even if CERTEN does not.
+ *
+ * Read `covering_head`, not `head`, when asking whether it is anchored. `head` is the head at this
+ * tree size, which may not itself have been anchored; `covering_head` is the head that carries the
+ * on-chain anchor, and a later root still commits to this leaf. A verifier reading only
+ * `head.anchor_status` concludes "unanchored" for every receipt between anchors.
+ */
+export interface ReceiptProof {
+  receipt_id: string;
+  leaf_hash: string;
+  /** Yours alone. Leaves are salted so a published root discloses nothing. */
+  leaf_salt: string;
+  leaf_index: number;
+  tree_size: number;
+  root_hash: string;
+  audit_path: string[];
+  head: TransparencyHead | null;
+  covering_head: TransparencyHead | null;
+  /** How to check each layer yourself, in words. */
+  verification?: Record<string, string>;
+}
+
+/** The public keys receipts and tree heads are signed with. */
+export interface VerificationKeys {
+  keys: Array<{
+    key_id: string;
+    algorithm: string;
+    public_key: string;
+    [k: string]: unknown;
+  }>;
+  [k: string]: unknown;
+}
+
+/**
  * A wallet you send from, registered so its deposits credit automatically.
  *
  * The alternative — a one-time payment matched on the exact amount — has to be opened before every

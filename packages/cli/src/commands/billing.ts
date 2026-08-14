@@ -29,6 +29,15 @@ function usd(amount: string): string {
   return `${neg ? '-$' : '$'}${neg ? whole.slice(1) : whole}.${(frac + '00').slice(0, 2)}`;
 }
 
+/** Parse a whole-number option, refusing anything else before a network call is made. */
+function intOption(raw: string, flag: string): number {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new CliError(`"${raw}" is not a whole number for ${flag}.`, 'INVALID_NUMBER', EXIT.USAGE);
+  }
+  return n;
+}
+
 function minutesUntil(iso: string): number {
   return Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 60_000));
 }
@@ -250,6 +259,169 @@ export function registerBillingCommands(program: Command): void {
       }
 
       hint(`Lock this price: pass quote_id=${q.quote_id} on the transaction (expires ${q.expires_at}).`);
+    });
+
+  // ---- Evidence -----------------------------------------------------------------------------
+  //
+  // "What was I charged, and can I prove it?" The gateway has answered this from the start --
+  // signed receipts, transparency-log inclusion proofs, an append-only double-entry ledger -- and
+  // no command reached any of it. An audit or finance function had to hand-roll HTTP, which for
+  // most of them means the evidence may as well not exist.
+
+  program
+    .command('ledger')
+    .description('Every balance change, newest first - where the money went')
+    .option('--limit <n>', 'How many to fetch (page size with --all)', '50')
+    .option('--offset <n>', 'Skip this many')
+    .option('--all', 'Fetch every page, not just the first')
+    .action(async (opts: { limit: string; offset?: string; all?: boolean }) => {
+      const limit = intOption(opts.limit, '--limit');
+      const offset = opts.offset === undefined ? undefined : intOption(opts.offset, '--offset');
+      if (opts.all && offset !== undefined) {
+        throw new CliError(
+          '--all starts from the beginning, so --offset has no meaning with it. Use one or the other.',
+          'CONFLICTING_PAGING_FLAGS', EXIT.USAGE,
+        );
+      }
+
+      const client = await getClient();
+      const entries = [];
+      if (opts.all) {
+        // --limit is the PAGE size here, not a cap: the point of --all is to stop thinking about
+        // page boundaries.
+        for await (const e of client.billing.ledgerAll(limit)) entries.push(e);
+      } else {
+        entries.push(...(await client.billing.ledger({ limit, offset })).entries);
+      }
+
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({ entries });
+        return;
+      }
+      human('');
+      if (entries.length === 0) {
+        human('  No ledger entries - nothing has moved on this account yet.');
+        return;
+      }
+      const kw = Math.max(...entries.map((e) => e.kind.length), 4);
+      const aw = Math.max(...entries.map((e) => e.account.length), 7);
+      human(`  ${'WHEN'.padEnd(20)}  ${'KIND'.padEnd(kw)}  ${'ACCOUNT'.padEnd(aw)}  ${'AMOUNT'.padStart(10)}`);
+      for (const e of entries) {
+        human(`  ${e.created_at.slice(0, 19).replace('T', ' ').padEnd(20)}  `
+          + `${e.kind.padEnd(kw)}  ${e.account.padEnd(aw)}  ${usd(e.amount_usd).padStart(10)}`
+          + `${e.memo ? `  ${e.memo}` : ''}`);
+      }
+      human('');
+      human(`  ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}. `
+        + 'Corrections appear as new reversing entries, never as edits.');
+    });
+
+  program
+    .command('receipts')
+    .description('Signed receipts for every charge, payment, refund and adjustment')
+    .option('--limit <n>', 'How many to fetch (page size with --all)', '50')
+    .option('--offset <n>', 'Skip this many')
+    .option('--all', 'Fetch every page, not just the first')
+    .action(async (opts: { limit: string; offset?: string; all?: boolean }) => {
+      const limit = intOption(opts.limit, '--limit');
+      const offset = opts.offset === undefined ? undefined : intOption(opts.offset, '--offset');
+      if (opts.all && offset !== undefined) {
+        throw new CliError(
+          '--all starts from the beginning, so --offset has no meaning with it. Use one or the other.',
+          'CONFLICTING_PAGING_FLAGS', EXIT.USAGE,
+        );
+      }
+
+      const client = await getClient();
+      const receipts = [];
+      if (opts.all) {
+        for await (const r of client.billing.receiptsAll(limit)) receipts.push(r);
+      } else {
+        receipts.push(...(await client.billing.receipts({ limit, offset })).receipts);
+      }
+
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({ receipts });
+        return;
+      }
+      human('');
+      if (receipts.length === 0) {
+        human('  No receipts yet - nothing has been charged or paid on this account.');
+        return;
+      }
+      human(`  ${'NUMBER'.padStart(8)}  ${'WHEN'.padEnd(20)}  ${'TYPE'.padEnd(12)}  ${'AMOUNT'.padStart(10)}  EVIDENCE`);
+      for (const r of receipts) {
+        // `signed` and `logged` decide what can be proven, and `logged` in particular decides
+        // whether an inclusion proof can be fetched at all.
+        const evidence = [r.signed ? 'signed' : null, r.logged ? 'logged' : null]
+          .filter(Boolean).join(' + ') || 'pending';
+        human(`  ${r.receipt_number.padStart(8)}  ${r.issued_at.slice(0, 19).replace('T', ' ').padEnd(20)}  `
+          + `${r.type.padEnd(12)}  ${usd(r.amount_usd).padStart(10)}  ${evidence}`);
+      }
+      human('');
+      hint('certen receipt <id> --proof   # the full receipt and its inclusion proof');
+    });
+
+  program
+    .command('receipt <id>')
+    .description('One receipt, with its signature and computation')
+    .option('--proof', 'Also fetch the transparency-log inclusion proof')
+    .option('--tree-size <n>', 'Prove against this tree size instead of the newest anchored head')
+    .action(async (id: string, opts: { proof?: boolean; treeSize?: string }) => {
+      const treeSize = opts.treeSize === undefined
+        ? undefined
+        : intOption(opts.treeSize, '--tree-size');
+      if (treeSize !== undefined && !opts.proof) {
+        throw new CliError(
+          '--tree-size only applies to the inclusion proof. Add --proof.',
+          'TREE_SIZE_WITHOUT_PROOF', EXIT.USAGE,
+        );
+      }
+
+      const client = await getClient();
+      const receipt = await client.billing.receipt(id);
+      // Sequential, not concurrent: without the receipt there is nothing to prove, and a 404 on the
+      // id should not also produce a second confusing failure from the proof call.
+      const proof = opts.proof ? await client.billing.receiptProof(id, { treeSize }) : undefined;
+
+      // Machine output only. `body`, `computation`, `verification` and `proof` are deep objects,
+      // and the generic key/value table renders each as one enormous line of raw JSON — burying
+      // the four facts a person actually reads under a screenful of hashes.
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({ ...receipt, ...(proof ? { proof } : {}) });
+        return;
+      }
+
+      human('');
+      human(`  Receipt ${receipt.receipt_number} - ${receipt.type} ${usd(receipt.amount_usd)}`);
+      human(`  Issued ${receipt.issued_at}`);
+      human(`  Digest ${receipt.digest}`);
+      human(receipt.signature
+        ? `  Signed ${receipt.algorithm ?? 'ed25519'} by key ${receipt.key_id}`
+        : '  NOT SIGNED yet.');
+      if (receipt.price_book_hash) {
+        human(`  Priced from price book ${receipt.price_book_hash}`);
+      }
+      if (proof) {
+        human('');
+        human(`  In the log at leaf ${proof.leaf_index} of ${proof.tree_size}.`);
+        // covering_head, not head: `head` is the head at this tree size and may not itself be
+        // anchored, while a later anchored root still commits to this leaf. Reporting head's
+        // status would call a perfectly good receipt unanchored for every gap between anchors.
+        const anchor = proof.covering_head;
+        if (anchor?.anchor_status === 'anchored') {
+          human(`  Anchored on Accumulate in ${anchor.anchor_tx_hash}`);
+          human(anchor.timestamp_attested
+            ? `  Existed no later than ${anchor.anchor_block_time} (block timestamp).`
+            : `  Existed no later than ${anchor.anchor_block_time} - a loose upper bound, not the block time.`);
+        } else {
+          human('  Not yet anchored on Accumulate - the proof holds against our signed head only.');
+        }
+        human('');
+        human('  Keep this proof with the receipt. It stays valid forever against that head.');
+      } else if (receipt.leaf_seq !== null) {
+        hint(`certen receipt ${id} --proof   # prove it is in the anchored log`);
+      }
     });
 
   // Registering the wallet you pay from. The gateway's own 402 names this as the recommended fix

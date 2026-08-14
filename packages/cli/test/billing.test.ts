@@ -537,3 +537,167 @@ describe('certen payers', () => {
     }
   });
 });
+
+
+describe('certen ledger and certen receipts', () => {
+  const ENTRY = {
+    id: 'le_1', account: 'available', amount_usd: '-5.000000', kind: 'capture',
+    ref_type: 'identity', ref_id: 'id_1', memo: 'identity.provision',
+    created_at: '2026-08-14T09:30:00.000Z',
+  };
+  const SUMMARY = {
+    id: 'rc_1', receipt_number: '1041', type: 'charge', amount_usd: '5.000000',
+    currency: 'USD', ref_type: 'identity', ref_id: 'id_1',
+    digest: 'd1', signed: true, logged: true, issued_at: '2026-08-14T09:30:00.000Z',
+  };
+  const FULL = {
+    ...SUMMARY, entry_group_id: 'eg_1', body: { a: 1 }, signature: 'sig', key_id: 'k1',
+    algorithm: 'ed25519', price_book_hash: 'pbh', computation: {}, leaf_seq: 22065,
+  };
+
+  it('prints the ledger with signed amounts', async () => {
+    const s = await stubGateway((req, res) => json(res, 200, { entries: [ENTRY] }));
+    try {
+      const r = await certen(['ledger'], s.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('capture');
+      // Negative renders as -$5.00, not $-5.00: the sign belongs outside the currency symbol.
+      expect(r.stdout).toContain('-$5.00');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('pages the whole ledger with --all and stops on a short page', async () => {
+    // The endpoint reports no total and no has_more, so the stop condition is inferred. Getting it
+    // wrong reports a partial ledger as complete, which for a reconciliation is worse than an error.
+    const s = await stubGateway((req, res, hit) => {
+      if (hit === 1) {
+        return json(res, 200, { entries: [{ ...ENTRY, id: 'a' }, { ...ENTRY, id: 'b' }] });
+      }
+      return json(res, 200, { entries: [{ ...ENTRY, id: 'c' }] });
+    });
+    try {
+      const r = await certen(['ledger', '--all', '--limit', '2', '--json'], s.url);
+      expect(r.code).toBe(0);
+      expect(s.hits()).toBe(2);
+      const { entries } = soleJson(r.stdout).data as { entries: Array<{ id: string }> };
+      expect(entries.map((e) => e.id)).toEqual(['a', 'b', 'c']);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('refuses --all together with --offset', async () => {
+    // --all starts from the beginning, so the two have no coherent joint meaning. Silently
+    // ignoring one would skip records from a report that claims to be complete.
+    const r = await certen(['ledger', '--all', '--offset', '10']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/--offset has no meaning/);
+  });
+
+  it('rejects a non-numeric --limit before opening a connection', async () => {
+    const r = await certen(['receipts', '--limit', 'lots']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/not a whole number/);
+  });
+
+  it('shows which receipts can actually be proven', async () => {
+    // `logged` is what decides whether an inclusion proof exists. A caller who cannot see it asks
+    // for a proof, gets a 404, and cannot tell "not yet" from "wrong id".
+    const s = await stubGateway((req, res) => json(res, 200, {
+      receipts: [SUMMARY, { ...SUMMARY, id: 'rc_2', receipt_number: '1042', logged: false }],
+    }));
+    try {
+      const r = await certen(['receipts'], s.url);
+      expect(r.stdout).toMatch(/1041.*signed \+ logged/);
+      expect(r.stdout).toMatch(/1042.*signed/);
+      expect(r.stdout).not.toMatch(/1042.*logged/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('fetches one receipt without a proof by default', async () => {
+    const s = await stubGateway((req, res) => json(res, 200, FULL));
+    try {
+      const r = await certen(['receipt', 'rc_1'], s.url);
+      expect(r.code).toBe(0);
+      expect(s.hits()).toBe(1);
+      expect(r.stdout).toContain('Receipt 1041');
+      expect(r.stdout).toContain('Signed ed25519 by key k1');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('reads covering_head, not head, when saying whether a receipt is anchored', async () => {
+    // The failure this prevents: `head` is the head at this tree size and may not itself be
+    // anchored, while a LATER anchored root still commits to the leaf. Reporting head.anchor_status
+    // calls a perfectly good receipt unanchored for every gap between anchors.
+    const s = await stubGateway((req, res) => {
+      if ((req.url ?? '').endsWith('/proof')) {
+        return json(res, 200, {
+          receipt_id: 'rc_1', leaf_hash: 'lh', leaf_salt: 'sa', leaf_index: 3,
+          tree_size: 22100, root_hash: 'rh', audit_path: [],
+          head: { tree_size: 22100, root_hash: 'rh', signature: 's', key_id: 'k',
+            anchor_status: 'pending', anchor_tx_hash: null, anchor_account_url: null,
+            anchor_block_time: null },
+          covering_head: { tree_size: 22400, root_hash: 'rh2', signature: 's', key_id: 'k',
+            anchor_status: 'anchored', anchor_tx_hash: '0xabc', anchor_account_url: 'acc://x',
+            anchor_block_time: '2026-08-14T10:00:00.000Z', timestamp_attested: true },
+        });
+      }
+      return json(res, 200, FULL);
+    });
+    try {
+      const r = await certen(['receipt', 'rc_1', '--proof'], s.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('Anchored on Accumulate in 0xabc');
+      expect(r.stdout).toContain('(block timestamp)');
+      expect(r.stdout).not.toMatch(/Not yet anchored/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('calls an unattested anchor time a loose bound rather than the block time', async () => {
+    // Presenting last_block_time as exact would overstate what the anchor proves, which is the one
+    // thing a timestamp claim must never do.
+    const s = await stubGateway((req, res) => {
+      if ((req.url ?? '').endsWith('/proof')) {
+        return json(res, 200, {
+          receipt_id: 'rc_1', leaf_index: 3, tree_size: 22100, audit_path: [],
+          head: null,
+          covering_head: { tree_size: 22400, anchor_status: 'anchored', anchor_tx_hash: '0xabc',
+            anchor_block_time: '2026-08-14T10:00:00.000Z', timestamp_attested: false },
+        });
+      }
+      return json(res, 200, FULL);
+    });
+    try {
+      const r = await certen(['receipt', 'rc_1', '--proof'], s.url);
+      expect(r.stdout).toMatch(/loose upper bound/);
+      expect(r.stdout).not.toContain('(block timestamp)');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('rejects --tree-size without --proof instead of ignoring it', async () => {
+    const r = await certen(['receipt', 'rc_1', '--tree-size', '22065']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/only applies to the inclusion proof/);
+  });
+
+  it('exits non-zero on an unknown receipt id', async () => {
+    const s = await stubGateway((req, res) =>
+      json(res, 404, { error: 'Receipt not found', code: 'NOT_FOUND' }));
+    try {
+      const r = await certen(['receipt', 'nope', '--json'], s.url);
+      expect(r.code).not.toBe(0);
+    } finally {
+      await s.close();
+    }
+  });
+});

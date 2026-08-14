@@ -3,6 +3,27 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen ledger`, `certen receipts`, `certen receipt`
+
+Where the money went, and proof of what you were charged — neither was reachable from the terminal.
+
+```
+certen ledger --all                  # every balance change, paged for you
+certen receipts                      # NUMBER, WHEN, TYPE, AMOUNT, EVIDENCE
+certen receipt <id> --proof          # signature, and the inclusion proof
+```
+
+`EVIDENCE` shows `signed + logged`, because `logged` is what decides whether an inclusion proof
+exists — without it you ask for one, get a 404, and cannot tell "not yet" from "wrong id".
+
+The anchor line reads `covering_head`, not `head`: a receipt whose own tree head is unanchored is
+still anchored by any later root that commits to it, and reporting `head` would call a perfectly
+good receipt unproven for every gap between anchors. An unattested anchor time is labelled a loose
+upper bound rather than presented as the block time.
+
+`--all` pages for you and refuses `--offset` alongside it; a non-numeric `--limit` and
+`--tree-size` without `--proof` are both rejected before any network call.
+
 ### Added — `certen payers` and `certen payers add`
 
 Register a wallet you send from, so deposits credit on sight instead of needing a one-time payment

@@ -1,4 +1,5 @@
 import { AxiosInstance } from 'axios';
+import { paginate } from '../client.js';
 import type {
   BalanceResponse,
   QuoteResponse,
@@ -8,6 +9,11 @@ import type {
   PaymentRecord,
   PricingCatalog,
   PayerAddress,
+  LedgerEntry,
+  ReceiptSummary,
+  Receipt,
+  ReceiptProof,
+  VerificationKeys,
 } from '../types.js';
 
 
@@ -92,6 +98,107 @@ export class BillingResource {
    */
   async obligations(): Promise<ObligationsResponse> {
     const { data } = await this.http.get('/v1/billing/obligations');
+    return data;
+  }
+
+  // ── Evidence ────────────────────────────────────────────────────────────────────────────────
+  //
+  // What was I charged, and can I prove it? These four endpoints existed on the gateway from the
+  // start and had no client surface at all — so the one question an enterprise finance or audit
+  // function actually asks could only be answered by hand-rolling HTTP. The evidence was there and
+  // unreachable, which for an auditor is the same as absent.
+
+  /**
+   * Every balance change, newest first. Requires `billing:read`.
+   *
+   * The append-only, double-entry record behind the balance: what moved, when, and why. Corrections
+   * appear as new REVERSING entries rather than edits, so the history is what happened.
+   *
+   * Use `ledgerAll()` to walk the whole thing.
+   */
+  async ledger(params: { limit?: number; offset?: number } = {}): Promise<{ entries: LedgerEntry[] }> {
+    const { data } = await this.http.get('/v1/billing/ledger', {
+      params: { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+    });
+    return data;
+  }
+
+  /**
+   * Every ledger entry, paging automatically.
+   *
+   * ```ts
+   * for await (const entry of certen.billing.ledgerAll()) { ... }
+   * ```
+   *
+   * The endpoint returns no total and no `has_more`, so termination is inferred from a short page —
+   * which is why this belongs here once rather than in every caller that gets the condition subtly
+   * wrong and silently reports a partial ledger as complete.
+   */
+  ledgerAll(pageSize = 100): AsyncIterableIterator<LedgerEntry> {
+    return paginate<LedgerEntry>(
+      async (limit, offset) => ({ items: (await this.ledger({ limit, offset })).entries ?? [] }),
+      pageSize,
+    );
+  }
+
+  /** Signed receipts for every payment, charge, refund and adjustment. Requires `billing:read`. */
+  async receipts(
+    params: { limit?: number; offset?: number } = {},
+  ): Promise<{ receipts: ReceiptSummary[] }> {
+    const { data } = await this.http.get('/v1/billing/receipts', {
+      params: { limit: params.limit ?? 50, offset: params.offset ?? 0 },
+    });
+    return data;
+  }
+
+  /** Every receipt, paging automatically. */
+  receiptsAll(pageSize = 100): AsyncIterableIterator<ReceiptSummary> {
+    return paginate<ReceiptSummary>(
+      async (limit, offset) => ({ items: (await this.receipts({ limit, offset })).receipts ?? [] }),
+      pageSize,
+    );
+  }
+
+  /**
+   * One receipt, with its signature, its computation inputs, and the gateway's own verification.
+   *
+   * `verification` is CERTEN checking CERTEN, which settles nothing by itself. What makes the
+   * receipt evidence is that every check in it is reproducible by you: verify `signature` against
+   * `verificationKeys()`, reproduce `digest` from `body`, and fetch `receiptProof()` to show the
+   * receipt is in a log that was anchored on Accumulate.
+   */
+  async receipt(id: string): Promise<Receipt> {
+    const { data } = await this.http.get(`/v1/billing/receipts/${encodeURIComponent(id)}`);
+    return data;
+  }
+
+  /**
+   * The transparency-log inclusion proof for a receipt.
+   *
+   * **Store it alongside the receipt.** It remains valid forever against the tree head it names,
+   * and that head is pinned on Accumulate — so the proof outlives any cooperation from CERTEN,
+   * which is the entire point of it existing.
+   *
+   * Defaults to the newest ANCHORED head; a proof against an unanchored head is only as good as our
+   * word. Only receipts with `logged: true` have one — expect a 404 otherwise.
+   */
+  async receiptProof(id: string, params: { treeSize?: number } = {}): Promise<ReceiptProof> {
+    const { data } = await this.http.get(
+      `/v1/billing/receipts/${encodeURIComponent(id)}/proof`,
+      params.treeSize ? { params: { tree_size: params.treeSize } } : undefined,
+    );
+    return data;
+  }
+
+  /**
+   * The public keys receipts and tree heads are signed with.
+   *
+   * Deliberately unauthenticated on the gateway, and it should stay that way in your integration
+   * too: a verification key you can only obtain by asking us nicely could not settle a dispute
+   * with us.
+   */
+  async verificationKeys(): Promise<VerificationKeys> {
+    const { data } = await this.http.get('/v1/billing/receipts/verification-key');
     return data;
   }
 

@@ -4,6 +4,18 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_billing_ledger`, `_receipts`, `_receipt`, `_verification_keys`
+
+An agent asked "what were we charged for, and can you prove it" had no tool that could answer.
+
+`certen_billing_receipt` takes `includeProof` rather than shipping a separate proof tool, because an
+agent asking for proof wants both and a not-yet-logged receipt should not lose it the receipt — that
+case returns the receipt with `proof: null` and a plain explanation.
+
+The tool descriptions carry the two things an agent gets wrong unprompted: `verification` is CERTEN
+checking its own work and must not be reported as independent confirmation, and anchoring must be
+read from `covering_head` rather than `head`.
+
 ### Added — `certen_billing_register_payer` and `certen_billing_payer_addresses`
 
 An agent that hit PAYMENT_REQUIRED was told, in the refusal itself, to register the sending wallet —
