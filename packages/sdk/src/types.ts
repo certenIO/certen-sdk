@@ -110,6 +110,21 @@ export interface IdentityResponse extends Identity {
   signing_provider?: unknown;
   /** Only on create, and only once — the URL stops working after it is read. */
   mnemonic_retrieval?: { url: string; expires_in: number };
+  /** Where to poll. Only on create. */
+  status_url?: string;
+  /**
+   * How to wait, published by the gateway so no client has to invent a cadence. Only on create.
+   *
+   * `first_poll_after_seconds` is the one that matters: provisioning is a chain of Accumulate
+   * transactions that each wait for the previous to anchor, so polling before then only spends
+   * requests. `createAndWait()` honours this automatically.
+   */
+  polling?: {
+    first_poll_after_seconds: number;
+    interval_seconds: number;
+    estimated_ready_in_seconds: number;
+    terminal_states: string[];
+  };
   warning?: string;
   /**
    * Free-form: the gateway serializes this subtree with mixed casing (`key_books` holds

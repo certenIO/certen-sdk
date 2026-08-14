@@ -358,3 +358,118 @@ describe('CertenClient default base URL', () => {
 function baseUrlOf(client: CertenClient): string | undefined {
   return (client as unknown as { http: { defaults: { baseURL?: string } } }).http.defaults.baseURL;
 }
+
+describe('createAndWait honours the cadence the gateway publishes', () => {
+  /** Local: this file has no shared json helper, unlike billing.test.ts. */
+  const json = (res: http.ServerResponse, status: number, body: unknown): void => {
+    res.statusCode = status;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+
+  const CREATED = (polling?: unknown) => ({
+    id: 'id_1', adi_url: 'acc://x.acme', status: 'creating',
+    status_url: '/v1/identity/id_1', chain_accounts: [], credit_balance: 0,
+    created_at: '2026-08-14T00:00:00.000Z',
+    ...(polling ? { polling } : {}),
+  });
+  const READY = {
+    id: 'id_1', adi_url: 'acc://x.acme', status: 'active', can_sign: true,
+    chain_accounts: [], credit_balance: 500, created_at: '2026-08-14T00:00:00.000Z',
+  };
+
+  it('waits before the FIRST poll instead of hammering an operation that cannot be done yet', async () => {
+    // It used to poll every 3s starting immediately, against provisioning that is a chain of
+    // anchored Accumulate transactions and cannot finish in under a minute — roughly twenty
+    // requests spent before anything could have changed.
+    const times: number[] = [];
+    const s = await startServer((req, res) => {
+      if (req.method === 'POST') {
+        return json(res, 202, CREATED({
+          first_poll_after_seconds: 0.12, interval_seconds: 0.01,
+          estimated_ready_in_seconds: 90, terminal_states: ['active', 'error'],
+        }));
+      }
+      times.push(Date.now());
+      return json(res, 200, READY);
+    });
+    try {
+      const t0 = Date.now();
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .identity.createAndWait({ name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) });
+      expect(out.status).toBe('active');
+      expect(times).toHaveLength(1);
+      expect(times[0] - t0).toBeGreaterThanOrEqual(100);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('polls immediately against a gateway that publishes nothing', async () => {
+    // The SDK ships separately and is pointed at older gateways. Waiting on an absent field would
+    // be inventing a delay, which is the mistake in the other direction.
+    const s = await startServer((req, res) => {
+      if (req.method === 'POST') return json(res, 202, CREATED());
+      return json(res, 200, READY);
+    });
+    try {
+      const t0 = Date.now();
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .identity.createAndWait({ name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) });
+      expect(Date.now() - t0).toBeLessThan(200);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('lets an explicit intervalMs override the published cadence entirely', async () => {
+    // A caller who names an interval has said what they want; honouring the server's first-poll
+    // delay on top of it would silently ignore them.
+    const s = await startServer((req, res) => {
+      if (req.method === 'POST') {
+        return json(res, 202, CREATED({
+          first_poll_after_seconds: 30, interval_seconds: 30,
+          estimated_ready_in_seconds: 90, terminal_states: ['active', 'error'],
+        }));
+      }
+      return json(res, 200, READY);
+    });
+    try {
+      const t0 = Date.now();
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .identity.createAndWait(
+          { name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) },
+          { intervalMs: 5 },
+        );
+      expect(Date.now() - t0).toBeLessThan(1_000);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('never lets the published delay overshoot the caller timeout', async () => {
+    // A gateway advertising a 30s first poll must not make a 300ms budget wait 30 seconds.
+    const s = await startServer((req, res) => {
+      if (req.method === 'POST') {
+        return json(res, 202, CREATED({
+          first_poll_after_seconds: 30, interval_seconds: 1,
+          estimated_ready_in_seconds: 90, terminal_states: ['active', 'error'],
+        }));
+      }
+      return json(res, 200, { ...READY, status: 'creating', can_sign: null });
+    });
+    try {
+      const t0 = Date.now();
+      await expect(
+        new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+          .identity.createAndWait(
+            { name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) },
+            { timeoutMs: 300 },
+          ),
+      ).rejects.toThrow();
+      expect(Date.now() - t0).toBeLessThan(3_000);
+    } finally {
+      await s.close();
+    }
+  });
+});

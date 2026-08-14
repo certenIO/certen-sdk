@@ -4,6 +4,18 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — `createAndWait()` uses the cadence the gateway publishes
+
+`POST /v1/identity` now returns a `polling` block: when to make the FIRST request, how often after
+that, the typical total, and which statuses are terminal. It was a `status_url` and nothing else,
+so every client invented a cadence — this one polled every 3 seconds starting immediately, against
+an operation that is a chain of anchored Accumulate transactions and cannot complete in under a
+minute. Roughly twenty requests spent before anything could possibly have changed.
+
+An explicit `intervalMs` still overrides it completely, a gateway that sends no `polling` block
+falls back to the previous numbers, and the published first-poll delay is clamped to the caller
+timeout so a long advertised delay can never overshoot a short budget.
+
 ### Added — `client.transparency` and `billing.verifyReceipt()`
 
 The transparency log had no client surface, which made the receipts unverifiable in practice. A

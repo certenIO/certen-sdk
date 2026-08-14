@@ -72,8 +72,9 @@ export class IdentityResource {
    */
   async createAndWait(
     params: CreateIdentityParams,
-    { timeoutMs = 300_000, intervalMs = 3_000, onPoll }: {
+    { timeoutMs = 300_000, intervalMs, onPoll }: {
       timeoutMs?: number;
+      /** Overrides the cadence the gateway publishes. Leave unset to use it. */
       intervalMs?: number;
       onPoll?: (identity: Identity) => void;
     } = {},
@@ -84,8 +85,22 @@ export class IdentityResource {
       throw new CertenError('certen: the gateway accepted the identity but returned no id', 0, 'NO_IDENTITY_ID');
     }
 
+    // The gateway now publishes how to wait, so this stops guessing. It used to poll every 3s
+    // starting IMMEDIATELY, against an operation that is a chain of anchored Accumulate
+    // transactions and cannot finish in under a minute — roughly twenty requests spent before
+    // anything could possibly have changed. An explicit `intervalMs` still wins, and a gateway that
+    // sends no `polling` block falls back to the old numbers rather than to nothing.
+    const polling = created.polling;
+    const pollInterval = intervalMs ?? (polling ? polling.interval_seconds * 1_000 : 3_000);
+    const firstPollDelay = intervalMs === undefined && polling
+      ? polling.first_poll_after_seconds * 1_000
+      : 0;
+
     const deadline = Date.now() + timeoutMs;
     let last: Identity | undefined;
+
+    // Bounded by the deadline, so a large published delay can never overshoot the caller's budget.
+    if (firstPollDelay > 0) await sleep(Math.min(firstPollDelay, Math.max(0, deadline - Date.now())));
 
     while (Date.now() < deadline) {
       // The response IS the identity (plus its joined sub-resources) since the gateway flattened
@@ -116,7 +131,7 @@ export class IdentityResource {
         // usually transient — and fall through to the unknown-answer error if it never resolves.
       }
 
-      await sleep(intervalMs);
+      await sleep(pollInterval);
     }
 
     if (last && !IN_FLIGHT.includes(last.status) && last.can_sign == null) {

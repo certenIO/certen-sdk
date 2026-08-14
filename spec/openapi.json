@@ -264,7 +264,7 @@
         "tags": [
           "Identity"
         ],
-        "description": "Compound method that provisions the entire CERTEN/Accumulate identity stack in a single call: it creates the Accumulate ADI (acc://<name>.acme), its key book, and the key page (book/1) keyed to the caller's public_key_hash so they can sign, then buys credits on that key page, and — when `chains` are supplied — derives and deploys the corresponding multi-chain accounts. With signing_mode \"external\" (the default) the caller supplies and retains their own keys via public_key_hash. With signing_mode \"provider\" the gateway generates and manages keys through the configured signing provider and returns a one-shot mnemonic retrieval URL (the mnemonic is never returned inline). Because each step waits for the previous transaction to anchor on-chain (Accumulate is eventually-consistent), this call typically takes ~60-90s. Requires the identity:write scope. If an idempotency_key is supplied the create is de-duplicated.",
+        "description": "Compound method that provisions the entire CERTEN/Accumulate identity stack in a single call: it creates the Accumulate ADI (acc://<name>.acme), its key book, and the key page (book/1) keyed to the caller's public_key_hash so they can sign, then buys credits on that key page, and — when `chains` are supplied — derives and deploys the corresponding multi-chain accounts. With signing_mode \"external\" (the default) the caller supplies and retains their own keys via public_key_hash. With signing_mode \"provider\" the gateway generates and manages keys through the configured signing provider and returns a one-shot mnemonic retrieval URL (the mnemonic is never returned inline). Because each step waits for the previous transaction to anchor on-chain (Accumulate is eventually-consistent), provisioning typically completes in 60-90 seconds. The call itself returns a 202 immediately; see the polling block on the 202 response for how to wait. Requires the identity:write scope. If an idempotency_key is supplied the create is de-duplicated.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -326,11 +326,11 @@
         },
         "responses": {
           "202": {
-            "description": "Identity provisioning ACCEPTED. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and takes minutes on Accumulate; the response returns immediately with identity.status \"provisioning\" and a status_url. Poll GET /v1/identity/{id} until status becomes \"active\" (or \"error\"). For provider signing mode the one-shot mnemonic_retrieval URL is included here.",
+            "description": "Identity provisioning ACCEPTED — nothing is finished yet. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and typically completes in 60-90 seconds; the response returns immediately with status \"creating\" and a `status_url`. **Use the `polling` block rather than inventing a cadence**: wait `first_poll_after_seconds` before the FIRST request (provisioning cannot finish sooner than a chain of anchored Accumulate transactions, so earlier polls only burn requests), then poll `status_url` every `interval_seconds` until `status` is one of `terminal_states`. For provider signing mode the one-shot mnemonic_retrieval URL is included here and nowhere else.",
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "Identity provisioning ACCEPTED. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and takes minutes on Accumulate; the response returns immediately with identity.status \"provisioning\" and a status_url. Poll GET /v1/identity/{id} until status becomes \"active\" (or \"error\"). For provider signing mode the one-shot mnemonic_retrieval URL is included here.",
+                  "description": "Identity provisioning ACCEPTED — nothing is finished yet. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and typically completes in 60-90 seconds; the response returns immediately with status \"creating\" and a `status_url`. **Use the `polling` block rather than inventing a cadence**: wait `first_poll_after_seconds` before the FIRST request (provisioning cannot finish sooner than a chain of anchored Accumulate transactions, so earlier polls only burn requests), then poll `status_url` every `interval_seconds` until `status` is one of `terminal_states`. For provider signing mode the one-shot mnemonic_retrieval URL is included here and nowhere else.",
                   "type": "object",
                   "additionalProperties": true,
                   "properties": {
@@ -362,6 +362,32 @@
                     "created_at": {},
                     "status_url": {
                       "type": "string"
+                    },
+                    "polling": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "How to wait for this, published so no client has to guess.",
+                      "properties": {
+                        "first_poll_after_seconds": {
+                          "type": "integer",
+                          "description": "Wait this long before the FIRST poll. Nothing can have changed sooner."
+                        },
+                        "interval_seconds": {
+                          "type": "integer",
+                          "description": "Minimum seconds between polls."
+                        },
+                        "estimated_ready_in_seconds": {
+                          "type": "integer",
+                          "description": "Typical total. Not a guarantee — poll until a terminal state."
+                        },
+                        "terminal_states": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "description": "Stop polling at any of these. Anything else means still in flight."
+                        }
+                      }
                     },
                     "signing_mode": {
                       "type": "string"
@@ -410,6 +436,97 @@
                   "description": "Missing or invalid authentication credentials.",
                   "type": "object",
                   "additionalProperties": true
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Always `PAYMENT_REQUIRED`."
+                    },
+                    "quote": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The binding price for this work. Pass `quote_id` on the retry to hold it."
+                    },
+                    "balance": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "available_usd": {
+                          "type": "string"
+                        },
+                        "held_usd": {
+                          "type": "string"
+                        },
+                        "spendable_usd": {
+                          "type": "string"
+                        },
+                        "shortfall_usd": {
+                          "type": "string",
+                          "description": "How much is missing. Send at least this."
+                        }
+                      }
+                    },
+                    "resolve": {
+                      "type": [
+                        "null",
+                        "object"
+                      ],
+                      "additionalProperties": true,
+                      "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
+                      "properties": {
+                        "payment_intent": {
+                          "type": "string",
+                          "description": "Reference for GET /v1/billing/deposits/{reference}."
+                        },
+                        "chain": {
+                          "type": "string"
+                        },
+                        "to_address": {
+                          "type": "string"
+                        },
+                        "amount_usd": {
+                          "type": "string",
+                          "description": "Send EXACTLY this. Attribution matches the exact amount."
+                        },
+                        "expires_at": {},
+                        "reused_existing": {
+                          "type": "boolean",
+                          "description": "True when an already-open intent covered the shortfall. A retry loop reuses one intent rather than opening a new one per refusal."
+                        },
+                        "portal_url": {
+                          "type": "string"
+                        },
+                        "cli_command": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "how_to_pay": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The same steps as endpoints, for a caller not using `resolve`."
+                    },
+                    "quote_expires_at": {
+                      "description": "Retry with the quote before this instant or it must be re-priced."
+                    }
+                  }
                 }
               }
             }
@@ -760,6 +877,97 @@
                   "description": "Missing or invalid authentication credentials.",
                   "type": "object",
                   "additionalProperties": true
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Always `PAYMENT_REQUIRED`."
+                    },
+                    "quote": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The binding price for this work. Pass `quote_id` on the retry to hold it."
+                    },
+                    "balance": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "available_usd": {
+                          "type": "string"
+                        },
+                        "held_usd": {
+                          "type": "string"
+                        },
+                        "spendable_usd": {
+                          "type": "string"
+                        },
+                        "shortfall_usd": {
+                          "type": "string",
+                          "description": "How much is missing. Send at least this."
+                        }
+                      }
+                    },
+                    "resolve": {
+                      "type": [
+                        "null",
+                        "object"
+                      ],
+                      "additionalProperties": true,
+                      "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
+                      "properties": {
+                        "payment_intent": {
+                          "type": "string",
+                          "description": "Reference for GET /v1/billing/deposits/{reference}."
+                        },
+                        "chain": {
+                          "type": "string"
+                        },
+                        "to_address": {
+                          "type": "string"
+                        },
+                        "amount_usd": {
+                          "type": "string",
+                          "description": "Send EXACTLY this. Attribution matches the exact amount."
+                        },
+                        "expires_at": {},
+                        "reused_existing": {
+                          "type": "boolean",
+                          "description": "True when an already-open intent covered the shortfall. A retry loop reuses one intent rather than opening a new one per refusal."
+                        },
+                        "portal_url": {
+                          "type": "string"
+                        },
+                        "cli_command": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "how_to_pay": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The same steps as endpoints, for a caller not using `resolve`."
+                    },
+                    "quote_expires_at": {
+                      "description": "Retry with the quote before this instant or it must be re-priced."
+                    }
+                  }
                 }
               }
             }
@@ -3352,6 +3560,97 @@
               }
             }
           },
+          "402": {
+            "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Always `PAYMENT_REQUIRED`."
+                    },
+                    "quote": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The binding price for this work. Pass `quote_id` on the retry to hold it."
+                    },
+                    "balance": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "available_usd": {
+                          "type": "string"
+                        },
+                        "held_usd": {
+                          "type": "string"
+                        },
+                        "spendable_usd": {
+                          "type": "string"
+                        },
+                        "shortfall_usd": {
+                          "type": "string",
+                          "description": "How much is missing. Send at least this."
+                        }
+                      }
+                    },
+                    "resolve": {
+                      "type": [
+                        "null",
+                        "object"
+                      ],
+                      "additionalProperties": true,
+                      "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
+                      "properties": {
+                        "payment_intent": {
+                          "type": "string",
+                          "description": "Reference for GET /v1/billing/deposits/{reference}."
+                        },
+                        "chain": {
+                          "type": "string"
+                        },
+                        "to_address": {
+                          "type": "string"
+                        },
+                        "amount_usd": {
+                          "type": "string",
+                          "description": "Send EXACTLY this. Attribution matches the exact amount."
+                        },
+                        "expires_at": {},
+                        "reused_existing": {
+                          "type": "boolean",
+                          "description": "True when an already-open intent covered the shortfall. A retry loop reuses one intent rather than opening a new one per refusal."
+                        },
+                        "portal_url": {
+                          "type": "string"
+                        },
+                        "cli_command": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "how_to_pay": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The same steps as endpoints, for a caller not using `resolve`."
+                    },
+                    "quote_expires_at": {
+                      "description": "Retry with the quote before this instant or it must be re-priced."
+                    }
+                  }
+                }
+              }
+            }
+          },
           "404": {
             "description": "Identity not found for this organization.",
             "content": {
@@ -4645,6 +4944,97 @@
               }
             }
           },
+          "402": {
+            "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Payment required. NOTHING WAS CHARGED AND NO WORK WAS STARTED. The body carries everything needed to settle and retry: `quote` is the binding price, `balance.shortfall_usd` is how much is missing, and `resolve` is a live payment target — send EXACTLY `resolve.amount_usd` to `resolve.to_address` on `resolve.chain`, since attribution matches on the exact amount and a different figure will not credit automatically. Then repeat this request with `quote_id` set to `quote.quote_id` before `quote_expires_at`. `resolve` is null only when no chain is currently accepting deposits; the refusal itself is still correct.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "description": "Always `PAYMENT_REQUIRED`."
+                    },
+                    "quote": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The binding price for this work. Pass `quote_id` on the retry to hold it."
+                    },
+                    "balance": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "available_usd": {
+                          "type": "string"
+                        },
+                        "held_usd": {
+                          "type": "string"
+                        },
+                        "spendable_usd": {
+                          "type": "string"
+                        },
+                        "shortfall_usd": {
+                          "type": "string",
+                          "description": "How much is missing. Send at least this."
+                        }
+                      }
+                    },
+                    "resolve": {
+                      "type": [
+                        "null",
+                        "object"
+                      ],
+                      "additionalProperties": true,
+                      "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
+                      "properties": {
+                        "payment_intent": {
+                          "type": "string",
+                          "description": "Reference for GET /v1/billing/deposits/{reference}."
+                        },
+                        "chain": {
+                          "type": "string"
+                        },
+                        "to_address": {
+                          "type": "string"
+                        },
+                        "amount_usd": {
+                          "type": "string",
+                          "description": "Send EXACTLY this. Attribution matches the exact amount."
+                        },
+                        "expires_at": {},
+                        "reused_existing": {
+                          "type": "boolean",
+                          "description": "True when an already-open intent covered the shortfall. A retry loop reuses one intent rather than opening a new one per refusal."
+                        },
+                        "portal_url": {
+                          "type": "string"
+                        },
+                        "cli_command": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "how_to_pay": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "The same steps as endpoints, for a caller not using `resolve`."
+                    },
+                    "quote_expires_at": {
+                      "description": "Retry with the quote before this instant or it must be re-priced."
+                    }
+                  }
+                }
+              }
+            }
+          },
           "403": {
             "description": "Authenticated, but the key lacks the required scope. (This is what an insufficient scope actually returns; it was previously documented as 401.)",
             "content": {
@@ -5791,12 +6181,60 @@
         "description": "Returns the signed-in Firebase user, the organizations they belong to (with role), and the active org. Requires a Firebase ID token (self-service portal).",
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "The signed-in user, the organization they are acting in, and every organization they belong to.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The signed-in user, the organization they are acting in, and every organization they belong to.",
+                  "properties": {
+                    "user": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "source": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "active_org_id": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "orgs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "org_id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -5832,12 +6270,53 @@
         "description": "Lists the API keys for the active organization. Only prefixes are returned — raw keys are never retrievable. Requires a Firebase ID token.",
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "API keys for the active organization. Secrets are never included.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "API keys for the active organization. Secrets are never included.",
+                  "properties": {
+                    "api_keys": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "key_prefix": {
+                            "type": "string"
+                          },
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "rate_limit_rpm": {
+                            "type": [
+                              "null",
+                              "integer"
+                            ]
+                          },
+                          "is_active": {
+                            "type": "boolean"
+                          },
+                          "created_at": {},
+                          "last_used_at": {}
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -5903,12 +6382,46 @@
         },
         "responses": {
           "201": {
-            "description": "Default Response",
+            "description": "The new key. `api_key.key` is the secret and is shown exactly once — `warning` says so, which is why the key is nested rather than flattened: the caller must read both together.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The new key. `api_key.key` is the secret and is shown exactly once — `warning` says so, which is why the key is nested rather than flattened: the caller must read both together.",
+                  "properties": {
+                    "api_key": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string",
+                          "description": "The secret. Shown once, never retrievable again."
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "permissions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -5965,12 +6478,46 @@
         ],
         "responses": {
           "201": {
-            "description": "Default Response",
+            "description": "The new key. `api_key.key` is the secret and is shown exactly once — `warning` says so, which is why the key is nested rather than flattened: the caller must read both together.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The new key. `api_key.key` is the secret and is shown exactly once — `warning` says so, which is why the key is nested rather than flattened: the caller must read both together.",
+                  "properties": {
+                    "api_key": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "key": {
+                          "type": "string",
+                          "description": "The secret. Shown once, never retrievable again."
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "permissions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -6027,12 +6574,21 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "The key, now inactive.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The key, now inactive.",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "is_active": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -6079,12 +6635,52 @@
         "description": "Lists members of the active organization. Requires a Firebase ID token.",
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "Two collections: who is in the organization, and who has been asked.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "Two collections: who is in the organization, and who has been asked.",
+                  "properties": {
+                    "members": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "pending_invites": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "email": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          },
+                          "expires_at": {}
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -6135,12 +6731,22 @@
         },
         "responses": {
           "201": {
-            "description": "Default Response",
+            "description": "The invitation, at the top level — matching every other singular write on this API.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The invitation, at the top level — matching every other singular write on this API.",
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "expires_at": {}
+                  }
                 }
               }
             }
@@ -6187,12 +6793,83 @@
         "description": "Account standing, registered payer addresses, open payment intents, and the chains that accept deposits. One call so the funding screen renders without a waterfall. Requires a Firebase ID token.",
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "Everything the funding panel renders, in one call.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "Everything the funding panel renders, in one call.",
+                  "properties": {
+                    "standing": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Balance, credit and status — what the funding panel leads with.",
+                      "properties": {}
+                    },
+                    "addresses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "The registered wallet, at the top level, identically to POST /v1/billing/deposit-addresses.",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "chain": {
+                            "type": "string"
+                          },
+                          "address": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "is_active": {
+                            "type": "boolean"
+                          },
+                          "verified_at": {},
+                          "created_at": {}
+                        }
+                      }
+                    },
+                    "open_intents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "The payment intent, at the top level, identically to GET /v1/billing/deposits/{reference}.",
+                        "properties": {
+                          "reference": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "description": "open | matched | expired | cancelled."
+                          },
+                          "amount_usd": {
+                            "type": "string"
+                          },
+                          "expires_at": {},
+                          "matched_at": {},
+                          "payment_id": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "chains": {
+                      "type": "array",
+                      "items": {}
+                    }
+                  }
                 }
               }
             }
@@ -6252,12 +6929,35 @@
         },
         "responses": {
           "201": {
-            "description": "Default Response",
+            "description": "Where to send, and the single-use intent matched on the EXACT amount.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "Where to send, and the single-use intent matched on the EXACT amount.",
+                  "properties": {
+                    "chain": {
+                      "type": "string"
+                    },
+                    "deposit_address": {
+                      "type": "string"
+                    },
+                    "token": {},
+                    "deposit_intent": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "properties": {
+                        "reference": {
+                          "type": "string"
+                        },
+                        "amount_usd": {
+                          "type": "string"
+                        },
+                        "expires_at": {}
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -6312,7 +7012,7 @@
     "/v1/portal/funding/intents/{reference}": {
       "get": {
         "summary": "Check a one-time payment",
-        "description": "Status of a single payment intent, so a waiting screen can poll instead of asking the customer to reload. Scoped to the active organization. Requires a Firebase ID token.",
+        "description": "Status of a single payment intent, so a waiting screen can poll instead of asking the customer to reload. The intent's fields are returned at the top level, identically to `GET /v1/billing/deposits/{reference}`. Scoped to the active organization. Requires a Firebase ID token.",
         "parameters": [
           {
             "schema": {
@@ -6326,12 +7026,33 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "The payment intent, at the top level, identically to GET /v1/billing/deposits/{reference}.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The payment intent, at the top level, identically to GET /v1/billing/deposits/{reference}.",
+                  "properties": {
+                    "reference": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "open | matched | expired | cancelled."
+                    },
+                    "amount_usd": {
+                      "type": "string"
+                    },
+                    "expires_at": {},
+                    "matched_at": {},
+                    "payment_id": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  }
                 }
               }
             }
@@ -6406,12 +7127,35 @@
         },
         "responses": {
           "201": {
-            "description": "Default Response",
+            "description": "The registered wallet, at the top level, identically to POST /v1/billing/deposit-addresses.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The registered wallet, at the top level, identically to POST /v1/billing/deposit-addresses.",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "chain": {
+                      "type": "string"
+                    },
+                    "address": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "is_active": {
+                      "type": "boolean"
+                    },
+                    "verified_at": {},
+                    "created_at": {}
+                  }
                 }
               }
             }
@@ -6491,12 +7235,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "Deposits from this wallet are no longer credited automatically.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "Deposits from this wallet are no longer credited automatically.",
+                  "properties": {
+                    "deactivated": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
@@ -6570,12 +7320,38 @@
         },
         "responses": {
           "201": {
-            "description": "Default Response",
+            "description": "The device authorization is open. Show `user_code` to the human, send them to `verification_uri`, and poll `GET /v1/portal/device/{device_code}` no faster than `interval` seconds until `expires_in` elapses.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The device authorization is open. Show `user_code` to the human, send them to `verification_uri`, and poll `GET /v1/portal/device/{device_code}` no faster than `interval` seconds until `expires_in` elapses.",
+                  "properties": {
+                    "device_code": {
+                      "type": "string",
+                      "description": "Secret. Poll with this; never show it to the user."
+                    },
+                    "user_code": {
+                      "type": "string",
+                      "description": "Short code the human reads and types. Show THIS."
+                    },
+                    "verification_uri": {
+                      "type": "string"
+                    },
+                    "verification_uri_complete": {
+                      "type": "string",
+                      "description": "Prefills the code. Following it does NOT approve — approval is always an explicit click by a signed-in human, because a link that grants access by being followed is the whole device-phishing problem."
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "description": "Seconds until the request dies."
+                    },
+                    "interval": {
+                      "type": "integer",
+                      "description": "Minimum seconds between polls."
+                    }
+                  }
                 }
               }
             }
@@ -6621,12 +7397,54 @@
         ],
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "Poll result. `status` is one of pending | approved | denied | expired | claimed. The key appears ONLY on the single `approved` response — the code becomes `claimed` immediately after, so a client that does not persist it there cannot recover it.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "Poll result. `status` is one of pending | approved | denied | expired | claimed. The key appears ONLY on the single `approved` response — the code becomes `claimed` immediately after, so a client that does not persist it there cannot recover it.",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied",
+                        "expired",
+                        "claimed"
+                      ]
+                    },
+                    "interval": {
+                      "type": "integer",
+                      "description": "Present while pending: wait at least this long."
+                    },
+                    "api_key": {
+                      "type": "string",
+                      "description": "Only on `approved`, and only once. Save it immediately."
+                    },
+                    "key_prefix": {
+                      "type": "string"
+                    },
+                    "key_id": {
+                      "type": "string"
+                    },
+                    "org_id": {
+                      "type": "string"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -6692,12 +7510,25 @@
         },
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "The human granted it. The waiting client collects the key on its next poll.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The human granted it. The waiting client collects the key on its next poll.",
+                  "properties": {
+                    "approved": {
+                      "type": "boolean"
+                    },
+                    "device_name": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "expires_at": {}
+                  }
                 }
               }
             }
@@ -6774,12 +7605,18 @@
         },
         "responses": {
           "200": {
-            "description": "Default Response",
+            "description": "The human refused it. The waiting client sees `status: denied` and stops.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "description": "The human refused it. The waiting client sees `status: denied` and stops.",
+                  "properties": {
+                    "denied": {
+                      "type": "boolean"
+                    }
+                  }
                 }
               }
             }
