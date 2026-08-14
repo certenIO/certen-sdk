@@ -7033,7 +7033,7 @@
     "/v1/billing/balance": {
       "get": {
         "summary": "Get the organization balance",
-        "description": "Current prepaid balance, funds held against in-flight work, and any granted postpay credit limit. `spendable_usd` is what may actually be spent right now (available + credit limit). Requires the billing:read scope.",
+        "description": "Current prepaid balance, funds held against in-flight work, and any granted postpay credit limit. `spendable_usd` is what may actually be spent right now (available + credit limit). **Gate on `remaining_usd`, not on `spendable_usd`.** `remaining_usd` subtracts what pending intents will consume when they execute; a multi-signature intent can wait weeks for quorum, so an account can show a healthy spendable balance that is entirely committed and still be refused on its next call. Both numbers are returned here so that answering \"can I afford this\" costs one request. `GET /v1/billing/obligations` itemises WHICH intents claimed it. Requires the billing:read scope.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -7056,6 +7056,15 @@
                       "type": "string"
                     },
                     "spendable_usd": {
+                      "type": "string"
+                    },
+                    "remaining_usd": {
+                      "type": "string"
+                    },
+                    "pending_intents": {
+                      "type": "integer"
+                    },
+                    "uncovered_usd": {
                       "type": "string"
                     },
                     "status": {

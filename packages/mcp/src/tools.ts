@@ -173,9 +173,13 @@ const READ_TOOLS: ToolDef[] = [
     mutates: false,
     endpoint: 'GET /v1/billing/balance',
     description:
-      'What the organization can spend. `spendable_usd` is available balance plus any credit line. '
-      + 'Read certen_billing_obligations too before concluding work is affordable: pending intents '
-      + 'may have claimed this balance already.',
+      'What the organization can spend, and what is actually left after work already committed. '
+      + 'Gate on `remaining_usd`, NOT on `spendable_usd`: a multi-signature intent is charged when '
+      + 'quorum is reached, which can be weeks after it was opened, so an account can show a healthy '
+      + 'spendable balance that is entirely spoken for and still be refused. This one call answers '
+      + '"can I afford this" — reach for certen_billing_obligations only to see WHICH intents '
+      + 'claimed it. Also carries the credit terms: `credit.suspends_at_usd` is the drawdown at '
+      + 'which service stops, so a top-up can happen before the refusal rather than after.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     run: (c) => c.billing.balance(),
   },

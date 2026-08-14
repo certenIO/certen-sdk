@@ -4,6 +4,13 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Changed — `certen_billing_balance` answers affordability on its own
+
+Its description told the agent to also call `certen_billing_obligations` before concluding that work
+was affordable. The balance now carries `remaining_usd`, so one call settles it, and the description
+says plainly to gate on that rather than on `spendable_usd`. `certen_billing_obligations` is still
+the tool for seeing which intents claimed the balance.
+
 ### Fixed — the server reports its real version
 
 `serverInfo.version` was the literal `0.1.0`, written once and never updated, so every MCP client

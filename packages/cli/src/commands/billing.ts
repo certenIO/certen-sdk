@@ -39,12 +39,19 @@ export function registerBillingCommands(program: Command): void {
     .description('Show your balance and what pending work has already claimed')
     .action(async () => {
       const client = await getClient();
-      // Both, because either alone misleads: the balance looks healthy while
-      // every cent of it is committed to intents awaiting quorum.
-      const [balance, obligations] = await Promise.all([
-        client.billing.balance(),
-        client.billing.obligations(),
-      ]);
+      // One call. The balance carries `remaining_usd` — spendable minus what pending intents will
+      // consume — because either number alone misleads: the balance looks healthy while every cent
+      // of it is committed to intents awaiting quorum. This used to be two concurrent requests, and
+      // it still falls back to the second one against a gateway that does not send the field yet,
+      // rather than reporting the flattering number as if it were safe.
+      const balance = await client.billing.balance();
+      const commitments = balance.remaining_usd !== undefined
+        ? {
+          remaining_usd: balance.remaining_usd,
+          pending_intents: balance.pending_intents ?? 0,
+          uncovered_usd: balance.uncovered_usd ?? '0.000000',
+        }
+        : await client.billing.obligations();
 
       printOutput({
         currency: balance.currency,
@@ -52,9 +59,9 @@ export function registerBillingCommands(program: Command): void {
         held_usd: balance.held_usd,
         credit_limit_usd: balance.credit_limit_usd,
         spendable_usd: balance.spendable_usd,
-        remaining_usd: obligations.remaining_usd,
-        pending_intents: obligations.pending_intents,
-        uncovered_usd: obligations.uncovered_usd,
+        remaining_usd: commitments.remaining_usd,
+        pending_intents: commitments.pending_intents,
+        uncovered_usd: commitments.uncovered_usd,
         status: balance.status,
         suspended_reason: balance.suspended_reason ?? null,
         credit: balance.credit ?? null,
@@ -69,16 +76,16 @@ export function registerBillingCommands(program: Command): void {
         human(`  Credit line        ${usd(balance.credit_limit_usd)}`);
       }
       human(`  Spendable          ${usd(balance.spendable_usd)}`);
-      human(`  Left to commit     ${usd(obligations.remaining_usd)}`);
+      human(`  Left to commit     ${usd(commitments.remaining_usd)}`);
       human('');
 
-      if (obligations.pending_intents > 0) {
+      if (commitments.pending_intents > 0) {
         human(
-          `  ${obligations.pending_intents} pending intent(s) have claimed `
-          + `${usd(obligations.uncovered_usd)} of that.`,
+          `  ${commitments.pending_intents} pending intent(s) have claimed `
+          + `${usd(commitments.uncovered_usd)} of that.`,
         );
       }
-      if (Number(obligations.remaining_usd) <= 0) {
+      if (Number(commitments.remaining_usd) <= 0) {
         human('  You cannot start new work until you add funds.');
         hint('certen fund <amount> --chain <chain>');
       }

@@ -3,6 +3,13 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Changed — `certen balance` makes one request instead of two
+
+It fetched the balance and `/v1/billing/obligations` concurrently, because the balance alone could
+not say how much was actually left to commit. The gateway now reports that with the balance, so the
+second request is gone. Against an older gateway the command still falls back to it — printing
+`spendable_usd` in the "Left to commit" slot would report committed money as available.
+
 ### Added — `certen pricing`, and `--sku` on `certen quote`
 
 There was no way to ask the CLI what anything costs. `certen quote` prices one operation and takes

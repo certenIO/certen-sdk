@@ -258,12 +258,22 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
   // still emitted in their original order below; only the I/O overlaps.
   //
   // `balance` reuses the credential probe when it succeeded, so the duplicate read is gone.
-  const [portfolio, balance, obligations, recentIntents] = await Promise.all([
+  const [portfolio, balance, recentIntents] = await Promise.all([
     client.portfolio.get().catch(() => null),
     probedBalance ? Promise.resolve(probedBalance) : client.billing.balance().catch(() => null),
-    client.billing.obligations().catch(() => null),
     client.transaction.list({ limit: 25 }).catch(() => null),
   ]);
+
+  // Commitments now ride along with the balance, so the dedicated `/v1/billing/obligations` read is
+  // gone — doctor used its response for one field, `remaining_usd`, and paid a whole round trip for
+  // it. Against a gateway that predates the change the field is absent and the old call is made,
+  // because the alternative is reporting `spendable_usd` as if it were safe to commit.
+  const commitments = balance?.remaining_usd !== undefined
+    ? {
+      remaining_usd: balance.remaining_usd,
+      pending_intents: balance.pending_intents ?? 0,
+    }
+    : await client.billing.obligations().catch(() => null);
 
   // ── 3-4. Identities, and whether their abstract accounts can execute ────────────────────────
 
@@ -334,14 +344,14 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
       detail: `Account is ${balance.status}${balance.suspended_reason ? `: ${balance.suspended_reason}` : ''}.`,
       fix: 'Add funds.',
     });
-  } else if (obligations && Number(obligations.remaining_usd) <= 0) {
+  } else if (commitments && Number(commitments.remaining_usd) <= 0) {
     // A balance can read healthy while every cent is committed to intents awaiting quorum, and
     // multi-signature intents can wait weeks. `remaining_usd` is the number that decides whether
     // new work is accepted.
     checks.push({
       name: 'billing balance',
       status: 'fail',
-      detail: `Nothing left to commit — ${obligations.pending_intents} pending intent(s) have claimed it.`,
+      detail: `Nothing left to commit — ${commitments.pending_intents} pending intent(s) have claimed it.`,
       fix: 'Add funds.',
     });
   } else {
@@ -349,7 +359,7 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
       name: 'billing balance',
       status: 'ok',
       detail: `${balance.spendable_usd} spendable`
-        + (obligations ? `, ${obligations.remaining_usd} left to commit` : ''),
+        + (commitments ? `, ${commitments.remaining_usd} left to commit` : ''),
     });
   }
 

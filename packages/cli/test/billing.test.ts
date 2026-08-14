@@ -391,3 +391,81 @@ describe('certen pricing', () => {
     }
   });
 });
+
+describe('certen balance', () => {
+  const BALANCE = {
+    currency: 'USD',
+    available_usd: '100.000000',
+    held_usd: '0.000000',
+    credit_limit_usd: '0.000000',
+    spendable_usd: '100.000000',
+    remaining_usd: '10.000000',
+    pending_intents: 3,
+    uncovered_usd: '90.000000',
+    status: 'active',
+    suspended_reason: null,
+  };
+
+  it('answers affordability in ONE request', async () => {
+    // It used to take two — the balance, then /v1/billing/obligations for `remaining_usd`, the
+    // number that actually decides whether new work is accepted. The gateway now sends both.
+    const paths: string[] = [];
+    const s = await stubGateway((req, res) => {
+      paths.push((req.url ?? '').split('?')[0]);
+      json(res, 200, BALANCE);
+    });
+    try {
+      const r = await certen(['balance', '--json'], s.url);
+      expect(r.code).toBe(0);
+      expect(paths).toEqual(['/v1/billing/balance']);
+      const out = soleJson(r.stdout).data as Record<string, unknown>;
+      expect(out.remaining_usd).toBe('10.000000');
+      expect(out.pending_intents).toBe(3);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('still asks obligations when the gateway is too old to send it', async () => {
+    // The SDK and CLI ship separately from the gateway and are regularly pointed at an older one.
+    // Falling back costs a round trip; NOT falling back would print `spendable_usd` in the
+    // "left to commit" slot, reporting committed money as available.
+    const paths: string[] = [];
+    const s = await stubGateway((req, res) => {
+      const path = (req.url ?? '').split('?')[0];
+      paths.push(path);
+      if (path === '/v1/billing/balance') {
+        const { remaining_usd, pending_intents, uncovered_usd, ...old } = BALANCE;
+        return json(res, 200, old);
+      }
+      return json(res, 200, {
+        pending_intents: 2, estimated_total_usd: '40.000000', uncovered_usd: '40.000000',
+        spendable_usd: '100.000000', remaining_usd: '60.000000', shortfall_usd: '0.000000',
+        enforcing: false, obligations: [], note: '',
+      });
+    });
+    try {
+      const r = await certen(['balance', '--json'], s.url);
+      expect(r.code).toBe(0);
+      expect(paths).toEqual(['/v1/billing/balance', '/v1/billing/obligations']);
+      const out = soleJson(r.stdout).data as Record<string, unknown>;
+      expect(out.remaining_usd).toBe('60.000000');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('says work cannot start when nothing is left to commit', async () => {
+    // A healthy-looking $100 spendable with $100 committed. Reporting only spendable here would
+    // tell someone to go ahead with work the gateway will refuse.
+    const s = await stubGateway((req, res) =>
+      json(res, 200, { ...BALANCE, remaining_usd: '0.000000', uncovered_usd: '100.000000' }));
+    try {
+      const r = await certen(['balance'], s.url);
+      expect(r.stdout).toContain('Left to commit     $0.00');
+      expect(r.stdout).toContain('cannot start new work');
+    } finally {
+      await s.close();
+    }
+  });
+});

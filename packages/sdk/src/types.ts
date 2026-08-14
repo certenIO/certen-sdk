@@ -671,8 +671,24 @@ export interface BalanceResponse {
   held_usd: string;
   /** The credit line IN FORCE. Zero once an expiring grant has lapsed. */
   credit_limit_usd: string;
-  /** available + credit line. NOT what may be committed — see ObligationsResponse. */
+  /** available + credit line. NOT what may be committed — gate on `remaining_usd`. */
   spendable_usd: string;
+  /**
+   * **The number to gate on.** `spendable_usd` minus what pending intents will consume.
+   *
+   * CERTEN charges a multi-signature intent when quorum is reached, which can be weeks after it was
+   * opened — so an account can show a healthy `spendable_usd` that is entirely committed and still
+   * be refused on its next call. Reading this used to mean a second request to
+   * `/v1/billing/obligations`; it now travels with the balance, so affordability costs one call.
+   *
+   * Goes NEGATIVE when commitments exceed capacity, rather than clamping: the size of the gap is
+   * what says how much to add. Optional only because an older gateway does not send it.
+   */
+  remaining_usd?: string;
+  /** How many pending intents claimed it. `obligations()` says which. */
+  pending_intents?: number;
+  /** The part of those commitments not already covered by a hold. */
+  uncovered_usd?: string;
   status: 'active' | 'suspended' | 'closed';
   /** Why service stopped. Without it `status: suspended` is unactionable. */
   suspended_reason?: string | null;

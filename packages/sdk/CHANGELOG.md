@@ -4,6 +4,20 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — affordability is one call, and `doctor()` drops a round trip
+
+`BalanceResponse` now carries `remaining_usd`, `pending_intents` and `uncovered_usd`. **Gate on
+`remaining_usd`.** `spendable_usd` ignores work already committed, and CERTEN charges a
+multi-signature intent when quorum is reached — which can be weeks after it was opened — so an
+account can show a healthy spendable balance that is entirely spoken for and still be refused.
+
+Reading the safe number used to require a second request to `/v1/billing/obligations`. `doctor()`
+made exactly that call for exactly that one field; it no longer does, taking it from **5 round trips
+to 4**. `obligations()` stays, and is still the way to see WHICH intents claimed the balance.
+
+The fields are optional in the type because an older gateway does not send them. Clients fall back
+to `obligations()` when `remaining_usd` is absent rather than treating `spendable_usd` as safe.
+
 ### Added — `billing.pricing()`, so prices stop having to be guessed
 
 `quote()` prices ONE sku on ONE chain and needs the sku name up front. Nothing published those

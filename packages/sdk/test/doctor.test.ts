@@ -52,6 +52,14 @@ const CHAINS = { version: '2.0.0', last_updated: '2026-07-31', accumulate: {}, c
 const BALANCE = {
   currency: 'USD', available_usd: '5.000000', held_usd: '0.000000',
   credit_limit_usd: '0.000000', spendable_usd: '5.000000', status: 'active',
+  // The current gateway reports commitments alongside the balance, so doctor does not read
+  // /v1/billing/obligations at all. LEGACY_BALANCE below is the older shape.
+  remaining_usd: '5.000000', pending_intents: 0, uncovered_usd: '0.000000',
+};
+/** A gateway from before commitments travelled with the balance. */
+const LEGACY_BALANCE = {
+  currency: 'USD', available_usd: '5.000000', held_usd: '0.000000',
+  credit_limit_usd: '0.000000', spendable_usd: '5.000000', status: 'active',
 };
 const OBLIGATIONS = { pending_intents: 0, remaining_usd: '5.000000', uncovered_usd: '0.000000' };
 
@@ -166,7 +174,9 @@ describe('the checks that catch silent failures', () => {
     // The balance reads healthy. `remaining_usd` is the number that decides whether new work is
     // accepted, and multi-signature intents can hold it for weeks.
     const stub = await startServer(gateway({
-      '/v1/billing/obligations': { pending_intents: 3, remaining_usd: '0.000000', uncovered_usd: '1.5' },
+      '/v1/billing/balance': {
+        ...BALANCE, remaining_usd: '0.000000', pending_intents: 3, uncovered_usd: '1.500000',
+      },
     }));
     try {
       const report = await client(stub.url).doctor();
@@ -429,6 +439,50 @@ describe('credit and trials', () => {
     try {
       const report = await client(stub.url).doctor();
       expect(byName(report.checks, 'credit / trial').status).toBe('ok');
+    } finally {
+      await stub.close();
+    }
+  });
+});
+
+describe('what doctor costs', () => {
+  it('does not read obligations separately — the balance already carries them', async () => {
+    // doctor used the obligations response for ONE field, `remaining_usd`, and paid a full round
+    // trip for it on the command whose whole job is to answer a stuck user quickly. The gateway now
+    // sends it with the balance. This pins the saving: obligations must not be requested at all.
+    const paths: string[] = [];
+    const stub = await startServer((req, res) => {
+      paths.push((req.url ?? '').split('?')[0]);
+      gateway()(req, res);
+    });
+    try {
+      const report = await client(stub.url).doctor();
+      expect(report.ok).toBe(true);
+      expect(paths).not.toContain('/v1/billing/obligations');
+      expect(byName(report.checks, 'billing balance').detail).toContain('5.000000 left to commit');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('falls back to obligations against a gateway that does not send it', async () => {
+    // The SDK ships separately from the gateway and is regularly pointed at an older one. The
+    // alternative to the fallback is treating `spendable_usd` as safe to commit, which is the exact
+    // mistake this check exists to catch.
+    const paths: string[] = [];
+    const stub = await startServer((req, res) => {
+      paths.push((req.url ?? '').split('?')[0]);
+      gateway({
+        '/v1/billing/balance': LEGACY_BALANCE,
+        '/v1/billing/obligations': { pending_intents: 4, remaining_usd: '0.000000', uncovered_usd: '5.0' },
+      })(req, res);
+    });
+    try {
+      const report = await client(stub.url).doctor();
+      expect(paths).toContain('/v1/billing/obligations');
+      const billing = byName(report.checks, 'billing balance');
+      expect(billing.status).toBe('fail');
+      expect(billing.detail).toMatch(/4 pending intent/);
     } finally {
       await stub.close();
     }
