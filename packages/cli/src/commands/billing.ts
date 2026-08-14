@@ -252,6 +252,66 @@ export function registerBillingCommands(program: Command): void {
       hint(`Lock this price: pass quote_id=${q.quote_id} on the transaction (expires ${q.expires_at}).`);
     });
 
+  // Registering the wallet you pay from. The gateway's own 402 names this as the recommended fix
+  // ("register_sender ... makes every future deposit attribute automatically") and no client could
+  // do it, so the advice in the refusal pointed at a raw endpoint the reader had to call by hand.
+  const payers = program
+    .command('payers')
+    .description('Wallets whose deposits credit automatically');
+
+  payers
+    .command('list', { isDefault: true })
+    .description('Show the wallets registered for automatic attribution')
+    .action(async () => {
+      const client = await getClient();
+      const { addresses } = await client.billing.payerAddresses();
+      // Machine output only. The generic key/value table renders a nested array as one line of raw
+      // JSON — `addresses  []` — which is noise above the readable list below.
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({ addresses });
+        return;
+      }
+      human('');
+      if (addresses.length === 0) {
+        human('  No wallets registered — deposits need a one-time payment to be attributed.');
+        hint('certen payers add <address> --chain base-sepolia');
+        return;
+      }
+      for (const a of addresses) {
+        human(`  ${a.address}  ${a.chain}${a.label ? `  (${a.label})` : ''}`
+          + `${a.is_active ? '' : '  [inactive]'}`);
+      }
+      human('');
+      human('  Deposits from these credit this organization on sight — no payment intent needed.');
+    });
+
+  payers
+    .command('add <address>')
+    .description('Register a wallet you pay from, so future deposits credit automatically')
+    .requiredOption('--chain <chain>', 'Chain the wallet sends on, e.g. base-sepolia')
+    .option('--label <label>', 'A name for your own reference')
+    .action(async (address: string, opts: { chain: string; label?: string }) => {
+      // Checked before the network call: a malformed address would otherwise be rejected by the
+      // gateway's pattern with no indication of which of the two arguments was wrong.
+      if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+        throw new CliError(
+          `"${address}" is not an EVM address. Expected 0x followed by 40 hex characters.`,
+          'INVALID_ADDRESS', EXIT.USAGE,
+        );
+      }
+      const chain = assertChain(opts.chain);
+      const client = await getClient();
+      const record = await client.billing.registerPayerAddress({
+        chain, address, label: opts.label,
+      });
+      printOutput({ ...record });
+      if (isJsonMode() || getOutputFormat() === 'json') return;
+      human('');
+      human(`  Registered ${record.address} on ${record.chain}.`);
+      human('  Stablecoin sent from this wallet now credits automatically — any amount, any time.');
+      hint('certen balance');
+    });
+
   program
     .command('fund')
     .argument('<amount>', 'Amount in USD to send, e.g. 25 or 25.50')

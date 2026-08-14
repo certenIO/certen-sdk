@@ -4,6 +4,21 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `billing.registerPayerAddress()` and `billing.payerAddresses()`
+
+Register the wallet you pay from once, and every future deposit from it credits automatically — no
+payment intent, no exact-amount matching, no expiry.
+
+**The gateway's own 402 recommended this and no client could do it.** The PAYMENT_REQUIRED body
+names `POST /v1/billing/deposit-addresses` under `how_to_pay.register_sender`, while this SDK
+omitted it on the stated grounds that it required a signed-in portal owner rather than a machine
+key. That was wrong — the endpoint authenticates with an API key carrying `billing:write`, which is
+exactly what an autonomous caller settling its own refusal is holding. The advice in the refusal
+pointed at a raw endpoint the reader had to call by hand.
+
+An address belongs to ONE organization per chain; a duplicate is rejected with a 409 rather than
+merged, because ambiguous attribution would credit the wrong customer.
+
 ### Changed — affordability is one call, and `doctor()` drops a round trip
 
 `BalanceResponse` now carries `remaining_usd`, `pending_intents` and `uncovered_usd`. **Gate on

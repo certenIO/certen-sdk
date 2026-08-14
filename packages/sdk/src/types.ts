@@ -665,6 +665,23 @@ export interface PricingCatalog {
   items: PricingItem[];
 }
 
+/**
+ * A wallet you send from, registered so its deposits credit automatically.
+ *
+ * The alternative — a one-time payment matched on the exact amount — has to be opened before every
+ * send and expires. Registering the sender once removes that step for good.
+ */
+export interface PayerAddress {
+  id: string;
+  chain: string;
+  address: string;
+  label: string | null;
+  is_active: boolean;
+  /** When ownership was confirmed, if it has been. */
+  verified_at: string | null;
+  created_at: string;
+}
+
 export interface BalanceResponse {
   currency: string;
   available_usd: string;

@@ -469,3 +469,71 @@ describe('certen balance', () => {
     }
   });
 });
+
+describe('certen payers', () => {
+  const ADDR = '0x' + 'b'.repeat(40);
+  const RECORD = {
+    id: 'da_1', chain: 'base-sepolia', address: ADDR, label: 'treasury',
+    is_active: true, verified_at: null, created_at: '2026-08-14T00:00:00.000Z',
+  };
+
+  it('registers a wallet so future deposits credit without an intent', async () => {
+    const s = await stubGateway((req, res) => json(res, 201, RECORD));
+    try {
+      const r = await certen(
+        ['payers', 'add', ADDR, '--chain', 'base-sepolia', '--label', 'treasury', '--json'],
+        s.url,
+      );
+      expect(r.code).toBe(0);
+      expect(soleJson(r.stdout).data).toMatchObject({ address: ADDR, chain: 'base-sepolia' });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('rejects a malformed address before opening a connection', async () => {
+    // The gateway's pattern would reject it too, but from here the message can say which of the
+    // two arguments was wrong. `certen` with no stub points at the discard port, so reaching the
+    // network at all would hang rather than exit 2.
+    const r = await certen(['payers', 'add', 'not-an-address', '--chain', 'base-sepolia']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toMatch(/not an EVM address/);
+  });
+
+  it('says plainly when nothing is registered, and how to fix it', async () => {
+    // An empty list is the state where every deposit needs an exact-amount intent first — worth
+    // naming, because it looks identical to "everything is fine" otherwise.
+    const s = await stubGateway((req, res) => json(res, 200, { addresses: [] }));
+    try {
+      const r = await certen(['payers'], s.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toMatch(/No wallets registered/);
+      expect(r.stdout + r.stderr).toMatch(/certen payers add/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('lists registered wallets', async () => {
+    const s = await stubGateway((req, res) => json(res, 200, { addresses: [RECORD] }));
+    try {
+      const r = await certen(['payers', 'list'], s.url);
+      expect(r.stdout).toContain(ADDR);
+      expect(r.stdout).toContain('base-sepolia');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('exits non-zero when the address is already registered elsewhere', async () => {
+    // Exiting 0 would leave a funding script believing attribution is set up when it is not.
+    const s = await stubGateway((req, res) =>
+      json(res, 409, { error: 'Already registered on this chain', code: 'CONFLICT' }));
+    try {
+      const r = await certen(['payers', 'add', ADDR, '--chain', 'base-sepolia', '--json'], s.url);
+      expect(r.code).not.toBe(0);
+    } finally {
+      await s.close();
+    }
+  });
+});

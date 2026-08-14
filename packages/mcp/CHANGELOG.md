@@ -4,6 +4,14 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_billing_register_payer` and `certen_billing_payer_addresses`
+
+An agent that hit PAYMENT_REQUIRED was told, in the refusal itself, to register the sending wallet —
+and had no tool for it. Registering is now a write-tier tool requiring `confirm:true`, because it
+asserts that money arriving from an address belongs to this organization: registering someone
+else's wallet would credit their deposits here, and an address belongs to only one organization per
+chain. Reading the registered list is read-tier.
+
 ### Changed — `certen_billing_balance` answers affordability on its own
 
 Its description told the agent to also call `certen_billing_obligations` before concluding that work

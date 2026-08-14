@@ -184,6 +184,18 @@ const READ_TOOLS: ToolDef[] = [
     run: (c) => c.billing.balance(),
   },
   {
+    name: 'certen_billing_payer_addresses',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/deposit-addresses',
+    description:
+      'Wallets whose deposits credit this organization automatically. An empty list means every '
+      + 'deposit needs a one-time payment intent opened for the exact amount first — see '
+      + 'certen_billing_register_payer to remove that step permanently.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.billing.payerAddresses(),
+  },
+  {
     name: 'certen_billing_obligations',
     tier: 'read',
     mutates: false,
@@ -435,6 +447,36 @@ const READ_TOOLS: ToolDef[] = [
 // ── write tier ──────────────────────────────────────────────────────────────────────────────────
 
 const WRITE_TOOLS: ToolDef[] = [
+  {
+    name: 'certen_billing_register_payer',
+    tier: 'write',
+    mutates: true,
+    endpoint: 'POST /v1/billing/deposit-addresses',
+    description:
+      'Register a wallet this organization pays from, so every future deposit sent from it is '
+      + 'credited automatically with no payment intent and no exact-amount matching. This is what a '
+      + 'PAYMENT_REQUIRED refusal recommends: its `how_to_pay.register_sender` names this endpoint. '
+      + 'Only register an address the user has confirmed is theirs — an address belongs to ONE '
+      + 'organization per chain, a duplicate is rejected rather than merged (409), and registering '
+      + 'someone else\'s wallet would credit their money here. It does not move funds or verify '
+      + 'ownership; it only says where deposits will come from.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chain: str('Chain the wallet sends on, e.g. base-sepolia'),
+        address: str('The sending wallet address, 0x followed by 40 hex characters'),
+        label: str('A name for the user\'s own reference'),
+        confirm: CONFIRM,
+      },
+      required: ['chain', 'address', 'confirm'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.billing.registerPayerAddress({
+      chain: s(a, 'chain'),
+      address: s(a, 'address'),
+      label: optS(a, 'label'),
+    }),
+  },
   {
     name: 'certen_identity_create',
     tier: 'write',

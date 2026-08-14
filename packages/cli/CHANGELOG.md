@@ -3,6 +3,21 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen payers` and `certen payers add`
+
+Register a wallet you send from, so deposits credit on sight instead of needing a one-time payment
+opened for the exact amount before every send. This is what a 402 already told you to do, at an
+endpoint no command could reach.
+
+```
+certen payers add 0xAbC… --chain base-sepolia --label treasury
+certen payers                                  # what is registered
+```
+
+A malformed address is rejected before the network call, an empty list says so plainly rather than
+looking like success, and a 409 (the address belongs to another organization on that chain) exits
+non-zero — a funding script must not read it as "attribution is set up".
+
 ### Changed — `certen balance` makes one request instead of two
 
 It fetched the balance and `/v1/billing/obligations` concurrently, because the balance alone could

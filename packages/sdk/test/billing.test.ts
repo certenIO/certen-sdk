@@ -385,3 +385,72 @@ describe('billing.pricing', () => {
     }
   });
 });
+
+describe('billing.registerPayerAddress', () => {
+  const RECORD = {
+    id: 'da_1', chain: 'base-sepolia', address: '0x' + 'a'.repeat(40),
+    label: 'treasury', is_active: true, verified_at: null,
+    created_at: '2026-08-14T00:00:00.000Z',
+  };
+
+  it('registers the wallet the 402 tells you to register', async () => {
+    // The gateway's PAYMENT_REQUIRED body names `POST /v1/billing/deposit-addresses` as the
+    // recommended fix, and no client could call it. An autonomous caller settling its own refusal
+    // is holding an API key with billing:write, which is all this endpoint asks for.
+    const s = await startServer((req, res) => json(res, 201, RECORD));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.registerPayerAddress({
+          chain: 'base-sepolia', address: RECORD.address, label: 'treasury',
+        });
+      expect(s.recorded[0]).toMatchObject({ method: 'POST', path: '/v1/billing/deposit-addresses' });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        chain: 'base-sepolia', address: RECORD.address, label: 'treasury',
+      });
+      expect(out).toEqual(RECORD);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('omits the label rather than sending an empty one', async () => {
+    // `label: ''` would be stored as the wallet's name, which is worse than having none.
+    const s = await startServer((req, res) => json(res, 201, { ...RECORD, label: null }));
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.registerPayerAddress({ chain: 'base-sepolia', address: RECORD.address });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        chain: 'base-sepolia', address: RECORD.address,
+      });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('surfaces the 409 rather than reporting a registration that did not happen', async () => {
+    // An address belongs to one organization per chain. Swallowing this would leave the caller
+    // believing deposits will attribute automatically when they will not.
+    const s = await startServer((req, res) =>
+      json(res, 409, { error: 'Already registered', code: 'CONFLICT' }));
+    try {
+      await expect(
+        new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+          .billing.registerPayerAddress({ chain: 'base-sepolia', address: RECORD.address }),
+      ).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('lists what is registered', async () => {
+    const s = await startServer((req, res) => json(res, 200, { addresses: [RECORD] }));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.payerAddresses();
+      expect(s.recorded[0]).toMatchObject({ method: 'GET', path: '/v1/billing/deposit-addresses' });
+      expect(out.addresses[0].address).toBe(RECORD.address);
+    } finally {
+      await s.close();
+    }
+  });
+});

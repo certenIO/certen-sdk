@@ -7,6 +7,7 @@ import type {
   DepositIntentStatus,
   PaymentRecord,
   PricingCatalog,
+  PayerAddress,
 } from '../types.js';
 
 
@@ -20,12 +21,16 @@ import type {
  * account can hold a balance that is entirely committed and still be refused on
  * its next call. Show or gate on `remaining_usd`.
  *
- * Funding has two attribution mechanisms and this resource exposes one of them.
+ * Funding has two attribution mechanisms and both are here.
  * `openPayment` declares an exact amount to send, matched inside a TTL — it needs
- * no registered wallet and suits a first deposit. Registering a payer address, so
- * every future send credits automatically, is deliberately NOT here: that asserts
- * deposits from an address belong to your organization, so it requires a signed-in
- * owner or admin in the portal rather than a machine key.
+ * no registered wallet and suits a first deposit. `registerPayerAddress` records a
+ * wallet once so every future send from it credits automatically.
+ *
+ * The second used to be omitted, on the stated grounds that asserting an address
+ * belongs to your organization required a signed-in portal owner rather than a
+ * machine key. That was simply wrong — the endpoint authenticates with an API key
+ * carrying `billing:write` — and the omission mattered, because the gateway's own
+ * 402 names registering a sender as the recommended fix.
  */
 export class BillingResource {
   constructor(private http: AxiosInstance) {}
@@ -87,6 +92,42 @@ export class BillingResource {
    */
   async obligations(): Promise<ObligationsResponse> {
     const { data } = await this.http.get('/v1/billing/obligations');
+    return data;
+  }
+
+  /**
+   * Register a wallet you pay from, so every future deposit from it credits automatically.
+   *
+   * This is the difference between funding once and funding repeatedly. `openPayment` opens a
+   * single-use intent matched on the EXACT amount within a TTL — right for a first deposit, and a
+   * step before every send thereafter. A registered address needs none of that: money arriving from
+   * it is attributed to this organization on sight.
+   *
+   * **The gateway's own 402 recommends doing this, and until now no client could.** Its `how_to_pay`
+   * block names `POST /v1/billing/deposit-addresses` as the recommended fix, while this SDK omitted
+   * it on the stated grounds that it needed a portal session rather than a machine key. That was
+   * wrong: the endpoint takes an API key with `billing:write`, which is exactly what an autonomous
+   * caller settling its own 402 is holding.
+   *
+   * An address belongs to ONE organization per chain. A duplicate is rejected rather than merged,
+   * because ambiguous attribution means crediting the wrong customer — expect a 409.
+   */
+  async registerPayerAddress(params: {
+    chain: string;
+    address: string;
+    label?: string;
+  }): Promise<PayerAddress> {
+    const { data } = await this.http.post('/v1/billing/deposit-addresses', {
+      chain: params.chain,
+      address: params.address,
+      ...(params.label ? { label: params.label } : {}),
+    });
+    return data;
+  }
+
+  /** Wallets registered for automatic attribution. Requires `billing:read`. */
+  async payerAddresses(): Promise<{ addresses: PayerAddress[] }> {
+    const { data } = await this.http.get('/v1/billing/deposit-addresses');
     return data;
   }
 
