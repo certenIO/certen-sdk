@@ -4,6 +4,13 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Fixed — the server reports its real version
+
+`serverInfo.version` was the literal `0.1.0`, written once and never updated, so every MCP client
+completing a handshake against 0.2.0, 0.3.0 and 0.4.0 was told it was talking to 0.1.0 — the wrong
+answer for a client deciding whether a tool it needs exists, and the wrong version on any bug
+report. It is now read from package.json, and a test pins the two together.
+
 ### Added — `certen_pricing` and `certen_quote`
 
 An agent could read the balance but could not find out what anything cost. There was no quote tool

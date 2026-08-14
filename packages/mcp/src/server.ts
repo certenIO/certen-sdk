@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { CertenClient, CertenError } from '@certen.io/sdk';
 import {
   LATEST_PROTOCOL_VERSION,
@@ -10,7 +12,27 @@ import { activeTools, writesAllowed, type ToolDef } from './tools.js';
 import { availableResources, readResource } from './resources.js';
 
 export const SERVER_NAME = '@certen.io/mcp';
-export const SERVER_VERSION = '0.1.0';
+
+/**
+ * Read from package.json rather than written here.
+ *
+ * It was the literal `'0.1.0'` and stayed that way through 0.2.0, 0.3.0 and 0.4.0 — so the startup
+ * banner and, more importantly, the `serverInfo.version` returned to every MCP client named a
+ * release three versions old. A client deciding whether the server carries a tool it needs was
+ * being told the wrong answer, and a bug report would name the wrong version.
+ *
+ * Resolved from this module's own location so it holds for `dist/server.js` (../package.json) and
+ * for `src/server.ts` under a test runner (../package.json) alike.
+ */
+export const SERVER_VERSION: string = (() => {
+  try {
+    const pkg = fileURLToPath(new URL('../package.json', import.meta.url));
+    return (JSON.parse(readFileSync(pkg, 'utf8')) as { version?: string }).version ?? '0.0.0';
+  } catch {
+    // A server that cannot read its own manifest must still start and serve tools.
+    return '0.0.0';
+  }
+})();
 
 export interface ServerOptions {
   env?: NodeJS.ProcessEnv;

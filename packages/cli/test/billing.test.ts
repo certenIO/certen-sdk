@@ -347,6 +347,38 @@ describe('certen pricing', () => {
     }
   });
 
+  it('shows ONE price per sku on a chain, resolving the "*" fallback', async () => {
+    // Observed against the real gateway on the real price book: base-sepolia carries its own
+    // proof.execute entry at $0.35 AND inherits a "*" entry at $0.50, and the filter listed both.
+    // Two prices for one operation on one chain, with nothing to say which would be billed. The
+    // "*" entry does not apply where a specific entry exists, so it is not shown.
+    const WITH_OVERRIDE = {
+      ...CATALOG,
+      items: [
+        ...CATALOG.items,
+        {
+          sku: 'proof.execute', chain: '*', mode: 'flat',
+          platform_fee_usd: '0.500000', gas_buffer_bps: 1500,
+          min_charge_usd: '0.000000', max_charge_usd: null,
+        },
+      ],
+    };
+    const s = await stubGateway((req, res) => json(res, 200, WITH_OVERRIDE));
+    try {
+      const r = await certen(['pricing', '--chain', 'base-sepolia', '--json'], s.url);
+      const { items } = soleJson(r.stdout).data as
+        { items: Array<{ sku: string; chain: string; platform_fee_usd: string }> };
+      const execute = items.filter((i) => i.sku === 'proof.execute');
+      expect(execute).toHaveLength(1);
+      expect(execute[0].chain).toBe('base-sepolia');
+      expect(execute[0].platform_fee_usd).toBe('0.350000');
+      // The fallback is still shown for skus that have no entry of their own.
+      expect(items.find((i) => i.sku === 'identity.provision')?.chain).toBe('*');
+    } finally {
+      await s.close();
+    }
+  });
+
   it('exits non-zero when pricing is not configured', async () => {
     // A script that treats a 503 as "free" would go on to run work it cannot pay for.
     const s = await stubGateway((req, res) =>

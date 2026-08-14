@@ -120,10 +120,16 @@ export function registerBillingCommands(program: Command): void {
       const client = await getClient();
       const book = await client.billing.pricing();
 
-      // "*" is the entry that applies to every chain without one of its own, so filtering it out
-      // of a per-chain view would hide the price that actually applies.
+      // Filtering to a chain RESOLVES the fallback rather than listing both candidates, because
+      // the price book resolves it: a sku with an entry for this chain is charged at that entry,
+      // and "*" applies only where there is none. Listing both showed proof.execute at $0.50 (*)
+      // and $0.35 (base-sepolia) side by side — two prices for one operation on one chain, with
+      // nothing on screen to say which one you would actually be billed.
       const items = chain
-        ? book.items.filter((i) => i.chain === chain || i.chain === '*')
+        ? book.items.filter((i) => (
+          i.chain === chain
+          || (i.chain === '*' && !book.items.some((j) => j.sku === i.sku && j.chain === chain))
+        ))
         : book.items;
 
       // Machine output carries the version and hash alongside the items, because a price is only

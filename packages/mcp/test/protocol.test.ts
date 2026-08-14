@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PassThrough } from 'node:stream';
+import { readFileSync } from 'node:fs';
 import { dispatch, serve, RpcError, RPC, LATEST_PROTOCOL_VERSION } from '../src/protocol.js';
-import { createHandlers } from '../src/server.js';
+import { createHandlers, SERVER_VERSION } from '../src/server.js';
 
 /**
  * Protocol-level behaviour, driven with real JSON-RPC frames.
@@ -241,5 +242,23 @@ describe('resources', () => {
       createHandlers({ env: READ_ONLY }),
     );
     expect(res?.error?.code).toBe(RPC.INVALID_PARAMS);
+  });
+});
+
+describe('the version the server reports', () => {
+  it('is the package version, not a literal that stopped being updated', async () => {
+    // It was hardcoded `'0.1.0'` and stayed there through 0.2.0, 0.3.0 and 0.4.0, so every MCP
+    // client's `initialize` was told a release three versions old. This test is the reason it
+    // cannot drift again.
+    const pkg = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { version: string };
+    expect(SERVER_VERSION).toBe(pkg.version);
+
+    const handlers = createHandlers({ env: {} as NodeJS.ProcessEnv });
+    const init = await handlers.initialize({
+      protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 't', version: '0' },
+    }) as { serverInfo: { version: string } };
+    expect(init.serverInfo.version).toBe(pkg.version);
   });
 });
