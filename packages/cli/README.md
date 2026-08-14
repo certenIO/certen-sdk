@@ -153,7 +153,8 @@ certen whoami                                    # which key, which gateway, wha
 certen identity get <id> | list | link-chain <id> --chain <chain> | retire <id> --yes
 certen portfolio                                 # balances across every identity and chain
 certen tx status <id> --wait | tx list
-certen balance | quote --chain <chain> | fund <amount> --chain <chain>
+certen pricing                                   # everything CERTEN charges for, in one call
+certen balance | quote --chain <chain> [--sku <sku>] | fund <amount> --chain <chain>
 certen governance add-delegate | set-threshold
 certen admin api-keys list | create | rotate | revoke
 certen admin audit-log | usage

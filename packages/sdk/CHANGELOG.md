@@ -4,6 +4,22 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `billing.pricing()`, so prices stop having to be guessed
+
+`quote()` prices ONE sku on ONE chain and needs the sku name up front. Nothing published those
+names, and they are not guessable: it is `identity.provision`, not `identity.create`. Finding out
+what onboarding cost meant guessing a name, reading the refusal, and guessing again.
+
+`billing.pricing()` returns the whole catalogue in one call — every sku, every chain, and the
+`price_book_version` and `price_book_hash` that quotes and receipts also carry, so a price seen here
+can be traced through to the charge.
+
+Read `mode` before reporting a number. `flat` means `platform_fee_usd` is the whole charge; `quoted`
+means gas is measured at execution and added, so the figure is a floor. `max_charge_usd` is `null`
+when uncapped and stays null — it is not flattened to a string or a zero.
+
+Requires a gateway with `GET /v1/pricing` (2026-08 or later).
+
 ### Changed — `doctor()` asks the gateway one question once, and overlaps the rest
 
 Measured against the live gateway before and after: **6 round trips to 5**, and **~1570ms to ~1195ms**

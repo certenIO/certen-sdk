@@ -334,3 +334,54 @@ describe('waitForPayment and the registered-address path', () => {
     }
   });
 });
+
+describe('billing.pricing', () => {
+  it('reads the catalogue from GET /v1/pricing and hands it back whole', async () => {
+    // Deliberately not reshaped by the SDK. The gateway already renders money as fixed-6dp strings
+    // and marks uncapped items with a real null; converting either here would only introduce a
+    // second representation of the same numbers for a caller to reconcile.
+    const CATALOG = {
+      price_book_version: '2026-08-10.1',
+      price_book_hash: 'abc123',
+      currency: 'USD',
+      items: [
+        {
+          sku: 'identity.provision', chain: '*', mode: 'flat',
+          platform_fee_usd: '5.000000', gas_buffer_bps: 0,
+          min_charge_usd: '0.000000', max_charge_usd: '7.500000',
+        },
+        {
+          sku: 'proof.execute', chain: 'base-sepolia', mode: 'quoted',
+          platform_fee_usd: '0.350000', gas_buffer_bps: 1500,
+          min_charge_usd: '0.000000', max_charge_usd: null,
+        },
+      ],
+    };
+    const s = await startServer((req, res) => json(res, 200, CATALOG));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.pricing();
+      expect(s.recorded[0]).toMatchObject({ method: 'GET', path: '/v1/pricing' });
+      expect(out).toEqual(CATALOG);
+      // The one field a mapping layer would most likely flatten to a string or a zero.
+      expect(out.items[1].max_charge_usd).toBeNull();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('surfaces NO_PRICE_BOOK rather than reporting an empty catalogue', async () => {
+    // "Nothing is priced" and "pricing is not configured" are different facts, and only one of
+    // them should ever reach a caller deciding whether CERTEN can do the work.
+    const s = await startServer((req, res) =>
+      json(res, 503, { error: 'No price book is in effect', code: 'NO_PRICE_BOOK' }));
+    try {
+      await expect(
+        new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+          .billing.pricing(),
+      ).rejects.toMatchObject({ code: 'NO_PRICE_BOOK' });
+    } finally {
+      await s.close();
+    }
+  });
+});

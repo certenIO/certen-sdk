@@ -122,6 +122,52 @@ const READ_TOOLS: ToolDef[] = [
     run: (c, a) => c.portfolio.get(optS(a, 'identityId')),
   },
   {
+    name: 'certen_pricing',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/pricing',
+    description:
+      'Everything CERTEN charges for and what it costs, in one call. Start here when asked what an '
+      + 'operation costs or whether the organization can afford it — the sku names are not guessable '
+      + '(it is `identity.provision`, not `identity.create`), and this is the only place they are '
+      + 'published. `mode` decides how to read the price: `flat` means `platform_fee_usd` is the '
+      + 'whole charge, `quoted` means gas is measured at execution and added, so treat that number '
+      + 'as a floor and never quote it to a user as a total. `chain: "*"` applies to any chain '
+      + 'without an entry of its own. For a binding price on specific work, follow with certen_quote.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.billing.pricing(),
+  },
+  {
+    name: 'certen_quote',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'POST /v1/quote',
+    description:
+      'A binding price for one specific piece of work. Free, and the answer holds: pass the returned '
+      + '`quote_id` when opening the transaction and that is the charge regardless of what gas does '
+      + 'in between. Single-use and short-lived, so ask when ready to act, not while exploring — use '
+      + 'certen_pricing for that. Get `sku` from certen_pricing rather than guessing it. Worth '
+      + 'reporting `computation.gas_estimate_basis` when it is `class_thin`: the estimate is '
+      + 'indicative and can move materially.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chain: str('Chain the work executes on, e.g. base-sepolia'),
+        sku: str('Operation to price, e.g. identity.provision. Names come from certen_pricing.'),
+        proofClass: str('on_cadence (batched, cheaper) or on_demand (immediate). Default on_cadence.'),
+        legCount: num('Number of legs in the intent. Default 1.'),
+      },
+      required: ['chain'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.billing.quote({
+      chain: s(a, 'chain'),
+      sku: optS(a, 'sku'),
+      proofClass: optS(a, 'proofClass') as 'on_demand' | 'on_cadence' | undefined,
+      legCount: optN(a, 'legCount'),
+    }),
+  },
+  {
     name: 'certen_billing_balance',
     tier: 'read',
     mutates: false,

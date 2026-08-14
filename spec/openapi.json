@@ -7287,6 +7287,84 @@
         }
       }
     },
+    "/v1/pricing": {
+      "get": {
+        "summary": "List every priced operation and what it costs",
+        "description": "The full price book in effect for the calling organization: every sku, on every chain, with its platform fee and pricing mode. `flat` is an all-in price; `quoted` prices gas dynamically at execution and the fee shown is the platform component only. Carries the same price_book_version and price_book_hash as quotes and receipts, so a price can be traced from discovery through to the charge. Use it to discover sku names for POST /v1/quote. Requires billing:read.",
+        "responses": {
+          "200": {
+            "description": "The price book in effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The price book in effect.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "price_book_version": {
+                      "type": "string"
+                    },
+                    "price_book_hash": {
+                      "type": "string"
+                    },
+                    "currency": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "sku": {
+                            "type": "string"
+                          },
+                          "chain": {
+                            "type": "string",
+                            "description": "\"*\" applies to any chain without its own entry."
+                          },
+                          "mode": {
+                            "type": "string",
+                            "description": "flat | quoted"
+                          },
+                          "platform_fee_usd": {
+                            "type": "string"
+                          },
+                          "gas_buffer_bps": {
+                            "type": "number"
+                          },
+                          "min_charge_usd": {
+                            "type": "string"
+                          },
+                          "max_charge_usd": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No price book is in effect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "No price book is in effect.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/quote/{id}": {
       "get": {
         "summary": "Get a quote",

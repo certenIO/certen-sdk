@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { CertenClient, type DepositIntentStatus } from '@certen.io/sdk';
-import { getApiKey, getApiUrl, getPortalUrl } from '../config.js';
+import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.js';
 import { printOutput, human, hint, isJsonMode } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import { assertChain } from '../chains.js';
@@ -108,12 +108,75 @@ export function registerBillingCommands(program: Command): void {
     });
 
   program
+    .command('pricing')
+    .description('Everything CERTEN charges for, and what it costs')
+    .option('--chain <chain>', 'Only operations priced on this chain (plus the "*" fallback)')
+    .action(async (opts: { chain?: string }) => {
+      // The price list had no client surface at all. `certen quote` prices ONE operation and needs
+      // its sku spelled correctly up front — and the names are not guessable: it is
+      // `identity.provision`, not `identity.create`. Anyone asking "what does onboarding cost"
+      // had to guess a name, read the refusal, and guess again.
+      const chain = opts.chain ? assertChain(opts.chain) : undefined;
+      const client = await getClient();
+      const book = await client.billing.pricing();
+
+      // "*" is the entry that applies to every chain without one of its own, so filtering it out
+      // of a per-chain view would hide the price that actually applies.
+      const items = chain
+        ? book.items.filter((i) => i.chain === chain || i.chain === '*')
+        : book.items;
+
+      // Machine output carries the version and hash alongside the items, because a price is only
+      // traceable to a charge with them. Human output does NOT go through printOutput: this payload
+      // has a nested array, and the generic key/value table renders it as one line of raw JSON.
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({
+          price_book_version: book.price_book_version,
+          price_book_hash: book.price_book_hash,
+          currency: book.currency,
+          items,
+        });
+        return;
+      }
+
+      if (items.length === 0) {
+        human('');
+        human(`  Nothing is priced on ${chain}.`);
+        hint('certen pricing   # every chain');
+        return;
+      }
+
+      const w = Math.max(...items.map((i) => i.sku.length), 3);
+      const c = Math.max(...items.map((i) => i.chain.length), 5);
+      human('');
+      human(`  ${'SKU'.padEnd(w)}  ${'CHAIN'.padEnd(c)}  PRICE`);
+      for (const i of items) {
+        // The distinction that decides whether the printed number is the answer or a floor:
+        // `flat` is all-in, `quoted` measures gas at execution and adds it.
+        const price = i.mode === 'flat'
+          ? usd(i.platform_fee_usd)
+          : `${usd(i.platform_fee_usd)} + gas`;
+        human(`  ${i.sku.padEnd(w)}  ${i.chain.padEnd(c)}  ${price}`);
+      }
+      human('');
+      if (items.some((i) => i.mode === 'quoted')) {
+        human('  "+ gas" is priced at execution from live chain conditions.');
+      }
+      if (items.some((i) => i.chain === '*')) {
+        human('  "*" applies to any chain without an entry of its own.');
+      }
+      human(`  Price book ${book.price_book_version}.`);
+      hint('certen quote --chain <chain> --sku <sku>   # a binding price for real work');
+    });
+
+  program
     .command('quote')
     .description('What a piece of work will cost, before you commit to it')
     .requiredOption('--chain <chain>', 'Chain the work executes on, e.g. base-sepolia')
+    .option('--sku <sku>', 'Operation to price, e.g. identity.provision. See: certen pricing')
     .option('--proof-class <class>', 'on_cadence (batched, cheaper) or on_demand (immediate)', 'on_cadence')
     .option('--legs <n>', 'Number of legs in the intent', '1')
-    .action(async (opts: { chain: string; proofClass: string; legs: string }) => {
+    .action(async (opts: { chain: string; sku?: string; proofClass: string; legs: string }) => {
       if (opts.proofClass !== 'on_cadence' && opts.proofClass !== 'on_demand') {
         throw new CliError(
           `"${opts.proofClass}" is not a proof class. Use on_cadence or on_demand.`,
@@ -131,6 +194,7 @@ export function registerBillingCommands(program: Command): void {
       const client = await getClient();
       const q = await client.billing.quote({
         chain,
+        sku: opts.sku,
         proofClass: opts.proofClass,
         legCount: legs,
       });

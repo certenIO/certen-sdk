@@ -3,6 +3,27 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen pricing`, and `--sku` on `certen quote`
+
+There was no way to ask the CLI what anything costs. `certen quote` prices one operation and takes
+its sku from a vocabulary nothing published — and it had no `--sku` flag at all, so it could only
+ever price the default. Asking "what does CERTEN cost" meant reading the gateway's refusals.
+
+```
+$ certen pricing --chain base-sepolia
+
+  SKU                 CHAIN         PRICE
+  identity.provision  *             $5.00
+  proof.execute       base-sepolia  $0.35 + gas
+```
+
+`+ gas` marks prices that are completed at execution, so a floor is not read as a total. `*` is the
+entry that applies to any chain without one of its own, and is kept when filtering by chain —
+dropping it would report identity provisioning as unpriced on a chain where it costs $5.
+
+`certen quote --sku <sku>` now prices any of them, and exits non-zero when pricing is not
+configured rather than reporting an empty catalogue.
+
 ### Changed — `certen call` no longer reads the same balances twice
 
 It fetched the identity (it needs `can_sign` before prompting for a passphrase), then fetched

@@ -267,3 +267,95 @@ describe('certen fund: flag surface', () => {
     expect(r.code).toBe(2);
   });
 });
+
+describe('certen pricing', () => {
+  const CATALOG = {
+    price_book_version: '2026-08-10.1',
+    price_book_hash: 'abc123',
+    currency: 'USD',
+    items: [
+      {
+        sku: 'identity.provision', chain: '*', mode: 'flat',
+        platform_fee_usd: '5.000000', gas_buffer_bps: 0,
+        min_charge_usd: '0.000000', max_charge_usd: '7.500000',
+      },
+      {
+        sku: 'proof.execute', chain: 'base-sepolia', mode: 'quoted',
+        platform_fee_usd: '0.350000', gas_buffer_bps: 1500,
+        min_charge_usd: '0.000000', max_charge_usd: null,
+      },
+      {
+        sku: 'proof.execute', chain: 'ethereum-sepolia', mode: 'flat',
+        platform_fee_usd: '1.000000', gas_buffer_bps: 0,
+        min_charge_usd: '0.000000', max_charge_usd: null,
+      },
+    ],
+  };
+
+  it('prints the whole catalogue in ONE call', async () => {
+    // The count is the point. Answering "what does CERTEN cost" used to mean one `quote` per sku
+    // per chain, against sku names nothing published.
+    const s = await stubGateway((req, res) => json(res, 200, CATALOG));
+    try {
+      const r = await certen(['pricing', '--json'], s.url);
+      expect(r.code).toBe(0);
+      expect(s.hits()).toBe(1);
+      const out = soleJson(r.stdout).data as { items: unknown[] };
+      expect(out.items.length).toBe(3);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('names the skus in human output, since guessing them is the problem', async () => {
+    const s = await stubGateway((req, res) => json(res, 200, CATALOG));
+    try {
+      const r = await certen(['pricing'], s.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('identity.provision');
+      expect(r.stdout).toContain('$5.00');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('marks gas-priced entries so a floor is not read as a total', async () => {
+    const s = await stubGateway((req, res) => json(res, 200, CATALOG));
+    try {
+      const r = await certen(['pricing'], s.url);
+      expect(r.stdout).toMatch(/proof\.execute\s+base-sepolia\s+\$0\.35 \+ gas/);
+      // The flat one must NOT be marked, or the distinction carries no information.
+      expect(r.stdout).toMatch(/proof\.execute\s+ethereum-sepolia\s+\$1\.00\s*$/m);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('keeps the "*" fallback when filtering by chain', async () => {
+    // Dropping it would hide the price that actually applies to that chain — the filter would
+    // report identity provisioning as unpriced on base-sepolia when it costs $5.
+    const s = await stubGateway((req, res) => json(res, 200, CATALOG));
+    try {
+      const r = await certen(['pricing', '--chain', 'base-sepolia', '--json'], s.url);
+      expect(r.code).toBe(0);
+      const { items } = soleJson(r.stdout).data as
+        { items: Array<{ sku: string; chain: string }> };
+      expect(items.map((i) => i.chain).sort()).toEqual(['*', 'base-sepolia']);
+      expect(items.map((i) => i.sku)).toContain('identity.provision');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('exits non-zero when pricing is not configured', async () => {
+    // A script that treats a 503 as "free" would go on to run work it cannot pay for.
+    const s = await stubGateway((req, res) =>
+      json(res, 503, { error: 'No price book is in effect', code: 'NO_PRICE_BOOK' }));
+    try {
+      const r = await certen(['pricing', '--json'], s.url);
+      expect(r.code).not.toBe(0);
+    } finally {
+      await s.close();
+    }
+  });
+});

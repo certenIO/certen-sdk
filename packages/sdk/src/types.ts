@@ -630,6 +630,41 @@ export interface UsageSummaryResponse {
 // Parsing money into a float loses cents at scale; compare and display the
 // string, or convert to an integer number of micro-dollars.
 
+/** One priced operation, on one chain. */
+export interface PricingItem {
+  /** e.g. `identity.provision`, `account.deploy`, `proof.execute`. */
+  sku: string;
+  /** The chain it applies to. `"*"` is the fallback for any chain without its own entry. */
+  chain: string;
+  /**
+   * `flat` — `platform_fee_usd` is the whole price.
+   * `quoted` — gas is measured at execution and added, so the total depends on chain conditions.
+   */
+  mode: 'flat' | 'quoted';
+  platform_fee_usd: string;
+  gas_buffer_bps: number;
+  min_charge_usd: string;
+  /** null when uncapped. */
+  max_charge_usd: string | null;
+}
+
+/**
+ * Everything CERTEN charges for, and what it costs.
+ *
+ * Added in the gateway's 2026-08 release. Before it, prices could only be discovered one at a time
+ * through `quote()`, against sku names that are not guessable — it is `identity.provision`, not
+ * `identity.create` — so finding one meant guessing and reading the refusal.
+ *
+ * `price_book_version` and `price_book_hash` are the same values quotes and receipts carry, so a
+ * price seen here can be traced through to the charge.
+ */
+export interface PricingCatalog {
+  price_book_version: string;
+  price_book_hash: string;
+  currency: string;
+  items: PricingItem[];
+}
+
 export interface BalanceResponse {
   currency: string;
   available_usd: string;

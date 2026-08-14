@@ -4,6 +4,20 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_pricing` and `certen_quote`
+
+An agent could read the balance but could not find out what anything cost. There was no quote tool
+at all, and no way to discover a sku name — they are not guessable (`identity.provision`, not
+`identity.create`), so "can I afford this" was unanswerable without leaving the tool surface.
+
+`certen_pricing` returns the whole catalogue in one call, for exploring. `certen_quote` returns a
+binding price for specific work, whose `quote_id` fixes the charge when the transaction is opened.
+Both are read-tier and neither mutates anything.
+
+The `mode` field is called out in the tool description because it changes what the number means:
+`quoted` prices are a floor with gas added at execution, and must not be reported to a user as a
+total.
+
 ### Fixed — `certen_identity_create` no longer advertises a call that cannot succeed
 
 The tool required `name` and `publicKeyHash` and marked `publicKey` optional, while the gateway

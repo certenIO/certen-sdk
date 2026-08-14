@@ -6,7 +6,9 @@ import type {
   DepositTarget,
   DepositIntentStatus,
   PaymentRecord,
+  PricingCatalog,
 } from '../types.js';
+
 
 /**
  * Balance, commitments, and adding funds.
@@ -27,6 +29,22 @@ import type {
  */
 export class BillingResource {
   constructor(private http: AxiosInstance) {}
+
+  /**
+   * Every priced operation and what it costs — one call, no guessing.
+   *
+   * `quote()` prices ONE sku on ONE chain and needs the sku name up front, which is the problem:
+   * the names are not guessable (`identity.provision`, not `identity.create`), and nothing listed
+   * them. Discovering the price of onboarding meant guessing a name, being refused, and guessing
+   * again.
+   *
+   * Use this to find the sku, then `quote()` to get a binding price for a specific piece of work.
+   * Requires `billing:read`.
+   */
+  async pricing(): Promise<PricingCatalog> {
+    const { data } = await this.http.get('/v1/pricing');
+    return data;
+  }
 
   /** Available, held, credit line, and spendable. Requires `billing:read`. */
   async balance(): Promise<BalanceResponse> {
