@@ -363,6 +363,66 @@ export function registerBillingCommands(program: Command): void {
     });
 
   program
+    .command('verify <receipt-id>')
+    .description('Check a receipt yourself, against independently published data')
+    .action(async (id: string) => {
+      // The receipt already ships a `verification` block, and it is CERTEN checking CERTEN. This
+      // command is the difference between being told the evidence is good and confirming it: the
+      // digest is recomputed from the body, the signature is checked against the PUBLISHED key set,
+      // and the audit path is folded and compared against a tree head fetched separately - not
+      // against the root that travelled inside the proof, which would compare the proof to itself.
+      const client = await getClient();
+      const report = await client.billing.verifyReceipt(id);
+
+      // Emitted as a success envelope only when it actually verified. Anything else throws below
+      // and carries the same checks under `error.details`, matching `certen doctor`: the machine
+      // interface never has to choose between knowing something is wrong and knowing what.
+      //
+      // JSON only in this block. The table renderer serialises `checks` to one unreadable line, and
+      // the rendered report below is the human answer.
+      if (report.verified && (isJsonMode() || getOutputFormat() === 'json')) {
+        printOutput({ ...report });
+        return;
+      }
+
+      human('');
+      for (const c of report.checks) {
+        const mark = c.status === 'ok' ? 'PASS' : c.status === 'failed' ? 'FAIL' : 'SKIP';
+        human(`  ${mark}  ${c.name.padEnd(10)}  ${c.detail}`);
+      }
+      human('');
+      if (report.verified) {
+        human('  Verified. Every check reproduced from published data.');
+      } else if (report.checks.some((c) => c.status === 'failed')) {
+        human('  VERIFICATION FAILED. At least one check did not reproduce.');
+      } else {
+        // Not a pass. A verifier that could not run every check must never imply one.
+        human('  Incomplete - some checks could not be run. This is not a verification.');
+      }
+
+      // `process.exitCode` does NOT survive here: run() returns EXIT.OK on any command that did
+      // not throw, and the entrypoint assigns that over it. Verified this the hard way — the
+      // command printed "this is not a verification" and exited 0, which a CI gate would have read
+      // as a pass. Throwing is the mechanism the CLI actually honours.
+      const failed = report.checks.filter((c) => c.status === 'failed');
+      if (failed.length > 0) {
+        throw new CliError(
+          `Verification FAILED: ${failed.map((f) => f.name).join(', ')} did not reproduce.`,
+          'RECEIPT_VERIFICATION_FAILED', EXIT.FAILED, false, { ...report },
+        );
+      }
+      if (!report.verified) {
+        // Incomplete is not a pass. Exiting 0 here would let a script report an unverified receipt
+        // as verified, which is the one mistake this command exists to prevent.
+        const skipped = report.checks.filter((c) => c.status === 'skipped');
+        throw new CliError(
+          `Verification INCOMPLETE: ${skipped.map((c) => c.name).join(', ')} could not be checked.`,
+          'RECEIPT_VERIFICATION_INCOMPLETE', EXIT.FAILED, false, { ...report },
+        );
+      }
+    });
+
+  program
     .command('receipt <id>')
     .description('One receipt, with its signature and computation')
     .option('--proof', 'Also fetch the transparency-log inclusion proof')

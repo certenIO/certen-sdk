@@ -701,3 +701,67 @@ describe('certen ledger and certen receipts', () => {
     }
   });
 });
+
+describe('certen verify', () => {
+  // A minimal sound receipt is built in the SDK suite against real ed25519 material; what matters
+  // HERE is what a process exposes — the exit code a CI gate reads, and whether the report survives
+  // a failure.
+  const REPORT_PATHS = (over: Record<string, unknown>) =>
+    (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url in over) {
+        const v = over[url] as { __status?: number; __body?: unknown };
+        if (v && typeof v === 'object' && '__status' in v) {
+          return json(res, v.__status as number, v.__body ?? {});
+        }
+        return json(res, 200, over[url]);
+      }
+      return json(res, 404, { error: 'not found', code: 'NOT_FOUND' });
+    };
+
+  it('exits NON-ZERO when a check could not be run', async () => {
+    // The bug this pins, found by running the command: it set `process.exitCode`, and the CLI
+    // entrypoint assigns `run()`'s return value over it — so the command printed "this is not a
+    // verification" and exited 0. A CI gate would have read that as a pass, which is precisely the
+    // failure `certen verify` exists to prevent.
+    const s = await stubGateway(REPORT_PATHS({
+      // Unsigned and unlogged: signature, inclusion, root and anchor all skip. Nothing FAILS.
+      '/v1/billing/receipts/rc_1': {
+        id: 'rc_1', receipt_number: '1', type: 'payment', amount_usd: '5.000000',
+        body: null, digest: 'd', signature: null, key_id: null, logged: false, leaf_seq: null,
+      },
+      '/v1/billing/receipts/rc_1/proof': { __status: 404, __body: { error: 'not logged' } },
+    }));
+    try {
+      const r = await certen(['verify', 'rc_1'], s.url);
+      expect(r.code).toBe(1);
+      expect(r.stdout + r.stderr).toMatch(/not a verification|INCOMPLETE/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('carries the checks under error.details so failing never costs you the diagnosis', async () => {
+    // Same contract as `certen doctor`: the machine interface must not have to choose between
+    // knowing something is wrong and knowing what.
+    const s = await stubGateway(REPORT_PATHS({
+      '/v1/billing/receipts/rc_1': {
+        id: 'rc_1', receipt_number: '1', type: 'payment', amount_usd: '5.000000',
+        body: { a: 1 }, digest: 'deadbeef', signature: null, key_id: null,
+        logged: false, leaf_seq: null,
+      },
+      '/v1/billing/receipts/rc_1/proof': { __status: 404, __body: { error: 'not logged' } },
+    }));
+    try {
+      const r = await certen(['verify', 'rc_1', '--json'], s.url);
+      expect(r.code).toBe(1);
+      const env = soleJson(r.stdout) as { ok: boolean; error: { code: string; details?: { checks?: unknown[] } } };
+      expect(env.ok).toBe(false);
+      // A body that does not hash to the stated digest is a FAILURE, not an omission.
+      expect(env.error.code).toBe('RECEIPT_VERIFICATION_FAILED');
+      expect(env.error.details?.checks?.length).toBeGreaterThan(0);
+    } finally {
+      await s.close();
+    }
+  });
+});

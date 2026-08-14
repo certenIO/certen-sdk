@@ -268,6 +268,53 @@ const READ_TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'certen_billing_verify_receipt',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/billing/receipts/{id} + /proof + /v1/transparency/heads/{treeSize}',
+    description:
+      'Check a receipt against independently published data and return a per-check report. Use this '
+      + 'rather than the `verification` block on the receipt itself: that block is CERTEN checking '
+      + 'CERTEN, while this recomputes the digest, verifies the signature against the PUBLISHED key '
+      + 'set, folds the audit path, and compares the result with a tree head fetched separately. '
+      + 'Report `verified` only when it is true AND `complete` is true — a `skipped` check means a '
+      + 'check could not be run, which is NOT a pass, and telling a user their receipt "verified" on '
+      + 'the strength of skipped checks would be the worst possible error here.',
+    inputSchema: {
+      type: 'object',
+      properties: { receiptId: str('Receipt id, from certen_billing_receipts') },
+      required: ['receiptId'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.billing.verifyReceipt(s(a, 'receiptId')),
+  },
+  {
+    name: 'certen_transparency_log',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/transparency',
+    description:
+      'The public transparency log: how large it is and where its roots are anchored on Accumulate. '
+      + 'This is the structure that makes a receipt checkable rather than merely signed. Needs no '
+      + 'API key, by design — evidence obtainable only by asking CERTEN could not settle a dispute '
+      + 'with CERTEN.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.transparency.log(),
+  },
+  {
+    name: 'certen_transparency_price_books',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/transparency/price-books',
+    description:
+      'Every published price book with its hash and the window it was in force. A receipt carries '
+      + '`price_book_hash`; this is where that hash resolves to actual prices, which is what shows a '
+      + 'charge matched the prices published AT THE TIME rather than prices chosen afterwards. Use '
+      + 'certen_pricing for what things cost now; use this to audit a past charge.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.transparency.priceBooks(),
+  },
+  {
     name: 'certen_billing_verification_keys',
     tier: 'read',
     mutates: false,

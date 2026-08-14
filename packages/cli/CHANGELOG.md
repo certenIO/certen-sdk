@@ -3,6 +3,25 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen verify <receipt-id>`
+
+Confirm a charge instead of being told it is fine.
+
+```
+PASS  digest      sha256(canonical_json(body)) matches the stated digest.
+PASS  signature   ed25519 signature verifies against published key bd4a7a92f29958b9.
+PASS  inclusion   This receipt is leaf 1254 of 1269.
+PASS  root        Audit path folds to the root of the independently fetched signed head at 1269.
+SKIP  anchor      No anchored tree head covers this receipt yet.
+```
+
+The receipt already carried a `verification` block; it is CERTEN checking CERTEN. This recomputes
+everything from published data and compares the folded root against a tree head fetched separately.
+
+**It exits non-zero when it did not fully verify — including when checks were merely SKIPPED.** An
+incomplete run is not a pass, and exiting 0 would let a script report an unverified receipt as
+verified. The report survives the failure under `error.details`, matching `certen doctor`.
+
 ### Added — `certen ledger`, `certen receipts`, `certen receipt`
 
 Where the money went, and proof of what you were charged — neither was reachable from the terminal.

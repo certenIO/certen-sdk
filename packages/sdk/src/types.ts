@@ -732,6 +732,46 @@ export interface Receipt extends ReceiptSummary {
   verification?: unknown;
 }
 
+/** What the transparency log is and how far it has grown. */
+export interface TransparencyLogInfo {
+  tree_size?: number;
+  latest_head?: TransparencyHead | null;
+  latest_anchored_head?: TransparencyHead | null;
+  [k: string]: unknown;
+}
+
+/** Proof that the log at `second` extends the log at `first` without rewriting it. */
+export interface ConsistencyProof {
+  first: number;
+  second: number;
+  /** Fold per RFC 6962 section 2.1.2. */
+  proof: string[];
+  first_root?: string;
+  second_root?: string;
+  [k: string]: unknown;
+}
+
+/** A price book as published, with the window it was in force. */
+export interface PublishedPriceBook {
+  version: string;
+  kind: string;
+  document_hash: string;
+  effective_from: string;
+  effective_to: string | null;
+  document?: unknown;
+  [k: string]: unknown;
+}
+
+/** A signed native-to-USD rate, observed at a moment. */
+export interface FxObservation {
+  id: string;
+  native_symbol?: string;
+  usd_per_native_micro?: string;
+  observed_at?: string;
+  signature?: string | null;
+  [k: string]: unknown;
+}
+
 /** A signed tree head, and where it is anchored on Accumulate. */
 export interface TransparencyHead {
   tree_size: number;
@@ -775,6 +815,27 @@ export interface ReceiptProof {
   covering_head: TransparencyHead | null;
   /** How to check each layer yourself, in words. */
   verification?: Record<string, string>;
+}
+
+/** One check in a receipt verification. `skipped` is never a pass. */
+export interface ReceiptCheck {
+  name: 'digest' | 'signature' | 'inclusion' | 'root' | 'anchor' | string;
+  status: 'ok' | 'failed' | 'skipped';
+  detail: string;
+}
+
+/**
+ * The result of checking a receipt yourself.
+ *
+ * `verified` is true only when EVERY check passed. `complete` says whether any were skipped — an
+ * unreachable transparency log skips the inclusion checks rather than passing them, because "I
+ * could not check" and "it checks out" are the two answers a dispute must never confuse.
+ */
+export interface ReceiptVerification {
+  receipt_id: string;
+  verified: boolean;
+  complete: boolean;
+  checks: ReceiptCheck[];
 }
 
 /** The public keys receipts and tree heads are signed with. */

@@ -11,6 +11,7 @@ import { BillingResource } from './resources/billing.js';
 import { AdminResource } from './resources/admin.js';
 import { ExecuteResource } from './resources/execute.js';
 import { ChainsResource } from './resources/chains.js';
+import { TransparencyResource } from './resources/transparency.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
@@ -99,6 +100,11 @@ export class CertenClient {
   public execute: ExecuteResource;
   /** The public contract registry — which chains CERTEN is on, and where. Needs no API key. */
   public chains: ChainsResource;
+  /**
+   * The public transparency log — signed tree heads, consistency proofs, published price books.
+   * What makes a receipt checkable rather than merely signed. Needs no API key.
+   */
+  public transparency: TransparencyResource;
   /** Reading and sharing proofs. See resources/proof.ts. */
   public proof: ProofResource;
   /** Device authorization, so a terminal can obtain its own key. Needs no API key. */
@@ -245,9 +251,10 @@ export class CertenClient {
     this.sign = new SignResource(this.http);
     this.portfolio = new PortfolioResource(this.http);
     this.admin = new AdminResource(this.http);
-    this.billing = new BillingResource(this.http);
+    this.billing = new BillingResource(this.http, this);
     this.execute = new ExecuteResource(this.http, generateIdempotencyKey);
     this.chains = new ChainsResource(this.http);
+    this.transparency = new TransparencyResource(this.http);
     this.proof = new ProofResource(this.http);
     this.device = new DeviceResource(this.http);
   }

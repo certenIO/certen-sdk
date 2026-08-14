@@ -1,5 +1,6 @@
 import { AxiosInstance } from 'axios';
-import { paginate } from '../client.js';
+import { paginate, type CertenClient } from '../client.js';
+import { verifyReceipt } from '../verify-receipt.js';
 import type {
   BalanceResponse,
   QuoteResponse,
@@ -14,6 +15,7 @@ import type {
   Receipt,
   ReceiptProof,
   VerificationKeys,
+  ReceiptVerification,
 } from '../types.js';
 
 
@@ -39,7 +41,13 @@ import type {
  * 402 names registering a sender as the recommended fix.
  */
 export class BillingResource {
-  constructor(private http: AxiosInstance) {}
+  /**
+   * `client` is the whole client, not just its HTTP handle, because verifying a receipt has to
+   * reach the transparency log as well as billing. It is captured, never dereferenced during
+   * construction — the client assigns its resources in sequence, so `transparency` does not exist
+   * yet at this point but always does by the time anything here runs.
+   */
+  constructor(private http: AxiosInstance, private client: CertenClient) {}
 
   /**
    * Every priced operation and what it costs — one call, no guessing.
@@ -200,6 +208,22 @@ export class BillingResource {
   async verificationKeys(): Promise<VerificationKeys> {
     const { data } = await this.http.get('/v1/billing/receipts/verification-key');
     return data;
+  }
+
+  /**
+   * Check a receipt yourself, against independently published data.
+   *
+   * Recomputes the digest from the body, verifies the ed25519 signature against the PUBLISHED key
+   * set, recomputes the salted leaf, folds the RFC 6962 audit path, and compares the result with a
+   * signed tree head fetched separately — not with the root that travelled inside the proof, which
+   * would be comparing the proof with itself.
+   *
+   * Never throws for a failed check: `verified` is false and the reason is in `checks`. A check that
+   * could not be run is `skipped`, and `complete` goes false — a verifier that cannot reach the log
+   * must say so rather than imply a pass.
+   */
+  verifyReceipt(id: string): Promise<ReceiptVerification> {
+    return verifyReceipt(this.client, id);
   }
 
   /**

@@ -4,6 +4,16 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_billing_verify_receipt`, `certen_transparency_log`, `certen_transparency_price_books`
+
+An agent asked to prove a charge could previously only quote CERTEN's own `verification` block back
+at the user. `certen_billing_verify_receipt` performs the checks against independently published
+data and returns a per-check report.
+
+Its description tells the agent the thing it would otherwise get wrong: report `verified` only when
+`complete` is also true, because a `skipped` check is not a pass — announcing a receipt "verified"
+on the strength of checks that never ran would be the worst available error here.
+
 ### Added — `certen_billing_ledger`, `_receipts`, `_receipt`, `_verification_keys`
 
 An agent asked "what were we charged for, and can you prove it" had no tool that could answer.

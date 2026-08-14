@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import http from 'http';
 import { AddressInfo } from 'net';
 import { CertenClient } from '../src/index.js';
+import * as nodeCrypto from 'node:crypto';
+import { canonicalJson, foldAuditPath } from '../src/verify-receipt.js';
 
 /**
  * Billing: balance, commitments, and adding funds.
@@ -596,5 +598,226 @@ describe('the evidence trail', () => {
     } finally {
       await s.close();
     }
+  });
+});
+
+
+describe('billing.verifyReceipt', () => {
+  // Real ed25519 material and a real Merkle leaf, generated in-test, so these cases exercise the
+  // actual cryptography rather than agreeing with a hardcoded expectation.
+  const { generateKeyPairSync, createHash, sign: edSign, createPrivateKey } = nodeCrypto;
+
+  function fixture() {
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    const rawPub = publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
+    const body = { amount_microusd: '5000000', type: 'payment', org: 'o1' };
+    const canonical = canonicalJson(body);
+    const digest = createHash('sha256').update(canonical).digest('hex');
+    const signature = edSign(null, Buffer.from(digest, 'hex'), privateKey).toString('hex');
+
+    const salt = '11'.repeat(32);
+    const leaf = createHash('sha256')
+      .update(Buffer.concat([
+        Buffer.from([0x00]), Buffer.from(salt, 'hex'), Buffer.from(canonical, 'utf8'),
+      ]))
+      .digest('hex');
+
+    // A single-leaf tree: the leaf IS the root, so the audit path is empty.
+    return { rawPub, body, digest, signature, salt, leaf, root: leaf };
+  }
+
+  function gateway(f: ReturnType<typeof fixture>, over: Record<string, unknown> = {}) {
+    return (req: http.IncomingMessage, res: http.ServerResponse) => {
+      const url = (req.url ?? '').split('?')[0];
+      if (url in over) {
+        const v = over[url] as { __status?: number; __body?: unknown };
+        if (v && typeof v === 'object' && '__status' in v) {
+          return json(res, v.__status as number, v.__body ?? {});
+        }
+        return json(res, 200, over[url]);
+      }
+      if (url === '/v1/billing/receipts/rc_1') {
+        return json(res, 200, {
+          id: 'rc_1', receipt_number: '1', type: 'payment', amount_usd: '5.000000',
+          currency: 'USD', ref_type: null, ref_id: null, body: f.body, digest: f.digest,
+          signature: f.signature, key_id: 'k1', algorithm: 'ed25519', signed: true, logged: true,
+          leaf_seq: 1, issued_at: '2026-08-14T00:00:00.000Z',
+        });
+      }
+      if (url === '/v1/billing/receipts/verification-key') {
+        return json(res, 200, { keys: [{ key_id: 'k1', algorithm: 'ed25519', public_key: f.rawPub }] });
+      }
+      if (url === '/v1/billing/receipts/rc_1/proof') {
+        return json(res, 200, {
+          receipt_id: 'rc_1', leaf_hash: f.leaf, leaf_salt: f.salt, leaf_index: 0,
+          tree_size: 1, root_hash: f.root, audit_path: [],
+          head: { tree_size: 1, root_hash: f.root, anchor_status: 'pending' },
+          covering_head: {
+            tree_size: 1, root_hash: f.root, anchor_status: 'anchored',
+            anchor_tx_hash: '0xabc', anchor_block_time: '2026-08-14T01:00:00.000Z',
+            timestamp_attested: true,
+          },
+        });
+      }
+      if (url === '/v1/transparency/heads/1') {
+        return json(res, 200, { tree_size: 1, root_hash: f.root, anchor_status: 'anchored' });
+      }
+      return json(res, 404, {});
+    };
+  }
+
+  const client = (url: string) =>
+    new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
+
+  it('verifies a sound receipt on every layer', async () => {
+    const f = fixture();
+    const s = await startServer(gateway(f));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.checks.filter((c) => c.status !== 'ok')).toEqual([]);
+      expect(r.verified).toBe(true);
+      expect(r.complete).toBe(true);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('catches a body that does not hash to the stated digest', async () => {
+    // The tamper this exists to catch: the amount is edited and the digest left alone.
+    const f = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/billing/receipts/rc_1': {
+        id: 'rc_1', digest: f.digest, signature: f.signature, key_id: 'k1',
+        body: { ...f.body, amount_microusd: '1' }, algorithm: 'ed25519', logged: false,
+      },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.verified).toBe(false);
+      expect(r.checks.find((c) => c.name === 'digest')?.status).toBe('failed');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('rejects a signature from a key the key set does not publish', async () => {
+    // A signature by an unpublished key is not weaker evidence; it is none.
+    const f = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/billing/receipts/verification-key': {
+        keys: [{ key_id: 'other', algorithm: 'ed25519', public_key: f.rawPub }],
+      },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.checks.find((c) => c.name === 'signature')?.status).toBe('failed');
+      expect(r.checks.find((c) => c.name === 'signature')?.detail).toMatch(/not in the published key set/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('rejects a signature made by a different key', async () => {
+    const f = fixture();
+    const other = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/billing/receipts/verification-key': {
+        keys: [{ key_id: 'k1', algorithm: 'ed25519', public_key: other.rawPub }],
+      },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.checks.find((c) => c.name === 'signature')?.status).toBe('failed');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('compares the folded root against the SEPARATELY fetched head, not the proof', async () => {
+    // The whole point of the root check. Here the proof asserts a root that agrees with its own
+    // audit path, and the independently served signed head says something else. Checking the proof
+    // against itself would pass; checking it against the log catches it.
+    const f = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/transparency/heads/1': { tree_size: 1, root_hash: 'ff'.repeat(32) },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.verified).toBe(false);
+      expect(r.checks.find((c) => c.name === 'root')?.status).toBe('failed');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('SKIPS rather than passes when the log cannot be reached', async () => {
+    // "I could not check" and "it checks out" are the two answers a dispute must never confuse.
+    const f = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/transparency/heads/1': { __status: 503, __body: { error: 'down' } },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.checks.find((c) => c.name === 'root')?.status).toBe('skipped');
+      expect(r.verified).toBe(false);
+      expect(r.complete).toBe(false);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('keeps the signature verdict when a receipt is not yet in the log', async () => {
+    // Not-yet-logged is an ordinary state. It must not lose the caller the checks that DID run.
+    const f = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/billing/receipts/rc_1/proof': { __status: 404, __body: { error: 'not logged' } },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      expect(r.checks.find((c) => c.name === 'signature')?.status).toBe('ok');
+      expect(r.checks.find((c) => c.name === 'inclusion')?.status).toBe('skipped');
+      expect(r.verified).toBe(false);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('does not present an unattested anchor time as the block timestamp', async () => {
+    // Overstating what an anchor proves is the one thing a timestamp claim must never do.
+    const f = fixture();
+    const s = await startServer(gateway(f, {
+      '/v1/billing/receipts/rc_1/proof': {
+        receipt_id: 'rc_1', leaf_hash: f.leaf, leaf_salt: f.salt, leaf_index: 0,
+        tree_size: 1, root_hash: f.root, audit_path: [],
+        head: null,
+        covering_head: {
+          tree_size: 1, anchor_status: 'anchored', anchor_tx_hash: '0xabc',
+          anchor_block_time: '2026-08-14T01:00:00.000Z', timestamp_attested: false,
+        },
+      },
+    }));
+    try {
+      const r = await client(s.url).billing.verifyReceipt('rc_1');
+      const anchor = r.checks.find((c) => c.name === 'anchor');
+      expect(anchor?.status).toBe('ok');
+      expect(anchor?.detail).toMatch(/loose upper bound/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('folds a multi-level audit path the way RFC 6962 specifies', async () => {
+    // The unbalanced-tree case: a node that is the LAST at its level takes the right-hand branch
+    // even at an even index. Dropping that condition passes on power-of-two trees and fails on
+    // every other size, which is most of them.
+    const a = Buffer.from('aa'.repeat(32), 'hex');
+    const b = Buffer.from('bb'.repeat(32), 'hex');
+    const parent = createHash('sha256')
+      .update(Buffer.concat([Buffer.from([0x01]), a, b])).digest();
+    expect(foldAuditPath(a.toString('hex'), 0, 2, [b.toString('hex')]))
+      .toBe(parent.toString('hex'));
+    // Same two leaves, other side: index 1 must fold sibling-first.
+    expect(foldAuditPath(b.toString('hex'), 1, 2, [a.toString('hex')]))
+      .toBe(parent.toString('hex'));
   });
 });

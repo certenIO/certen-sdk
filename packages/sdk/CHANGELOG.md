@@ -4,6 +4,31 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `client.transparency` and `billing.verifyReceipt()`
+
+The transparency log had no client surface, which made the receipts unverifiable in practice. A
+receipt's own instructions say to check its folded root against the signed head at that tree size —
+and `/v1/transparency/heads/{treeSize}` was unreachable, so the instruction could not be followed
+without hand-rolling HTTP. A verification procedure nobody can run is not a verification procedure.
+
+`client.transparency` exposes `log()`, `heads()`, `head(treeSize)`, `consistency(first, second)`,
+`priceBooks()` and `fx(id)`. None require an API key, deliberately: evidence obtainable only by
+asking CERTEN could not settle a dispute with CERTEN.
+
+`billing.verifyReceipt(id)` runs the whole procedure and returns a per-check report — digest
+recomputed from the body, ed25519 signature checked against the PUBLISHED key set, salted leaf
+recomputed, audit path folded and compared against a head fetched **separately**. Comparing the
+proof with the `root_hash` that travelled inside it would prove nothing; the independent fetch is
+the check.
+
+It never throws for a failed check, and a check it could not run is `skipped` — which leaves both
+`verified` and `complete` false. "I could not check" and "it checks out" are the two answers a
+dispute must never confuse, so an unreachable log can never produce a pass.
+
+Verified against a real signed receipt on a running gateway: digest, signature, inclusion and root
+all reproduce; the anchor check correctly reports `skipped` when no anchored head covers the receipt
+yet.
+
 ### Added — the evidence trail: `ledger`, `receipts`, `receipt`, `receiptProof`, `verificationKeys`
 
 "What was I charged, and can I prove it?" The gateway has answered this from the start — an
