@@ -16,6 +16,7 @@ import type {
   ReceiptProof,
   VerificationKeys,
   ReceiptVerification,
+  Pagination,
 } from '../types.js';
 
 
@@ -124,7 +125,7 @@ export class BillingResource {
    *
    * Use `ledgerAll()` to walk the whole thing.
    */
-  async ledger(params: { limit?: number; offset?: number } = {}): Promise<{ entries: LedgerEntry[] }> {
+  async ledger(params: { limit?: number; offset?: number } = {}): Promise<{ entries: LedgerEntry[]; pagination?: Pagination }> {
     const { data } = await this.http.get('/v1/billing/ledger', {
       params: { limit: params.limit ?? 50, offset: params.offset ?? 0 },
     });
@@ -144,7 +145,10 @@ export class BillingResource {
    */
   ledgerAll(pageSize = 100): AsyncIterableIterator<LedgerEntry> {
     return paginate<LedgerEntry>(
-      async (limit, offset) => ({ items: (await this.ledger({ limit, offset })).entries ?? [] }),
+      async (limit, offset) => {
+        const page = await this.ledger({ limit, offset });
+        return { items: page.entries ?? [], hasMore: page.pagination?.has_more };
+      },
       pageSize,
     );
   }
@@ -152,7 +156,7 @@ export class BillingResource {
   /** Signed receipts for every payment, charge, refund and adjustment. Requires `billing:read`. */
   async receipts(
     params: { limit?: number; offset?: number } = {},
-  ): Promise<{ receipts: ReceiptSummary[] }> {
+  ): Promise<{ receipts: ReceiptSummary[]; pagination?: Pagination }> {
     const { data } = await this.http.get('/v1/billing/receipts', {
       params: { limit: params.limit ?? 50, offset: params.offset ?? 0 },
     });
@@ -162,7 +166,10 @@ export class BillingResource {
   /** Every receipt, paging automatically. */
   receiptsAll(pageSize = 100): AsyncIterableIterator<ReceiptSummary> {
     return paginate<ReceiptSummary>(
-      async (limit, offset) => ({ items: (await this.receipts({ limit, offset })).receipts ?? [] }),
+      async (limit, offset) => {
+        const page = await this.receipts({ limit, offset });
+        return { items: page.receipts ?? [], hasMore: page.pagination?.has_more };
+      },
       pageSize,
     );
   }
@@ -291,7 +298,7 @@ export class BillingResource {
    * Distinct from a deposit INTENT. A payment can be credited without ever matching an intent —
    * see `waitForPayment` — so this is the record that says whether money actually arrived.
    */
-  async payments(params: { limit?: number } = {}): Promise<{ payments: PaymentRecord[] }> {
+  async payments(params: { limit?: number } = {}): Promise<{ payments: PaymentRecord[]; pagination?: Pagination }> {
     const { data } = await this.http.get('/v1/billing/payments', {
       params: { limit: params.limit ?? 10 },
     });

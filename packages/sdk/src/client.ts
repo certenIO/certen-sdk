@@ -292,14 +292,30 @@ function generateIdempotencyKey(): string {
  * "27 of 412". When the server does not return `total`, the yielded object's `total` is undefined.
  */
 export async function* paginate<T>(
-  fetchPage: (limit: number, offset: number) => Promise<{ items: T[]; total?: number }>,
+  fetchPage: (limit: number, offset: number) => Promise<{ items: T[]; total?: number; hasMore?: boolean }>,
   pageSize = 100,
 ): AsyncIterableIterator<T> {
   let offset = 0;
   for (;;) {
-    const { items } = await fetchPage(pageSize, offset);
+    const { items, hasMore } = await fetchPage(pageSize, offset);
     for (const it of items) yield it;
-    if (items.length < pageSize) return;
+
+    // `hasMore` when the endpoint reports it; a short page otherwise.
+    //
+    // The fallback is not equivalent, and the difference is the reason the gateway now sends the
+    // field. A final page that lands EXACTLY on the page size is indistinguishable from a full one,
+    // so short-page inference either stops a page early — reporting a partial ledger as complete,
+    // which for a reconciliation is worse than an error — or spends an extra request discovering an
+    // empty page. It stays only because the SDK is regularly pointed at an older gateway.
+    if (hasMore !== undefined) {
+      if (!hasMore) return;
+    } else if (items.length < pageSize) {
+      return;
+    }
+
+    // Guard against a server that reports more while returning nothing: without this the loop
+    // never advances and never ends.
+    if (items.length === 0) return;
     offset += items.length;
   }
 }

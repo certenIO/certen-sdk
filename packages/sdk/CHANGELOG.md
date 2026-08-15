@@ -4,6 +4,22 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — `paginate()` stops on `has_more` instead of guessing
+
+The gateway now returns `pagination: { limit, offset, has_more, returned }` on the ledger, receipts
+and payments lists. Eleven list endpoints paged three different ways and six reported nothing at
+all, so walking one meant inferring the end from a short page.
+
+That inference is wrong in one specific case, and it fails silently: **a final page that lands
+exactly on the page size is indistinguishable from a full one.** So the walk either stops a page
+early — reporting a partial ledger as complete, which for a reconciliation is worse than an error —
+or spends an extra request discovering an empty page.
+
+`paginate()`, `ledgerAll()` and `receiptsAll()` use `has_more` when it is present and fall back to
+short-page inference when it is not, since the SDK is regularly pointed at an older gateway. A
+server that reports `has_more: true` while returning no rows now terminates the loop rather than
+spinning forever — a hang in an unattended script being worse than a wrong answer.
+
 ### Changed — `doctor()` distinguishes an entitlement outage from a component outage
 
 The gateway now reports `entitlement_unpublished` and `entitlement_expired` as not-ready. When no

@@ -896,3 +896,93 @@ describe('fetchSharedProof — the counterparty side of a share', () => {
       .toEqual({ token: 'tok/abc', baseUrl: 'https://g.example' });
   });
 });
+
+describe('paging stops at the right place', () => {
+  const ENTRY = (id: string) => ({
+    id, account: 'available', amount_usd: '-5.000000', kind: 'capture',
+    ref_type: null, ref_id: null, memo: null, created_at: '2026-08-15T00:00:00.000Z',
+  });
+
+  it('stops on has_more:false even when the last page is exactly full', async () => {
+    // The case short-page inference gets wrong. Two rows for a page size of two looks identical to
+    // a full page, so without has_more the walk either fetches again or — with the other common
+    // guess — stops a page early and reports a partial ledger as complete.
+    const s = await startServer((req, res, n) => {
+      if (n === 1) {
+        return json(res, 200, {
+          entries: [ENTRY('a'), ENTRY('b')],
+          pagination: { limit: 2, offset: 0, has_more: false, returned: 2 },
+        });
+      }
+      return json(res, 500, { error: 'should not have asked for a second page' });
+    });
+    try {
+      const seen: string[] = [];
+      for await (const e of new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.ledgerAll(2)) seen.push(e.id);
+      expect(seen).toEqual(['a', 'b']);
+      expect(s.recorded).toHaveLength(1);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('keeps going on has_more:true even when the page is short', async () => {
+    // The mirror image: a server may return fewer rows than asked for and still have more. Short-
+    // page inference would stop here and silently truncate.
+    const s = await startServer((req, res, n) => {
+      if (n === 1) {
+        return json(res, 200, {
+          entries: [ENTRY('a')],
+          pagination: { limit: 5, offset: 0, has_more: true, returned: 1 },
+        });
+      }
+      return json(res, 200, {
+        entries: [ENTRY('b')],
+        pagination: { limit: 5, offset: 1, has_more: false, returned: 1 },
+      });
+    });
+    try {
+      const seen: string[] = [];
+      for await (const e of new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.ledgerAll(5)) seen.push(e.id);
+      expect(seen).toEqual(['a', 'b']);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('falls back to short-page inference against a gateway that sends no pagination', async () => {
+    // The SDK ships separately and is regularly pointed at an older gateway.
+    const s = await startServer((req, res, n) => {
+      if (n === 1) return json(res, 200, { entries: [ENTRY('a'), ENTRY('b')] });
+      return json(res, 200, { entries: [ENTRY('c')] });
+    });
+    try {
+      const seen: string[] = [];
+      for await (const e of new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.ledgerAll(2)) seen.push(e.id);
+      expect(seen).toEqual(['a', 'b', 'c']);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('terminates on a server that claims more while returning nothing', async () => {
+    // Without the empty-page guard this loop never advances and never ends — a hang rather than a
+    // wrong answer, which is worse in a script nobody is watching.
+    const s = await startServer((req, res) => json(res, 200, {
+      entries: [],
+      pagination: { limit: 2, offset: 0, has_more: true, returned: 0 },
+    }));
+    try {
+      const seen: unknown[] = [];
+      for await (const e of new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .billing.ledgerAll(2)) seen.push(e);
+      expect(seen).toEqual([]);
+      expect(s.recorded).toHaveLength(1);
+    } finally {
+      await s.close();
+    }
+  });
+});

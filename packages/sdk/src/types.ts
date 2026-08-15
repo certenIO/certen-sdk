@@ -681,6 +681,22 @@ export interface PricingCatalog {
 }
 
 /**
+ * Where a page sits in a list.
+ *
+ * **Loop until `has_more` is false.** Do not infer the end from a short page: a final page that
+ * lands exactly on the page size is indistinguishable from a full one, so that inference stops a
+ * page early and reports a partial result as complete — silently.
+ *
+ * Optional on responses because an older gateway does not send it; `paginate()` falls back then.
+ */
+export interface Pagination {
+  limit: number;
+  offset: number;
+  has_more: boolean;
+  returned: number;
+}
+
+/**
  * One line of the append-only, double-entry ledger.
  *
  * Every balance change has an entry here, and corrections appear as new REVERSING groups rather
