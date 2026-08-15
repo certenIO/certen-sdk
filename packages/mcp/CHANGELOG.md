@@ -4,6 +4,12 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_proof_open_shared`
+
+Reads a proof from a share link, with no API key. Its description tells the agent that a 410 means
+the link was real and has lapsed — so the response is to ask for a new link, not to tell the user
+their proof does not exist.
+
 ### Added — `certen_platform_ready`
 
 An agent had no way to tell a CERTEN outage from a user misconfiguration, and most errors look

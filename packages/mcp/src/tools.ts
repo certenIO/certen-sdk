@@ -289,6 +289,27 @@ const READ_TOOLS: ToolDef[] = [
     run: (c, a) => c.billing.verifyReceipt(s(a, 'receiptId')),
   },
   {
+    name: 'certen_proof_open_shared',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/proof/shared/{token}',
+    description:
+      'Read a proof someone shared with you, from the share link they sent. Needs no API key and no '
+      + 'CERTEN account — requiring a credential to verify a CERTEN proof would defeat the purpose '
+      + 'of sharing one. Pass the link exactly as received; the token is extracted from it. A 410 '
+      + 'means the link was real and is now revoked, expired, or out of views, so the right response '
+      + 'is to ask for a fresh link — NOT to tell the user the proof does not exist.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        link: str('The share link as received, or the bare token'),
+      },
+      required: ['link'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.proof.shared(s(a, 'link')),
+  },
+  {
     name: 'certen_platform_ready',
     tier: 'read',
     mutates: false,

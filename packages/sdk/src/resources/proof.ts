@@ -1,6 +1,8 @@
 import { AxiosInstance } from 'axios';
+import { parseShareTarget } from '../shared-proof.js';
 import type {
   ProofArtifact, ProofCustody, ChainReceipt, ProofShare, ProofSharesResponse,
+  SharedProof,
 } from '../types.js';
 
 /**
@@ -75,6 +77,21 @@ export class ProofResource {
    *
    * The token is returned once. `expiresIn` is seconds.
    */
+  /**
+   * Read a proof someone shared with you.
+   *
+   * Convenience for a caller who already has a client. The endpoint takes NO API key — the person
+   * a share link is for has no CERTEN relationship — so a counterparty should import the standalone
+   * `fetchSharedProof(url)` instead and construct nothing.
+   *
+   * Accepts the share URL as handed over, or the bare token.
+   */
+  async shared(tokenOrUrl: string): Promise<SharedProof> {
+    const { token } = parseShareTarget(tokenOrUrl, 'http://placeholder');
+    const { data } = await this.http.get(`/v1/proof/shared/${encodeURIComponent(token)}`);
+    return data;
+  }
+
   async share(proofId: string, params: { label?: string; expiresIn?: number } = {}): Promise<ProofShare> {
     const { data } = await this.http.post(`/v1/proof/${proofId}/share`, {
       label: params.label,

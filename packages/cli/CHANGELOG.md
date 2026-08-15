@@ -3,6 +3,20 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen proof open <link>`
+
+Read a proof someone shared with you. **Runs with no API key configured** — the recipient of a
+share link has no CERTEN account, and every other share command (`share`, `shares`, `shares revoke`)
+serves the sender.
+
+```
+certen proof open https://gateway.kompendium.co/v1/proof/shared/<token>
+certen proof open <link> --out proof.json
+```
+
+An expired or revoked link exits non-zero saying to ask for a fresh one, rather than reporting that
+the proof does not exist.
+
 ### Added — `certen verify <receipt-id>`
 
 Confirm a charge instead of being told it is fine.

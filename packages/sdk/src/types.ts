@@ -748,6 +748,21 @@ export interface Receipt extends ReceiptSummary {
 }
 
 /**
+ * A proof bundle received through a share link.
+ *
+ * `bundle` is fetched live rather than snapshotted when the link was made, so a share can never
+ * serve a superseded artifact.
+ */
+export interface SharedProof {
+  proof_id: string;
+  shared: boolean;
+  expires_at: string;
+  /** How many times the link has been redeemed, including this one. Some links are view-capped. */
+  view_count: number;
+  bundle: unknown;
+}
+
+/**
  * Whether CERTEN can serve, and what is wrong when it cannot.
  *
  * `reasons` carries coarse tokens. The ones worth acting on differently:

@@ -4,6 +4,24 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `fetchSharedProof()`, for the person a share link is FOR
+
+The SDK could create a share, list shares and revoke a share — every operation for the sender — and
+had nothing at all for the recipient, who is the reason the feature exists.
+
+`fetchSharedProof(link)` is a standalone export, not a client method, and that is the point: the
+endpoint takes no API key because "requiring a Certen credential to verify a Certen proof would
+defeat the purpose", and putting the only client-side way to redeem behind a constructor that
+demands an `apiKey` would have reimposed exactly that requirement.
+
+Pass the link as received. The origin comes from the link itself — a proof shared from one
+deployment is never fetched from another, where the token means nothing and the resulting 404 would
+read as "this proof never existed". A bare token works too, with `baseUrl`.
+
+A 410 is surfaced distinctly from a 404: the link WAS real and is now revoked, expired, or out of
+views, so the recipient is told to ask for a fresh one rather than that the proof does not exist.
+`proof.shared(link)` is the equivalent for a caller who already holds a client.
+
 ### Added — `client.health.ready()`, and a `doctor()` check that tells a CERTEN outage from your setup
 
 `doctor()` proved the gateway was there with `GET /v1/chains`. That is a static registry read: it

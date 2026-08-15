@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { writeFileSync, readFileSync } from 'node:fs';
-import { CertenClient, CertenError, type ChainReceipt } from '@certen.io/sdk';
+import { CertenClient, CertenError, fetchSharedProof, type ChainReceipt } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -290,6 +290,50 @@ export function registerProofCommands(program: Command): void {
       if (share.expires_at) human(`  Expires ${share.expires_at}.`);
       hint('');
       hint(`Revoke it: certen proof shares revoke ${share.id ?? '<share-id>'}`);
+    });
+
+  proof
+    .command('open <link>')
+    .description('Read a proof someone shared with you (no API key needed)')
+    .option('--out <file>', 'Write the bundle to a file instead of printing it')
+    .action(async (link: string, opts: { out?: string }) => {
+      // NO getApiKey() and no client. This is the one command a counterparty runs, and the endpoint
+      // takes no credential precisely because requiring a CERTEN account to verify a CERTEN proof
+      // would defeat the purpose. Every other operation on a share existed - create, list, revoke,
+      // all for the SENDER - and the person the feature is actually for had nothing.
+      //
+      // The share URL is accepted as handed over, origin included, so nothing needs configuring:
+      // asking someone to strip the token out of a link and then name the gateway it came from is
+      // work invented for no reason.
+      const shared = await fetchSharedProof(link);
+
+      if (opts.out) {
+        writeFileSync(opts.out, JSON.stringify(shared.bundle, null, 2));
+        printOutput({
+          proof_id: shared.proof_id, expires_at: shared.expires_at,
+          view_count: shared.view_count, written_to: opts.out,
+        });
+        if (!isJsonMode()) {
+          human('');
+          human(`  Proof ${shared.proof_id} written to ${opts.out}.`);
+          human(`  This link expires ${shared.expires_at}.`);
+        }
+        return;
+      }
+
+      if (isJsonMode()) {
+        printOutput({ ...shared } as unknown as Record<string, unknown>);
+        return;
+      }
+
+      // The bundle is the payload; printing it through the key/value table would render it as one
+      // unreadable line.
+      human('');
+      human(`  Proof ${shared.proof_id}`);
+      human(`  Link expires ${shared.expires_at} - viewed ${shared.view_count} time(s).`);
+      human('');
+      process.stdout.write(`${JSON.stringify(shared.bundle, null, 2)}\n`);
+      hint('certen proof open <link> --out proof.json   # keep a copy');
     });
 
   const shares = proof.command('shares').description('Share links this organization has created');

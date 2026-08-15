@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import http from 'http';
 import { AddressInfo } from 'net';
-import { CertenClient } from '../src/index.js';
+import { CertenClient, fetchSharedProof, parseShareTarget } from '../src/index.js';
 import * as nodeCrypto from 'node:crypto';
 import { canonicalJson, foldAuditPath } from '../src/verify-receipt.js';
 
@@ -819,5 +819,80 @@ describe('billing.verifyReceipt', () => {
     // Same two leaves, other side: index 1 must fold sibling-first.
     expect(foldAuditPath(b.toString('hex'), 1, 2, [a.toString('hex')]))
       .toBe(parent.toString('hex'));
+  });
+});
+
+describe('fetchSharedProof — the counterparty side of a share', () => {
+  const BUNDLE = { proof_id: 'p1', anchors: [{ chain: 'base-sepolia' }] };
+  const SHARED = {
+    proof_id: 'p1', shared: true, expires_at: '2026-09-01T00:00:00.000Z',
+    view_count: 1, bundle: BUNDLE,
+  };
+
+  it('takes the share link as handed over and needs no client and no key', async () => {
+    // The asymmetry this closes: the SDK could create, list and revoke a share — every operation
+    // for the SENDER — and had nothing for the person the feature is for, who by design has no
+    // CERTEN account and so cannot construct a CertenClient at all.
+    const s = await startServer((req, res) => json(res, 200, SHARED));
+    try {
+      const out = await fetchSharedProof(`${s.url}/v1/proof/shared/tok_abc`);
+      expect(s.recorded[0]).toMatchObject({ method: 'GET', path: '/v1/proof/shared/tok_abc' });
+      // No credential is sent — this endpoint takes none, and appearing to require one would be
+      // the misleading part.
+      expect(out).toEqual(SHARED);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('accepts a bare token against an explicit base url', async () => {
+    const s = await startServer((req, res) => json(res, 200, SHARED));
+    try {
+      const out = await fetchSharedProof('tok_abc', { baseUrl: s.url });
+      expect(s.recorded[0].path).toBe('/v1/proof/shared/tok_abc');
+      expect(out.proof_id).toBe('p1');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('fetches from the origin in the LINK, not from a configured default', async () => {
+    // A proof shared from one deployment must not be fetched from another, where the token is
+    // meaningless — and the 404 that produced would read as "this proof never existed".
+    const right = await startServer((req, res) => json(res, 200, SHARED));
+    const wrong = await startServer((req, res) => json(res, 404, { error: 'no' }));
+    try {
+      const out = await fetchSharedProof(`${right.url}/v1/proof/shared/tok_abc`);
+      expect(out.proof_id).toBe('p1');
+      expect(wrong.recorded).toHaveLength(0);
+    } finally {
+      await right.close();
+      await wrong.close();
+    }
+  });
+
+  it('distinguishes a dead link from a link that never existed', async () => {
+    // 410 means the link WAS real. Collapsing it into "not found" would leave a counterparty
+    // believing the proof does not exist, when what they need is to ask for a fresh link.
+    const s = await startServer((req, res) =>
+      json(res, 410, { error: 'This share link has expired.', code: 'SHARE_NO_LONGER_VALID' }));
+    try {
+      await expect(fetchSharedProof(`${s.url}/v1/proof/shared/tok_abc`))
+        .rejects.toMatchObject({ status: 410, code: 'SHARE_NO_LONGER_VALID' });
+      await expect(fetchSharedProof(`${s.url}/v1/proof/shared/tok_abc`))
+        .rejects.toThrow(/ask for a new link/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('rejects something that is not a share link before making a request', async () => {
+    await expect(fetchSharedProof('https://example.com/somewhere/else'))
+      .rejects.toMatchObject({ code: 'INVALID_SHARE_LINK' });
+  });
+
+  it('parses a link with a trailing slash and a percent-encoded token', async () => {
+    expect(parseShareTarget('https://g.example/v1/proof/shared/tok%2Fabc/'))
+      .toEqual({ token: 'tok/abc', baseUrl: 'https://g.example' });
   });
 });

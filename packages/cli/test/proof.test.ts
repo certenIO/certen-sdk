@@ -425,3 +425,72 @@ describe('proof shares', () => {
     }
   });
 });
+
+describe('certen proof open — the counterparty command', () => {
+  const SHARED = {
+    proof_id: 'p1', shared: true, expires_at: '2026-09-01T00:00:00.000Z',
+    view_count: 1, bundle: { proof_id: 'p1', anchors: [{ chain: 'base-sepolia' }] },
+  };
+
+  /** Deliberately WITHOUT CERTEN_API_KEY or CERTEN_API_URL — a counterparty has neither. */
+  async function bare(args: string[]): Promise<Run> {
+    const home = mkdtempSync(join(tmpdir(), 'certen-share-'));
+    const env: Record<string, string> = { ...(process.env as Record<string, string>), HOME: home, USERPROFILE: home };
+    delete env.CERTEN_API_KEY;
+    delete env.CERTEN_API_URL;
+    try {
+      const { stdout, stderr } = await run(process.execPath, [CLI, ...args], { env, encoding: 'utf8', cwd: home });
+      return { stdout, stderr, code: 0, home };
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string; code?: number };
+      return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', code: e.code ?? -1, home };
+    }
+  }
+
+  it('works with NO API key configured on the machine', async () => {
+    // The whole point. Every other proof-share command is for the sender; this is the one the
+    // recipient runs, and they have no CERTEN account — so requiring a key would make the command
+    // useless to exactly the person it exists for.
+    const srv = await stubGateway((req, res) => json(res, 200, SHARED));
+    try {
+      const r = await bare(['proof', 'open', `${srv.url}/v1/proof/shared/tok_abc`, '--json']);
+      expect(r.code).toBe(0);
+      const data = soleJson(r.stdout).data as Record<string, unknown>;
+      expect(data.proof_id).toBe('p1');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('writes the bundle to a file with --out', async () => {
+    const srv = await stubGateway((req, res) => json(res, 200, SHARED));
+    try {
+      const r = await bare(['proof', 'open', `${srv.url}/v1/proof/shared/tok_abc`, '--out', 'b.json', '--json']);
+      expect(r.code).toBe(0);
+      const written = JSON.parse(readFileSync(join(r.home, 'b.json'), 'utf8')) as { proof_id: string };
+      expect(written.proof_id).toBe('p1');
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('tells a recipient to ask for a fresh link rather than that the proof is missing', async () => {
+    // A 410 means the link WAS real. Reporting it as "not found" would send a counterparty away
+    // believing the proof does not exist.
+    const srv = await stubGateway((req, res) =>
+      json(res, 410, { error: 'This share link has expired.', code: 'SHARE_NO_LONGER_VALID' }));
+    try {
+      const r = await bare(['proof', 'open', `${srv.url}/v1/proof/shared/tok_abc`]);
+      expect(r.code).not.toBe(0);
+      expect(r.stderr).toMatch(/ask for a new link/);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('rejects a link that is not a share link without making a request', async () => {
+    const r = await bare(['proof', 'open', 'https://example.com/nope']);
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toMatch(/not a share link/);
+  });
+});
