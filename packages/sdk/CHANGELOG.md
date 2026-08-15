@@ -4,6 +4,14 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — `doctor()` distinguishes an entitlement outage from a component outage
+
+The gateway now reports `entitlement_unpublished` and `entitlement_expired` as not-ready. When no
+valid entitlement epoch is published, validators refuse EVERY intent on the fleet — an outage that
+stops execution of work that already exists, as opposed to a dry sponsor, which stops identity
+creation silently behind a 202. The two need different responses, so `doctor()` names them
+differently instead of printing a reason token.
+
 ### Added — `fetchSharedProof()`, for the person a share link is FOR
 
 The SDK could create a share, list shares and revoke a share — every operation for the sender — and

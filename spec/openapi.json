@@ -114,7 +114,7 @@
         "tags": [
           "Health"
         ],
-        "description": "Readiness — can the gateway actually serve? Checks the database, api-bridge, the proof-service, Accumulate, and the onboarding sponsor balance. Returns 200 when ready and 503 otherwise, with coarse reason tokens. No authentication: this is what an external uptime monitor should poll. For component-level detail use /v1/health/detail.",
+        "description": "Readiness — can the gateway actually serve? Checks the database, api-bridge, the proof-service, Accumulate, the onboarding sponsor balance, and the entitlement epoch. Returns 200 when ready and 503 otherwise, with coarse reason tokens. No authentication: this is what an external uptime monitor should poll. For component-level detail use /v1/health/detail.",
         "responses": {
           "200": {
             "description": "Ready.",

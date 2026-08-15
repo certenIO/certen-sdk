@@ -770,6 +770,8 @@ export interface SharedProof {
  * - `sponsor_below_floor` — identity creation will return 202 and then NEVER complete. Do not
  *   create identities until this clears; every signal you would normally trust says it worked.
  * - `sponsor_low_warning` — appears alongside `ready: true`. A scheduling signal, not an outage.
+ * - `entitlement_unpublished` / `entitlement_expired` — validators are refusing EVERY intent on the
+ *   fleet right now. Work will not execute until this clears; nothing is wrong with your request.
  * - `database`, `api_bridge`, `proofs_service`, `accumulate` — a component is down. None of these
  *   are anything a caller can fix by changing their own setup.
  */

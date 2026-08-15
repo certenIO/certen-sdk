@@ -568,3 +568,44 @@ describe('telling a CERTEN outage apart from a broken setup', () => {
     }
   });
 });
+
+describe('an entitlement gap stops execution, not creation', () => {
+  it('says work will not execute, rather than naming a component', async () => {
+    // The two not-ready causes have different consequences and different advice. A dry sponsor
+    // stops identity CREATION silently, behind a 202. An entitlement gap stops EXECUTION of work
+    // that already exists — reporting it as "Affected: entitlement_expired" would leave the reader
+    // to guess which.
+    const stub = await startServer(gateway({
+      '/v1/health/ready': {
+        __status: 503,
+        __body: { status: 'not_ready', reasons: ['entitlement_expired'] },
+      },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      const check = byName(report.checks, 'platform ready');
+      expect(check.status).toBe('fail');
+      expect(check.detail).toMatch(/refusing every intent/);
+      expect(check.fix).toMatch(/Nothing on your side/);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('still names the other faults alongside it', async () => {
+    const stub = await startServer(gateway({
+      '/v1/health/ready': {
+        __status: 503,
+        __body: { status: 'not_ready', reasons: ['entitlement_unpublished', 'api_bridge'] },
+      },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      const check = byName(report.checks, 'platform ready');
+      expect(check.detail).toMatch(/refusing every intent/);
+      expect(check.detail).toMatch(/api_bridge/);
+    } finally {
+      await stub.close();
+    }
+  });
+});

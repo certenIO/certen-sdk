@@ -224,6 +224,10 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
       } else {
         const reasons = readiness.reasons ?? [];
         const sponsorDry = reasons.includes('sponsor_below_floor');
+        // Named separately because the consequence differs: a dry sponsor stops identity CREATION
+        // (silently, with a 202), while an entitlement gap stops EXECUTION of work already created.
+        const gateShut = reasons.includes('entitlement_unpublished')
+          || reasons.includes('entitlement_expired');
         checks.push({
           name: 'platform ready',
           status: 'fail',
@@ -231,7 +235,11 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
             ? 'CERTEN is not ready: the onboarding sponsor is below its floor. Identity creation '
               + 'will return 202 and then NEVER complete.'
               + (reasons.length > 1 ? ` Also down: ${reasons.filter((r) => r !== 'sponsor_below_floor').join(', ')}.` : '')
-            : `CERTEN is not ready. Affected: ${reasons.join(', ') || 'unspecified'}.`,
+            : gateShut
+              ? 'CERTEN is not ready: no valid entitlement epoch is published, so validators are '
+                + 'refusing every intent. Work will not execute until this clears.'
+                + (reasons.length > 1 ? ` Also affected: ${reasons.filter((r) => !r.startsWith('entitlement_')).join(', ')}.` : '')
+              : `CERTEN is not ready. Affected: ${reasons.join(', ') || 'unspecified'}.`,
           // Deliberately not a configuration instruction. The whole value of this check is telling
           // someone to STOP looking at their own setup, so the fix must not send them back to it.
           fix: sponsorDry
