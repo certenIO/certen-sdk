@@ -195,6 +195,64 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
     });
   }
 
+  // ── 1b. Can the platform actually serve? ────────────────────────────────────────────────────
+  //
+  // Check 1 proves the gateway is answering HTTP, and nothing more: `GET /v1/chains` is a static
+  // registry read that keeps returning 200 while the database, the api-bridge, the proof service or
+  // Accumulate are down. So a CERTEN-side outage was indistinguishable from a broken local setup,
+  // and the report said "gateway reachable: ok" while sending the reader to look at their own
+  // configuration for a fault that was never theirs.
+  //
+  // `sponsor_below_floor` is the reason this check earns its round trip. When the onboarding
+  // sponsor runs dry, identity creation returns 202 and then never completes — every visible signal
+  // says it worked. Nothing else in this report can see that.
+  if (!unreachable) {
+    try {
+      const readiness = await client.health.ready();
+      if (readiness.ready) {
+        const warning = (readiness.reasons ?? []).includes('sponsor_low_warning');
+        checks.push({
+          name: 'platform ready',
+          status: warning ? 'warn' : 'ok',
+          detail: warning
+            ? 'Serving normally. CERTEN reports its onboarding sponsor is running low'
+              + (readiness.sponsor_identities_remaining != null
+                ? ` (~${readiness.sponsor_identities_remaining} identities left)` : '')
+              + ' — not an outage, but identity creation may be affected soon.'
+            : 'All components serving.',
+        });
+      } else {
+        const reasons = readiness.reasons ?? [];
+        const sponsorDry = reasons.includes('sponsor_below_floor');
+        checks.push({
+          name: 'platform ready',
+          status: 'fail',
+          detail: sponsorDry
+            ? 'CERTEN is not ready: the onboarding sponsor is below its floor. Identity creation '
+              + 'will return 202 and then NEVER complete.'
+              + (reasons.length > 1 ? ` Also down: ${reasons.filter((r) => r !== 'sponsor_below_floor').join(', ')}.` : '')
+            : `CERTEN is not ready. Affected: ${reasons.join(', ') || 'unspecified'}.`,
+          // Deliberately not a configuration instruction. The whole value of this check is telling
+          // someone to STOP looking at their own setup, so the fix must not send them back to it.
+          fix: sponsorDry
+            ? 'Nothing on your side to change. Do not create identities until this clears — they '
+              + 'will appear to succeed and never finish. Retry later or contact CERTEN.'
+            : 'Nothing on your side to change — this is a CERTEN-side outage. Retry later.',
+        });
+      }
+    } catch (err) {
+      // The probe is public and cheap; failing it while `/v1/chains` succeeded is odd enough to
+      // report, but it is not evidence that anything is broken for this caller.
+      checks.push({
+        name: 'platform ready',
+        status: 'warn',
+        detail: `Could not read the readiness probe: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  } else {
+    checks.push({ name: 'platform ready', status: 'skipped', detail: 'gateway unreachable' });
+  }
+
   // ── 2. Does the gateway accept this credential? ─────────────────────────────────────────────
   let credentialOk = false;
   // The credential probe's answer, kept rather than discarded.

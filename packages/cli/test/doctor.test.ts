@@ -161,6 +161,7 @@ function healthy(over: Record<string, unknown> = {}): Handler {
     const url = (req.url ?? '').split('?')[0];
     if (url in over) return json(res, 200, over[url]);
     if (url === '/v1/chains') return json(res, 200, CHAINS);
+    if (url === '/v1/health/ready') return json(res, 200, { status: 'ready', reasons: [] });
     if (url.startsWith('/v1/chains/')) {
       const id = url.split('/').pop();
       const chain = CHAINS.chains.find((c) => c.id === id || String(c.chainId) === id);
@@ -235,7 +236,7 @@ describe('certen doctor', () => {
       expect(r.code).toBe(0);
       const data = soleJson(r.stdout).data as { ok: boolean; checks: Array<{ name: string; status: string }> };
       expect(data.ok).toBe(true);
-      expect(data.checks).toHaveLength(8);
+      expect(data.checks).toHaveLength(9);
       expect(data.checks.every((c) => c.status === 'ok' || c.status === 'warn')).toBe(true);
     } finally {
       await stub.close();
@@ -252,7 +253,7 @@ describe('certen doctor', () => {
       expect(r.code).toBe(1);
       const checks = (soleJson(r.stdout).error as { details: { checks: Array<{ name: string; status: string }> } })
         .details.checks;
-      expect(checks).toHaveLength(8);
+      expect(checks).toHaveLength(9);
       expect(checks.filter((c) => c.status === 'skipped')).toHaveLength(5);
     } finally {
       await stub.close();
@@ -268,7 +269,7 @@ describe('certen doctor', () => {
       // The whole point of the `details` key: a caller must not have to choose between knowing
       // that something is broken and knowing what.
       expect(err.details?.checks).toBeDefined();
-      expect((err.details!.checks as unknown[]).length).toBe(8);
+      expect((err.details!.checks as unknown[]).length).toBe(9);
     } finally {
       await stub.close();
     }

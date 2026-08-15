@@ -4,6 +4,25 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `client.health.ready()`, and a `doctor()` check that tells a CERTEN outage from your setup
+
+`doctor()` proved the gateway was there with `GET /v1/chains`. That is a static registry read: it
+keeps returning 200 while the database, the api-bridge, the proof service or Accumulate are down. So
+a CERTEN-side outage and a broken local setup produced the same report — "gateway reachable: ok" —
+and sent the reader hunting through their own configuration for a fault that was never theirs.
+
+The new `platform ready` check reads the public readiness probe and names what is down, with a fix
+that says explicitly there is nothing on your side to change.
+
+The case that earns the round trip is `sponsor_below_floor`: when the onboarding sponsor runs dry,
+identity creation returns 202 and then **never completes** — every visible signal says it worked.
+Nothing else in the report could see it. A low-but-serving sponsor is a `warn` and does not fail the
+run, because failing on it would train people to ignore the check.
+
+`health.ready()` does NOT throw on 503. A not-ready answer IS the answer and carries the reasons;
+turning it into an exception would discard the only useful part. It needs no API key, so a caller
+whose credential is being rejected can still find out whether the platform is the problem.
+
 ### Changed — `createAndWait()` uses the cadence the gateway publishes
 
 `POST /v1/identity` now returns a `polling` block: when to make the FIRST request, how often after

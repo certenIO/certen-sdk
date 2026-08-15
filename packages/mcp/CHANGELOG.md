@@ -4,6 +4,13 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_platform_ready`
+
+An agent had no way to tell a CERTEN outage from a user misconfiguration, and most errors look
+identical either way — so the likely response was to send someone debugging their own setup during
+an outage. The tool description flags `sponsor_below_floor` as a hard stop on creating identities,
+because that failure returns 202 and then never completes.
+
 ### Added — `certen_billing_verify_receipt`, `certen_transparency_log`, `certen_transparency_price_books`
 
 An agent asked to prove a charge could previously only quote CERTEN's own `verification` block back

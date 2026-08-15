@@ -747,6 +747,27 @@ export interface Receipt extends ReceiptSummary {
   verification?: unknown;
 }
 
+/**
+ * Whether CERTEN can serve, and what is wrong when it cannot.
+ *
+ * `reasons` carries coarse tokens. The ones worth acting on differently:
+ *
+ * - `sponsor_below_floor` — identity creation will return 202 and then NEVER complete. Do not
+ *   create identities until this clears; every signal you would normally trust says it worked.
+ * - `sponsor_low_warning` — appears alongside `ready: true`. A scheduling signal, not an outage.
+ * - `database`, `api_bridge`, `proofs_service`, `accumulate` — a component is down. None of these
+ *   are anything a caller can fix by changing their own setup.
+ */
+export interface ReadinessReport {
+  /** True only on a 200 whose status is `ready`. */
+  ready: boolean;
+  status: string;
+  reasons: string[];
+  sponsor_identities_remaining?: number | null;
+  degraded?: boolean;
+  [k: string]: unknown;
+}
+
 /** What the transparency log is and how far it has grown. */
 export interface TransparencyLogInfo {
   tree_size?: number;

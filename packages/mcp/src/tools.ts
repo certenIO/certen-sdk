@@ -289,6 +289,22 @@ const READ_TOOLS: ToolDef[] = [
     run: (c, a) => c.billing.verifyReceipt(s(a, 'receiptId')),
   },
   {
+    name: 'certen_platform_ready',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/health/ready',
+    description:
+      'Whether CERTEN can actually serve right now. Call this BEFORE concluding that a failure is '
+      + 'the user\'s configuration — most other errors look identical whether the fault is theirs or '
+      + 'ours, and sending someone to debug their own setup during a CERTEN outage wastes their time '
+      + 'entirely. `reasons` names what is down. Treat `sponsor_below_floor` as a hard stop on '
+      + 'creating identities: creation still returns 202 and then never completes, so every signal '
+      + 'you would normally trust will say it worked. `sponsor_low_warning` appears with '
+      + '`ready: true` and is a scheduling signal, not an outage. Needs no API key.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.health.ready(),
+  },
+  {
     name: 'certen_transparency_log',
     tier: 'read',
     mutates: false,

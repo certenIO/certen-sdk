@@ -89,6 +89,7 @@ function gateway(over: Record<string, unknown> = {}): (req: http.IncomingMessage
       return json(res, 200, over[url]);
     }
     if (url === '/v1/chains') return json(res, 200, CHAINS);
+    if (url === '/v1/health/ready') return json(res, 200, { status: 'ready', reasons: [] });
     if (url === '/v1/billing/balance') return json(res, 200, BALANCE);
     if (url === '/v1/billing/obligations') return json(res, 200, OBLIGATIONS);
     if (url === '/v1/portfolio') return json(res, 200, PORTFOLIO);
@@ -113,7 +114,7 @@ describe('a healthy setup', () => {
       const report = await client(stub.url).doctor();
       expect(report.ok).toBe(true);
       expect(report.unreachable).toBe(false);
-      expect(report.checks).toHaveLength(7);
+      expect(report.checks).toHaveLength(8);
       expect(report.checks.every((c) => c.status === 'ok')).toBe(true);
     } finally {
       await stub.close();
@@ -128,9 +129,9 @@ describe('it never throws, whatever is broken', () => {
     expect(report.unreachable).toBe(true);
     expect(report.ok).toBe(false);
     // Same length as a healthy run. A caller must not have to branch on how far it got.
-    expect(report.checks).toHaveLength(7);
+    expect(report.checks).toHaveLength(8);
     expect(byName(report.checks, 'gateway reachable').status).toBe('fail');
-    expect(report.checks.filter((c) => c.status === 'skipped')).toHaveLength(6);
+    expect(report.checks.filter((c) => c.status === 'skipped')).toHaveLength(7);
   });
 
   it('returns a report when the credential is rejected', async () => {
@@ -141,7 +142,7 @@ describe('it never throws, whatever is broken', () => {
       const report = await client(stub.url).doctor();
       expect(report.ok).toBe(false);
       expect(byName(report.checks, 'api key').status).toBe('fail');
-      expect(report.checks).toHaveLength(7);
+      expect(report.checks).toHaveLength(8);
     } finally {
       await stub.close();
     }
@@ -483,6 +484,85 @@ describe('what doctor costs', () => {
       const billing = byName(report.checks, 'billing balance');
       expect(billing.status).toBe('fail');
       expect(billing.detail).toMatch(/4 pending intent/);
+    } finally {
+      await stub.close();
+    }
+  });
+});
+
+describe('telling a CERTEN outage apart from a broken setup', () => {
+  it('fails, and says plainly there is nothing on your side to change', async () => {
+    // The gateway answers /v1/chains — it is a static registry read and keeps returning 200 while
+    // components behind it are down. Before this check the report said "gateway reachable: ok" and
+    // sent the reader hunting through their own configuration for a fault that was never theirs.
+    const stub = await startServer(gateway({
+      '/v1/health/ready': {
+        __status: 503,
+        __body: { status: 'not_ready', reasons: ['api_bridge', 'accumulate'] },
+      },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      expect(report.ok).toBe(false);
+      const check = byName(report.checks, 'platform ready');
+      expect(check.status).toBe('fail');
+      expect(check.detail).toMatch(/api_bridge/);
+      expect(check.fix).toMatch(/Nothing on your side/);
+      // The gateway IS answering — the two checks must disagree, or the new one adds nothing.
+      expect(byName(report.checks, 'gateway reachable').status).toBe('ok');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('warns that identities will hang when the onboarding sponsor is dry', async () => {
+    // The worst silent failure in onboarding: creation returns 202 and never completes, so every
+    // signal a caller would normally trust says it worked. Nothing else in this report sees it.
+    const stub = await startServer(gateway({
+      '/v1/health/ready': {
+        __status: 503,
+        __body: { status: 'not_ready', reasons: ['sponsor_below_floor'] },
+      },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      const check = byName(report.checks, 'platform ready');
+      expect(check.status).toBe('fail');
+      expect(check.detail).toMatch(/NEVER complete/);
+      expect(check.fix).toMatch(/Do not create identities/);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('treats a low sponsor as a warning, not an outage', async () => {
+    // It arrives with a 200 and `ready`. Failing on it would train people to ignore the check.
+    const stub = await startServer(gateway({
+      '/v1/health/ready': {
+        status: 'ready', reasons: ['sponsor_low_warning'], sponsor_identities_remaining: 12,
+      },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      const check = byName(report.checks, 'platform ready');
+      expect(check.status).toBe('warn');
+      expect(check.detail).toMatch(/12 identities left/);
+      // A warning must not flip the overall verdict — the setup works right now.
+      expect(report.ok).toBe(true);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('warns rather than fails when the probe itself cannot be read', async () => {
+    // The probe being unavailable is not evidence that anything is broken for this caller.
+    const stub = await startServer(gateway({
+      '/v1/health/ready': { __status: 500, __body: { error: 'boom' } },
+    }));
+    try {
+      const report = await client(stub.url).doctor();
+      expect(byName(report.checks, 'platform ready').status).toBe('warn');
+      expect(report.ok).toBe(true);
     } finally {
       await stub.close();
     }

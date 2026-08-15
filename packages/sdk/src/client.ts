@@ -12,6 +12,7 @@ import { AdminResource } from './resources/admin.js';
 import { ExecuteResource } from './resources/execute.js';
 import { ChainsResource } from './resources/chains.js';
 import { TransparencyResource } from './resources/transparency.js';
+import { HealthResource } from './resources/health.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
@@ -105,6 +106,11 @@ export class CertenClient {
    * What makes a receipt checkable rather than merely signed. Needs no API key.
    */
   public transparency: TransparencyResource;
+  /**
+   * Whether CERTEN can serve right now, and what is wrong when it cannot. Needs no API key —
+   * a caller whose credential is rejected can still learn whether the platform is the problem.
+   */
+  public health: HealthResource;
   /** Reading and sharing proofs. See resources/proof.ts. */
   public proof: ProofResource;
   /** Device authorization, so a terminal can obtain its own key. Needs no API key. */
@@ -255,6 +261,7 @@ export class CertenClient {
     this.execute = new ExecuteResource(this.http, generateIdempotencyKey);
     this.chains = new ChainsResource(this.http);
     this.transparency = new TransparencyResource(this.http);
+    this.health = new HealthResource(this.http);
     this.proof = new ProofResource(this.http);
     this.device = new DeviceResource(this.http);
   }
