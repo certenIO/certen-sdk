@@ -88,7 +88,12 @@ export class TransactionResource {
    */
   listAll(pageSize = 100): AsyncIterableIterator<TransactionResponse> {
     return paginate<TransactionResponse>(
-      async (limit, offset) => ({ items: (await this.list({ limit, offset })).transactions ?? [] }),
+      async (limit, offset) => {
+        const page = await this.list({ limit, offset });
+        // `has_more` when the gateway sends it. Short-page inference otherwise, which ends a walk
+        // early whenever the last page happens to be exactly full.
+        return { items: page.transactions ?? [], hasMore: page.pagination?.has_more };
+      },
       pageSize,
     );
   }

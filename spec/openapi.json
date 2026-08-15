@@ -1947,6 +1947,9 @@
                         },
                         "total": {
                           "type": "number"
+                        },
+                        "has_more": {
+                          "type": "boolean"
                         }
                       }
                     }
@@ -2249,6 +2252,9 @@
                         },
                         "total": {
                           "type": "number"
+                        },
+                        "has_more": {
+                          "type": "boolean"
                         }
                       }
                     }
@@ -4011,6 +4017,29 @@
                     },
                     "offset": {
                       "type": "integer"
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "description": "Page size that was applied."
+                        },
+                        "offset": {
+                          "type": "integer",
+                          "description": "Where this page started."
+                        },
+                        "has_more": {
+                          "type": "boolean",
+                          "description": "True when at least one further row exists. The only field a pager needs."
+                        },
+                        "returned": {
+                          "type": "integer",
+                          "description": "Rows in this page."
+                        }
+                      }
                     }
                   }
                 }
@@ -4596,7 +4625,39 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "properties": {
+                    "shares": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "description": "Page size that was applied."
+                        },
+                        "offset": {
+                          "type": "integer",
+                          "description": "Where this page started."
+                        },
+                        "has_more": {
+                          "type": "boolean",
+                          "description": "True when at least one further row exists. The only field a pager needs."
+                        },
+                        "returned": {
+                          "type": "integer",
+                          "description": "Rows in this page."
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -5446,6 +5507,9 @@
                         "total": {
                           "type": "integer"
                         },
+                        "has_more": {
+                          "type": "boolean"
+                        },
                         "urgent": {
                           "type": "integer"
                         },
@@ -5472,6 +5536,9 @@
                         },
                         "total": {
                           "type": "integer"
+                        },
+                        "has_more": {
+                          "type": "boolean"
                         }
                       }
                     }
@@ -8800,7 +8867,39 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "properties": {
+                    "heads": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "description": "Page size that was applied."
+                        },
+                        "offset": {
+                          "type": "integer",
+                          "description": "Where this page started."
+                        },
+                        "has_more": {
+                          "type": "boolean",
+                          "description": "True when at least one further row exists. The only field a pager needs."
+                        },
+                        "returned": {
+                          "type": "integer",
+                          "description": "Rows in this page."
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -9730,7 +9829,39 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": true
+                  "additionalProperties": true,
+                  "properties": {
+                    "intents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "description": "Page size that was applied."
+                        },
+                        "offset": {
+                          "type": "integer",
+                          "description": "Where this page started."
+                        },
+                        "has_more": {
+                          "type": "boolean",
+                          "description": "True when at least one further row exists. The only field a pager needs."
+                        },
+                        "returned": {
+                          "type": "integer",
+                          "description": "Rows in this page."
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

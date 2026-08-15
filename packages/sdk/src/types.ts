@@ -354,6 +354,8 @@ export interface ListTransactionsResponse {
   transactions: TransactionResponse[];
   limit: number;
   offset: number;
+  /** Loop until `has_more` is false. Absent on a gateway older than 2026-08. */
+  pagination?: Pagination;
 }
 
 /** Response to `POST /v1/transaction/{id}/signature`. */

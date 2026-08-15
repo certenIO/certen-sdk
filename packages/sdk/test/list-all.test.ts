@@ -190,3 +190,46 @@ describe('admin.auditLogAll', () => {
     } finally { await g.close(); }
   });
 });
+
+describe('transaction.listAll uses the gateway pagination', () => {
+  it('stops on has_more:false even when the final page is exactly full', async () => {
+    // Same silent failure as the ledger: a last page landing exactly on the page size looks like a
+    // full one, so short-page inference either spends an extra request or — with the other common
+    // guess — stops a page early and reports a partial list as complete.
+    const srv = await gateway(() => ({
+      transactions: [{ intent_id: 'a' }, { intent_id: 'b' }],
+      limit: 2,
+      offset: 0,
+      pagination: { limit: 2, offset: 0, has_more: false, returned: 2 },
+    }));
+    try {
+      const seen: string[] = [];
+      for await (const t of client(srv.url).transaction.listAll(2)) {
+        seen.push(t.intent_id as string);
+      }
+      expect(seen).toEqual(['a', 'b']);
+      // One request. Without has_more this walk asks for a second page it does not need.
+      expect(srv.seen).toHaveLength(1);
+    } finally {
+      await srv.close();
+    }
+  });
+
+  it('still walks a gateway that sends no pagination', async () => {
+    const srv = await gateway((q) => {
+      const offset = Number(q.get('offset') ?? 0);
+      return offset === 0
+        ? { transactions: [{ intent_id: 'a' }, { intent_id: 'b' }], limit: 2, offset: 0 }
+        : { transactions: [{ intent_id: 'c' }], limit: 2, offset };
+    });
+    try {
+      const seen: string[] = [];
+      for await (const t of client(srv.url).transaction.listAll(2)) {
+        seen.push(t.intent_id as string);
+      }
+      expect(seen).toEqual(['a', 'b', 'c']);
+    } finally {
+      await srv.close();
+    }
+  });
+});

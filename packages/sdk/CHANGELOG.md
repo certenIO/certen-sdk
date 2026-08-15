@@ -4,6 +4,12 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — `transaction.listAll()` also stops on `has_more`
+
+Every paged list on the gateway now publishes `pagination.has_more`, including `/v1/transactions`,
+which previously echoed `limit` and `offset` with no way to tell the last page from a full one.
+`listAll()` uses it and falls back to short-page inference against an older gateway.
+
 ### Changed — `paginate()` stops on `has_more` instead of guessing
 
 The gateway now returns `pagination: { limit, offset, has_more, returned }` on the ledger, receipts
