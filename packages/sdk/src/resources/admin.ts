@@ -9,10 +9,27 @@ import type {
   AuditLogResponse,
   AuditLogEntry,
   UsageSummaryResponse,
+  ScopeInfo,
 } from '../types.js';
 
 export class AdminResource {
   constructor(private http: AxiosInstance) {}
+
+  /**
+   * Every permission a key can be granted, and what each one covers.
+   *
+   * Read this before minting a key. The vocabulary was published nowhere, so the choice was made by
+   * guessing — and guessing wrong is asymmetric: under-grant and you get 403s, which are visible;
+   * over-grant, and the obvious answer to uncertainty is `*`, which hands a key that only needed to
+   * read a balance the ability to retire identities and publish price books.
+   *
+   * Needs no API key: choosing permissions should not require already holding one.
+   */
+  async scopes(): Promise<{ scopes: ScopeInfo[] }> {
+    const { data } = await this.http.get('/v1/scopes');
+    return data;
+  }
+
 
   async createOrg(params: CreateOrgParams): Promise<OrgResponse> {
     const { data } = await this.http.post('/v1/admin/org', {
@@ -80,7 +97,8 @@ export class AdminResource {
    *
    * ```ts
    * for await (const { item, index, total } of certen.admin.auditLogAll({ from })) {
-   *   process.stdout.write(`${index + 1} of ${total}`);
+   *   process.stdout.write(`
+${index + 1} of ${total}`);
    * }
    * ```
    *

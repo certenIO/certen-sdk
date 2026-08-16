@@ -47,8 +47,25 @@ export class IdentityResource {
    * as a query string, where it was silently ignored — so the signature promised a capability the API does
    * not have.
    */
-  async get(id: string): Promise<IdentityResponse> {
-    const { data } = await this.http.get(`/v1/identity/${id}`);
+  async get(
+    id: string,
+    opts: {
+      /**
+       * Which enrichments to fetch. Defaults to ALL THREE, and each costs a live query —
+       * `governance` and `balances` hit the network, `balances` once PER LINKED CHAIN.
+       *
+       * Pass `[]` to skip them entirely. `status` and `can_sign` are computed before any
+       * enrichment runs and are always returned, so anything polling for readiness wants `[]`.
+       */
+      include?: Array<'governance' | 'balances' | 'pending'>;
+    } = {},
+  ): Promise<IdentityResponse> {
+    const { data } = await this.http.get(`/v1/identity/${id}`, {
+      // Only sent when asked for: omitting the param keeps the gateway's default, while sending
+      // `include=` is the explicit "none" that a poll loop wants. The two are different requests
+      // and conflating them would silently strip enrichments from every ordinary read.
+      ...(opts.include ? { params: { include: opts.include.join(',') } } : {}),
+    });
     return data;
   }
 
@@ -105,12 +122,22 @@ export class IdentityResource {
     while (Date.now() < deadline) {
       // The response IS the identity (plus its joined sub-resources) since the gateway flattened
       // these endpoints; it no longer arrives under an `identity` key.
-      const identity = await this.get(id);
+      // No enrichments while polling. This loop reads `status` and `can_sign`, both computed
+      // before any enrichment runs — so fetching governance, balances and pending on every
+      // iteration bought nothing. At the default 3s interval a 90s provisioning wait is ~30
+      // polls, each of which was making a governance network call, a balance network call PER
+      // LINKED CHAIN, and a pending lookup, then discarding all of it.
+      const identity = await this.get(id, { include: [] });
       last = identity;
       onPoll?.(identity);
 
       if (!IN_FLIGHT.includes(identity.status)) {
-        if (identity.can_sign === true) return identity;
+        if (identity.can_sign === true) {
+          // One enriched read at the end, so what comes back is exactly what it always was.
+          // Returning the lean poll result would silently drop `balances`, `governance` and
+          // `pending` for anyone reading them off this — a saving not worth a surprise.
+          return await this.get(id).catch(() => identity);
+        }
 
         if (identity.can_sign === false) {
           throw new CertenError(

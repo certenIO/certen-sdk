@@ -4,6 +4,28 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Changed — `identity.get()` takes `include`, and `createAndWait()` stops paying for data it discards
+
+`GET /v1/identity/{id}` enriches with `governance`, `balances` and `pending` by default. Each is a
+live query: governance and balances hit the network, and **balances runs once per linked chain**.
+The parameter controlling this was neither in the OpenAPI document nor exposed here, so nobody could
+opt out.
+
+`createAndWait()` was the worst case. It polls every 3 seconds for up to 90 — around thirty rounds —
+and reads exactly two fields, `status` and `can_sign`, both of which the gateway computes BEFORE any
+enrichment runs. Every poll was fetching governance, per-chain balances and pending counts and
+throwing them away. It now polls with `include: []` and does one enriched read at the end, so what
+it returns is unchanged.
+
+`identity.get(id, { include: [...] })` exposes the choice. Omitting the option omits the parameter
+entirely, keeping the gateway default — sending `include=` and sending nothing are different
+requests, and conflating them would strip enrichments from every ordinary read.
+
+**This needs the matching gateway fix to do anything.** `?include=` arrives as an empty string,
+which the route treated as falsy and turned back into the full default — so the one spelling that
+reads as "give me nothing" was the spelling that fetched everything. Against a gateway older than
+that fix, `include: []` is simply ignored rather than harmful.
+
 ### Changed — `transaction.listAll()` also stops on `has_more`
 
 Every paged list on the gateway now publishes `pagination.has_more`, including `/v1/transactions`,

@@ -24,9 +24,20 @@
   "paths": {
     "/reference": {
       "get": {
+        "summary": "Human-readable API reference (HTML)",
+        "description": "The rendered API reference. Serves HTML, not JSON — it is a page to open in a browser, not an endpoint to call from code. Public, like /docs.",
+        "security": [],
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "An HTML page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "description": "An HTML page."
+                }
+              }
+            }
           }
         }
       }
@@ -35,6 +46,7 @@
       "get": {
         "summary": "Prometheus metrics",
         "description": "Public Prometheus metrics endpoint — requires no auth (a scraper has no auth context). Returns Prometheus exposition format as text/plain, NOT JSON. In production this should be gated at the reverse proxy (network ACL or scraper-only bearer token). Returns HTTP 503 when the prom-client library is not installed.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Prometheus exposition text",
@@ -68,6 +80,7 @@
           "Health"
         ],
         "description": "Public liveness probe — requires no auth. Runs a single database connectivity check and reports overall status only (no infra topology). Returns HTTP 200 when healthy and HTTP 503 when the database is unreachable.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Gateway healthy.",
@@ -115,6 +128,7 @@
           "Health"
         ],
         "description": "Readiness — can the gateway actually serve? Checks the database, api-bridge, the proof-service, Accumulate, the onboarding sponsor balance, and the entitlement epoch. Returns 200 when ready and 503 otherwise, with coarse reason tokens. No authentication: this is what an external uptime monitor should poll. For component-level detail use /v1/health/detail.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Ready.",
@@ -174,6 +188,17 @@
           "Health"
         ],
         "description": "Operator-facing detailed health report. Requires an API key with the health:read, admin:read, or admin:write scope. Probes the database, api-bridge, proofs-service, and Accumulate network and reports per-component up/down status with latencies. Overall status is healthy, degraded, or unhealthy. Returns HTTP 503 when unhealthy (database down), otherwise HTTP 200.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "health:read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Component health detail (healthy or degraded).",
@@ -324,6 +349,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "202": {
             "description": "Identity provisioning ACCEPTED — nothing is finished yet. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and typically completes in 60-90 seconds; the response returns immediately with status \"creating\" and a `status_url`. **Use the `polling` block rather than inventing a cadence**: wait `first_poll_after_seconds` before the FIRST request (provisioning cannot finish sooner than a chain of anchored Accumulate transactions, so earlier polls only burn requests), then poll `status_url` every `interval_seconds` until `status` is one of `terminal_states`. For provider signing mode the one-shot mnemonic_retrieval URL is included here and nowhere else.",
@@ -592,6 +626,26 @@
         "parameters": [
           {
             "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "": {
+                "value": ""
+              },
+              "balances": {
+                "value": "balances"
+              },
+              "governance,balances,pending": {
+                "value": "governance,balances,pending"
+              }
+            },
+            "in": "query",
+            "name": "include",
+            "required": false,
+            "description": "Comma-separated enrichments: `governance`, `balances`, `pending`. Defaults to ALL THREE, and each one costs a live query — governance and balances hit the network, balances once PER LINKED CHAIN. Pass `include=` (empty) when polling: `status` and `can_sign` are computed before any enrichment and are always returned, so a poll loop can skip the lot. A 90-second provisioning wait at a 3-second interval is roughly thirty of these, and the enrichments are re-fetched every time."
+          },
+          {
+            "schema": {
               "type": "string",
               "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
             },
@@ -600,6 +654,16 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "identity:read",
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The identity plus any requested enrichments (governance, balances, pending).",
@@ -773,6 +837,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The updated identity, re-fetched with default enrichments (same shape as GET /v1/identity/:id).",
@@ -1015,6 +1088,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The identity was retired. Its quota slot is now free; the on-chain ADI is unaffected.",
@@ -1109,6 +1191,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The plaintext mnemonic plus a warning that it cannot be retrieved again.",
@@ -1187,6 +1278,17 @@
             "description": "Scope to one identity: an ADI URL or identity id, org-scoped. Omit for all."
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "portfolio:read",
+          "identity:read",
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Portfolio entries with per-chain balances and pending counts, plus an aggregate chain total.",
@@ -1314,6 +1416,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Organization created.",
@@ -1422,6 +1533,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Webhook configured; secret returned once.",
@@ -1544,6 +1664,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "API key created; raw key returned once.",
@@ -1651,6 +1776,16 @@
           "Admin"
         ],
         "description": "Lists all API keys belonging to the caller's organization. Raw key material is never returned — only the prefix and metadata. Requires the admin:read or admin:write scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "API keys for the org.",
@@ -1762,6 +1897,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Key rotated; new raw key returned once.",
@@ -1918,6 +2062,16 @@
             "description": "Rows to skip. Default 0."
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Audit log entries with pagination metadata.",
@@ -2015,6 +2169,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "204": {
             "description": "API key revoked; no content."
@@ -2085,6 +2248,16 @@
             "description": "Window end. Defaults to now."
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Usage summary for the requested period.",
@@ -2223,6 +2396,16 @@
             "description": "Rows to skip. Default 0."
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Webhook deliveries with pagination metadata.",
@@ -2320,6 +2503,16 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Webhook delivery detail.",
@@ -2458,6 +2651,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Delivery requeued.",
@@ -2563,6 +2765,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Endpoint registered; secret returned once.",
@@ -2664,6 +2875,16 @@
           "Admin"
         ],
         "description": "Lists the webhook endpoints registered for the caller's org. Secrets are never returned — only metadata and health fields (verification and failure counts). Requires the admin:read or admin:write scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Webhook endpoints for the org.",
@@ -2775,6 +2996,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Verification result (success or failure).",
@@ -2889,6 +3119,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Endpoint updated.",
@@ -3004,6 +3243,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "204": {
             "description": "Endpoint deactivated; no content."
@@ -3082,6 +3330,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Secret rotated; returned once.",
@@ -3170,6 +3427,16 @@
           "Admin"
         ],
         "description": "Lists the signing providers configured for the caller's org, each annotated with its signing-log activity count and last-success timestamp. Requires the admin:read or admin:write scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Signing providers with activity stats.",
@@ -3266,6 +3533,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Provider revoked.",
@@ -3478,6 +3754,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "transaction:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Intent created. External mode returns signing_data + submit_url (status `signing_required`); provider mode returns the submitted tx_hash (status `submitted`); an idempotent replay echoes the original intent with `idempotent: true`.",
@@ -3726,6 +4011,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "transaction:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Signature accepted and the signed transaction was submitted to Accumulate.",
@@ -3834,6 +4128,16 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "transaction:read",
+          "transaction:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The transaction intent, including a joined `proof` object when delivered and proven.",
@@ -3960,6 +4264,16 @@
             "description": "Rows to skip. Default 0; clamped to bounds."
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "transaction:read",
+          "transaction:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "A page of transaction intents with the echoed pagination cursor.",
@@ -4090,6 +4404,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Chain receipt for the transaction.",
@@ -4179,6 +4502,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Proof artifact (shape defined by the proof-service).",
@@ -4260,6 +4592,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "401": {
             "description": "Missing or invalid API key / bearer token.",
@@ -4329,6 +4670,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Custody chain (shape defined by the proof-service).",
@@ -4410,6 +4760,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Proof artifact for the transaction hash (shape defined by the proof-service).",
@@ -4518,6 +4877,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Default Response",
@@ -4618,6 +4986,15 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -4705,6 +5082,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -4770,6 +5156,7 @@
             "required": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -4842,6 +5229,7 @@
             "description": "Only networks whose contracts are all on-chain verified."
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -4871,6 +5259,7 @@
             "required": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -4890,6 +5279,58 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/scopes": {
+      "get": {
+        "summary": "List every permission a key can be granted",
+        "description": "The full scope vocabulary, what each permits, and which operations require it. Read this before minting a key: the names are not guessable, and the safe-looking response to uncertainty — granting `*` — hands a key far more than it needs. `operations` is derived from the live route table, so it cannot drift from what is enforced. Public: choosing permissions should not require already holding a credential.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "audience": {
+                            "type": "string",
+                            "enum": [
+                              "customer",
+                              "operator"
+                            ],
+                            "description": "Operator scopes are for the fee console and platform staff."
+                          },
+                          "operations": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Operations requiring this scope, as `METHOD /path`."
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -4947,6 +5388,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "governance:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Governance operation created. External mode returns signing_data and submit_url; provider mode returns a completed operation with tx_hash.",
@@ -5165,6 +5615,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "governance:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Signature accepted and governance operation submitted to the network.",
@@ -5270,6 +5729,16 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "governance:read",
+          "governance:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Governance operation status and details.",
@@ -5410,6 +5879,17 @@
             "description": "Rows to skip. Default 0; clamped to bounds."
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "pending:read",
+          "identity:read",
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Pending actions page with aggregate stats and pagination.",
@@ -5658,6 +6138,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "sign:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Sign request created. Provider mode returns `{status: \"signed\", tx_hash, signature_count, signing_mode: \"provider\"}`; external mode returns `{sign_request_id, status: \"signing_required\", signing_data, submit_url, expires_at}`.",
@@ -5809,6 +6298,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "sign:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Signature accepted and the vote was relayed to Accumulate.",
@@ -5891,6 +6389,7 @@
           "OAuth"
         ],
         "description": "OAuth2 token endpoint. Requires NO API-key auth — credentials are supplied in the request body. Supports grant_type \"client_credentials\" (client_id + client_secret → new access_token + refresh_token) and \"refresh_token\" (rotates the pair; replaying a spent refresh token revokes the entire descendant chain as a theft-detection security feature). Returns access_token, token_type, expires_in (3600s), refresh_token, refresh_expires_in (30d) and scope.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Token issued (or rotated) successfully.",
@@ -5978,6 +6477,7 @@
           "OAuth"
         ],
         "description": "Revoke an OAuth2 access or refresh token (RFC 7009). Requires NO API-key auth — the token is supplied in the body. Accepts either an access token or a refresh token; revoking a refresh token kills its entire descendant chain. Per-IP rate limited. Per spec, always returns 200 with an empty body and never leaks whether the token existed.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Revocation processed (empty body; no info leak).",
@@ -6022,6 +6522,16 @@
           "Admin"
         ],
         "description": "Create an OAuth2 client and return its generated client_id and one-time client_secret. Requires an API key with the oauth:write or admin:write scope. Non-admin callers may only create clients within their own org. The client_secret is shown once and cannot be retrieved again.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "oauth:write",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Client created; client_secret returned once.",
@@ -6083,6 +6593,17 @@
           "Admin"
         ],
         "description": "List the OAuth2 clients belonging to the authenticated caller's org. Requires an API key with the oauth:write, admin:read, or admin:write scope. Never returns client secrets.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "oauth:write",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "OAuth2 clients for the caller's org.",
@@ -6137,6 +6658,16 @@
           "Admin"
         ],
         "description": "Deactivate an OAuth2 client and cascade-revoke all of its outstanding tokens. Requires an API key with the oauth:write or admin:write scope. Returns 204 No Content on success.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "oauth:write",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "parameters": [
           {
             "schema": {
@@ -6181,6 +6712,16 @@
           "Admin"
         ],
         "description": "Rotate the client_secret for an OAuth2 client and return the new one-time secret. Requires an API key with the oauth:write or admin:write scope. The previous secret stays valid during an optional grace window (grace_seconds, default 300, max 7 days). The new client_secret is shown once and cannot be retrieved again.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "oauth:write",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "parameters": [
           {
             "schema": {
@@ -6246,6 +6787,11 @@
       "get": {
         "summary": "Current portal user",
         "description": "Returns the signed-in Firebase user, the organizations they belong to (with role), and the active org. Requires a Firebase ID token (self-service portal).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "The signed-in user, the organization they are acting in, and every organization they belong to.",
@@ -6335,6 +6881,11 @@
       "get": {
         "summary": "List your organization API keys",
         "description": "Lists the API keys for the active organization. Only prefixes are returned — raw keys are never retrievable. Requires a Firebase ID token.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "API keys for the active organization. Secrets are never included.",
@@ -6447,6 +6998,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "The new key. `api_key.key` is the secret and is shown exactly once — `warning` says so, which is why the key is nested rather than flattened: the caller must read both together.",
@@ -6533,6 +7089,11 @@
       "post": {
         "summary": "Rotate an API key",
         "description": "Revokes the given key and issues a replacement with the same name and scopes; the new raw key is returned once. Requires owner/admin role.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -6629,6 +7190,11 @@
       "delete": {
         "summary": "Revoke an API key",
         "description": "Immediately deactivates an API key for the active organization. Requires owner/admin role.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "schema": {
@@ -6700,6 +7266,11 @@
       "get": {
         "summary": "List organization members",
         "description": "Lists members of the active organization. Requires a Firebase ID token.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Two collections: who is in the organization, and who has been asked.",
@@ -6796,6 +7367,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "The invitation, at the top level — matching every other singular write on this API.",
@@ -6858,6 +7434,11 @@
       "get": {
         "summary": "Funding overview for the active organization",
         "description": "Account standing, registered payer addresses, open payment intents, and the chains that accept deposits. One call so the funding screen renders without a waterfall. Requires a Firebase ID token.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Everything the funding panel renders, in one call.",
@@ -6994,6 +7575,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "Where to send, and the single-use intent matched on the EXACT amount.",
@@ -7089,6 +7675,11 @@
             "in": "path",
             "name": "reference",
             "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -7192,6 +7783,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "The registered wallet, at the top level, identically to POST /v1/billing/deposit-addresses.",
@@ -7300,6 +7896,11 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Deposits from this wallet are no longer credited automatically.",
@@ -7385,6 +7986,7 @@
             }
           }
         },
+        "security": [],
         "responses": {
           "201": {
             "description": "The device authorization is open. Show `user_code` to the human, send them to `verification_uri`, and poll `GET /v1/portal/device/{device_code}` no faster than `interval` seconds until `expires_in` elapses.",
@@ -7462,6 +8064,7 @@
             "required": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Poll result. `status` is one of pending | approved | denied | expired | claimed. The key appears ONLY on the single `approved` response — the code becomes `claimed` immediately after, so a client that does not persist it there cannot recover it.",
@@ -7575,6 +8178,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "The human granted it. The waiting client collects the key on its next poll.",
@@ -7670,6 +8278,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "The human refused it. The waiting client sees `status: denied` and stops.",
@@ -7746,6 +8359,11 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -7799,6 +8417,11 @@
             "in": "path",
             "name": "id",
             "required": true
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
           }
         ],
         "responses": {
@@ -7867,6 +8490,11 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -7919,6 +8547,15 @@
       "get": {
         "summary": "What pending intents will cost when they execute",
         "description": "Every non-terminal intent and the price it will charge on execution, so an account can be kept solvent deliberately rather than by luck. This matters for multi-signature intents, which may wait hours or weeks for quorum: CERTEN does the expensive work — and charges — only once quorum is reached, by which time the originator is long gone. `uncovered_usd` is the portion NOT already reserved by a hold, i.e. the amount still needing balance behind it; `remaining_usd` is what is left to commit after those. Measured against spendable (available + credit limit), so an invoiced account reads correctly. Requires the billing:read scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -7938,6 +8575,15 @@
       "get": {
         "summary": "Get the organization balance",
         "description": "Current prepaid balance, funds held against in-flight work, and any granted postpay credit limit. `spendable_usd` is what may actually be spent right now (available + credit limit). **Gate on `remaining_usd`, not on `spendable_usd`.** `remaining_usd` subtracts what pending intents will consume when they execute; a multi-signature intent can wait weeks for quorum, so an account can show a healthy spendable balance that is entirely committed and still be refused on its next call. Both numbers are returned here so that answering \"can I afford this\" costs one request. `GET /v1/billing/obligations` itemises WHICH intents claimed it. Requires the billing:read scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8071,6 +8717,15 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8196,6 +8851,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8227,6 +8891,15 @@
       "get": {
         "summary": "List every priced operation and what it costs",
         "description": "The full price book in effect for the calling organization: every sku, on every chain, with its platform fee and pricing mode. `flat` is an all-in price; `quoted` prices gas dynamically at execution and the fee shown is the platform component only. Carries the same price_book_version and price_book_hash as quotes and receipts, so a price can be traced from discovery through to the charge. Use it to discover sku names for POST /v1/quote. Requires billing:read.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The price book in effect.",
@@ -8315,6 +8988,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8368,6 +9050,15 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8443,6 +9134,16 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:fund",
+          "billing:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8485,6 +9186,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "The deposit intent. Poll until `status` leaves `open`.",
@@ -8564,6 +9274,15 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "201": {
             "description": "Default Response",
@@ -8593,6 +9312,15 @@
       "get": {
         "summary": "List registered deposit addresses",
         "description": "Requires the billing:read scope.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8635,6 +9363,15 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8739,6 +9476,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8788,6 +9534,15 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:read"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8818,6 +9573,7 @@
       "get": {
         "summary": "Describe the receipt transparency log",
         "description": "How to audit CERTEN billing without trusting CERTEN. Returns the log parameters, the current and latest anchored tree heads, and the verification procedure for each artifact. No authentication.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8860,6 +9616,7 @@
             "required": false
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8922,6 +9679,7 @@
             "required": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8972,6 +9730,7 @@
             "required": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9002,6 +9761,7 @@
       "get": {
         "summary": "List published price books",
         "description": "Every published price book with its content hash. The hash referenced by a receipt identifies exactly which prices the charge was computed under, and published books are immutable — a price you were charged under cannot be edited after you dispute it. No authentication.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9031,6 +9791,7 @@
             "required": true
           }
         ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9061,6 +9822,7 @@
       "get": {
         "summary": "Get the receipt verification key set",
         "description": "Every ed25519 key the gateway has ever signed receipts with, each with its validity window and status. Verify a receipt against the key whose window contains the receipt's issued_at — that is what makes rotation safe: an old receipt stays verifiable after the key that signed it is retired. Key registration and revocation are themselves entries in the transparency log, so the key history is anchored too. No authentication: a key you need permission to fetch cannot settle a dispute with the party granting permission.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9080,6 +9842,7 @@
       "get": {
         "summary": "Current signed entitlement epoch",
         "description": "The signed set of accounts entitled to CERTEN execution, with per-account ceilings. Consumed by validators to admit or refuse intents. Self-authenticating: verify the ed25519 signature over the header against a pinned key, then check the set against header.set_hash. Treat this transport as untrusted.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9099,6 +9862,7 @@
       "get": {
         "summary": "Entitlement publisher health",
         "description": "Whether epochs are being published, and how fresh the current one is.",
+        "security": [],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9120,7 +9884,18 @@
         "tags": [
           "Admin"
         ],
-        "description": "Per-chain measured-cost coverage and the resulting verdict: `flat` (sticker price is safe), `quoted` (p95 cost is too high for a flat price — Ethereum L1 lives here), or `unavailable` (not enough data; the chain must not go on the price list). This is the enforcement of the \"no chain ships without 30 days of measurement\" rule — the eight non-EVM chains start here as `unavailable` and stay there until the validator reports real per-leg costs.",
+        "description": "Per-chain measured-cost coverage and the resulting verdict: `flat` (sticker price is safe), `quoted` (p95 cost is too high for a flat price — Ethereum L1 lives here), or `unavailable` (not enough data; the chain must not go on the price list). This is the enforcement of the \"no chain ships without 30 days of measurement\" rule — the eight non-EVM chains start here as `unavailable` and stay there until the validator reports real per-leg costs. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9142,7 +9917,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "Per-chain NET revenue (amount charged minus measured on-chain cost), gas recovered, and average quote drift. Net is the correct KPI: gross margin on Ethereum L1 reads ~0.6% because gas is 99% of the amount charged, which says nothing about whether the business works. A chain whose net revenue is negative is being sold below cost.",
+        "description": "Per-chain NET revenue (amount charged minus measured on-chain cost), gas recovered, and average quote drift. Net is the correct KPI: gross margin on Ethereum L1 reads ~0.6% because gas is 99% of the amount charged, which says nothing about whether the business works. A chain whose net revenue is negative is being sold below cost. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9156,6 +9931,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9177,7 +9963,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "While BILLING_ENFORCE=false every charge is computed and recorded as a shadow charge, and nobody is blocked. `would_have_failed` counts the shadow charges that become live 402s the instant the flag flips, and `affected_orgs` names how many customers that hits. Drive the decision from those numbers, not from elapsed calendar time.",
+        "description": "While BILLING_ENFORCE=false every charge is computed and recorded as a shadow charge, and nobody is blocked. `would_have_failed` counts the shadow charges that become live 402s the instant the flag flips, and `affected_orgs` names how many customers that hits. Drive the decision from those numbers, not from elapsed calendar time. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9191,6 +9977,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9296,6 +10093,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "Default Response",
@@ -9372,6 +10174,11 @@
           },
           "required": true
         },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "Default Response",
@@ -9437,6 +10244,11 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9487,6 +10299,11 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9508,7 +10325,18 @@
         "tags": [
           "Admin"
         ],
-        "description": "Final on-chain deposits with no resolvable organization. The watcher attributes a deposit only from a registered sending address or an exact-amount deposit intent; anything else lands here rather than being guessed at, because crediting the wrong customer is worse than crediting late. Each row carries the sending address and tx hash so the payer can be identified out of band.",
+        "description": "Final on-chain deposits with no resolvable organization. The watcher attributes a deposit only from a registered sending address or an exact-amount deposit intent; anything else lands here rather than being guessed at, because crediting the wrong customer is worse than crediting late. Each row carries the sending address and tx hash so the payer can be identified out of band. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9562,6 +10390,11 @@
             "required": true
           }
         ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9606,7 +10439,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "The anti-smoke check. Everything else proves internal consistency — the ledger balances, the log is append-only, receipts are anchored — and none of it detects books that simply do not correspond to the money. This compares the treasury stablecoin delta against deposits credited, and each relayer EOA native delta against gas recorded in cost_events. A `drift` verdict means the books and the chain disagree and one of them is wrong.",
+        "description": "The anti-smoke check. Everything else proves internal consistency — the ledger balances, the log is append-only, receipts are anchored — and none of it detects books that simply do not correspond to the money. This compares the treasury stablecoin delta against deposits credited, and each relayer EOA native delta against gas recorded in cost_events. A `drift` verdict means the books and the chain disagree and one of them is wrong. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9620,6 +10453,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9642,6 +10486,11 @@
           "Admin"
         ],
         "description": "Takes a fresh balance snapshot of every treasury and relayer address and reconciles it against the previous one. The first run per address only records a baseline — reconciliation needs two snapshots to compute a delta.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9664,6 +10513,11 @@
           "Admin"
         ],
         "description": "Runs the full reconciliation pass on demand rather than waiting for the hourly job: charge drift vs. measured cost, ledger drift, unlogged receipts, and transparency-log head integrity.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9685,7 +10539,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "Window totals, per-chain P&L, the alert set, and the revenue/cost trend. Read this response with one rule in mind: `totals.net_revenue_usd` counts ONLY charges whose on-chain cost was actually measured. `totals.unmeasured_charged_usd` is money billed with NO cost data behind it — its margin is unknown, not positive, and it is never added into net. A null `net_revenue_usd` means nothing in the window was measured at all; rendering that as zero is how a platform selling at 20% of cost reported healthy revenue.",
+        "description": "Window totals, per-chain P&L, the alert set, and the revenue/cost trend. Read this response with one rule in mind: `totals.net_revenue_usd` counts ONLY charges whose on-chain cost was actually measured. `totals.unmeasured_charged_usd` is money billed with NO cost data behind it — its margin is unknown, not positive, and it is never added into net. A null `net_revenue_usd` means nothing in the window was measured at all; rendering that as zero is how a platform selling at 20% of cost reported healthy revenue. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9699,6 +10553,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9720,7 +10585,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "Charges, measured/unmeasured counts, amount charged, measured cost, net revenue, margin in bps, average quote drift, and whether the chain may be sold at all. Sorted worst-first with UNMEASURED chains ahead of loss-making ones: a chain with no cost data is the larger problem because its true net could be anything. `state` is one of profitable | break_even | below_cost | unmeasured | no_charges, and `net_revenue_usd` is null — never 0 — whenever nothing behind the charges was measured.",
+        "description": "Charges, measured/unmeasured counts, amount charged, measured cost, net revenue, margin in bps, average quote drift, and whether the chain may be sold at all. Sorted worst-first with UNMEASURED chains ahead of loss-making ones: a chain with no cost data is the larger problem because its true net could be anything. `state` is one of profitable | break_even | below_cost | unmeasured | no_charges, and `net_revenue_usd` is null — never 0 — whenever nothing behind the charges was measured. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9734,6 +10599,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9755,7 +10631,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "The itemised view — it answers \"why did this intent cost $2.49\". Each row carries the amount charged split into platform fee and gas, the measured cost broken down per leg (anchor, verify, vault_execute) with gas used, effective gas price and the tx hash for each, the net, the completion basis, and the receipt id.\n\nCost is joined to intents through the normalized Accumulate tx hash, NEVER through `cost_events.intent_id` (the validator's own id, which never equals a gateway intent id). That exact mistake silently zeroed the margin report.\n\n`measured_cost_usd` and `net_usd` are null on an intent with no cost events. Filter with `only=unmeasured` to work that queue down, or `only=below_cost` for intents whose cost IS known and exceeds what was charged.",
+        "description": "The itemised view — it answers \"why did this intent cost $2.49\". Each row carries the amount charged split into platform fee and gas, the measured cost broken down per leg (anchor, verify, vault_execute) with gas used, effective gas price and the tx hash for each, the net, the completion basis, and the receipt id.\n\nCost is joined to intents through the normalized Accumulate tx hash, NEVER through `cost_events.intent_id` (the validator's own id, which never equals a gateway intent id). That exact mistake silently zeroed the margin report.\n\n`measured_cost_usd` and `net_usd` are null on an intent with no cost events. Filter with `only=unmeasured` to work that queue down, or `only=below_cost` for intents whose cost IS known and exceeds what was charged. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9822,6 +10698,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9875,7 +10762,18 @@
         "tags": [
           "Admin"
         ],
-        "description": "Per organization: available, held, credit limit, spendable, arrears, lifetime charged, lifetime PAID (credited payments — real money), lifetime GRANTED (promotional balance, deliberately kept out of \"paid\"), shadow charged, and last payment.\n\nSegments: `paying` (real money received), `on_credit` (negative balance inside a granted limit), `in_arrears` (negative with no headroom left — refused the moment enforcement is on), `comped` (consuming, or holding granted balance, having never paid), `dormant` (no activity at all). A comped account is NOT a paying customer however positive its balance looks, which is the distinction this screen exists to make.\n\n`shadow_charged_usd` matters while BILLING_ENFORCE=false: nothing is ever captured, so lifetime_charged is zero for everyone and every org would otherwise read as dormant.",
+        "description": "Per organization: available, held, credit limit, spendable, arrears, lifetime charged, lifetime PAID (credited payments — real money), lifetime GRANTED (promotional balance, deliberately kept out of \"paid\"), shadow charged, and last payment.\n\nSegments: `paying` (real money received), `on_credit` (negative balance inside a granted limit), `in_arrears` (negative with no headroom left — refused the moment enforcement is on), `comped` (consuming, or holding granted balance, having never paid), `dormant` (no activity at all). A comped account is NOT a paying customer however positive its balance looks, which is the distinction this screen exists to make.\n\n`shadow_charged_usd` matters while BILLING_ENFORCE=false: nothing is ever captured, so lifetime_charged is zero for everyone and every org would otherwise read as dormant. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9897,7 +10795,7 @@
         "tags": [
           "Admin"
         ],
-        "description": "Bucketed by hour, day or week. `charged_usd` is filtered to MEASURED charges so it is comparable with `measured_cost_usd`; `charged_all_usd` is the unfiltered total. Plotting the unfiltered total against measured cost draws a rising margin that is really rising ignorance — watch `unmeasured_charges` on the same axis. `net_revenue_usd` is null in any bucket where nothing was measured.",
+        "description": "Bucketed by hour, day or week. `charged_usd` is filtered to MEASURED charges so it is comparable with `measured_cost_usd`; `charged_all_usd` is the unfiltered total. Plotting the unfiltered total against measured cost draws a rising margin that is really rising ignorance — watch `unmeasured_charges` on the same axis. `net_revenue_usd` is null in any bucket where nothing was measured. Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
         "parameters": [
           {
             "schema": {
@@ -9934,6 +10832,17 @@
             "required": false
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9955,7 +10864,18 @@
         "tags": [
           "Admin"
         ],
-        "description": "Treasury and relayer balances vs the ledger, materialized-balance drift, anchor lag and the unanchored head backlog, receipts missing from the transparency log, FX feed freshness per symbol, and chain priceability coverage.\n\nThree states are distinguished on purpose, because two would let missing data read as healthy: balance drift is `match` | `drift` | `never_run` (nothing has ever compared the books to the chain); anchoring is `anchored` | `never_anchored` (a null lag, not a zero one); each FX symbol is `fresh` | `stale` | `never_observed` (a chain the feed has never managed to price at all, which cannot be quoted).",
+        "description": "Treasury and relayer balances vs the ledger, materialized-balance drift, anchor lag and the unanchored head backlog, receipts missing from the transparency log, FX feed freshness per symbol, and chain priceability coverage.\n\nThree states are distinguished on purpose, because two would let missing data read as healthy: balance drift is `match` | `drift` | `never_run` (nothing has ever compared the books to the chain); anchoring is `anchored` | `never_anchored` (a null lag, not a zero one); each FX symbol is `fresh` | `stale` | `never_observed` (a chain the feed has never managed to price at all, which cannot be quoted). Requires any of `billing:admin_read` or `admin:read` or `admin:write`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-required-scopes": [
+          "billing:admin_read",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
         "responses": {
           "200": {
             "description": "Default Response",

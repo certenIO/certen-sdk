@@ -683,6 +683,21 @@ export interface PricingCatalog {
 }
 
 /**
+ * One permission a key can be granted.
+ *
+ * `operations` is derived from the gateway's live route table, so it says what is actually
+ * enforced rather than what someone remembered to document.
+ */
+export interface ScopeInfo {
+  name: string;
+  description: string;
+  /** `operator` scopes are for the fee console and platform staff, not customer keys. */
+  audience: 'customer' | 'operator';
+  /** Operations requiring this scope, as `METHOD /path`. Empty for `*`, which satisfies all. */
+  operations: string[];
+}
+
+/**
  * Where a page sits in a list.
  *
  * **Loop until `has_more` is false.** Do not infer the end from a short page: a final page that

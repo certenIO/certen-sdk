@@ -310,6 +310,22 @@ const READ_TOOLS: ToolDef[] = [
     run: (c, a) => c.proof.shared(s(a, 'link')),
   },
   {
+    name: 'certen_scopes',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/scopes',
+    description:
+      'Every permission an API key can be granted, what each covers, and which operations require '
+      + 'it. Read this BEFORE creating a key or advising anyone on permissions. Never suggest `*` '
+      + 'as a default: granting it because the right scope is unclear hands a key that only needed '
+      + 'to read a balance the ability to retire identities and publish price books. Prefer the '
+      + 'narrowest scopes that cover the intended operations — `operations` is derived from the '
+      + 'live route table, so it says what is actually enforced. Scopes marked `operator` are for '
+      + 'the fee console and platform staff, not customer keys. Needs no API key.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.admin.scopes(),
+  },
+  {
     name: 'certen_platform_ready',
     tier: 'read',
     mutates: false,

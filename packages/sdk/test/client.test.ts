@@ -390,7 +390,9 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
           estimated_ready_in_seconds: 90, terminal_states: ['active', 'error'],
         }));
       }
-      times.push(Date.now());
+      // Poll reads carry `?include=`; the single enriched read at the end does not. Timing the
+      // polls only, since that is what the first-poll delay governs.
+      if ((req.url ?? '').endsWith('?include=')) times.push(Date.now());
       return json(res, 200, READY);
     });
     try {
@@ -468,6 +470,129 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
           ),
       ).rejects.toThrow();
       expect(Date.now() - t0).toBeLessThan(3_000);
+    } finally {
+      await s.close();
+    }
+  });
+});
+
+describe('identity.get enrichments cost real queries, so polling skips them', () => {
+  const json2 = (res: http.ServerResponse, status: number, body: unknown): void => {
+    res.statusCode = status;
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  const READY = {
+    id: 'id_1', adi_url: 'acc://x.acme', status: 'active', can_sign: true,
+    chain_accounts: [], credit_balance: 500, created_at: '2026-08-16T00:00:00.000Z',
+    balances: [{ chain_id: 'base-sepolia', balance: '1' }],
+  };
+
+  it('omits the param entirely by default, keeping the gateway default', async () => {
+    // Sending `include=` and sending nothing are DIFFERENT requests. Conflating them would strip
+    // enrichments from every ordinary read.
+    const paths: string[] = [];
+    const s = await startServer((req, res) => {
+      paths.push(req.url ?? '');
+      json2(res, 200, READY);
+    });
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url }).identity.get('id_1');
+      expect(paths[0]).toBe('/v1/identity/id_1');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('sends an explicit empty include when asked for none', async () => {
+    const paths: string[] = [];
+    const s = await startServer((req, res) => {
+      paths.push(req.url ?? '');
+      json2(res, 200, READY);
+    });
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .identity.get('id_1', { include: [] });
+      expect(paths[0]).toBe('/v1/identity/id_1?include=');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('passes a chosen subset through', async () => {
+    const paths: string[] = [];
+    const s = await startServer((req, res) => {
+      paths.push(req.url ?? '');
+      json2(res, 200, READY);
+    });
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .identity.get('id_1', { include: ['balances'] });
+      expect(paths[0]).toBe('/v1/identity/id_1?include=balances');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('polls WITHOUT enrichments, then returns the enriched identity', async () => {
+    // The saving: `status` and `can_sign` are computed before any enrichment, so a poll loop that
+    // fetches governance + balances-per-chain + pending on every iteration is paying for data it
+    // never reads. At 3s intervals a 90s provisioning wait is ~30 of those.
+    const polls: string[] = [];
+    const s = await startServer((req, res) => {
+      const url = req.url ?? '';
+      if (req.method === 'POST') {
+        return json2(res, 202, {
+          id: 'id_1', adi_url: 'acc://x.acme', status: 'creating', chain_accounts: [],
+          credit_balance: 0, created_at: '2026-08-16T00:00:00.000Z',
+          polling: {
+            first_poll_after_seconds: 0, interval_seconds: 0.01,
+            estimated_ready_in_seconds: 90, terminal_states: ['active', 'error'],
+          },
+        });
+      }
+      polls.push(url);
+      // Still provisioning on the first poll, so the loop runs more than once.
+      if (polls.length === 1) {
+        return json2(res, 200, { ...READY, status: 'creating', can_sign: null, balances: undefined });
+      }
+      return json2(res, 200, READY);
+    });
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .identity.createAndWait(
+          { name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) },
+        );
+      // Every poll lean...
+      const lean = polls.filter((p) => p.endsWith('?include='));
+      expect(lean.length).toBeGreaterThanOrEqual(2);
+      // ...and exactly one enriched read at the end, so the return value is unchanged.
+      expect(polls.filter((p) => p === '/v1/identity/id_1')).toHaveLength(1);
+      expect(out.balances).toBeDefined();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('falls back to the poll result if the final enriched read fails', async () => {
+    // A ready identity must not be lost to a hiccup on a call made purely for enrichment.
+    let n = 0;
+    const s = await startServer((req, res) => {
+      if (req.method === 'POST') {
+        return json2(res, 202, {
+          id: 'id_1', adi_url: 'acc://x.acme', status: 'creating', chain_accounts: [],
+          credit_balance: 0, created_at: '2026-08-16T00:00:00.000Z',
+        });
+      }
+      n += 1;
+      if ((req.url ?? '').endsWith('?include=')) return json2(res, 200, READY);
+      return json2(res, 500, { error: 'enrichment blew up' });
+    });
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url, maxRetries: 0 })
+        .identity.createAndWait({ name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) });
+      expect(out.status).toBe('active');
+      expect(out.can_sign).toBe(true);
     } finally {
       await s.close();
     }
