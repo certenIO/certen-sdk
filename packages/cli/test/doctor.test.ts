@@ -167,6 +167,15 @@ function healthy(over: Record<string, unknown> = {}): Handler {
       const chain = CHAINS.chains.find((c) => c.id === id || String(c.chainId) === id);
       return chain ? json(res, 200, { chain }) : json(res, 404, { error: { message: 'no such chain' } });
     }
+    if (url === '/v1/me') {
+      return json(res, 200, {
+        auth_method: 'api_key',
+        org: { id: 'org-1', name: 'Acme Robotics' },
+        scopes: ['billing:read', 'proof:read'],
+        key: { id: 'key-42', rate_limit_rpm: 120 },
+        user: null, active_org_id: 'org-1', role: null, orgs: [],
+      });
+    }
     if (url === '/v1/billing/balance') return json(res, 200, BALANCE);
     if (url === '/v1/billing/obligations') return json(res, 200, OBLIGATIONS);
     if (url === '/v1/portfolio') return json(res, 200, PORTFOLIO);
@@ -349,17 +358,21 @@ describe('certen whoami', () => {
       expect(r.code).toBe(0);
       const data = soleJson(r.stdout).data as {
         api_url: string; key_prefix: string; account_status: string;
-        organization: string; scopes_observed: Record<string, boolean>;
+        organization: { id: string; name: string } | null;
+        scopes: string[] | null; key_id: string | null; rate_limit_rpm: number | null;
       };
       expect(data.api_url).toBe(stub.url);
       expect(data.key_prefix).toBe('ck_live_test...');
       expect(data.account_status).toBe('active');
-      // Honesty about the API surface: no endpoint returns the org name to a machine key, so the
-      // field says where it lives rather than being silently absent or plausibly invented.
-      expect(data.organization).toMatch(/portal/);
-      // The stub answers 403 for admin usage, so the observed scope must reflect that.
-      expect(data.scopes_observed['billing:read']).toBe(true);
-      expect(data.scopes_observed['admin:read']).toBe(false);
+      // The org name USED to be unavailable to a machine key — this printed a sentence pointing at
+      // the portal instead. GET /v1/me answers it now.
+      expect(data.organization).toEqual({ id: 'org-1', name: 'Acme Robotics' });
+      expect(data.key_id).toBe('key-42');
+      expect(data.rate_limit_rpm).toBe(120);
+      // Scopes as GRANTED. This was `scopes_observed`, inferred from which probe calls happened to
+      // return 200 — a method that can only describe the scopes it thought to test for. `proof:read`
+      // is here precisely because nothing probes it.
+      expect(data.scopes).toEqual(['billing:read', 'proof:read']);
     } finally {
       await stub.close();
     }

@@ -4,6 +4,18 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `client.me()`
+
+Who this credential is and what it may do, in one call: the organization (with its name), the
+GRANTED scopes, and the key or the signed-in user depending on which credential was sent.
+
+`GET /v1/me` accepted only a portal session until now, so a machine holding an API key could learn
+neither its organization nor its own permissions — the two things anyone needs immediately after
+minting a key. Clients resorted to probing endpoints and reading the 403s to guess.
+
+Check `scopes` before starting a flow rather than after. A missing scope otherwise surfaces as a 403
+partway through, by which point some of the work may already have happened.
+
 ### Changed — `identity.get()` takes `include`, and `createAndWait()` stops paying for data it discards
 
 `GET /v1/identity/{id}` enriches with `governance`, `balances` and `pending` by default. Each is a

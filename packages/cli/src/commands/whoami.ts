@@ -39,11 +39,16 @@ export function registerWhoamiCommands(program: Command): void {
 
       const client = new CertenClient({ apiKey, baseUrl: apiUrl });
 
-      // Each probe degrades independently: a key with `billing:read` but no `admin:read` should
-      // still get everything billing can tell it, rather than one failure blanking the report.
-      const [balance, usage] = await Promise.all([
+      // `me` is the credential asking about itself; `balance` is its standing. Each degrades
+      // independently, so a key that can read one but not the other still reports what it can.
+      //
+      // The old third call to `admin.getUsage` is gone. It existed only to INFER whether the key
+      // held `admin:read`, by seeing whether the call succeeded — and `me.scopes` now says so
+      // outright. Inferring permissions by making calls and reading the refusals is a strange way
+      // to answer a question the gateway can answer directly.
+      const [me, balance] = await Promise.all([
+        client.me().catch(() => null),
         client.billing.balance().catch((err: unknown) => (err instanceof CertenError ? err : null)),
-        client.admin.getUsage({}).catch(() => null),
       ]);
 
       const balanceOk = balance !== null && !(balance instanceof CertenError);
@@ -58,18 +63,17 @@ export function registerWhoamiCommands(program: Command): void {
           portal_url: getPortalUrl(),
           key_prefix: `${apiKey.substring(0, 12)}...`,
           key_source: source,
-          // Named so the absence reads as a fact about the API surface rather than a missing lookup.
-          organization: 'not exposed to API keys — see the portal',
+          organization: me ? { id: me.org.id, name: me.org.name } : null,
+          key_id: me?.key?.id ?? null,
+          rate_limit_rpm: me?.key?.rate_limit_rpm ?? null,
           account_status: b?.status ?? 'unknown',
           spendable_usd: b?.spendable_usd ?? null,
           available_usd: b?.available_usd ?? null,
           held_usd: b?.held_usd ?? null,
           credit: b?.credit ?? null,
-          usage: usage ?? null,
-          scopes_observed: {
-            'billing:read': balanceOk,
-            'admin:read': usage !== null,
-          },
+          // Granted, not observed. This used to be a guess assembled from which probe calls
+          // happened to succeed, which could only ever describe the scopes it had thought to test.
+          scopes: me?.scopes ?? null,
         });
         return;
       }

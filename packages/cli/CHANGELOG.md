@@ -3,6 +3,20 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Changed — `certen whoami` reports your organization and scopes instead of guessing
+
+It printed `organization: "not exposed to API keys — see the portal"`, and reported permissions as
+`scopes_observed` — a guess assembled from which probe calls happened to return 200 rather than 403,
+which can only ever describe the scopes it thought to test for.
+
+It now reads `GET /v1/me`: the real organization name, the granted scopes, the key id and its rate
+limit. Still two requests, but the third call to `/v1/admin/usage` is gone — it existed only to
+infer whether the key held `admin:read` — so `whoami` no longer needs that scope at all.
+
+**Breaking for `--json` consumers:** `scopes_observed` (an object of booleans) is replaced by
+`scopes` (an array of granted scope names), and `organization` is now `{ id, name }` rather than an
+explanatory sentence.
+
 ### Added — `certen proof open <link>`
 
 Read a proof someone shared with you. **Runs with no API key configured** — the recipient of a

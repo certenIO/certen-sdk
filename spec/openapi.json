@@ -6785,26 +6785,84 @@
     },
     "/v1/me": {
       "get": {
-        "summary": "Current portal user",
-        "description": "Returns the signed-in Firebase user, the organizations they belong to (with role), and the active org. Requires a Firebase ID token (self-service portal).",
+        "summary": "Who this credential is, and what it may do",
+        "description": "Answers \"who am I\" for EITHER an API key or a signed-in portal session. Returns the organization, the granted scopes, and — depending on which credential was used — the key or the user.\n\nThis accepted only a portal session until 2026-08, so a machine holding an API key had no way to learn its own organization or its own permissions. That is the first thing anyone needs after minting a key, and the only route to it was inferring from unrelated endpoints. Send `X-API-Key` or a Firebase ID token; if both are present the API key wins, because an automated caller should be judged on the credential it meant to send.",
         "security": [
+          {
+            "apiKey": []
+          },
           {
             "bearerAuth": []
           }
         ],
         "responses": {
           "200": {
-            "description": "The signed-in user, the organization they are acting in, and every organization they belong to.",
+            "description": "Who this credential is and what it may do. `user`/`orgs` are populated for a session, `key` for an API key; the rest is common to both so one parser reads either.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "description": "The signed-in user, the organization they are acting in, and every organization they belong to.",
+                  "description": "Who this credential is and what it may do. `user`/`orgs` are populated for a session, `key` for an API key; the rest is common to both so one parser reads either.",
                   "properties": {
-                    "user": {
+                    "auth_method": {
+                      "type": "string",
+                      "enum": [
+                        "api_key",
+                        "oauth",
+                        "session"
+                      ],
+                      "description": "Which credential answered. `key` is populated for the first two, `user` for the last."
+                    },
+                    "org": {
                       "type": "object",
                       "additionalProperties": true,
+                      "description": "The organization this credential acts for.",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      }
+                    },
+                    "scopes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "What this credential may do. `*` is the wildcard. See GET /v1/scopes."
+                    },
+                    "key": {
+                      "type": [
+                        "null",
+                        "object"
+                      ],
+                      "additionalProperties": true,
+                      "description": "The API key, when one was used. Null for a portal session.",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "rate_limit_rpm": {
+                          "type": [
+                            "null",
+                            "integer"
+                          ]
+                        }
+                      }
+                    },
+                    "user": {
+                      "type": [
+                        "null",
+                        "object"
+                      ],
+                      "additionalProperties": true,
+                      "description": "The signed-in human, when a session was used. Null for an API key.",
                       "properties": {
                         "id": {
                           "type": "string"
@@ -6821,6 +6879,12 @@
                       }
                     },
                     "active_org_id": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    },
+                    "role": {
                       "type": [
                         "null",
                         "string"

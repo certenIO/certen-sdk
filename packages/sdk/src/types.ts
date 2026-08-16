@@ -698,6 +698,28 @@ export interface ScopeInfo {
 }
 
 /**
+ * Who a credential is, and what it may do.
+ *
+ * One shape for both an API key and a portal session: `key` is populated for the former, `user` and
+ * `orgs` for the latter, and everything else is common so a single parser reads either.
+ *
+ * `scopes` is the field worth having. Before this existed, an API key could not learn its own
+ * permissions, so clients inferred them by making calls and seeing which ones came back 403 —
+ * `certen whoami` literally reported `scopes_observed` derived that way.
+ */
+export interface MeResponse {
+  auth_method: 'api_key' | 'oauth' | 'session';
+  org: { id: string; name: string | null };
+  /** What this credential may do. `*` is the wildcard. Enumerate them with `admin.scopes()`. */
+  scopes: string[];
+  key: { id: string; rate_limit_rpm: number | null } | null;
+  user: { id: string; email: string | null; source: string } | null;
+  active_org_id: string | null;
+  role: string | null;
+  orgs: Array<{ org_id: string; name: string | null; role: string }>;
+}
+
+/**
  * Where a page sits in a list.
  *
  * **Loop until `has_more` is false.** Do not infer the end from a short page: a final page that

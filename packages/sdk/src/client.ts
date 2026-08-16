@@ -16,7 +16,9 @@ import { HealthResource } from './resources/health.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
-import type { CertenClientOptions } from './types.js';
+import type { CertenClientOptions,
+  MeResponse,
+} from './types.js';
 
 /**
  * The gateway this SDK talks to when the caller does not say.
@@ -123,6 +125,21 @@ export class CertenClient {
    * `report.ok` is false when something failed; warnings do not clear it and do not set it.
    * See doctor.ts for what each check exists to catch.
    */
+  /**
+   * Who this credential is, and what it may do.
+   *
+   * One call, and the only way to learn your own organization and scopes. It accepted a portal
+   * session only until the gateway's 2026-08 change, so a machine holding an API key could not ask
+   * — clients resorted to probing endpoints and reading the 403s to guess what they were allowed
+   * to do.
+   *
+   * Check `scopes` before a flow rather than after: a missing scope surfaces otherwise as a 403
+   * partway through, when some of the work may already have happened.
+   */
+  me(): Promise<MeResponse> {
+    return this.http.get('/v1/me').then((r) => r.data as MeResponse);
+  }
+
   doctor(): Promise<DoctorReport> {
     return runDoctor(this);
   }
