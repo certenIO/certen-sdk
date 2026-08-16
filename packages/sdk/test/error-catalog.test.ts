@@ -84,3 +84,86 @@ describe('error catalog', () => {
     }
   });
 });
+
+describe('the SDK catalogue against what the gateway actually raises', () => {
+  // Vendored from the gateway by `npm run spec:dump`, exactly as spec/openapi.json is. Before this,
+  // the SDK's list and the gateway's were unrelated artifacts — either could gain, lose or
+  // re-classify a code and nothing would notice.
+  const GATEWAY = JSON.parse(
+    readFileSync(join(REPO_ROOT, 'spec', 'errors.json'), 'utf8'),
+  ) as { errors: Array<{ code: string; status: number; retryable: boolean; audience: string }> };
+
+  const byCode = new Map(GATEWAY.errors.map((e) => [e.code, e]));
+
+  /**
+   * Codes the SDK raises that the gateway never does, because they happen before or instead of an
+   * HTTP response. Anything else appearing here is drift.
+   */
+  const SDK_ONLY = new Set(['NETWORK_ERROR']);
+
+  it('vendors a catalogue worth checking against', () => {
+    expect(GATEWAY.errors.length).toBeGreaterThanOrEqual(30);
+    expect(byCode.has('PAYMENT_REQUIRED')).toBe(true);
+  });
+
+  it('claims no code the gateway cannot produce', () => {
+    // A documented error that cannot occur sends someone writing a handler for a dead branch.
+    const phantom = ERROR_CODES
+      .map((e) => e.code)
+      .filter((code) => !byCode.has(code) && !SDK_ONLY.has(code));
+    expect(phantom, 'codes documented here that the gateway never raises').toEqual([]);
+  });
+
+  it('agrees with the gateway on status and retryability', () => {
+    // `retryable` is acted on automatically. The two lists disagreeing means one of them makes a
+    // client retry something that can never succeed, or give up on something that would have.
+    const disagreements: string[] = [];
+    for (const entry of ERROR_CODES) {
+      const gw = byCode.get(entry.code);
+      if (!gw) continue;
+      if (entry.status !== gw.status) {
+        disagreements.push(`${entry.code}: SDK says ${entry.status}, gateway ${gw.status}`);
+      }
+      if (entry.retryable !== gw.retryable) {
+        disagreements.push(`${entry.code}: SDK retryable=${entry.retryable}, gateway ${gw.retryable}`);
+      }
+    }
+    expect(disagreements).toEqual([]);
+  });
+
+  it('reports how much of the caller-facing vocabulary is documented', () => {
+    // Not a pass/fail on coverage — the platform-fault codes are not worth an agent's attention.
+    // What this pins is that the CALLER-facing ones a client must handle are not silently growing
+    // beyond what the docs describe.
+    const callerFacing = GATEWAY.errors.filter((e) => e.audience === 'caller').map((e) => e.code);
+    const documented = new Set(ERROR_CODES.map((e) => e.code));
+    const missing = callerFacing.filter((c) => !documented.has(c));
+
+    // Known gap, recorded rather than hidden: these are raised and not yet in the SDK docs.
+    // Shrinking this list is the work; growing it silently is the regression.
+    expect(missing.length).toBeLessThanOrEqual(12);
+  });
+});
+
+describe('the two codes where status alone gets retryability wrong', () => {
+  it('retries an in-flight idempotent request', async () => {
+    // A 409 normally means "do not retry". This one means an identical request is already running,
+    // and retrying the SAME key is the correct response — treating it as terminal fails a request
+    // that would have succeeded moments later.
+    const err = new CertenError('still running', 409, 'IDEMPOTENCY_KEY_IN_FLIGHT');
+    expect(err.isRetryable).toBe(true);
+  });
+
+  it('does not retry an exhausted plan quota', async () => {
+    // A 429 normally means "back off". This one is a quota for the billing period, not a rate —
+    // no amount of backing off clears it, and retrying burns the attempts a genuinely transient
+    // failure would need.
+    const err = new CertenError('quota gone', 429, 'PLAN_QUOTA_EXCEEDED');
+    expect(err.isRetryable).toBe(false);
+  });
+
+  it('leaves ordinary throttles and conflicts alone', async () => {
+    expect(new CertenError('slow', 429, 'RATE_LIMIT_EXCEEDED').isRetryable).toBe(true);
+    expect(new CertenError('dup', 409, 'CONFLICT').isRetryable).toBe(false);
+  });
+});

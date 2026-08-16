@@ -56,10 +56,33 @@ Catch `CertenError` and branch on `.code`. `.isRetryable` implements the table b
 | `INTERNAL_ERROR` | 500 | yes | An unexpected server error. | Safe to retry — the SDK does, up to maxRetries. |
 | `BAD_GATEWAY` | 502 | yes | A downstream service (api-bridge, proofs service) returned an error. | Safe to retry. If it persists, the gateway is degraded, not your request. |
 | `NETWORK_ERROR` | — | yes | Synthesized by the SDK when the request never reached the gateway, including on timeout. | Safe to retry ONLY because every POST carries an Idempotency-Key. Do not strip it. If it is a timeout rather than an outage, raise `timeoutMs` instead of retrying. |
+| `PAYMENT_REQUIRED` | 402 | no | The balance does not cover this work. Nothing was charged and no work was started. | The body carries a binding quote and a live payment target. Send exactly `resolve.amount_usd` to `resolve.to_address`, then retry with `quote_id` before `quote_expires_at`. Retrying without paying returns the same 402. |
+| `INSUFFICIENT_BALANCE` | 402 | no | The ledger refused the charge for lack of funds. | Add funds. Gate on `remaining_usd` from the balance, not `spendable_usd` — the latter ignores work already committed. |
+| `COMMITMENT_EXCEEDED` | 402 | no | The balance covers this request but not everything already promised. Multi-signature intents charge when quorum is reached, which can be weeks after they were opened. | Read `billing.obligations()` to see which pending intents claimed the balance, or add funds. |
+| `QUOTE_EXPIRED` | 409 | no | The quote passed its expiry before the work was submitted. | Request a new quote and retry with it. Quotes are free. |
+| `QUOTE_MISMATCH` | 409 | no | The quote does not describe the work being submitted — a different chain, sku, or leg count. | Quote the work you are actually about to do, then pass that `quote_id`. |
+| `IDEMPOTENCY_KEY_IN_FLIGHT` | 409 | yes | An identical request with this Idempotency-Key is still running. | Wait and retry with the SAME key. A new key would perform the work a second time. |
+| `IDEMPOTENCY_KEY_MISMATCH` | 409 | no | This Idempotency-Key was already used with a different request body. | A key binds to one request. Use a new key, or resend the original body unchanged. |
+| `SHARE_NO_LONGER_VALID` | 410 | no | The share link was real and is now revoked, expired, or out of views. | Ask the sender for a fresh link. This does NOT mean the proof does not exist. |
+| `PLAN_QUOTA_EXCEEDED` | 429 | no | A plan limit for the period is exhausted — a quota, not a per-second rate. | Waiting will not clear this within the period. Raise the plan limit. |
+| `TOO_MANY_REQUESTS` | 429 | yes | Generic throttle. | Wait for the `Retry-After` header. The SDK honours it automatically. |
+| `SLOW_DOWN` | 429 | yes | Polling the device-authorization flow faster than it allows. | Increase the poll interval to the value the flow published. |
+| `CHAIN_UNRESOLVED` | 400 | no | The chain identifier could not be resolved to a deployment. | List valid chains with `chains.list()`. |
 
 ## Methods
 
 ### certen.admin
+
+#### certen.admin.scopes()
+
+Every permission a key can be granted, and what each one covers.
+
+GET /v1/scopes — List every permission a key can be granted
+
+The full scope vocabulary, what each permits, and which operations require it. Read this before minting a key: the names are not guessable, and the safe-looking response to uncertainty — granting `*` — hands a key far more than it needs. `operations` is derived from the live route table, so it cannot drift from what is enforced. Public: choosing permissions should not require already holding a credential.
+
+Response 200 — Default Response:
+  - `scopes`: { name, description, audience, operations }[]
 
 #### certen.admin.createOrg()
 
@@ -145,7 +168,7 @@ Query parameters:
 
 Response 200 — Audit log entries with pagination metadata:
   - `entries`: object[]
-  - `pagination`: { limit, offset, total }
+  - `pagination`: { limit, offset, total, has_more }
 
 #### certen.admin.getUsage()
 
@@ -166,13 +189,27 @@ Response 200 — Usage summary for the requested period:
 
 ### certen.billing
 
+#### certen.billing.pricing()
+
+Every priced operation and what it costs — one call, no guessing.
+
+GET /v1/pricing — List every priced operation and what it costs
+
+The full price book in effect for the calling organization: every sku, on every chain, with its platform fee and pricing mode. `flat` is an all-in price; `quoted` prices gas dynamically at execution and the fee shown is the platform component only. Carries the same price_book_version and price_book_hash as quotes and receipts, so a price can be traced from discovery through to the charge. Use it to discover sku names for POST /v1/quote. Requires billing:read.
+
+Response 200 — The price book in effect:
+  - `price_book_version`: string
+  - `price_book_hash`: string
+  - `currency`: string
+  - `items`: { sku, chain, mode, platform_fee_usd, gas_buffer_bps, min_charge_usd, max_charge_usd }[]
+
 #### certen.billing.balance()
 
 Available, held, credit line, and spendable.
 
 GET /v1/billing/balance — Get the organization balance
 
-Current prepaid balance, funds held against in-flight work, and any granted postpay credit limit. `spendable_usd` is what may actually be spent right now (available + credit limit). Requires the billing:read scope.
+Current prepaid balance, funds held against in-flight work, and any granted postpay credit limit. `spendable_usd` is what may actually be spent right now (available + credit limit). **Gate on `remaining_usd`, not on `spendable_usd`.** `remaining_usd` subtracts what pending intents will consume when they execute; a multi-signature intent can wait weeks for quorum, so an account can show a healthy spendable balance that is entirely committed and still be refused on its next call. Both numbers are returned here so that answering "can I afford this" costs one request. `GET /v1/billing/obligations` itemises WHICH intents claimed it. Requires the billing:read scope.
 
 Response 200 — Default Response:
   - `currency`: string
@@ -180,6 +217,9 @@ Response 200 — Default Response:
   - `held_usd`: string
   - `credit_limit_usd`: string
   - `spendable_usd`: string
+  - `remaining_usd`: string
+  - `pending_intents`: integer
+  - `uncovered_usd`: string
   - `status`: "active" | "suspended" | "closed"
   - `suspended_reason`: null,string
   - `credit`: { kind, label, granted_limit_usd, expires_at, expired, warns_at_usd, suspends_at_usd }
@@ -207,6 +247,92 @@ GET /v1/billing/obligations — What pending intents will cost when they execute
 
 Every non-terminal intent and the price it will charge on execution, so an account can be kept solvent deliberately rather than by luck. This matters for multi-signature intents, which may wait hours or weeks for quorum: CERTEN does the expensive work — and charges — only once quorum is reached, by which time the originator is long gone. `uncovered_usd` is the portion NOT already reserved by a hold, i.e. the amount still needing balance behind it; `remaining_usd` is what is left to commit after those. Measured against spendable (available + credit limit), so an invoiced account reads correctly. Requires the billing:read scope.
 
+#### certen.billing.ledger()
+
+Every balance change, newest first.
+
+GET /v1/billing/ledger — List ledger entries
+
+Append-only, double-entry ledger for this organization, newest first. Every balance change has an entry here; corrections appear as new reversing groups rather than edits. Requires the billing:read scope.
+
+Query parameters:
+  - `limit`: integer
+  - `offset`: integer
+
+Response 200 — Default Response:
+  - `entries`: { id, account, amount_usd, kind, ref_type, ref_id, memo, created_at }[]
+  - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.
+
+#### certen.billing.receipts()
+
+Signed receipts for every payment, charge, refund and adjustment.
+
+GET /v1/billing/receipts — List receipts
+
+Signed receipts for every payment, charge, refund, and adjustment on this organization, newest first. Requires the billing:read scope.
+
+Query parameters:
+  - `limit`: integer
+  - `offset`: integer
+
+Response 200 — Default Response:
+  - `receipts`: { id, receipt_number, type, amount_usd, currency, ref_type, ref_id, digest, signed, logged, issued_at }[]
+  - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.
+
+#### certen.billing.receipt()
+
+One receipt, with its signature, its computation inputs, and the gateway's own verification.
+
+GET /v1/billing/receipts/{id} — Get a receipt with its signature, log proof, and computation
+
+The full receipt. Three independent layers of evidence: the ed25519 SIGNATURE (CERTEN issued this), the transparency-log INCLUSION proof against an Accumulate-anchored tree head (CERTEN did not hide or edit it), and the COMPUTATION inputs (the amount is a consequence of measured on-chain gas, a hashed price book, and a signed FX rate — not an assertion). `verification` is the gateway checking its own work; every check in it is reproducible by you from published data, and `independently_verifiable` says how. Requires the billing:read scope.
+
+Path parameters:
+  - `id`: string
+
+#### certen.billing.receiptProof()
+
+The transparency-log inclusion proof for a receipt.
+
+GET /v1/billing/receipts/{id}/proof — Get the transparency-log inclusion proof for a receipt
+
+The RFC 6962 audit path proving this receipt is a leaf of the log at the given tree size, plus the leaf salt (yours alone — leaves are salted so a published root discloses nothing, and the salt is what lets YOU verify while nobody else can enumerate). Defaults to the newest ANCHORED head: a proof against an unanchored head is only as good as our word. Keep this proof with the receipt — it stays valid forever against that head, which is itself pinned on Accumulate. Requires the billing:read scope.
+
+Path parameters:
+  - `id`: string
+
+Query parameters:
+  - `tree_size`: integer
+
+#### certen.billing.verificationKeys()
+
+The public keys receipts and tree heads are signed with.
+
+GET /v1/billing/receipts/verification-key — Get the receipt verification key set
+
+Every ed25519 key the gateway has ever signed receipts with, each with its validity window and status. Verify a receipt against the key whose window contains the receipt's issued_at — that is what makes rotation safe: an old receipt stays verifiable after the key that signed it is retired. Key registration and revocation are themselves entries in the transparency log, so the key history is anchored too. No authentication: a key you need permission to fetch cannot settle a dispute with the party granting permission.
+
+#### certen.billing.registerPayerAddress()
+
+Register a wallet you pay from, so every future deposit from it credits automatically.
+
+POST /v1/billing/deposit-addresses — Register a sending address for deposit attribution
+
+Registers a wallet address you will send stablecoin from, so any future deposit from it is automatically credited to this organization. An address may belong to only ONE organization per chain — a duplicate registration is rejected rather than merged, because ambiguous attribution would mean crediting the wrong customer. Requires the billing:write scope.
+
+Request body:
+  - `chain`: string **required**
+  - `address`: string **required**
+  - `label`: string
+
+#### certen.billing.payerAddresses()
+
+Wallets registered for automatic attribution.
+
+GET /v1/billing/deposit-addresses — List registered deposit addresses
+
+Requires the billing:read scope.
+
 #### certen.billing.openPayment()
 
 Where to send stablecoin, optionally opening a single-use payment matched on the exact amount.
@@ -230,6 +356,10 @@ Payments received for this organization across every rail (stablecoin deposits, 
 Query parameters:
   - `limit`: integer
   - `offset`: integer
+
+Response 200 — Default Response:
+  - `payments`: object[]
+  - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.
 
 #### certen.billing.payment()
 
@@ -286,6 +416,14 @@ Allocates a device code and a short user code so a terminal can obtain its own A
 Request body:
   - `device_name`: string — What to call this device on the approval screen and on the minted key.
 
+Response 201 — The device authorization is open. Show `user_code` to the human, send them to `verification_uri`, and poll `GET /v1/portal/device/{device_code}` no faster than `interval` seconds until `expires_in` elapses:
+  - `device_code`: string — Secret. Poll with this; never show it to the user.
+  - `user_code`: string — Short code the human reads and types. Show THIS.
+  - `verification_uri`: string
+  - `verification_uri_complete`: string — Prefills the code. Following it does NOT approve — approval is always an explicit click by a signed-in human, because a link that grants access by being followed is the whole device-phishing problem.
+  - `expires_in`: integer — Seconds until the request dies.
+  - `interval`: integer — Minimum seconds between polls.
+
 #### certen.device.poll()
 
 Ask whether it has been approved yet, and collect the key when it has.
@@ -296,6 +434,17 @@ Returns `pending`, `denied`, `expired`, or `approved`. On the FIRST call after a
 
 Path parameters:
   - `deviceCode`: string
+
+Response 200 — Poll result. `status` is one of pending | approved | denied | expired | claimed. The key appears ONLY on the single `approved` response — the code becomes `claimed` immediately after, so a client that does not persist it there cannot recover it:
+  - `status`: "pending" | "approved" | "denied" | "expired" | "claimed"
+  - `interval`: integer — Present while pending: wait at least this long.
+  - `api_key`: string — Only on `approved`, and only once. Save it immediately.
+  - `key_prefix`: string
+  - `key_id`: string
+  - `org_id`: string
+  - `permissions`: string[]
+  - `warning`: string
+  - `note`: string
 
 ### certen.execute
 
@@ -587,6 +736,20 @@ Response 200 — Governance operation status and details:
   - `created_at`: string
   - `completed_at`: string
 
+### certen.health
+
+#### certen.health.ready()
+
+Whether the gateway can serve, and what is wrong when it cannot.
+
+GET /v1/health/ready — Public readiness probe
+
+Readiness — can the gateway actually serve? Checks the database, api-bridge, the proof-service, Accumulate, the onboarding sponsor balance, and the entitlement epoch. Returns 200 when ready and 503 otherwise, with coarse reason tokens. No authentication: this is what an external uptime monitor should poll. For component-level detail use /v1/health/detail.
+
+Response 200 — Ready:
+  - `status`: string
+  - `reasons`: string[]
+
 ### certen.identity
 
 #### certen.identity.create()
@@ -595,7 +758,7 @@ Create an identity.
 
 POST /v1/identity — Provision a full identity in one call
 
-Compound method that provisions the entire CERTEN/Accumulate identity stack in a single call: it creates the Accumulate ADI (acc://<name>.acme), its key book, and the key page (book/1) keyed to the caller's public_key_hash so they can sign, then buys credits on that key page, and — when `chains` are supplied — derives and deploys the corresponding multi-chain accounts. With signing_mode "external" (the default) the caller supplies and retains their own keys via public_key_hash. With signing_mode "provider" the gateway generates and manages keys through the configured signing provider and returns a one-shot mnemonic retrieval URL (the mnemonic is never returned inline). Because each step waits for the previous transaction to anchor on-chain (Accumulate is eventually-consistent), this call typically takes ~60-90s. Requires the identity:write scope. If an idempotency_key is supplied the create is de-duplicated.
+Compound method that provisions the entire CERTEN/Accumulate identity stack in a single call: it creates the Accumulate ADI (acc://<name>.acme), its key book, and the key page (book/1) keyed to the caller's public_key_hash so they can sign, then buys credits on that key page, and — when `chains` are supplied — derives and deploys the corresponding multi-chain accounts. With signing_mode "external" (the default) the caller supplies and retains their own keys via public_key_hash. With signing_mode "provider" the gateway generates and manages keys through the configured signing provider and returns a one-shot mnemonic retrieval URL (the mnemonic is never returned inline). Because each step waits for the previous transaction to anchor on-chain (Accumulate is eventually-consistent), provisioning typically completes in 60-90 seconds. The call itself returns a 202 immediately; see the polling block on the 202 response for how to wait. Requires the identity:write scope. If an idempotency_key is supplied the create is de-duplicated.
 
 Request body:
   - `name`: string **required**
@@ -607,7 +770,7 @@ Request body:
   - `signing_provider`: object
   - `idempotency_key`: string
 
-Response 202 — Identity provisioning ACCEPTED. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and takes minutes on Accumulate; the response returns immediately with identity.status "provisioning" and a status_url. Poll GET /v1/identity/{id} until status becomes "active" (or "error"). For provider signing mode the one-shot mnemonic_retrieval URL is included here:
+Response 202 — Identity provisioning ACCEPTED — nothing is finished yet. On-chain provisioning (ADI + /data + key handoff + credits + chain accounts) runs asynchronously and typically completes in 60-90 seconds; the response returns immediately with status "creating" and a `status_url`. **Use the `polling` block rather than inventing a cadence**: wait `first_poll_after_seconds` before the FIRST request (provisioning cannot finish sooner than a chain of anchored Accumulate transactions, so earlier polls only burn requests), then poll `status_url` every `interval_seconds` until `status` is one of `terminal_states`. For provider signing mode the one-shot mnemonic_retrieval URL is included here and nowhere else:
   - `id`: string
   - `adi_url`: string
   - `book_url`: string
@@ -617,6 +780,7 @@ Response 202 — Identity provisioning ACCEPTED. On-chain provisioning (ADI + /d
   - `credit_balance`: number
   - `created_at`: any
   - `status_url`: string
+  - `polling`: { first_poll_after_seconds, interval_seconds, estimated_ready_in_seconds, terminal_states } — How to wait for this, published so no client has to guess.
   - `signing_mode`: string
   - `signing_provider`: object
   - `mnemonic_retrieval`: { url, expires_in }
@@ -632,6 +796,9 @@ Fetches a stored identity by id (org-scoped) and, depending on the comma-separat
 
 Path parameters:
   - `id`: string
+
+Query parameters:
+  - `include`: string — Comma-separated enrichments: `governance`, `balances`, `pending`. Defaults to ALL THREE, and each one costs a live query — governance and balances hit the network, balances once PER LINKED CHAIN. Pass `include=` (empty) when polling: `status` and `can_sign` are computed before any enrichment and are always returned, so a poll loop can skip the lot. A 90-second provisioning wait at a 3-second interval is roughly thirty of these, and the enrichments are re-fetched every time.
 
 Response 200 — The identity plus any requested enrichments (governance, balances, pending):
   - `id`: string
@@ -718,8 +885,8 @@ Query parameters:
 
 Response 200 — Pending actions page with aggregate stats and pagination:
   - `actions`: { id, identity_id, identity_url, category, type, status, tx_hash, tx_id, principal, transaction_type, collected_signatures, total_authorities, required_signatures, approved_authorities, user_has_signed, expires_at, discovered_at, created_at }[]
-  - `stats`: { total, urgent, governance, transactions, awaiting_others }
-  - `pagination`: { limit, offset, total }
+  - `stats`: { total, has_more, urgent, governance, transactions, awaiting_others }
+  - `pagination`: { limit, offset, total, has_more }
 
 ### certen.portfolio
 
@@ -803,9 +970,18 @@ Retrieve the custody chain for a proof ID, proxied from the proof-service. The c
 Path parameters:
   - `id`: string
 
-#### certen.proof.share()
+#### certen.proof.shared()
 
-Mint a shareable link, so a counterparty can fetch the bundle without an API key of yours.
+Read a proof someone shared with you.
+
+GET /v1/proof/shared/{token} — Fetch a shared proof bundle
+
+Redeem a share link and receive the full proof bundle. NO AUTHENTICATION — this is the endpoint a counterparty uses, and requiring a Certen credential to verify a Certen proof would defeat the purpose. Authorization is possession of the token.
+
+Path parameters:
+  - `token`: string
+
+#### certen.proof.share()
 
 POST /v1/proof/{id}/share — Create a shareable link for a proof
 
@@ -830,6 +1006,10 @@ Newest first. Never returns tokens — only their prefixes. Requires the proof:r
 Query parameters:
   - `limit`: integer
   - `offset`: integer
+
+Response 200 — Default Response:
+  - `shares`: object[]
+  - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.
 
 #### certen.proof.revokeShare()
 
@@ -980,10 +1160,79 @@ Response 200 — A page of transaction intents with the echoed pagination cursor
   - `transactions`: { intent_id, identity_id, status, intent_type, accum_tx_hash, proof_id, error_message, created_at, updated_at, completed_at }[]
   - `limit`: integer
   - `offset`: integer
+  - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.
+
+### certen.transparency
+
+#### certen.transparency.log()
+
+What the log is, how big it is, and where its roots are anchored.
+
+GET /v1/transparency — Describe the receipt transparency log
+
+How to audit CERTEN billing without trusting CERTEN. Returns the log parameters, the current and latest anchored tree heads, and the verification procedure for each artifact. No authentication.
+
+#### certen.transparency.heads()
+
+Signed tree heads, newest first.
+
+GET /v1/transparency/heads — List signed tree heads
+
+Signed tree heads, newest first. Each is a commitment to the entire log at that size. Verify a head by checking its ed25519 signature over sha256(canonical_json(head body)), and check any two heads are consistent with GET /v1/transparency/consistency. No authentication.
+
+Query parameters:
+  - `limit`: integer
+  - `offset`: integer
+
+Response 200 — Default Response:
+  - `heads`: object[]
+  - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.
+
+#### certen.transparency.head()
+
+The signed head at one tree size.
+
+GET /v1/transparency/heads/{treeSize} — Get the signed tree head at a size
+
+The head committed at a specific tree size, including the exact canonical body the signature covers so a verifier does not have to reconstruct it. No authentication.
+
+Path parameters:
+  - `treeSize`: string
+
+#### certen.transparency.consistency()
+
+Proof that the log at `second` extends the log at `first` without rewriting it.
+
+GET /v1/transparency/consistency — Consistency proof between two tree sizes
+
+Proves the log at size `second` still contains everything it did at size `first`, unedited — the append-only property. This is the check a signature cannot express: it is what detects a deleted, altered, or back-dated receipt. Verify with the RFC 6962 algorithm against the two roots. No authentication.
+
+Query parameters:
+  - `first`: integer **required**
+  - `second`: integer **required**
+
+#### certen.transparency.priceBooks()
+
+Every published price book, with its hash and the window it was in force.
+
+GET /v1/transparency/price-books — List published price books
+
+Every published price book with its content hash. The hash referenced by a receipt identifies exactly which prices the charge was computed under, and published books are immutable — a price you were charged under cannot be edited after you dispute it. No authentication.
+
+#### certen.transparency.fx()
+
+A signed FX observation.
+
+GET /v1/transparency/fx/{id} — Get a signed FX observation
+
+The exact native-token-to-USD rate used by a charge, with its source, observation time, and signature. This is the one input to a charge that cannot be verified against a blockchain — so it is committed to in advance and logged, letting you check that we fixed the rate BEFORE the charge and compare it against public market data at that instant. No authentication.
+
+Path parameters:
+  - `id`: string
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 40 of the gateway's 116 operations. The rest are reachable only by
+The SDK wraps 57 of the gateway's 118 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -1028,7 +1277,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
 **Health**
   - `GET /v1/health` — Liveness probe
   - `GET /v1/health/detail` — Detailed component health
-  - `GET /v1/health/ready` — Public readiness probe
 
 **Identity**
   - `GET /v1/identity/{id}/mnemonic/{token}` — Retrieve a generated mnemonic once
@@ -1041,28 +1289,15 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `DELETE /v1/portal/funding/addresses/{id}` — Stop crediting deposits from a wallet
   - `DELETE /v1/portal/keys/{id}` — Revoke an API key
   - `GET /metrics` — Prometheus metrics
-  - `GET /reference`
-  - `GET /v1/billing/deposit-addresses` — List registered deposit addresses
-  - `GET /v1/billing/ledger` — List ledger entries
-  - `GET /v1/billing/receipts` — List receipts
-  - `GET /v1/billing/receipts/{id}` — Get a receipt with its signature, log proof, and computation
-  - `GET /v1/billing/receipts/{id}/proof` — Get the transparency-log inclusion proof for a receipt
-  - `GET /v1/billing/receipts/verification-key` — Get the receipt verification key set
+  - `GET /reference` — Human-readable API reference (HTML)
   - `GET /v1/entitlement/current` — Current signed entitlement epoch
   - `GET /v1/entitlement/health` — Entitlement publisher health
-  - `GET /v1/me` — Current portal user
+  - `GET /v1/me` — Who this credential is, and what it may do
   - `GET /v1/portal/funding` — Funding overview for the active organization
   - `GET /v1/portal/funding/intents/{reference}` — Check a one-time payment
   - `GET /v1/portal/keys` — List your organization API keys
   - `GET /v1/portal/members` — List organization members
   - `GET /v1/quote/{id}` — Get a quote
-  - `GET /v1/transparency` — Describe the receipt transparency log
-  - `GET /v1/transparency/consistency` — Consistency proof between two tree sizes
-  - `GET /v1/transparency/fx/{id}` — Get a signed FX observation
-  - `GET /v1/transparency/heads` — List signed tree heads
-  - `GET /v1/transparency/heads/{treeSize}` — Get the signed tree head at a size
-  - `GET /v1/transparency/price-books` — List published price books
-  - `POST /v1/billing/deposit-addresses` — Register a sending address for deposit attribution
   - `POST /v1/portal/device/approve` — Approve a CLI device authorization
   - `POST /v1/portal/device/deny` — Deny a CLI device authorization
   - `POST /v1/portal/funding/addresses` — Register a wallet you pay from
@@ -1070,7 +1305,4 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `POST /v1/portal/invites` — Invite a teammate
   - `POST /v1/portal/keys` — Create an API key for your organization
   - `POST /v1/portal/keys/{id}/rotate` — Rotate an API key
-
-**Proof**
-  - `GET /v1/proof/shared/{token}` — Fetch a shared proof bundle
 

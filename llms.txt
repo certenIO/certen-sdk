@@ -96,9 +96,10 @@ certen doctor                   # names the one thing blocking you
 
 ## Methods
 
-45 methods across 12 resources. Signatures and field-level detail: `llms-full.txt`.
+62 methods across 14 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
+  - `certen.admin.scopes()` — Every permission a key can be granted, and what each one covers.
   - `certen.admin.createOrg()` — Create organization
   - `certen.admin.createApiKey()` — Mint API key
   - `certen.admin.listApiKeys()` — List API keys
@@ -108,9 +109,17 @@ certen doctor                   # names the one thing blocking you
   - `certen.admin.getUsage()` — Get usage summary
 
 **certen.billing**
+  - `certen.billing.pricing()` — Every priced operation and what it costs — one call, no guessing.
   - `certen.billing.balance()` — Available, held, credit line, and spendable.
   - `certen.billing.quote()` — Price a piece of work before committing to it.
   - `certen.billing.obligations()` — Pending intents and what they will cost — including `remaining_usd`, the amount that may actually be committed to new work.
+  - `certen.billing.ledger()` — Every balance change, newest first.
+  - `certen.billing.receipts()` — Signed receipts for every payment, charge, refund and adjustment.
+  - `certen.billing.receipt()` — One receipt, with its signature, its computation inputs, and the gateway's own verification.
+  - `certen.billing.receiptProof()` — The transparency-log inclusion proof for a receipt.
+  - `certen.billing.verificationKeys()` — The public keys receipts and tree heads are signed with.
+  - `certen.billing.registerPayerAddress()` — Register a wallet you pay from, so every future deposit from it credits automatically.
+  - `certen.billing.payerAddresses()` — Wallets registered for automatic attribution.
   - `certen.billing.openPayment()` — Where to send stablecoin, optionally opening a single-use payment matched on the exact amount.
   - `certen.billing.payments()` — Payments the gateway has seen, most recent first.
   - `certen.billing.payment()` — Check a one-time payment
@@ -135,6 +144,9 @@ certen doctor                   # names the one thing blocking you
   - `certen.governance.submitSignature()` — Submit signature for governance op
   - `certen.governance.get()` — Get governance operation status
 
+**certen.health**
+  - `certen.health.ready()` — Whether the gateway can serve, and what is wrong when it cannot.
+
 **certen.identity**
   - `certen.identity.create()` — Create an identity.
   - `certen.identity.get()` — Fetch one identity.
@@ -153,7 +165,8 @@ certen doctor                   # names the one thing blocking you
   - `certen.proof.receipt()` — The Accumulate merkle inclusion receipt for a transaction, read from the network.
   - `certen.proof.bundle()` — The full bundle.
   - `certen.proof.custody()` — The custody chain for a proof.
-  - `certen.proof.share()` — Mint a shareable link, so a counterparty can fetch the bundle without an API key of yours.
+  - `certen.proof.shared()` — Read a proof someone shared with you.
+  - `certen.proof.share()` — Create a shareable link for a proof
   - `certen.proof.shares()` — Every share link this organization has created, including revoked and expired ones.
   - `certen.proof.revokeShare()` — Revoke a share link.
 
@@ -167,6 +180,14 @@ certen doctor                   # names the one thing blocking you
   - `certen.transaction.get()` — Get a transaction intent status
   - `certen.transaction.list()` — List transaction intents
 
-The gateway exposes 116 operations; the SDK wraps 40 of them. Anything not listed
+**certen.transparency**
+  - `certen.transparency.log()` — What the log is, how big it is, and where its roots are anchored.
+  - `certen.transparency.heads()` — Signed tree heads, newest first.
+  - `certen.transparency.head()` — The signed head at one tree size.
+  - `certen.transparency.consistency()` — Proof that the log at `second` extends the log at `first` without rewriting it.
+  - `certen.transparency.priceBooks()` — Every published price book, with its hash and the window it was in force.
+  - `certen.transparency.fx()` — A signed FX observation.
+
+The gateway exposes 118 operations; the SDK wraps 57 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

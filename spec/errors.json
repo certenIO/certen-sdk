@@ -1,0 +1,299 @@
+{
+  "errors": [
+    {
+      "code": "BAD_GATEWAY",
+      "status": 502,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "A downstream service failed. The request may or may not have taken effect.",
+      "action": "Retry with the SAME Idempotency-Key where the operation accepts one."
+    },
+    {
+      "code": "BAD_REQUEST",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The request was understood but is not valid for this operation."
+    },
+    {
+      "code": "BILLING_DISABLED",
+      "status": 503,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "Billing is switched off on this deployment; billing endpoints are unavailable."
+    },
+    {
+      "code": "CHAIN_NOT_PRICEABLE",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "This chain has too little measured cost data to be priced safely. CERTEN refuses to guess rather than charge a number it cannot stand behind."
+    },
+    {
+      "code": "CHAIN_SUSPENDED",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "Work on this chain is suspended."
+    },
+    {
+      "code": "CHAIN_UNRESOLVED",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The chain identifier could not be resolved to a deployment.",
+      "action": "List valid chains with GET /v1/chains."
+    },
+    {
+      "code": "COMMITMENT_EXCEEDED",
+      "status": 402,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The balance covers this request but not everything already promised. Pending multi-signature intents charge when quorum is reached, which can be weeks later.",
+      "action": "See GET /v1/billing/obligations for which intents claimed it."
+    },
+    {
+      "code": "CONFLICT",
+      "status": 409,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The resource already exists, or its state has moved on since you read it."
+    },
+    {
+      "code": "ENTITLEMENT_UNAVAILABLE",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "No entitlement epoch has been published yet. Validators enforcing the gate refuse every intent."
+    },
+    {
+      "code": "FORBIDDEN",
+      "status": 403,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The credential is valid but lacks the scope this operation requires.",
+      "action": "Check GET /v1/me for granted scopes and GET /v1/scopes for what each covers. Scopes are fixed at key creation — a key missing one has to be reissued."
+    },
+    {
+      "code": "FX_UNAVAILABLE",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "No signed FX observation is available, so a gas-priced charge cannot be converted to USD."
+    },
+    {
+      "code": "IDEMPOTENCY_KEY_IN_FLIGHT",
+      "status": 409,
+      "retryable": true,
+      "audience": "caller",
+      "meaning": "An identical request with this Idempotency-Key is still running.",
+      "action": "Wait and retry the SAME key. Using a new key would perform the work twice."
+    },
+    {
+      "code": "IDEMPOTENCY_KEY_MISMATCH",
+      "status": 409,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "This Idempotency-Key was already used with a DIFFERENT request body.",
+      "action": "A key binds to one request. Use a new key, or resend the original body."
+    },
+    {
+      "code": "INSUFFICIENT_BALANCE",
+      "status": 402,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The ledger refused the charge for lack of funds.",
+      "action": "Add funds. Gate on `remaining_usd` from GET /v1/billing/balance, not `spendable_usd`."
+    },
+    {
+      "code": "INTERNAL_ERROR",
+      "status": 500,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "An unhandled fault. The request id in the response identifies it in our logs."
+    },
+    {
+      "code": "LEDGER_ACCOUNT_NOT_LOCKED",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A balance was modified without holding the account lock."
+    },
+    {
+      "code": "LEDGER_MISSING_ORG",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A customer-account leg carried no organization."
+    },
+    {
+      "code": "LEDGER_NEGATIVE_HOLD",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A hold would have gone negative."
+    },
+    {
+      "code": "LEDGER_UNBALANCED",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A ledger entry group did not sum to zero and was refused. Double-entry invariant."
+    },
+    {
+      "code": "LEDGER_UNEXPECTED_ORG",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A platform-account leg carried an organization."
+    },
+    {
+      "code": "LEDGER_ZERO_LEG",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A ledger leg of zero was refused."
+    },
+    {
+      "code": "LOG_DIVERGENCE",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "The transparency log diverged from its expected head."
+    },
+    {
+      "code": "NO_PRICE_BOOK",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "No price book is in effect, so nothing can be priced."
+    },
+    {
+      "code": "NOT_FOUND",
+      "status": 404,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "No such resource for this organization. Ids are org-scoped, so another org's id reads as missing."
+    },
+    {
+      "code": "PAYMENT_REQUIRED",
+      "status": 402,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The balance does not cover this work. NOTHING WAS CHARGED AND NO WORK WAS STARTED.",
+      "action": "The body carries a binding quote and a live payment target — send exactly `resolve.amount_usd`, then retry with `quote_id` before `quote_expires_at`."
+    },
+    {
+      "code": "PLAN_QUOTA_EXCEEDED",
+      "status": 429,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "A plan limit is exhausted — not a per-second rate, a quota for the period.",
+      "action": "Waiting will not clear this within the period. Raise the plan limit."
+    },
+    {
+      "code": "QUOTE_EXPIRED",
+      "status": 409,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The quote passed its expiry before the work was submitted.",
+      "action": "Request a new quote. They are free."
+    },
+    {
+      "code": "QUOTE_MISMATCH",
+      "status": 409,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The quote does not match the work being submitted — a different chain, sku or leg count."
+    },
+    {
+      "code": "RATE_LIMIT_EXCEEDED",
+      "status": 429,
+      "retryable": true,
+      "audience": "caller",
+      "meaning": "Too many requests in the current window.",
+      "action": "Wait `retry_after_seconds`, which is also the Retry-After header. Retrying sooner cannot succeed and still counts against the limit."
+    },
+    {
+      "code": "RECEIPT_COMPUTATION_MISMATCH",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A receipt total did not match its own computation inputs and was refused."
+    },
+    {
+      "code": "RECEIPT_KEY_NOT_REGISTERED",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "The active signing key is not in the published verification key set."
+    },
+    {
+      "code": "RECEIPT_KEY_UNAVAILABLE",
+      "status": 500,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The receipt signing key could not be loaded, so a receipt cannot be signed."
+    },
+    {
+      "code": "SCHEMA_CONSTRAINT",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A database constraint rejected the write."
+    },
+    {
+      "code": "SERVICE_TOKEN_UNCONFIGURED",
+      "status": 503,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A downstream service token is not configured on this deployment."
+    },
+    {
+      "code": "SHARE_NO_LONGER_VALID",
+      "status": 410,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The share link was real and is now revoked, expired, or out of views.",
+      "action": "Ask the sender for a fresh link. This is NOT \"the proof does not exist\"."
+    },
+    {
+      "code": "SLOW_DOWN",
+      "status": 429,
+      "retryable": true,
+      "audience": "caller",
+      "meaning": "Polling faster than the endpoint allows, on the device-authorization flow.",
+      "action": "Increase the poll interval to the value the flow published."
+    },
+    {
+      "code": "TIMESTAMP_SERVICE_UNAVAILABLE",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The timestamping service could not be reached."
+    },
+    {
+      "code": "TOO_MANY_REQUESTS",
+      "status": 429,
+      "retryable": true,
+      "audience": "caller",
+      "meaning": "Generic throttle. See Retry-After."
+    },
+    {
+      "code": "UNAUTHORIZED",
+      "status": 401,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "No credential, or one the gateway does not recognise.",
+      "action": "Send X-API-Key, or a portal session as Authorization: Bearer."
+    },
+    {
+      "code": "VALIDATION_ERROR",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "A field failed schema validation. The message names the field and what it expected.",
+      "action": "Fix the named field. `details` carries the per-field entries for programmatic use."
+    }
+  ]
+}

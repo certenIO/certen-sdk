@@ -33,9 +33,24 @@ export class CertenError extends Error {
     this.body = opts.body;
   }
 
-  /** True for transient downstream errors that are safe to retry. */
+  /**
+   * True when repeating this identical request can eventually succeed on its own.
+   *
+   * Status alone gets two cases wrong, and both are decided by the CODE:
+   *
+   * - `IDEMPOTENCY_KEY_IN_FLIGHT` is a 409, which status-wise reads as "do not retry" — but the
+   *   whole point of that code is that an identical request is already running, and retrying the
+   *   SAME key is precisely the correct response. Treating it as terminal fails a request that
+   *   would have succeeded a moment later.
+   * - `PLAN_QUOTA_EXCEEDED` is a 429, which reads as "back off and retry" — but it is a quota for
+   *   the billing period, not a per-second rate. No amount of backing off clears it, so retrying
+   *   only burns the attempts a genuinely transient failure would need.
+   */
   get isRetryable(): boolean {
     if (this.code === 'NETWORK_ERROR') return true;
+    // Code beats status, in both directions.
+    if (this.code === 'IDEMPOTENCY_KEY_IN_FLIGHT') return true;
+    if (this.code === 'PLAN_QUOTA_EXCEEDED') return false;
     if (this.status >= 500 && this.status < 600) return true;
     if (this.status === 429) return true;
     if (this.status === 408) return true;

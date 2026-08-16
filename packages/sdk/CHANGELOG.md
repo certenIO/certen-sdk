@@ -4,6 +4,28 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Fixed — `isRetryable` was wrong for two codes, in both directions
+
+HTTP status alone decides retryability correctly almost everywhere, and gets exactly two cases
+backwards. Both are now decided by the code:
+
+- `IDEMPOTENCY_KEY_IN_FLIGHT` is a 409, which reads as "do not retry" — but it means an identical
+  request is already running, and retrying the SAME key is the correct response. It was being
+  treated as terminal, failing a request that would have succeeded moments later.
+- `PLAN_QUOTA_EXCEEDED` is a 429, which reads as "back off and retry" — but it is a quota for the
+  billing period, not a rate. Backing off never clears it, so the retries were spent for nothing.
+
+### Added — 12 more error codes documented
+
+The catalogue described 9 of the 40 codes the gateway can raise, and the gaps were the ones a client
+most needs: `PAYMENT_REQUIRED`, `INSUFFICIENT_BALANCE`, `COMMITMENT_EXCEEDED`, `QUOTE_EXPIRED`,
+`QUOTE_MISMATCH`, both idempotency codes, `SHARE_NO_LONGER_VALID`, and the throttles.
+
+The gateway now publishes its catalogue at `GET /v1/errors`, and it is vendored here as
+`spec/errors.json` exactly as the OpenAPI document is. A test relates the two: this SDK may not
+document a code the gateway cannot raise, and the two may not disagree about status or
+retryability. Previously they were unrelated lists, free to drift the moment either side changed.
+
 ### Fixed — the client-side rate-limit throttle, which had never worked and could hang a caller
 
 Two bugs in the same few lines, found while making retries honour `Retry-After`.

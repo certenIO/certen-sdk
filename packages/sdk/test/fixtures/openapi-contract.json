@@ -115,6 +115,7 @@
             "credit_balance",
             "created_at",
             "status_url",
+            "polling",
             "signing_mode",
             "signing_provider",
             "mnemonic_retrieval",
@@ -123,6 +124,12 @@
         },
         "responseShapes": {
           "202": {
+            "polling": [
+              "first_poll_after_seconds",
+              "interval_seconds",
+              "estimated_ready_in_seconds",
+              "terminal_states"
+            ],
             "mnemonic_retrieval": [
               "url",
               "expires_in"
@@ -136,7 +143,9 @@
         "required": [],
         "properties": [],
         "propertyTypes": {},
-        "query": [],
+        "query": [
+          "include"
+        ],
         "responses": {
           "200": [
             "id",
@@ -425,7 +434,8 @@
             "pagination": [
               "limit",
               "offset",
-              "total"
+              "total",
+              "has_more"
             ]
           }
         }
@@ -498,7 +508,8 @@
             "pagination": [
               "limit",
               "offset",
-              "total"
+              "total",
+              "has_more"
             ]
           }
         }
@@ -851,7 +862,8 @@
           "200": [
             "transactions",
             "limit",
-            "offset"
+            "offset",
+            "pagination"
           ]
         },
         "responseShapes": {
@@ -867,6 +879,12 @@
               "created_at",
               "updated_at",
               "completed_at"
+            ],
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
             ]
           }
         }
@@ -960,8 +978,22 @@
           "limit",
           "offset"
         ],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "shares",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
+            ]
+          }
+        }
       }
     },
     "/v1/proof/shares/{shareId}": {
@@ -1005,6 +1037,29 @@
         "query": [],
         "responses": {},
         "responseShapes": {}
+      }
+    },
+    "/v1/scopes": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {
+          "200": [
+            "scopes"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "scopes": [
+              "name",
+              "description",
+              "audience",
+              "operations"
+            ]
+          }
+        }
       }
     },
     "/v1/governance": {
@@ -1131,6 +1186,7 @@
             ],
             "stats": [
               "total",
+              "has_more",
               "urgent",
               "governance",
               "transactions",
@@ -1139,7 +1195,8 @@
             "pagination": [
               "limit",
               "offset",
-              "total"
+              "total",
+              "has_more"
             ]
           }
         }
@@ -1325,8 +1382,40 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "auth_method",
+            "org",
+            "scopes",
+            "key",
+            "user",
+            "active_org_id",
+            "role",
+            "orgs"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "org": [
+              "id",
+              "name"
+            ],
+            "key": [
+              "id",
+              "rate_limit_rpm"
+            ],
+            "user": [
+              "id",
+              "email",
+              "source"
+            ],
+            "orgs": [
+              "org_id",
+              "name",
+              "role"
+            ]
+          }
+        }
       }
     },
     "/v1/portal/keys": {
@@ -1335,8 +1424,25 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "api_keys"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "api_keys": [
+              "id",
+              "name",
+              "key_prefix",
+              "permissions",
+              "rate_limit_rpm",
+              "is_active",
+              "created_at",
+              "last_used_at"
+            ]
+          }
+        }
       },
       "post": {
         "required": [
@@ -1353,8 +1459,23 @@
           "rate_limit_rpm": "number"
         },
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "201": [
+            "api_key",
+            "warning"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "api_key": [
+              "id",
+              "key",
+              "prefix",
+              "name",
+              "permissions"
+            ]
+          }
+        }
       }
     },
     "/v1/portal/keys/{id}/rotate": {
@@ -1363,8 +1484,23 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "201": [
+            "api_key",
+            "warning"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "api_key": [
+              "id",
+              "key",
+              "prefix",
+              "name",
+              "permissions"
+            ]
+          }
+        }
       }
     },
     "/v1/portal/keys/{id}": {
@@ -1373,7 +1509,12 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "id",
+            "is_active"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1383,8 +1524,26 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "members",
+            "pending_invites"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "members": [
+              "user_id",
+              "email",
+              "role"
+            ],
+            "pending_invites": [
+              "email",
+              "role",
+              "expires_at"
+            ]
+          }
+        }
       }
     },
     "/v1/portal/invites": {
@@ -1401,7 +1560,13 @@
           "role": "string"
         },
         "query": [],
-        "responses": {},
+        "responses": {
+          "201": [
+            "email",
+            "role",
+            "expires_at"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1411,8 +1576,35 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "standing",
+            "addresses",
+            "open_intents",
+            "chains"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "addresses": [
+              "id",
+              "chain",
+              "address",
+              "label",
+              "is_active",
+              "verified_at",
+              "created_at"
+            ],
+            "open_intents": [
+              "reference",
+              "status",
+              "amount_usd",
+              "expires_at",
+              "matched_at",
+              "payment_id"
+            ]
+          }
+        }
       }
     },
     "/v1/portal/funding/intents": {
@@ -1430,8 +1622,23 @@
           "amount_usd": "string"
         },
         "query": [],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "201": [
+            "chain",
+            "deposit_address",
+            "token",
+            "deposit_intent"
+          ]
+        },
+        "responseShapes": {
+          "201": {
+            "deposit_intent": [
+              "reference",
+              "amount_usd",
+              "expires_at"
+            ]
+          }
+        }
       }
     },
     "/v1/portal/funding/intents/{reference}": {
@@ -1440,7 +1647,16 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "reference",
+            "status",
+            "amount_usd",
+            "expires_at",
+            "matched_at",
+            "payment_id"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1461,7 +1677,17 @@
           "label": "string"
         },
         "query": [],
-        "responses": {},
+        "responses": {
+          "201": [
+            "id",
+            "chain",
+            "address",
+            "label",
+            "is_active",
+            "verified_at",
+            "created_at"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1471,7 +1697,11 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "deactivated"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1485,7 +1715,16 @@
           "device_name": "string"
         },
         "query": [],
-        "responses": {},
+        "responses": {
+          "201": [
+            "device_code",
+            "user_code",
+            "verification_uri",
+            "verification_uri_complete",
+            "expires_in",
+            "interval"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1495,7 +1734,19 @@
         "properties": [],
         "propertyTypes": {},
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "status",
+            "interval",
+            "api_key",
+            "key_prefix",
+            "key_id",
+            "org_id",
+            "permissions",
+            "warning",
+            "note"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1511,7 +1762,13 @@
           "user_code": "string"
         },
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "approved",
+            "device_name",
+            "expires_at"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1527,7 +1784,11 @@
           "user_code": "string"
         },
         "query": [],
-        "responses": {},
+        "responses": {
+          "200": [
+            "denied"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1586,6 +1847,9 @@
             "held_usd",
             "credit_limit_usd",
             "spendable_usd",
+            "remaining_usd",
+            "pending_intents",
+            "uncovered_usd",
             "status",
             "suspended_reason",
             "credit"
@@ -1617,7 +1881,8 @@
         ],
         "responses": {
           "200": [
-            "entries"
+            "entries",
+            "pagination"
           ]
         },
         "responseShapes": {
@@ -1631,6 +1896,12 @@
               "ref_id",
               "memo",
               "created_at"
+            ],
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
             ]
           }
         }
@@ -1660,6 +1931,35 @@
         "responseShapes": {}
       }
     },
+    "/v1/pricing": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {
+          "200": [
+            "price_book_version",
+            "price_book_hash",
+            "currency",
+            "items"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "items": [
+              "sku",
+              "chain",
+              "mode",
+              "platform_fee_usd",
+              "gas_buffer_bps",
+              "min_charge_usd",
+              "max_charge_usd"
+            ]
+          }
+        }
+      }
+    },
     "/v1/quote/{id}": {
       "get": {
         "required": [],
@@ -1679,8 +1979,22 @@
           "limit",
           "offset"
         ],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "payments",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
+            ]
+          }
+        }
       }
     },
     "/v1/billing/deposits": {
@@ -1758,8 +2072,35 @@
           "limit",
           "offset"
         ],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "receipts",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "receipts": [
+              "id",
+              "receipt_number",
+              "type",
+              "amount_usd",
+              "currency",
+              "ref_type",
+              "ref_id",
+              "digest",
+              "signed",
+              "logged",
+              "issued_at"
+            ],
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
+            ]
+          }
+        }
       }
     },
     "/v1/billing/receipts/{id}": {
@@ -1803,8 +2144,22 @@
           "limit",
           "offset"
         ],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "heads",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
+            ]
+          }
+        }
       }
     },
     "/v1/transparency/heads/{treeSize}": {
@@ -2095,8 +2450,22 @@
           "org_id",
           "only"
         ],
-        "responses": {},
-        "responseShapes": {}
+        "responses": {
+          "200": [
+            "intents",
+            "pagination"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "pagination": [
+              "limit",
+              "offset",
+              "has_more",
+              "returned"
+            ]
+          }
+        }
       }
     },
     "/v1/admin/billing/accounts": {

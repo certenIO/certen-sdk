@@ -46,6 +46,18 @@ backoff — a second retry loop wrapped around it is wrong.
 | `NOT_FOUND` | 404 | no | The requested resource does not exist or is not accessible |
 | `CONFLICT` | 409 | no | The resource already exists (e.g., duplicate identity name) |
 | `RATE_LIMIT_EXCEEDED` | 429 | yes | Too many requests; the SDK backs off and retries using `Retry-After` |
+| `CHAIN_UNRESOLVED` | 400 | no | The chain identifier could not be resolved to a deployment |
+| `PAYMENT_REQUIRED` | 402 | no | The balance does not cover this work; nothing was charged and no work started |
+| `INSUFFICIENT_BALANCE` | 402 | no | The ledger refused the charge for lack of funds |
+| `COMMITMENT_EXCEEDED` | 402 | no | The balance is already promised to pending intents awaiting quorum |
+| `QUOTE_EXPIRED` | 409 | no | The quote expired before the work was submitted; request a new one |
+| `QUOTE_MISMATCH` | 409 | no | The quote describes different work than what was submitted |
+| `IDEMPOTENCY_KEY_IN_FLIGHT` | 409 | yes | An identical request with this key is still running; retry the SAME key |
+| `IDEMPOTENCY_KEY_MISMATCH` | 409 | no | This key was already used with a different body; use a new key |
+| `SHARE_NO_LONGER_VALID` | 410 | no | The share link was real and is now revoked, expired, or out of views |
+| `PLAN_QUOTA_EXCEEDED` | 429 | no | A plan quota for the period is exhausted; waiting will not clear it |
+| `TOO_MANY_REQUESTS` | 429 | yes | Generic throttle; wait for `Retry-After` |
+| `SLOW_DOWN` | 429 | yes | Polling the device-authorization flow faster than it allows |
 | `INTERNAL_ERROR` | 500 | yes | An unexpected server error occurred |
 | `BAD_GATEWAY` | 502 | yes | A downstream service (api-bridge, proofs service) returned an error |
 | `NETWORK_ERROR` | — | yes | Synthesized by the SDK when the request never reached the gateway |
