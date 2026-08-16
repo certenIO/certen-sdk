@@ -3,6 +3,31 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Changed — `certen receipts get <id>` replaces `certen receipt <id>`
+
+Two top-level commands differing by one character, sitting adjacent in help. Now one group, matching
+`tx` and `identity`: `certen receipts` lists, `certen receipts get <id>` fetches one. `certen verify`
+stays top-level — it is the command that answers "can I prove this charge", and burying it would
+hide it.
+
+Both commands were added in this same release and neither has shipped, so nothing external breaks.
+
+### Changed — commands fetch only the identity data they read
+
+`certen call`, `certen init` and `certen identity retire` all fetched an identity with every
+enrichment: on-chain governance, per-chain balances, and pending counts. `call` reads the balances
+(for the unfunded-account guard) and never touches governance or pending; the other two need none of
+it. Each unused enrichment is a live query — governance is a network round trip, balances runs once
+per linked chain — and they sat on the critical path of the flagship command.
+
+### Added — `scripts/measure-onboarding.mjs`
+
+Records round trips, wall-clock and endpoints touched for each step of the first-run journey, by
+running the real CLI through a counting proxy. Onboarding had never been measured end to end, so
+there was no way to tell whether any of this work reduced friction or moved it.
+
+First run: 12 requests, 10.7s. After bounding the gateway health probe: **12 requests, 4.9s**.
+
 ### Changed — `certen whoami` reports your organization and scopes instead of guessing
 
 It printed `organization: "not exposed to API keys — see the portal"`, and reported permissions as

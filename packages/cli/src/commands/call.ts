@@ -92,7 +92,11 @@ export function registerCallCommands(program: Command): void {
       // Resolve the identity BEFORE unlocking the signer: if the identity cannot sign, prompting
       // for a passphrase first would be asking for a secret in order to fail.
       // The response IS the identity now — it is no longer nested under an `identity` key.
-      const identity = await client.identity.get(opts.identity);
+      // Only `balances` — this command reads `can_sign`, `adi_url`, `chain_accounts` and the
+      // per-chain balances (for the unfunded-account guard), and never touches `governance` or
+      // `pending`. Both of those are live fetches on the critical path of the flagship command:
+      // governance is a network round trip, pending a database read, and neither answer was used.
+      const identity = await client.identity.get(opts.identity, { include: ['balances'] });
 
       if (identity.can_sign === false) {
         throw new CliError(

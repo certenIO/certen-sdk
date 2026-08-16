@@ -316,9 +316,13 @@ export function registerBillingCommands(program: Command): void {
         + 'Corrections appear as new reversing entries, never as edits.');
     });
 
-  program
+  const receipts = program
     .command('receipts')
-    .description('Signed receipts for every charge, payment, refund and adjustment')
+    .description('Signed receipts for every charge, payment, refund and adjustment');
+
+  receipts
+    .command('list', { isDefault: true })
+    .description('List receipts, newest first')
     .option('--limit <n>', 'How many to fetch (page size with --all)', '50')
     .option('--offset <n>', 'Skip this many')
     .option('--all', 'Fetch every page, not just the first')
@@ -359,7 +363,7 @@ export function registerBillingCommands(program: Command): void {
           + `${r.type.padEnd(12)}  ${usd(r.amount_usd).padStart(10)}  ${evidence}`);
       }
       human('');
-      hint('certen receipt <id> --proof   # the full receipt and its inclusion proof');
+      hint('certen receipts get <id> --proof   # the full receipt and its inclusion proof');
     });
 
   program
@@ -422,8 +426,8 @@ export function registerBillingCommands(program: Command): void {
       }
     });
 
-  program
-    .command('receipt <id>')
+  receipts
+    .command('get <id>')
     .description('One receipt, with its signature and computation')
     .option('--proof', 'Also fetch the transparency-log inclusion proof')
     .option('--tree-size <n>', 'Prove against this tree size instead of the newest anchored head')
@@ -480,7 +484,7 @@ export function registerBillingCommands(program: Command): void {
         human('');
         human('  Keep this proof with the receipt. It stays valid forever against that head.');
       } else if (receipt.leaf_seq !== null) {
-        hint(`certen receipt ${id} --proof   # prove it is in the anchored log`);
+        hint(`certen receipts get ${id} --proof   # prove it is in the anchored log`);
       }
     });
 

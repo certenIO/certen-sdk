@@ -188,7 +188,8 @@ export function registerInitCommands(program: Command): void {
       // from it produced a closing command with an unfillable `<id>` placeholder.
       const remembered = opts.name ? undefined : lastIdentity();
       const reusable = remembered
-        ? await client.identity.get(remembered.id).catch(() => null)
+        // Only `can_sign`, `id` and `adi_url` are read below, none of which are enrichments.
+        ? await client.identity.get(remembered.id, { include: [] }).catch(() => null)
         : null;
 
       if (reusable && reusable.can_sign === true) {

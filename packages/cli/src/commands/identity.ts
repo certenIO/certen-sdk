@@ -255,7 +255,9 @@ export function registerIdentityCommands(program: Command): void {
       // Resolved first so the confirmation message names what is being retired. An id pasted from
       // the wrong terminal is the mistake worth catching, and it is invisible until something says
       // the ADI out loud.
-      const before = await client.identity.get(id).catch(() => null);
+      // No enrichments: this read exists to name the ADI in the confirmation prompt. Fetching
+      // governance, per-chain balances and pending counts to print one URL is work nobody sees.
+      const before = await client.identity.get(id, { include: [] }).catch(() => null);
 
       const result = await client.identity.retire(id);
       // Dropped from the local record too, so `certen init` does not offer to reuse it.

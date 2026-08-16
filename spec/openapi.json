@@ -366,6 +366,8 @@
           }
         ],
         "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Billable and creates on-chain state. Without a key, a retry inside the ~90s provisioning window creates a second identity and charges again — the name-collision check cannot fire until the first has anchored.",
         "x-required-scopes": [
           "identity:write"
         ],
@@ -854,6 +856,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Sets fields to the values given.",
         "x-required-scopes": [
           "identity:write"
         ],
@@ -1105,6 +1109,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Already-retired stays retired.",
         "x-required-scopes": [
           "identity:write"
         ],
@@ -1445,6 +1451,8 @@
           }
         ],
         "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Creates an organization.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -1562,6 +1570,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Sets the webhook URL.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -1705,6 +1715,8 @@
           }
         ],
         "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Mints a key. Without a key a retry mints a second one, and the secret is shown once.",
         "responses": {
           "201": {
             "description": "API key created; raw key returned once.",
@@ -1938,6 +1950,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Same as the portal rotation: a retry invalidates the secret just issued.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -2210,6 +2224,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Already-revoked stays revoked.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -2692,6 +2708,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Unsafe BY DESIGN — delivering again is the entire purpose. Listed so it is a decision rather than an omission.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -2806,6 +2824,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call registers another endpoint, so the same event fires twice.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -3037,6 +3057,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Sends a test ping; changes no stored state.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -3160,6 +3182,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Sets fields to the values given.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -3284,6 +3308,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Deletion is a state.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -3371,6 +3397,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "A retry invalidates the signing secret just issued.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -3574,6 +3602,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Deletion is a state.",
         "x-required-scopes": [
           "admin:write"
         ],
@@ -3807,6 +3837,8 @@
           }
         ],
         "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Billable. A replay returns the stored response without pricing or reserving again.",
         "x-required-scopes": [
           "transaction:write"
         ],
@@ -4064,6 +4096,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "A second submission loses the race and returns 409 rather than submitting twice.",
         "x-required-scopes": [
           "transaction:write"
         ],
@@ -4930,6 +4964,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call mints another live share link. A link is a credential — a retry leaves one you did not intend to hand out.",
         "x-required-scopes": [
           "proof:read"
         ],
@@ -5135,6 +5171,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Revoked stays revoked.",
         "x-required-scopes": [
           "proof:read"
         ],
@@ -5507,6 +5545,8 @@
           }
         ],
         "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Billable governance change. A replay returns the stored response.",
         "x-required-scopes": [
           "governance:write"
         ],
@@ -5734,6 +5774,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "The operation moves out of its pending state once signed.",
         "x-required-scopes": [
           "governance:write"
         ],
@@ -6269,6 +6311,8 @@
           }
         ],
         "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Creates a signing request. A replay returns the original.",
         "x-required-scopes": [
           "sign:write"
         ],
@@ -6429,6 +6473,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "The request moves out of its pending state once signed.",
         "x-required-scopes": [
           "sign:write"
         ],
@@ -6516,6 +6562,8 @@
         ],
         "description": "OAuth2 token endpoint. Requires NO API-key auth — credentials are supplied in the request body. Supports grant_type \"client_credentials\" (client_id + client_secret → new access_token + refresh_token) and \"refresh_token\" (rotates the pair; replaying a spent refresh token revokes the entire descendant chain as a theft-detection security feature). Returns access_token, token_type, expires_in (3600s), refresh_token, refresh_expires_in (30d) and scope.",
         "security": [],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call issues a new token. Expected for a token endpoint.",
         "responses": {
           "200": {
             "description": "Token issued (or rotated) successfully.",
@@ -6604,6 +6652,8 @@
         ],
         "description": "Revoke an OAuth2 access or refresh token (RFC 7009). Requires NO API-key auth — the token is supplied in the body. Accepts either an access token or a refresh token; revoking a refresh token kills its entire descendant chain. Per-IP rate limited. Per spec, always returns 200 with an empty body and never leaks whether the token existed.",
         "security": [],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Revoking a revoked token is a no-op, per RFC 7009.",
         "responses": {
           "200": {
             "description": "Revocation processed (empty body; no info leak).",
@@ -6653,6 +6703,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call creates another client with its own secret.",
         "x-required-scopes": [
           "oauth:write",
           "admin:write"
@@ -6789,6 +6841,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Deactivation is a state, not an event.",
         "x-required-scopes": [
           "oauth:write",
           "admin:write"
@@ -6843,6 +6897,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "A retry invalidates the secret just issued.",
         "x-required-scopes": [
           "oauth:write",
           "admin:write"
@@ -7193,6 +7249,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call mints a key whose secret is shown once. A retry leaves an unrecorded live key.",
         "responses": {
           "201": {
             "description": "The new key. `api_key.key` is the secret and is shown exactly once — `warning` says so, which is why the key is nested rather than flattened: the caller must read both together.",
@@ -7284,6 +7342,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each rotation invalidates the secret the previous one just issued. A retry can strand a caller holding a key that was valid moments ago.",
         "parameters": [
           {
             "schema": {
@@ -7385,6 +7445,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Already-revoked stays revoked.",
         "parameters": [
           {
             "schema": {
@@ -7562,6 +7624,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "An outstanding invite for the same address is reused rather than duplicated.",
         "responses": {
           "201": {
             "description": "The invitation, at the top level — matching every other singular write on this API.",
@@ -7770,6 +7834,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call opens another payment intent. Same caution as POST /v1/billing/deposits.",
         "responses": {
           "201": {
             "description": "Where to send, and the single-use intent matched on the EXACT amount.",
@@ -7978,6 +8044,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "Same uniqueness rule as the API-key route above.",
         "responses": {
           "201": {
             "description": "The registered wallet, at the top level, identically to POST /v1/billing/deposit-addresses.",
@@ -8091,6 +8159,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Deregistration is a state.",
         "responses": {
           "200": {
             "description": "Deposits from this wallet are no longer credited automatically.",
@@ -8177,6 +8247,8 @@
           }
         },
         "security": [],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Unsafe by design — each call starts a new device authorization with its own code, which is what a fresh login attempt should do.",
         "responses": {
           "201": {
             "description": "The device authorization is open. Show `user_code` to the human, send them to `verification_uri`, and poll `GET /v1/portal/device/{device_code}` no faster than `interval` seconds until `expires_in` elapses.",
@@ -8373,6 +8445,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Approved stays approved.",
         "responses": {
           "200": {
             "description": "The human granted it. The waiting client collects the key on its next poll.",
@@ -8473,6 +8547,8 @@
             "bearerAuth": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Denied stays denied.",
         "responses": {
           "200": {
             "description": "The human refused it. The waiting client sees `status: denied` and stops.",
@@ -8614,6 +8690,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Approved stays approved.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -8685,6 +8763,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Suspended stays suspended.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -9046,6 +9126,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call issues a new quote. Harmless — quotes are free, single-use and expire — but a retry does not return the first one.",
         "x-required-scopes": [
           "billing:read"
         ],
@@ -9329,6 +9411,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call opens a new payment intent, and two open intents for the same money is worse for the payer than one. The 402 resolution path reuses an existing intent; direct calls do not.",
         "x-required-scopes": [
           "billing:fund",
           "billing:write"
@@ -9469,6 +9553,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "An address belongs to one organization per chain; a duplicate is 409, never merged.",
         "x-required-scopes": [
           "billing:write"
         ],
@@ -10288,6 +10374,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "Price books are immutable per version. Re-publishing identical content returns the existing row; different content under the same version is a 409.",
         "responses": {
           "201": {
             "description": "Default Response",
@@ -10369,6 +10457,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call registers another signing key.",
         "responses": {
           "201": {
             "description": "Default Response",
@@ -10439,6 +10529,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Revoked stays revoked.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10494,6 +10586,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Assignment is a state, not an event.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10585,6 +10679,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "Refuses with 409 once the payment is credited, so it cannot double-credit.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10681,6 +10777,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Takes a fresh snapshot each time.",
         "responses": {
           "200": {
             "description": "Default Response",
@@ -10708,6 +10806,8 @@
             "apiKey": []
           }
         ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Recomputes from current data; running twice reaches the same conclusion.",
         "responses": {
           "200": {
             "description": "Default Response",

@@ -621,7 +621,7 @@ describe('certen ledger and certen receipts', () => {
   it('fetches one receipt without a proof by default', async () => {
     const s = await stubGateway((req, res) => json(res, 200, FULL));
     try {
-      const r = await certen(['receipt', 'rc_1'], s.url);
+      const r = await certen(['receipts', 'get', 'rc_1'], s.url);
       expect(r.code).toBe(0);
       expect(s.hits()).toBe(1);
       expect(r.stdout).toContain('Receipt 1041');
@@ -651,7 +651,7 @@ describe('certen ledger and certen receipts', () => {
       return json(res, 200, FULL);
     });
     try {
-      const r = await certen(['receipt', 'rc_1', '--proof'], s.url);
+      const r = await certen(['receipts', 'get', 'rc_1', '--proof'], s.url);
       expect(r.code).toBe(0);
       expect(r.stdout).toContain('Anchored on Accumulate in 0xabc');
       expect(r.stdout).toContain('(block timestamp)');
@@ -676,7 +676,7 @@ describe('certen ledger and certen receipts', () => {
       return json(res, 200, FULL);
     });
     try {
-      const r = await certen(['receipt', 'rc_1', '--proof'], s.url);
+      const r = await certen(['receipts', 'get', 'rc_1', '--proof'], s.url);
       expect(r.stdout).toMatch(/loose upper bound/);
       expect(r.stdout).not.toContain('(block timestamp)');
     } finally {
@@ -685,7 +685,7 @@ describe('certen ledger and certen receipts', () => {
   });
 
   it('rejects --tree-size without --proof instead of ignoring it', async () => {
-    const r = await certen(['receipt', 'rc_1', '--tree-size', '22065']);
+    const r = await certen(['receipts', 'get', 'rc_1', '--tree-size', '22065']);
     expect(r.code).toBe(2);
     expect(r.stderr).toMatch(/only applies to the inclusion proof/);
   });
@@ -694,7 +694,7 @@ describe('certen ledger and certen receipts', () => {
     const s = await stubGateway((req, res) =>
       json(res, 404, { error: 'Receipt not found', code: 'NOT_FOUND' }));
     try {
-      const r = await certen(['receipt', 'nope', '--json'], s.url);
+      const r = await certen(['receipts', 'get', 'nope', '--json'], s.url);
       expect(r.code).not.toBe(0);
     } finally {
       await s.close();
