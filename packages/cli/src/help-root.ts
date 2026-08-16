@@ -45,12 +45,17 @@ const GROUPS: Group[] = [
   {
     title: 'Money',
     blurb: 'what it costs and how to pay',
-    commands: ['balance', 'quote', 'fund'],
+    commands: ['pricing', 'balance', 'quote', 'fund', 'payers'],
+  },
+  {
+    title: 'Audit',
+    blurb: 'what you were charged, and proof of it',
+    commands: ['ledger', 'receipts', 'receipt', 'verify'],
   },
   {
     title: 'Operate',
     blurb: 'across every identity and key',
-    commands: ['portfolio', 'admin'],
+    commands: ['portfolio', 'admin', 'scopes'],
   },
 ];
 

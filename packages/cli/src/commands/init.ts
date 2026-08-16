@@ -252,7 +252,12 @@ export function registerInitCommands(program: Command): void {
 
       // ── 5. Balance ────────────────────────────────────────────────────────────────────────────
       const balance = await client.billing.balance().catch(() => null);
-      const obligations = await client.billing.obligations().catch(() => null);
+      // The balance carries `remaining_usd` now, so the separate obligations read is gone — it was
+      // fetched for that one field, sequentially, on the command a new user runs first. Falls back
+      // against a gateway that predates the change rather than treating `spendable_usd` as safe.
+      const commitments = balance?.remaining_usd !== undefined
+        ? { remaining_usd: balance.remaining_usd }
+        : await client.billing.obligations().catch(() => null);
       steps.push({
         step: 'billing',
         status: 'done',
@@ -298,7 +303,7 @@ export function registerInitCommands(program: Command): void {
         human('');
       }
 
-      if (balance && Number(obligations?.remaining_usd ?? balance.spendable_usd) <= 0) {
+      if (balance && Number(commitments?.remaining_usd ?? balance.spendable_usd) <= 0) {
         human('  You have nothing left to commit to new work.');
         hint(`certen fund <amount> --chain ${chains[0]}`);
         human('');

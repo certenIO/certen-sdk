@@ -202,9 +202,15 @@ export class CertenClient {
           req.headers = headers;
         }
       }
-      // Respect any rate-limit reset window the gateway already told us about.
+      // Respect a rate-limit window the gateway already told us about — but BOUNDED.
+      //
+      // This slept for the entire remaining window with no ceiling, so a 429 carrying
+      // `Retry-After: 3600` parked the next request for an hour inside the HTTP client, ignoring
+      // both `maxBackoffMs` and the per-request timeout, with no way for the caller to escape it.
+      // Capping at `maxBackoffMs` keeps the wait to something the caller agreed to; if the window
+      // has genuinely not reopened the next attempt returns 429 and the retry path handles it.
       if (this.rateLimit.resetAt && Date.now() < this.rateLimit.resetAt) {
-        const wait = this.rateLimit.resetAt - Date.now();
+        const wait = Math.min(this.rateLimit.resetAt - Date.now(), this.maxBackoffMs);
         await sleep(wait);
         this.rateLimit.resetAt = null;
       }
@@ -214,10 +220,21 @@ export class CertenClient {
     // Wrap errors into the typed taxonomy + retry transient failures.
     this.http.interceptors.response.use(
       (response) => {
-        // Update rate-limit state from headers if present.
+        // Self-throttle ONLY once the window is actually exhausted.
+        //
+        // Two things were wrong here. `x-ratelimit-reset` is SECONDS REMAINING, not a Unix
+        // timestamp — the gateway sends `56` with a 60-second window — so `Number(reset) * 1000`
+        // produced 56000, an instant in 1970, and the guard above never fired. The throttle has
+        // never run.
+        //
+        // Simply correcting the arithmetic would have been far worse than the bug: `reset` comes
+        // back on EVERY response, so setting the window from it unconditionally would sleep the
+        // full remaining window before every single request. It is only meaningful when
+        // `x-ratelimit-remaining` has reached zero.
         const reset = response.headers['x-ratelimit-reset'];
-        if (typeof reset === 'string' && /^\d+$/.test(reset)) {
-          this.rateLimit.resetAt = Number(reset) * 1000;
+        const remaining = response.headers['x-ratelimit-remaining'];
+        if (remaining === '0' && typeof reset === 'string' && /^\d+$/.test(reset)) {
+          this.rateLimit.resetAt = Date.now() + Number(reset) * 1000;
         }
         return response;
       },
@@ -234,7 +251,22 @@ export class CertenClient {
         const message = sentMessage ?? error.message;
         const requestId = (error.response?.headers?.['x-request-id'] as string | undefined) ?? undefined;
         const retryAfter = error.response?.headers?.['retry-after'];
-        const details = retryAfter ? { retryAfter: Number(retryAfter) } : undefined;
+
+        // `details` carries whatever is STRUCTURED about this failure, from either side.
+        //
+        // It used to hold only `retryAfter`, so the gateway's own `details` — the per-field
+        // validation entries naming exactly what was wrong — reached callers only via `body`,
+        // which is not where anyone looks. A tool rendering `error.details` therefore showed
+        // nothing for the one error class where structure is most useful.
+        //
+        // `retryAfter` keeps its place: `CertenError.retryAfterSeconds` reads it from here.
+        const serverDetails = (body as { details?: unknown } | undefined)?.details;
+        const details = retryAfter || serverDetails !== undefined
+          ? {
+            ...(retryAfter ? { retryAfter: Number(retryAfter) } : {}),
+            ...(serverDetails !== undefined ? { validation: serverDetails } : {}),
+          }
+          : undefined;
 
         if (status === 429 && typeof retryAfter === 'string') {
           this.rateLimit.resetAt = Date.now() + Number(retryAfter) * 1000;
@@ -253,12 +285,20 @@ export class CertenClient {
         if (cfg && wrapped.isRetryable) {
           cfg.__retryCount = (cfg.__retryCount ?? 0) + 1;
           if (cfg.__retryCount <= this.maxRetries) {
-            const backoff = Math.min(
-              this.maxBackoffMs,
-              this.baseBackoffMs * Math.pow(2, cfg.__retryCount - 1),
-            );
-            const jitter = Math.floor(Math.random() * backoff);
-            await sleep(backoff + jitter);
+            // The server's own `Retry-After` wins over the local curve.
+            //
+            // Exponential backoff is a guess made without information; `Retry-After` is the
+            // gateway stating when the window actually reopens. Ignoring it — as this did — meant
+            // retrying early, which cannot succeed, and each failed attempt still counts against
+            // the limit. Capped at `maxBackoffMs` so a large server value cannot park a caller
+            // for longer than they agreed to wait, and jittered like the fallback so a fleet
+            // released at the same instant does not stampede.
+            const serverHint = retryAfter ? Number(retryAfter) * 1000 : NaN;
+            const base = Number.isFinite(serverHint) && serverHint > 0
+              ? Math.min(this.maxBackoffMs, serverHint)
+              : Math.min(this.maxBackoffMs, this.baseBackoffMs * Math.pow(2, cfg.__retryCount - 1));
+            const jitter = Math.floor(Math.random() * Math.min(base, 1_000));
+            await sleep(base + jitter);
             return this.http.request(cfg);
           }
         }

@@ -138,3 +138,128 @@ describe('error codes stay inside the documented catalog', () => {
     expect(new CertenError('x', 404, 'NOT_FOUND').isRetryable).toBe(false);
   });
 });
+
+describe('backing off when the server says when', () => {
+  const jsonR = (
+    res: http.ServerResponse, status: number, body: unknown,
+    headers: Record<string, string> = {},
+  ): void => {
+    res.statusCode = status;
+    res.setHeader('content-type', 'application/json');
+    for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
+    res.end(JSON.stringify(body));
+  };
+
+  it('waits the server-stated Retry-After rather than its own curve', async () => {
+    // Exponential backoff is a guess made without information. `Retry-After` is the gateway saying
+    // when the window reopens — retrying before it cannot succeed, and each early attempt still
+    // counts against the limit.
+    let hits = 0;
+    const baseUrl = await serve((_req, res) => {
+      hits += 1;
+      if (hits === 1) {
+        return jsonR(res, 429, { error: 'Rate limit exceeded', code: 'RATE_LIMIT_EXCEEDED' },
+          { 'retry-after': '1' });
+      }
+      return jsonR(res, 200, { ok: true });
+    });
+    const t0 = Date.now();
+    await new CertenClient({
+      apiKey: 'ck_live_test', baseUrl, maxRetries: 2,
+      // A tiny local curve: without honouring the header this retries almost immediately.
+      baseBackoffMs: 5, maxBackoffMs: 10_000,
+    }).billing.balance();
+    expect(hits).toBe(2);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(1_000);
+  });
+
+  it('never waits longer than maxBackoffMs, whatever the server asks for', async () => {
+    // A caller who set a ceiling agreed to wait that long and no longer; an hour-long
+    // `Retry-After` must not park them there.
+    let hits = 0;
+    const baseUrl = await serve((_req, res) => {
+      hits += 1;
+      if (hits === 1) {
+        return jsonR(res, 429, { error: 'slow down', code: 'RATE_LIMIT_EXCEEDED' },
+          { 'retry-after': '3600' });
+      }
+      return jsonR(res, 200, { ok: true });
+    });
+    const t0 = Date.now();
+    await new CertenClient({
+      apiKey: 'ck_live_test', baseUrl, maxRetries: 1, baseBackoffMs: 5, maxBackoffMs: 200,
+    }).billing.balance();
+    expect(hits).toBe(2);
+    expect(Date.now() - t0).toBeLessThan(3_000);
+  });
+
+  it('falls back to exponential backoff when no header is sent', async () => {
+    let hits = 0;
+    const baseUrl = await serve((_req, res) => {
+      hits += 1;
+      if (hits === 1) return jsonR(res, 503, { error: 'down', code: 'UNAVAILABLE' });
+      return jsonR(res, 200, { ok: true });
+    });
+    await new CertenClient({
+      apiKey: 'ck_live_test', baseUrl, maxRetries: 1, baseBackoffMs: 5, maxBackoffMs: 50,
+    }).billing.balance();
+    expect(hits).toBe(2);
+  });
+
+  it('does not self-throttle while quota remains', async () => {
+    // `x-ratelimit-reset` rides on EVERY response. Treating it as a window to wait for — rather
+    // than only once `x-ratelimit-remaining` hits zero — would sleep the full remaining window
+    // before every request, turning a 60/min limit into roughly one request a minute.
+    let hits = 0;
+    const baseUrl = await serve((_req, res) => {
+      hits += 1;
+      res.setHeader('x-ratelimit-limit', '60');
+      res.setHeader('x-ratelimit-remaining', '59');
+      res.setHeader('x-ratelimit-reset', '56');
+      jsonR(res, 200, { ok: true });
+    });
+    const client = new CertenClient({ apiKey: 'ck_live_test', baseUrl, maxBackoffMs: 10_000 });
+    const t0 = Date.now();
+    await client.billing.balance();
+    await client.billing.balance();
+    expect(hits).toBe(2);
+    expect(Date.now() - t0).toBeLessThan(1_000);
+  });
+
+  it('waits — but not unboundedly — once quota is exhausted', async () => {
+    // `reset` is seconds REMAINING, not an epoch. Read as an epoch it lands in 1970 and the
+    // throttle silently never fires; read correctly but uncapped it can park a caller for the
+    // whole window. Bounded by maxBackoffMs.
+    let hits = 0;
+    const baseUrl = await serve((_req, res) => {
+      hits += 1;
+      res.setHeader('x-ratelimit-limit', '60');
+      res.setHeader('x-ratelimit-remaining', hits === 1 ? '0' : '59');
+      res.setHeader('x-ratelimit-reset', '3600');
+      jsonR(res, 200, { ok: true });
+    });
+    const client = new CertenClient({ apiKey: 'ck_live_test', baseUrl, maxBackoffMs: 150 });
+    await client.billing.balance();
+    const t0 = Date.now();
+    await client.billing.balance();
+    const waited = Date.now() - t0;
+    expect(waited).toBeGreaterThanOrEqual(100);
+    expect(waited).toBeLessThan(3_000);
+  });
+
+  it('carries the gateway validation detail on error.details', async () => {
+    // It used to live only on `body`, so anything rendering `error.details` showed nothing for the
+    // one error class where per-field structure is most useful.
+    const baseUrl = await serve((_req, res) => jsonR(res, 400, {
+      error: 'id must be a UUID',
+      code: 'VALIDATION_ERROR',
+      details: [{ instancePath: '/id', keyword: 'pattern' }],
+    }));
+    await expect(
+      new CertenClient({ apiKey: 'ck_live_test', baseUrl, maxRetries: 0 }).billing.balance(),
+    ).rejects.toMatchObject({
+      message: 'id must be a UUID',
+      details: { validation: [{ instancePath: '/id', keyword: 'pattern' }] },
+    });
+  });
+});

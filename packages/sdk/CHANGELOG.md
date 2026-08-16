@@ -4,6 +4,35 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Fixed — the client-side rate-limit throttle, which had never worked and could hang a caller
+
+Two bugs in the same few lines, found while making retries honour `Retry-After`.
+
+`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp — the gateway sends `56` for a
+60-second window. The SDK computed `Number(reset) * 1000`, producing an instant in 1970, so the
+guard that waits for the window never fired. The throttle has never run.
+
+Correcting the arithmetic alone would have been far worse than the bug: `reset` comes back on EVERY
+response, so a corrected-but-unconditional version would sleep the full remaining window before
+every request — turning a 60/min limit into roughly one request a minute. It now engages only once
+`x-ratelimit-remaining` reaches zero.
+
+Separately, that wait had no ceiling. A 429 carrying `Retry-After: 3600` parked the next request for
+an hour inside the HTTP client, ignoring both `maxBackoffMs` and the per-request timeout, with no
+way out. It is now capped at `maxBackoffMs`.
+
+### Changed — retries honour `Retry-After`
+
+Exponential backoff is a guess made without information; `Retry-After` is the gateway stating when
+the window reopens. Retrying earlier cannot succeed, and each early attempt still counts against the
+limit. The header wins when present, capped at `maxBackoffMs` and jittered.
+
+### Changed — `error.details` carries the gateway's per-field validation entries
+
+They arrived only on `body` before, which is not where anyone looks, so a tool rendering
+`error.details` showed nothing for the one error class where per-field structure is most useful.
+`retryAfter` keeps its place alongside.
+
 ### Added — `client.me()`
 
 Who this credential is and what it may do, in one call: the organization (with its name), the
