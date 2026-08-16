@@ -986,3 +986,109 @@ describe('paging stops at the right place', () => {
     }
   });
 });
+
+describe('webhooks — the push mechanism that had no client surface', () => {
+  const ENDPOINT = {
+    id: 'wh_1', url: 'https://example.com/hooks', event_types: ['proof.completed'],
+    description: 'prod', is_active: true, verified: true, verification_error: null,
+    created_at: '2026-08-16T00:00:00.000Z',
+  };
+
+  it('registers an endpoint and hands back the once-only secret', async () => {
+    const s = await startServer((req, res) =>
+      json(res, 201, { ...ENDPOINT, secret: 'sh_abc', warning: 'shown once' }));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .webhooks.register({ url: ENDPOINT.url, eventTypes: ['proof.completed'] });
+      expect(s.recorded[0]).toMatchObject({ method: 'POST', path: '/v1/webhooks/endpoints' });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        url: ENDPOINT.url, event_types: ['proof.completed'],
+      });
+      expect(out.secret).toBe('sh_abc');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('does not send optional fields it was not given', async () => {
+    // Sending `description: undefined` or an empty event list would read as "no events" rather
+    // than "everything", which is the difference between a working endpoint and a silent one.
+    const s = await startServer((req, res) => json(res, 201, ENDPOINT));
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .webhooks.register({ url: ENDPOINT.url });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({ url: ENDPOINT.url });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('reads deliveries — the half that makes a failure visible', async () => {
+    const s = await startServer((req, res) => json(res, 200, {
+      deliveries: [{
+        id: 'd1', event_type: 'proof.completed', status: 'failed',
+        attempts: 3, response_status: 500, error: 'upstream 500',
+      }],
+      pagination: { limit: 50, offset: 0, has_more: false, returned: 1 },
+    }));
+    try {
+      const out = await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .webhooks.deliveries();
+      expect(s.recorded[0].path).toBe('/v1/webhooks/deliveries?limit=50&offset=0');
+      // Without the error and the status, a failed delivery is indistinguishable from an event
+      // that never fired.
+      expect(out.deliveries[0]).toMatchObject({ status: 'failed', error: 'upstream 500' });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('walks every delivery on has_more', async () => {
+    const s = await startServer((req, res, n) => {
+      if (n === 1) {
+        return json(res, 200, {
+          deliveries: [{ id: 'a' }, { id: 'b' }],
+          pagination: { limit: 2, offset: 0, has_more: true, returned: 2 },
+        });
+      }
+      return json(res, 200, {
+        deliveries: [{ id: 'c' }],
+        pagination: { limit: 2, offset: 2, has_more: false, returned: 1 },
+      });
+    });
+    try {
+      const seen: string[] = [];
+      for await (const d of new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
+        .webhooks.deliveriesAll(2)) seen.push(d.id);
+      expect(seen).toEqual(['a', 'b', 'c']);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('redelivers, which is deliberately not idempotent', async () => {
+    const s = await startServer((req, res) => json(res, 202, { queued: true }));
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url }).webhooks.redeliver('d1');
+      expect(s.recorded[0]).toMatchObject({
+        method: 'POST', path: '/v1/webhooks/deliveries/d1/redeliver',
+      });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('reaches /v1/webhooks, not the admin namespace it used to live in', async () => {
+    // The path move is the point: the data was always org-scoped, so `/v1/admin/` overstated it —
+    // and the MCP server forbids read tools from touching an admin path, which is how the
+    // mislabelling surfaced.
+    const s = await startServer((req, res) => json(res, 200, { endpoints: [ENDPOINT] }));
+    try {
+      await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url }).webhooks.list();
+      expect(s.recorded[0].path).toBe('/v1/webhooks/endpoints');
+      expect(s.recorded[0].path).not.toContain('/admin/');
+    } finally {
+      await s.close();
+    }
+  });
+});

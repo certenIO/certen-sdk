@@ -4,6 +4,22 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `client.webhooks`
+
+CERTEN has pushed events all along, with a delivery queue, a retry policy and a published
+signature-verification guide. None of it had a client surface, so an endpoint could be registered
+nowhere and a failed delivery could be neither seen nor retried — the worst shape for a push
+mechanism, because a dropped delivery and an event that never fired look identical from outside.
+
+`list`, `register`, `update`, `remove`, `rotateSecret`, `verify`, `deliveries`, `deliveriesAll`,
+`delivery`, `redeliver`.
+
+**The operations moved from `/v1/admin/webhooks/*` to `/v1/webhooks/*`**, and from `admin:write` to
+the new `webhook:read` / `webhook:write`. The data was always org-scoped — every endpoint belongs to
+the calling organization — so both the path and the scope overstated what this is: reaching your own
+webhooks required a scope that also grants revoking every API key in the organization, attributing
+payments and publishing price books. Existing `admin:*` keys still work.
+
 ### Fixed — `isRetryable` was wrong for two codes, in both directions
 
 HTTP status alone decides retryability correctly almost everywhere, and gets exactly two cases

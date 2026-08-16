@@ -3,6 +3,18 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen webhooks`
+
+`list`, `add`, `remove`, `verify`, `rotate-secret`, `deliveries`, `redeliver`.
+
+`certen webhooks deliveries` is the command that earns the group: it shows the status, HTTP code and
+error for each attempt, and prints the exact `redeliver` command for anything that failed. Without
+it a dropped delivery was indistinguishable from an event that never fired. `--failed` narrows to
+just the ones that did not arrive.
+
+Registering prints the signing secret with a plain warning that it is shown once — the only
+recovery is rotating, which invalidates whatever the previous secret was already signing.
+
 ### Changed — `certen receipts get <id>` replaces `certen receipt <id>`
 
 Two top-level commands differing by one character, sitting adjacent in help. Now one group, matching

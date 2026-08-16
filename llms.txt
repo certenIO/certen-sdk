@@ -96,7 +96,7 @@ certen doctor                   # names the one thing blocking you
 
 ## Methods
 
-62 methods across 14 resources. Signatures and field-level detail: `llms-full.txt`.
+71 methods across 15 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.scopes()` — Every permission a key can be granted, and what each one covers.
@@ -188,6 +188,17 @@ certen doctor                   # names the one thing blocking you
   - `certen.transparency.priceBooks()` — Every published price book, with its hash and the window it was in force.
   - `certen.transparency.fx()` — A signed FX observation.
 
-The gateway exposes 118 operations; the SDK wraps 57 of them. Anything not listed
+**certen.webhooks**
+  - `certen.webhooks.list()` — Endpoints registered for this organization.
+  - `certen.webhooks.register()` — Register an endpoint.
+  - `certen.webhooks.update()` — Change an endpoint's URL, events, description, or active state.
+  - `certen.webhooks.remove()` — Stop delivering to an endpoint.
+  - `certen.webhooks.rotateSecret()` — Issue a new signing secret.
+  - `certen.webhooks.verify()` — Re-run the verification ping against an endpoint.
+  - `certen.webhooks.deliveries()` — Delivery attempts, newest first.
+  - `certen.webhooks.delivery()` — One delivery, including the response body the endpoint returned.
+  - `certen.webhooks.redeliver()` — Send a delivery again.
+
+The gateway exposes 119 operations; the SDK wraps 66 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

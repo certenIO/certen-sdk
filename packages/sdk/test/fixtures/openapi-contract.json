@@ -487,7 +487,7 @@
         }
       }
     },
-    "/v1/admin/webhooks/deliveries": {
+    "/v1/webhooks/deliveries": {
       "get": {
         "required": [],
         "properties": [],
@@ -515,7 +515,7 @@
         }
       }
     },
-    "/v1/admin/webhooks/deliveries/{id}": {
+    "/v1/webhooks/deliveries/{id}": {
       "get": {
         "required": [],
         "properties": [],
@@ -542,7 +542,7 @@
         "responseShapes": {}
       }
     },
-    "/v1/admin/webhooks/deliveries/{id}/redeliver": {
+    "/v1/webhooks/deliveries/{id}/redeliver": {
       "post": {
         "required": [],
         "properties": [],
@@ -557,7 +557,7 @@
         "responseShapes": {}
       }
     },
-    "/v1/admin/webhooks/endpoints": {
+    "/v1/webhooks/endpoints": {
       "post": {
         "required": [
           "url"
@@ -620,7 +620,7 @@
         }
       }
     },
-    "/v1/admin/webhooks/endpoints/{id}/verify": {
+    "/v1/webhooks/endpoints/{id}/verify": {
       "post": {
         "required": [],
         "properties": [],
@@ -635,7 +635,7 @@
         "responseShapes": {}
       }
     },
-    "/v1/admin/webhooks/endpoints/{id}": {
+    "/v1/webhooks/endpoints/{id}": {
       "patch": {
         "required": [],
         "properties": [
@@ -676,7 +676,7 @@
         "responseShapes": {}
       }
     },
-    "/v1/admin/webhooks/endpoints/{id}/rotate-secret": {
+    "/v1/webhooks/endpoints/{id}/rotate-secret": {
       "post": {
         "required": [],
         "properties": [
@@ -1057,6 +1057,31 @@
               "description",
               "audience",
               "operations"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/errors": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {
+          "200": [
+            "errors"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "errors": [
+              "code",
+              "status",
+              "meaning",
+              "retryable",
+              "audience",
+              "action"
             ]
           }
         }

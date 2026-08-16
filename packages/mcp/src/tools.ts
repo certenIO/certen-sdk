@@ -310,6 +310,38 @@ const READ_TOOLS: ToolDef[] = [
     run: (c, a) => c.proof.shared(s(a, 'link')),
   },
   {
+    name: 'certen_webhook_endpoints',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/webhooks/endpoints',
+    description:
+      'Webhook endpoints registered for this organization. `verified` and `is_active` are the two '
+      + 'fields that decide whether anything actually arrives — an inactive or unverified endpoint '
+      + 'explains "the event never fired" far more often than a missing event does.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.webhooks.list(),
+  },
+  {
+    name: 'certen_webhook_deliveries',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/webhooks/deliveries',
+    description:
+      'Delivery attempts, newest first, with the status and error for each. Reach for this FIRST '
+      + 'when someone reports a missing event: a failed delivery and an event that never happened '
+      + 'look identical from outside, and only this tells them apart. A failed one can be sent '
+      + 'again with certen_webhook_redeliver.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: num('How many. Default 50.'),
+        offset: num('Skip this many, for paging.'),
+      },
+      additionalProperties: false,
+    },
+    run: (c, a) => c.webhooks.deliveries({ limit: optN(a, 'limit'), offset: optN(a, 'offset') }),
+  },
+  {
     name: 'certen_scopes',
     tier: 'read',
     mutates: false,
@@ -643,6 +675,27 @@ const READ_TOOLS: ToolDef[] = [
 // ── write tier ──────────────────────────────────────────────────────────────────────────────────
 
 const WRITE_TOOLS: ToolDef[] = [
+  {
+    name: 'certen_webhook_redeliver',
+    tier: 'write',
+    mutates: true,
+    endpoint: 'POST /v1/webhooks/deliveries/{id}/redeliver',
+    description:
+      'Send a failed delivery again. Genuinely NOT idempotent — each call delivers again, which is '
+      + 'the entire point — so confirm the receiver can handle a repeat before using it. Check '
+      + 'certen_webhook_deliveries first: redelivering to an endpoint that is inactive or failing '
+      + 'verification will fail the same way it did the first time.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        deliveryId: str('Delivery id, from certen_webhook_deliveries'),
+        confirm: CONFIRM,
+      },
+      required: ['deliveryId', 'confirm'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.webhooks.redeliver(s(a, 'deliveryId')),
+  },
   {
     name: 'certen_billing_register_payer',
     tier: 'write',

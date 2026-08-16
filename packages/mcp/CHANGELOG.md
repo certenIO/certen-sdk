@@ -4,6 +4,15 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_webhook_endpoints`, `certen_webhook_deliveries`, `certen_webhook_redeliver`
+
+An agent asked "why did the event not arrive" had nothing to look at. `certen_webhook_deliveries` is
+the tool to reach for first — a failed delivery and an event that never fired are indistinguishable
+without it.
+
+Redelivering is write-tier and requires `confirm:true`: it is one of the few genuinely
+non-idempotent operations on the API, because delivering again is the entire point.
+
 ### Added — `certen_proof_open_shared`
 
 Reads a proof from a share link, with no API key. Its description tells the agent that a 410 means

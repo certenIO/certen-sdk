@@ -287,7 +287,7 @@ describe('paged and filtered routes declare their query parameters', () => {
     '/v1/portfolio': ['identity'],
     '/v1/admin/usage': ['from', 'to'],
     '/v1/admin/audit-log': ['resource_type', 'action', 'from', 'to', 'limit', 'offset'],
-    '/v1/admin/webhooks/deliveries': ['status', 'limit', 'offset'],
+    '/v1/webhooks/deliveries': ['status', 'limit', 'offset'],
   };
 
   it.each(Object.entries(expected))('%s declares %s', (path, params) => {

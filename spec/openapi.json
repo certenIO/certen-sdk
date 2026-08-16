@@ -1454,6 +1454,7 @@
         "x-retry-safety": "idempotent-with-key",
         "x-retry-note": "Creates an organization.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -2412,12 +2413,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/deliveries": {
+    "/v1/webhooks/deliveries": {
       "get": {
         "summary": "List webhook deliveries",
-        "tags": [
-          "Admin"
-        ],
         "description": "Lists webhook delivery records for the caller's org (the delivery dead-letter queue view), optionally filtered by status. Results are paginated (limit clamps to 500, default 50) and include a total count. Requires the admin:read or admin:write scope.",
         "parameters": [
           {
@@ -2537,12 +2535,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/deliveries/{id}": {
+    "/v1/webhooks/deliveries/{id}": {
       "get": {
         "summary": "Get webhook delivery",
-        "tags": [
-          "Admin"
-        ],
         "description": "Returns a single webhook delivery, including the exact signed_canonical_payload bytes the gateway HMAC'd plus the signature metadata so a customer-side verifier can reproduce the signature. Scoped to the caller's org. Requires the admin:read or admin:write scope.",
         "parameters": [
           {
@@ -2561,6 +2556,8 @@
           }
         ],
         "x-required-scopes": [
+          "webhook:read",
+          "webhook:write",
           "admin:read",
           "admin:write"
         ],
@@ -2685,12 +2682,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/deliveries/{id}/redeliver": {
+    "/v1/webhooks/deliveries/{id}/redeliver": {
       "post": {
         "summary": "Redeliver webhook",
-        "tags": [
-          "Admin"
-        ],
         "description": "Requeues a webhook delivery and fires it immediately; if the attempt fails the retry poller resumes it. Scoped to the caller's org. Requires the admin:write scope.",
         "parameters": [
           {
@@ -2711,6 +2705,7 @@
         "x-retry-safety": "unsafe",
         "x-retry-note": "Unsafe BY DESIGN — delivering again is the entire purpose. Listed so it is a decision rather than an omission.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -2774,12 +2769,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/endpoints": {
+    "/v1/webhooks/endpoints": {
       "post": {
         "summary": "Register webhook endpoint",
-        "tags": [
-          "Admin"
-        ],
         "description": "Registers a webhook endpoint for the caller's org (multiple endpoints per org are supported). Unless skip_verification is true, a verification ping carrying a challenge token is sent and the endpoint is marked verified on a 2xx response. A secret is generated when omitted, and the secret is returned ONCE and cannot be retrieved again. Requires the admin:write scope.",
         "requestBody": {
           "content": {
@@ -2827,6 +2819,7 @@
         "x-retry-safety": "unsafe",
         "x-retry-note": "Each call registers another endpoint, so the same event fires twice.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -2927,9 +2920,6 @@
       },
       "get": {
         "summary": "List webhook endpoints",
-        "tags": [
-          "Admin"
-        ],
         "description": "Lists the webhook endpoints registered for the caller's org. Secrets are never returned — only metadata and health fields (verification and failure counts). Requires the admin:read or admin:write scope.",
         "security": [
           {
@@ -2937,6 +2927,8 @@
           }
         ],
         "x-required-scopes": [
+          "webhook:read",
+          "webhook:write",
           "admin:read",
           "admin:write"
         ],
@@ -3034,12 +3026,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/endpoints/{id}/verify": {
+    "/v1/webhooks/endpoints/{id}/verify": {
       "post": {
         "summary": "Re-verify webhook endpoint",
-        "tags": [
-          "Admin"
-        ],
         "description": "Re-runs the verification ping against an existing webhook endpoint and marks it verified on a 2xx response. Returns 200 in both the success and failure cases with a verified flag and an error message. Scoped to the caller's org. Requires the admin:write scope.",
         "parameters": [
           {
@@ -3060,6 +3049,7 @@
         "x-retry-safety": "idempotent",
         "x-retry-note": "Sends a test ping; changes no stored state.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -3126,12 +3116,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/endpoints/{id}": {
+    "/v1/webhooks/endpoints/{id}": {
       "patch": {
         "summary": "Update webhook endpoint",
-        "tags": [
-          "Admin"
-        ],
         "description": "Updates an existing webhook endpoint's url, event_types, description, or is_active flag. Changing the url re-validates it against outbound rules and invalidates the prior verification (verified_at is cleared). Scoped to the caller's org. Requires the admin:write scope.",
         "requestBody": {
           "content": {
@@ -3185,6 +3172,7 @@
         "x-retry-safety": "idempotent",
         "x-retry-note": "Sets fields to the values given.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -3288,9 +3276,6 @@
       },
       "delete": {
         "summary": "Delete webhook endpoint",
-        "tags": [
-          "Admin"
-        ],
         "description": "Deactivates (deletes) a webhook endpoint in the caller's org so it stops receiving deliveries. Returns 204 with no body on success. Requires the admin:write scope.",
         "parameters": [
           {
@@ -3311,6 +3296,7 @@
         "x-retry-safety": "idempotent",
         "x-retry-note": "Deletion is a state.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -3357,12 +3343,9 @@
         }
       }
     },
-    "/v1/admin/webhooks/endpoints/{id}/rotate-secret": {
+    "/v1/webhooks/endpoints/{id}/rotate-secret": {
       "post": {
         "summary": "Rotate webhook secret",
-        "tags": [
-          "Admin"
-        ],
         "description": "Rotates the signing secret for a webhook endpoint. A new secret is generated when one is not supplied, and the new secret is returned ONCE and cannot be retrieved again. Scoped to the caller's org. Requires the admin:write scope.",
         "requestBody": {
           "content": {
@@ -3400,6 +3383,7 @@
         "x-retry-safety": "unsafe",
         "x-retry-note": "A retry invalidates the signing secret just issued.",
         "x-required-scopes": [
+          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",

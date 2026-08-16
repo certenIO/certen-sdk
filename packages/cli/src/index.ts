@@ -34,6 +34,7 @@ import { registerProofCommands } from './commands/proof.js';
 import { registerCallCommands } from './commands/call.js';
 import { registerInitCommands } from './commands/init.js';
 import { registerSignupCommands } from './commands/signup.js';
+import { registerWebhookCommands } from './commands/webhooks.js';
 import { formatRootHelp } from './help-root.js';
 
 const VERSION = readVersion();
@@ -67,6 +68,7 @@ export function buildProgram(): Command {
   registerPortfolioCommands(program);
   registerBillingCommands(program);
   registerAdminCommands(program);
+  registerWebhookCommands(program);
 
   // Every command, not just the root. `exitOverride()` is NOT inherited by subcommands, so without
   // this walk a missing required flag on `identity create` called process.exit(1) inside commander:

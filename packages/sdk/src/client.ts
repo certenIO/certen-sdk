@@ -13,6 +13,7 @@ import { ExecuteResource } from './resources/execute.js';
 import { ChainsResource } from './resources/chains.js';
 import { TransparencyResource } from './resources/transparency.js';
 import { HealthResource } from './resources/health.js';
+import { WebhooksResource } from './resources/webhooks.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
@@ -113,6 +114,11 @@ export class CertenClient {
    * a caller whose credential is rejected can still learn whether the platform is the problem.
    */
   public health: HealthResource;
+  /**
+   * Webhook endpoints and their delivery history. The gateway has pushed events all along; nothing
+   * on this side could register an endpoint or see why a delivery failed.
+   */
+  public webhooks: WebhooksResource;
   /** Reading and sharing proofs. See resources/proof.ts. */
   public proof: ProofResource;
   /** Device authorization, so a terminal can obtain its own key. Needs no API key. */
@@ -319,6 +325,7 @@ export class CertenClient {
     this.chains = new ChainsResource(this.http);
     this.transparency = new TransparencyResource(this.http);
     this.health = new HealthResource(this.http);
+    this.webhooks = new WebhooksResource(this.http);
     this.proof = new ProofResource(this.http);
     this.device = new DeviceResource(this.http);
   }

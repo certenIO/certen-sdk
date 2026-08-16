@@ -719,6 +719,39 @@ export interface MeResponse {
   orgs: Array<{ org_id: string; name: string | null; role: string }>;
 }
 
+/** A registered webhook endpoint. The signing secret is returned only when it is created or rotated. */
+export interface WebhookEndpoint {
+  id: string;
+  url: string;
+  /** Events this endpoint receives. Empty or absent means everything. */
+  event_types: string[];
+  description: string | null;
+  is_active: boolean;
+  /** Whether the verification ping succeeded. An unverified endpoint may still be delivered to. */
+  verified: boolean;
+  verification_error: string | null;
+  created_at: string;
+  [k: string]: unknown;
+}
+
+/**
+ * One delivery attempt.
+ *
+ * The field worth reading is whichever explains a failure — status code, error, attempt count.
+ * Without this a failed delivery is indistinguishable from an event that never fired.
+ */
+export interface WebhookDelivery {
+  id: string;
+  event_type?: string;
+  status?: string;
+  attempts?: number;
+  response_status?: number | null;
+  error?: string | null;
+  created_at?: string;
+  delivered_at?: string | null;
+  [k: string]: unknown;
+}
+
 /**
  * Where a page sits in a list.
  *
