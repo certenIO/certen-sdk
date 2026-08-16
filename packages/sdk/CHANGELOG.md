@@ -4,6 +4,22 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `fetchOAuthToken`, `refreshOAuthToken`, `revokeOAuthToken`
+
+The whole OAuth2 token lifecycle was unreachable. A service using client credentials could obtain a
+token only by hand-rolling HTTP, and could not give one back at all — so the response to a suspected
+leak was to open a browser.
+
+Standalone functions rather than client methods, for the same reason as `fetchSharedProof`: both
+endpoints carry their credential in the BODY and need no API key. A service using OAuth holds a
+client id and secret, so routing these through a constructor demanding `apiKey` would ask for the
+one credential such a caller does not have.
+
+Two behaviours worth knowing, both documented on the functions. A refresh token is single-use, and
+replaying a spent one revokes its entire descendant chain — deliberate theft detection, so store the
+new pair before doing anything else. And revocation deliberately never reveals whether a token
+existed: success means "not valid now", not "was valid before".
+
 ### Added — `client.webhooks`
 
 CERTEN has pushed events all along, with a delivery queue, a retry policy and a published

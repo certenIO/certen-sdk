@@ -3,6 +3,24 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen auth revoke-token`
+
+Revoke a leaked OAuth2 token from the terminal. **Works with no API key configured** — the gateway
+authenticates the request with the token itself, and requiring the credential you are trying to
+contain would be backwards.
+
+Reads from stdin or a prompt when no argument is given, so a live token does not land in shell
+history or a process listing. `--refresh` marks it as a refresh token, whose revocation also kills
+every access token descended from it.
+
+### Fixed — the CLI test suite no longer flakes
+
+Every test in that package spawns the CLI as a real subprocess, against vitest's 5s default — a
+budget sized for in-process tests. The slowest case measured **4353ms**, about 13% headroom, so
+ordinary scheduling load tipped a passing test over; `doctor.test.ts` failed in a full run and
+passed alone. Raised to 20s, roughly 4.5x the measured worst case: a genuine slowdown still fails
+rather than hanging, but noise no longer reads as a broken test.
+
 ### Added — `certen webhooks`
 
 `list`, `add`, `remove`, `verify`, `rotate-secret`, `deliveries`, `redeliver`.

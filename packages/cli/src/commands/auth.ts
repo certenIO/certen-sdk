@@ -1,9 +1,9 @@
 import { Command } from 'commander';
-import { CertenClient, CertenError } from '@certen.io/sdk';
+import { CertenClient, CertenError, revokeOAuthToken } from '@certen.io/sdk';
 import {
-  readConfig, writeConfig, setApiKey, clearApiKey, DEFAULT_API_URL, getPortalUrl,
+  readConfig, writeConfig, setApiKey, clearApiKey, DEFAULT_API_URL, getPortalUrl, getApiUrl,
 } from '../config.js';
-import { printOutput, human, hint } from '../output.js';
+import { printOutput, human, hint, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { isInteractive, promptSecret, readSecretFromStdin } from '../passphrase.js';
 
@@ -157,6 +157,45 @@ export function registerAuthCommands(program: Command): void {
       }
       hint('');
       hint('Next: certen keys generate --name dev');
+    });
+
+  auth
+    .command('revoke-token [token]')
+    .description('Revoke an OAuth2 access or refresh token (no API key needed)')
+    .option('--refresh', 'The token is a refresh token — revoking it kills its whole chain')
+    .action(async (token: string | undefined, opts: { refresh?: boolean }) => {
+      // Reachable without a configured API key on purpose. This is the command someone runs when a
+      // token has leaked, and requiring the credential they are trying to contain would be exactly
+      // backwards. The gateway authenticates the request with the token itself.
+      let value = token;
+      if (!value) {
+        // Read from stdin or a prompt rather than argv: a token pasted as an argument lands in
+        // shell history and process listings, which is a poor place for a live credential.
+        value = isInteractive()
+          ? await promptSecret('Token to revoke: ')
+          : await readSecretFromStdin();
+      }
+      if (!value) {
+        throw new UsageError('No token given. Pass it as an argument, or pipe it on stdin.', 'MISSING_TOKEN');
+      }
+
+      await revokeOAuthToken(value.trim(), {
+        baseUrl: getApiUrl(),
+        tokenTypeHint: opts.refresh ? 'refresh_token' : 'access_token',
+      });
+
+      printOutput({ revoked: true });
+      if (!isJsonMode()) {
+        human('');
+        human('  That token is no longer valid.');
+        // Said explicitly because RFC 7009 makes success ambiguous by design, and someone
+        // containing an incident deserves to know what they have and have not learned.
+        human('  Revocation never reveals whether a token existed, so this succeeds either way —');
+        human('  it confirms the token is not valid now, not that it was valid before.');
+        if (opts.refresh) {
+          human('  Its descendant access tokens were revoked with it.');
+        }
+      }
     });
 
   auth

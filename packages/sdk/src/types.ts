@@ -719,6 +719,26 @@ export interface MeResponse {
   orgs: Array<{ org_id: string; name: string | null; role: string }>;
 }
 
+/**
+ * An OAuth2 token pair.
+ *
+ * `refresh_token` is single-use: exchanging it yields a new pair and spends the old one. Replaying a
+ * spent refresh token revokes the entire descendant chain — deliberate theft detection, so store
+ * the new pair before doing anything else with it.
+ */
+export interface OAuthTokens {
+  access_token: string;
+  token_type: string;
+  /** Seconds. Currently 3600. */
+  expires_in: number;
+  refresh_token?: string;
+  /** Seconds. Currently 30 days. */
+  refresh_expires_in?: number;
+  /** Space-delimited granted scopes. */
+  scope?: string;
+  [k: string]: unknown;
+}
+
 /** A registered webhook endpoint. The signing secret is returned only when it is created or rotated. */
 export interface WebhookEndpoint {
   id: string;

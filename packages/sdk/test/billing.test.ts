@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import http from 'http';
 import { AddressInfo } from 'net';
-import { CertenClient, fetchSharedProof, parseShareTarget } from '../src/index.js';
+import {
+  CertenClient, fetchSharedProof, parseShareTarget,
+  fetchOAuthToken, refreshOAuthToken, revokeOAuthToken,
+} from '../src/index.js';
 import * as nodeCrypto from 'node:crypto';
 import { canonicalJson, foldAuditPath } from '../src/verify-receipt.js';
 
@@ -1087,6 +1090,105 @@ describe('webhooks — the push mechanism that had no client surface', () => {
       await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url }).webhooks.list();
       expect(s.recorded[0].path).toBe('/v1/webhooks/endpoints');
       expect(s.recorded[0].path).not.toContain('/admin/');
+    } finally {
+      await s.close();
+    }
+  });
+});
+
+describe('the OAuth token lifecycle, which had no client surface at all', () => {
+  it('exchanges client credentials without needing an API key', async () => {
+    // The point of these being standalone: a service using OAuth holds a client id and secret, not
+    // an API key. Routing them through CertenClient would demand the one credential such a caller
+    // does not have.
+    const s = await startServer((req, res) => json(res, 200, {
+      access_token: 'at_1', token_type: 'Bearer', expires_in: 3600,
+      refresh_token: 'rt_1', refresh_expires_in: 2592000, scope: 'billing:read',
+    }));
+    try {
+      const out = await fetchOAuthToken(
+        { clientId: 'cid', clientSecret: 'csec', scope: 'billing:read' },
+        { baseUrl: s.url },
+      );
+      expect(s.recorded[0]).toMatchObject({ method: 'POST', path: '/v1/oauth/token' });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        grant_type: 'client_credentials', client_id: 'cid', client_secret: 'csec',
+        scope: 'billing:read',
+      });
+      expect(out.access_token).toBe('at_1');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('refreshes with the refresh grant', async () => {
+    const s = await startServer((req, res) => json(res, 200, {
+      access_token: 'at_2', token_type: 'Bearer', expires_in: 3600, refresh_token: 'rt_2',
+    }));
+    try {
+      const out = await refreshOAuthToken('rt_1', { baseUrl: s.url });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        grant_type: 'refresh_token', refresh_token: 'rt_1',
+      });
+      // The new pair must reach the caller — the old refresh token is spent, and losing the
+      // replacement means replaying the spent one, which revokes the whole chain.
+      expect(out.refresh_token).toBe('rt_2');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('revokes a token, and can say it is a refresh token', async () => {
+    const s = await startServer((req, res) => json(res, 200, {}));
+    try {
+      await revokeOAuthToken('rt_1', { baseUrl: s.url, tokenTypeHint: 'refresh_token' });
+      expect(s.recorded[0]).toMatchObject({ method: 'POST', path: '/v1/oauth/revoke' });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        token: 'rt_1', token_type_hint: 'refresh_token',
+      });
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('resolves for a token that never existed, without revealing that', async () => {
+    // RFC 7009: an endpoint that distinguished "was valid" from "never existed" would be an oracle
+    // for guessing tokens. Success here means "not valid now", not "was valid before".
+    const s = await startServer((req, res) => json(res, 200, {}));
+    try {
+      await expect(revokeOAuthToken('never-existed', { baseUrl: s.url })).resolves.toBeUndefined();
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('reports an OAuth error using its own field names', async () => {
+    // OAuth uses `error` / `error_description` (RFC 6749), not this API's `error` / `code`, so a
+    // naive reader would surface an empty message on the one call where the reason matters.
+    const s = await startServer((req, res) => json(res, 401, {
+      error: 'invalid_client', error_description: 'client authentication failed',
+    }));
+    try {
+      await expect(
+        fetchOAuthToken({ clientId: 'bad', clientSecret: 'bad' }, { baseUrl: s.url }),
+      ).rejects.toMatchObject({ status: 401, code: 'invalid_client' });
+      await expect(
+        fetchOAuthToken({ clientId: 'bad', clientSecret: 'bad' }, { baseUrl: s.url }),
+      ).rejects.toThrow(/client authentication failed/);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('omits scope and hint when not given', async () => {
+    const s = await startServer((req, res) => json(res, 200, {
+      access_token: 'a', token_type: 'Bearer', expires_in: 3600,
+    }));
+    try {
+      await fetchOAuthToken({ clientId: 'c', clientSecret: 's' }, { baseUrl: s.url });
+      expect(JSON.parse(s.recorded[0].body)).toEqual({
+        grant_type: 'client_credentials', client_id: 'c', client_secret: 's',
+      });
     } finally {
       await s.close();
     }
