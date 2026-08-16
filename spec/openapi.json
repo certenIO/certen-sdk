@@ -349,11 +349,23 @@
           },
           "required": true
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
         "security": [
           {
             "apiKey": []
           }
         ],
+        "x-idempotent": true,
         "x-required-scopes": [
           "identity:write"
         ],
@@ -1416,11 +1428,23 @@
           },
           "required": true
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
         "security": [
           {
             "apiKey": []
           }
         ],
+        "x-idempotent": true,
         "x-required-scopes": [
           "admin:write"
         ],
@@ -1664,11 +1688,23 @@
           },
           "required": true
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
         "security": [
           {
             "apiKey": []
           }
         ],
+        "x-idempotent": true,
         "responses": {
           "201": {
             "description": "API key created; raw key returned once.",
@@ -3754,11 +3790,23 @@
           },
           "required": true
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
         "security": [
           {
             "apiKey": []
           }
         ],
+        "x-idempotent": true,
         "x-required-scopes": [
           "transaction:write"
         ],
@@ -5338,6 +5386,60 @@
         }
       }
     },
+    "/v1/errors": {
+      "get": {
+        "summary": "Every error code this API can return",
+        "description": "The full error vocabulary: what each code means, whether retrying an identical request can ever succeed, and whether it is something the caller can act on at all. Published because the codes were previously discoverable only by provoking them. `retryable` answers \"will repeating this exact request eventually work?\" — not \"whose fault is it\": a 503 from an unavailable rate oracle is retryable, a 402 is not, because retrying without paying changes nothing. Public: a client should be able to build its error handling before it holds a credential.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "code": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "integer"
+                          },
+                          "meaning": {
+                            "type": "string"
+                          },
+                          "retryable": {
+                            "type": "boolean"
+                          },
+                          "audience": {
+                            "type": "string",
+                            "enum": [
+                              "caller",
+                              "platform"
+                            ],
+                            "description": "`platform` means nothing the caller can change."
+                          },
+                          "action": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/governance": {
       "post": {
         "summary": "Submit a governance operation",
@@ -5388,11 +5490,23 @@
           },
           "required": true
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
         "security": [
           {
             "apiKey": []
           }
         ],
+        "x-idempotent": true,
         "x-required-scopes": [
           "governance:write"
         ],
@@ -6138,11 +6252,23 @@
           },
           "required": true
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
         "security": [
           {
             "apiKey": []
           }
         ],
+        "x-idempotent": true,
         "x-required-scopes": [
           "sign:write"
         ],
