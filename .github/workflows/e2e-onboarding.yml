@@ -1,0 +1,80 @@
+name: Onboarding end-to-end
+
+# The journey every customer walks — sign up from nothing, create an identity, check it can pay,
+# execute a proof-gated call, verify the proof. It is the only journey with no automated coverage,
+# because until self-service signup landed its first step required a human in a browser.
+#
+# Nightly rather than per-push, deliberately. A full run creates a real organization and spends real
+# testnet funds, so per-push would leave a trail of scratch orgs and a running cost for a signal that
+# changes rarely. Nightly bounds both and still catches a break within a day. `workflow_dispatch` is
+# there so it can be run on demand the moment something is deployed.
+#
+# NOTHING is handed to this workflow as a credential. It signs up with a keypair generated inside the
+# run and thrown away — which is the entire reason that path exists. The only input is the URL of the
+# gateway to point at.
+
+on:
+  schedule:
+    # 04:20 UTC. Offset from the CI cron at 03:30 so the two do not contend for runners.
+    - cron: '20 4 * * *'
+  workflow_dispatch:
+    inputs:
+      gateway_url:
+        description: 'Gateway to run against'
+        required: false
+        default: 'https://gateway.kompendium.co'
+      contract:
+        description: 'Contract address for the proof-gated call. Omit to skip that step.'
+        required: false
+        default: ''
+
+jobs:
+  onboarding:
+    name: Sign up from nothing and prove some work
+    runs-on: ubuntu-latest
+    # Generous: the run waits on real identity provisioning, which is a chain of Accumulate
+    # transactions each waiting for the previous to anchor. Bounded so a hung downstream cannot hold
+    # a runner all night.
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The e2e drives the built CLI, not the sources — so this exercises what a customer installs.
+      - name: Build
+        run: npm run build
+
+      # Fails the job before the e2e runs if the deployment cannot serve this build. Without it a
+      # 404 on a moved path would surface as a mysterious step failure rather than as version skew,
+      # which is the exact confusion `ENDPOINT_NOT_ON_GATEWAY` exists to remove.
+      - name: Does the deployment serve this build?
+        env:
+          CERTEN_API_URL: ${{ github.event.inputs.gateway_url || 'https://gateway.kompendium.co' }}
+        run: npm run check:gateway
+
+      - name: Onboard from nothing
+        env:
+          CERTEN_API_URL: ${{ github.event.inputs.gateway_url || 'https://gateway.kompendium.co' }}
+        run: |
+          node scripts/e2e-onboarding.mjs \
+            --url "$CERTEN_API_URL" \
+            ${{ github.event.inputs.contract && format('--contract {0}', github.event.inputs.contract) || '' }}
+
+      # Runs even when the e2e fails, because a regression in round trips is worth seeing next to the
+      # failure rather than only when everything is green.
+      - name: Measure the journey
+        if: always()
+        env:
+          CERTEN_API_URL: ${{ github.event.inputs.gateway_url || 'https://gateway.kompendium.co' }}
+        run: |
+          echo "Read-path measurement is skipped here: it needs a long-lived API key, and this"
+          echo "workflow deliberately holds none. Run it by hand against staging:"
+          echo "  node scripts/measure-onboarding.mjs --url \$CERTEN_API_URL --key \$KEY --full"
