@@ -145,13 +145,24 @@ Reads from stdin or a prompt when no argument is given, so a live token does not
 history or a process listing. `--refresh` marks it as a refresh token, whose revocation also kills
 every access token descended from it.
 
-### Fixed — the CLI test suite no longer flakes
+### Fixed — the CLI test suite no longer flakes (properly, this time)
 
 Every test in that package spawns the CLI as a real subprocess, against vitest's 5s default — a
 budget sized for in-process tests. The slowest case measured **4353ms**, about 13% headroom, so
 ordinary scheduling load tipped a passing test over; `doctor.test.ts` failed in a full run and
-passed alone. Raised to 20s, roughly 4.5x the measured worst case: a genuine slowdown still fails
-rather than hanging, but noise no longer reads as a broken test.
+passed alone. Raised to 20s, roughly 4.5x the measured worst case.
+
+**That fix was inert for a whole phase.** It was written into
+`packages/cli/vitest.config.ts`, and a per-package config only applies when vitest is invoked with
+that package as its root — while `scripts/test-all.mjs` runs a single process from the repository
+root. Its own comment claimed "the root config already globs them"; no root config existed. So every
+run kept using 5s, and the suite flaked twice in one session, both times at exactly 5000ms.
+
+The timeout now lives in a root `vitest.config.ts`, which sets **only** the timeouts —
+declaring `include` there would change discovery, and a glob subtly narrower than the default drops
+test files with no failure anywhere. `packages/sdk/test/test-config.test.ts` asserts the root config
+exists, that its timeout is a real number rather than a present key, that discovery is left alone,
+and that all three packages are still found.
 
 ### Added — `certen webhooks`
 
