@@ -80,10 +80,21 @@ const DELIBERATELY_UNREACHABLE: Record<string, string> = {
   'GET /v1/entitlement/health': 'Validator-facing entitlement health.',
 
   // ── Health: covered by a narrower method ────────────────────────────────────────────────────
-  // `health.ready()` answers "can CERTEN serve", which is the question a client has. These two are
-  // the liveness probe and an operator-scoped component breakdown.
+  //
+  // `GET /v1/health/detail` was raised as "worth wiring — doctor could name the failing component
+  // when the key allows". CONSIDERED AND DECIDED AGAINST, recorded here so it is a decision rather
+  // than a finding that gets re-raised at every audit.
+  //
+  // It requires `health:read`, which is an OPERATOR scope. Wiring it would make `doctor` name the
+  // failing component for CERTEN staff and silently say nothing for every customer — a diagnostic
+  // whose depth depends on who is holding it is worse than one that behaves the same for everyone,
+  // because the person debugging cannot tell a healthy component from an invisible one.
+  //
+  // The question a client actually has is already answered: `health.ready()` returns `ready` plus
+  // `reasons`, which names what is down. Revisit only if `health:read` becomes grantable to
+  // customers, at which point the objection disappears.
   'GET /v1/health': 'Liveness probe. `health.ready()` answers the question a client actually has.',
-  'GET /v1/health/detail': 'Component-level detail behind the operator-only health:read scope.',
+  'GET /v1/health/detail': 'Operator-scoped component detail. Deliberately not wired — see above.',
 };
 
 describe('client coverage of the gateway surface', () => {

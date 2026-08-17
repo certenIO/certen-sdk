@@ -144,6 +144,20 @@ It runs nightly via `.github/workflows/e2e-onboarding.yml`, and on demand throug
 `workflow_dispatch`. **It cannot pass until the gateway is deployed** — `/v1/signup/challenge` is one
 of 22 operations this build calls that production does not yet serve.
 
+**Every number an audit quotes** comes from one command, because the last one drifted:
+
+```bash
+node scripts/audit-numbers.mjs            # operations, coverage, error codes
+node scripts/audit-numbers.mjs --tests    # also runs both suites and reads their totals
+```
+
+The consolidated friction audit stated 119 operations, 1225 gateway tests and 576 client tests; the
+real figures were 125, 1253 and 589. Nothing was wrong when it was written — prose cannot notice that
+the code moved, and a reader cannot tell a current number from a stale one. Paste this output and
+name the command beside it: a number without a command that reproduces it is a claim, not a
+measurement. It also warns when the vendored spec and the gateway's own spec disagree, which means
+one of them was never refreshed.
+
 **Coverage** was measured for a long time by a tool that matched paths as substrings, so a path in
 a code *comment* counted as implemented — `POST /v1/oauth/token` was reported covered while the SDK
 had no OAuth surface at all. Its replacement then missed every path behind a local helper function.
