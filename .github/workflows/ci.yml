@@ -93,8 +93,22 @@ jobs:
           tar -tzf "$TGZ" | grep -qx "package/bundled/llms.txt" || { echo "bundled/llms.txt missing"; exit 1; }
           tar -tzf "$TGZ" | grep -q  "package/bundled/docs/guides/" || { echo "guides missing"; exit 1; }
 
+          # Pack the SDK too, and install BOTH tarballs together.
+          #
+          # Installing the MCP tarball alone made npm resolve `@certen.io/sdk@^0.7.0` from the
+          # registry, and this repository bumps the SDK version before publishing it — so the check
+          # could only pass for a version that was already released. On the first CI run this
+          # repository ever had, it failed with `notarget No matching version found for
+          # @certen.io/sdk@^0.7.0`, under a step named "carries its documentation", while the
+          # documentation was bundled perfectly.
+          #
+          # Installing both makes the check do what it was always meant to: exercise the ARTEFACTS
+          # about to be published, rather than whatever the registry happens to hold.
+          cd "$GITHUB_WORKSPACE/packages/sdk" && npm pack
+          SDK_TGZ=$(ls *.tgz | head -1)
+
           mkdir -p /tmp/mcp-consume && cd /tmp/mcp-consume && npm init -y >/dev/null
-          npm install "$GITHUB_WORKSPACE/packages/mcp/$TGZ"
+          npm install "$GITHUB_WORKSPACE/packages/sdk/$SDK_TGZ" "$GITHUB_WORKSPACE/packages/mcp/$TGZ"
           # Speak MCP to the installed binary and require it to serve its resources.
           printf '%s\n%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
