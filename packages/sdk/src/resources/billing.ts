@@ -41,6 +41,19 @@ import type {
  * carrying `billing:write` — and the omission mattered, because the gateway's own
  * 402 names registering a sender as the recommended fix.
  */
+/**
+ * Whole seconds until an ISO instant, or null if there is nothing usable to measure.
+ *
+ * Floored, never rounded up: a quote with 900ms left must not report 1 second and invite a caller
+ * to act on it.
+ */
+function secondsUntil(iso: unknown): number | null {
+  if (typeof iso !== 'string') return null;
+  const at = Date.parse(iso);
+  if (!Number.isFinite(at)) return null;
+  return Math.max(0, Math.floor((at - Date.now()) / 1000));
+}
+
 export class BillingResource {
   /**
    * `client` is the whole client, not just its HTTP handle, because verifying a receipt has to
@@ -111,9 +124,16 @@ export class BillingResource {
    *
    * `quote()` CREATES; this one READS. Requires `billing:read`.
    */
-  async quoteById(id: string): Promise<QuoteResponse> {
+  async quoteById(id: string): Promise<QuoteResponse & { seconds_remaining: number | null }> {
     const { data } = await this.http.get(`/v1/quote/${encodeURIComponent(id)}`);
-    return data;
+    // `seconds_remaining` is computed HERE rather than left to the caller.
+    //
+    // The question anyone reads a quote back to answer is "can I still use this?", and answering it
+    // from `expires_at` means parsing a timestamp and subtracting against a clock — three chances
+    // to get a timezone or a unit wrong, on a value that decides whether a submission is refused
+    // partway through the work. `null` when the gateway sent no expiry, which is not the same as
+    // zero and must not be mistaken for it.
+    return { ...data, seconds_remaining: secondsUntil(data?.expires_at) };
   }
 
   /**

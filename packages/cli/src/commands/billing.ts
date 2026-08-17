@@ -1,9 +1,10 @@
 import { Command } from 'commander';
-import { CertenClient, type DepositIntentStatus, type QuoteResponse } from '@certen.io/sdk';
+import { CertenClient, CertenError, type DepositIntentStatus, type QuoteResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.js';
 import { printOutput, human, hint, isJsonMode, usd } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import { assertChain } from '../chains.js';
+import { buildPaymentUri, estimateWait, preciseDuration } from '../payment-uri.js';
 
 /**
  * Money commands.
@@ -225,7 +226,7 @@ export function registerBillingCommands(program: Command): void {
    * The shape is identical on the wire, so printing them differently would only teach a reader that
    * the two are different things when the whole point is that they are the same price.
    */
-  function renderQuote(q: QuoteResponse): void {
+  function renderQuote(q: QuoteResponse, remainingSeconds?: number | null): void {
     printOutput({
       quote_id: q.quote_id,
       chain: q.chain,
@@ -237,6 +238,7 @@ export function registerBillingCommands(program: Command): void {
       max_total_usd: q.max_total_usd,
       expires_at: q.expires_at,
       status: q.status ?? null,
+      seconds_remaining: remainingSeconds ?? null,
       gas_estimate_basis: q.computation?.gas_estimate_basis ?? null,
     });
 
@@ -279,6 +281,12 @@ export function registerBillingCommands(program: Command): void {
       hint(`certen quote --chain ${q.chain}${q.sku ? ` --sku ${q.sku}` : ''}`);
       return;
     }
+    // A duration, not an instant. Someone reading a quote back is deciding whether to act NOW, and
+    // "expires 2026-08-17T04:51:12Z" makes them do arithmetic to find out.
+    if (remainingSeconds !== null && remainingSeconds !== undefined) {
+      human(`  Valid for another ${preciseDuration(remainingSeconds)}.`);
+      human('');
+    }
     hint(`Lock this price: pass quote_id=${q.quote_id} on the transaction (expires ${q.expires_at}).`);
   }
 
@@ -303,7 +311,7 @@ export function registerBillingCommands(program: Command): void {
           );
         }
         const existing = await (await getClient()).billing.quoteById(opts.id);
-        renderQuote(existing);
+        renderQuote(existing, existing.seconds_remaining);
         return;
       }
       if (!opts.chain) {
@@ -633,6 +641,11 @@ export function registerBillingCommands(program: Command): void {
     // long-running command (`identity create`, `tx create`, `call`) takes it. Someone who learned
     // the flag there types it here and, without this, meets "unknown option" on a command that was
     // about to do exactly what they asked.
+    .option(
+      '--payer <address>',
+      'Register the wallet you are sending from, so future deposits credit on sight',
+    )
+    .option('--uri', 'Print an EIP-681 payment URI a wallet can open')
     .option('--wait', 'Wait for the deposit to be credited (the default)')
     .option('--no-wait', 'Print the payment details and exit instead of waiting')
     .option('--timeout <minutes>', 'How long to wait for the deposit', '60')
@@ -642,7 +655,10 @@ export function registerBillingCommands(program: Command): void {
     .option('--poll-interval <seconds>', 'How often to check for the deposit', '5')
     .action(async (
       amount: string,
-      opts: { chain?: string; wait: boolean; timeout: string; pollInterval: string },
+      opts: {
+        chain?: string; payer?: string; uri?: boolean;
+        wait: boolean; timeout: string; pollInterval: string;
+      },
     ) => {
       if (!/^\d+(\.\d{1,6})?$/.test(amount) || Number(amount) <= 0) {
         throw new CliError(
@@ -684,6 +700,16 @@ export function registerBillingCommands(program: Command): void {
         );
       }
 
+      // Checked with the other pre-flight validation, and for the same reason: a malformed address
+      // must not be discovered after a real payment intent has been opened.
+      if (opts.payer !== undefined && !/^0x[0-9a-fA-F]{40}$/.test(opts.payer)) {
+        throw new CliError(
+          `"${opts.payer}" is not an address. Expected 0x followed by 40 hex characters.`,
+          'INVALID_PAYER_ADDRESS',
+          EXIT.USAGE,
+        );
+      }
+
       const client = await getClient();
       const target = await client.billing.openPayment({ chain, amountUsd: amount });
       const intent = target.deposit_intent;
@@ -696,6 +722,51 @@ export function registerBillingCommands(program: Command): void {
         );
       }
 
+      // ── The payer, registered at the one moment the user knows which wallet they will send from ──
+      //
+      // `certen init --payer` exists, but `init` runs before anyone has chosen a wallet. This is the
+      // moment. Registering it makes every FUTURE deposit credit on sight — no intent, no
+      // exact-amount match, no expiry to beat — and it was reachable only by knowing that
+      // `certen payers add` existed, which nothing in this flow said.
+      //
+      // Never allowed to fail the funding flow: the deposit target above is valid regardless, and a
+      // 409 usually means the address is already registered. Reporting a payer problem as a payment
+      // problem would send someone looking for a lost transfer that was never made.
+      let payerNote: string | null = null;
+      if (opts.payer) {
+        payerNote = await client.billing
+          .registerPayerAddress({ chain, address: opts.payer })
+          .then(() => `Deposits from ${opts.payer} will credit automatically from now on.`)
+          .catch((err: unknown) => (err instanceof CertenError && err.status === 409
+            ? `${opts.payer} was already registered — nothing to do.`
+            : `Could not register ${opts.payer}: ${err instanceof Error ? err.message : String(err)}`));
+      }
+
+      // NEVER allowed to break the funding flow.
+      //
+      // The first version of this called `buildPaymentUri` directly and threw on a target whose
+      // addresses were not canonical 0x form — which took down the whole command: no deposit
+      // address printed, no payment instructions, on a payment intent the gateway had already
+      // opened. A convenience that can prevent someone paying is worse than no convenience, and the
+      // existing tests caught it immediately.
+      //
+      // So: a URI is offered when it can be built and silently omitted when it cannot. The deposit
+      // address is printed either way, and that is the load-bearing output.
+      let paymentUri: string | null = null;
+      let uriProblem: string | null = null;
+      try {
+        paymentUri = buildPaymentUri(target, intent.amount_usd);
+      } catch (err) {
+        uriProblem = err instanceof Error ? err.message : String(err);
+      }
+      const wait = estimateWait(chain, target.min_confirmations);
+
+      // Machine payload, then a human summary — never both to the same reader.
+      //
+      // `fund` printed the raw key/value table AND the readable instructions, the same defect fixed
+      // in `balance`. It matters more here now: the table carries `payment_uri`, so a person saw the
+      // long link whether or not they asked, which both buried the deposit address and made `--uri`
+      // pointless. Machines keep every field; a person gets the four things they need to act.
       printOutput({
         reference: intent.reference,
         amount_usd: intent.amount_usd,
@@ -704,9 +775,15 @@ export function registerBillingCommands(program: Command): void {
         chain_id: target.chain_id,
         token_symbol: target.token_symbol,
         token_address: target.token_address,
+        token_decimals: target.token_decimals,
         deposit_address: target.deposit_address,
         min_confirmations: target.min_confirmations,
-      });
+        // Both new fields are in the machine payload unconditionally. A script assembling a wallet
+        // deep link should not have to re-derive the smallest-unit amount — that arithmetic is
+        // where an off-by-one-decimal 10x error comes from.
+        payment_uri: paymentUri,
+        estimated_wait_seconds: wait?.seconds ?? null,
+      }, { machineOnly: true });
 
       if (!isJsonMode()) {
         human('');
@@ -716,7 +793,45 @@ export function registerBillingCommands(program: Command): void {
         human('');
         human(`  Reference ${intent.reference} · expires in ${minutesUntil(intent.expires_at)} min`);
         human('  The exact amount is how we know the payment is yours, so send it to the cent.');
-        human(`  Credited after ${target.min_confirmations} confirmation(s).`);
+        human(wait
+          ? `  Credited after ${target.min_confirmations} confirmation(s) — ${wait.text} on ${wait.basis}.`
+          : `  Credited after ${target.min_confirmations} confirmation(s).`);
+        if (wait) human('  That is an estimate from block time, not a guarantee.');
+
+        // Printed on request rather than always. It is a long line that wraps badly, and the
+        // address above is what most people copy — burying that under a URI would be a regression
+        // for the common case.
+        if (opts.uri && paymentUri) {
+          human('');
+          human('  Open in a wallet (EIP-681 — carries token, chain, recipient and exact amount):');
+          human(`      ${paymentUri}`);
+        } else if (opts.uri) {
+          // Asked for explicitly, so say why it is absent rather than printing nothing. Silence
+          // here would look like the flag was ignored.
+          human('');
+          human(`  No payment link for this target: ${uriProblem}`);
+          human('  Use the address above — it is the same payment either way.');
+        } else if (paymentUri) {
+          hint('certen fund --uri … prints a link a wallet can open, with the amount already set');
+        }
+
+        if (payerNote) {
+          human('');
+          human(`  ${payerNote}`);
+        }
+        // Offered as a HINT, and deliberately without checking first.
+        //
+        // Knowing whether this chain already has a registered payer costs a round trip on the money
+        // command, and a targeted suggestion is not worth latency here — the same reasoning that
+        // stripped unused enrichments off `call` and `init`. `payers add` is idempotent from the
+        // user's point of view (a duplicate is a 409 that says "already registered"), so a hint
+        // shown to someone who has already done it costs them one command and no confusion.
+        if (!opts.payer) {
+          hint('');
+          hint('Sending from this wallet again? Register it once and future deposits credit on');
+          hint(`sight, with no exact-amount match to get right:`);
+          hint(`  certen fund <amount> --chain ${chain} --payer <your-address>`);
+        }
         human('');
       }
 

@@ -283,6 +283,180 @@ describe('certen fund: payment details', () => {
   });
 });
 
+/**
+ * Phase 11 — the money path.
+ *
+ * Funding asked someone to carry a token contract, a chain, a treasury address and an exact amount
+ * from a terminal into a wallet by hand, and then to wait an unstated length of time for it to land.
+ * A mistyped recipient is the one error here that loses real money irreversibly.
+ *
+ * `REAL_TARGET` uses canonical addresses because the shared `TARGET` fixture does not — and that
+ * difference caught a genuine regression: the first version of the URI builder threw on a
+ * non-canonical address and took the ENTIRE funding command down with it, on a payment intent the
+ * gateway had already opened. A convenience that can stop someone paying is worse than no
+ * convenience, so both paths are pinned below.
+ */
+const REAL_TARGET = () => ({
+  ...TARGET(),
+  token_address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  deposit_address: '0x1111111111111111111111111111111111111111',
+});
+
+describe('certen fund: a link a wallet can open', () => {
+  it('emits an EIP-681 URI carrying token, chain, recipient and exact amount', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, REAL_TARGET()));
+    try {
+      const r = await certen(
+        ['--json', 'fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url,
+      );
+      const data = soleJson(r.stdout).data as Record<string, string>;
+      expect(r.code).toBe(0);
+      // 25.000000 USDC at 6 decimals is 25000000 base units. A float multiplication here is where an
+      // off-by-one-unit payment comes from, and attribution matches on the exact amount.
+      expect(data.payment_uri).toBe(
+        'ethereum:0x036CbD53842c5426634e7929541eC2318f3dCF7e@84532'
+        + '/transfer?address=0x1111111111111111111111111111111111111111&uint256=25000000',
+      );
+    } finally { await stub.close(); }
+  });
+
+  it('prints the link only when asked, and hints at it otherwise', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, REAL_TARGET()));
+    try {
+      const shown = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait', '--uri'], stub.url);
+      expect(shown.stdout).toContain('ethereum:0x036CbD53842c5426634e7929541eC2318f3dCF7e@84532');
+
+      const quiet = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
+      // The address is what most people copy; burying it under a long wrapping URI would be a
+      // regression for the common case.
+      expect(quiet.stdout).not.toContain('ethereum:');
+      expect(quiet.stderr).toContain('--uri');
+    } finally { await stub.close(); }
+  });
+
+  it('still prints the payment when no URI can be built', async () => {
+    // The regression this file caught. `TARGET` has non-canonical addresses, so no URI is possible —
+    // and the deposit instructions must survive that completely.
+    const stub = await stubGateway((_req, res) => json(res, 200, TARGET()));
+    try {
+      const r = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('0xTreasury');
+      expect(r.stdout).toContain('25.000000 USDC');
+    } finally { await stub.close(); }
+  });
+
+  it('says why the link is missing when it was explicitly requested', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, TARGET()));
+    try {
+      const r = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait', '--uri'], stub.url);
+      // Silence after an explicit flag looks like the flag was ignored.
+      expect(r.stdout).toContain('No payment link for this target');
+      expect(r.stdout).toContain('0xTreasury');
+    } finally { await stub.close(); }
+  });
+});
+
+describe('certen fund: how long it will take', () => {
+  it('turns confirmations into an estimate and names its basis', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, REAL_TARGET()));
+    try {
+      const r = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
+      // 3 confirmations at ~2s blocks. A confirmation COUNT alone gives no way to tell a slow chain
+      // from a broken command, which is when people interrupt it and send twice.
+      expect(r.stdout).toContain('3 confirmation(s)');
+      expect(r.stdout).toContain('about 6 seconds');
+      expect(r.stdout).toContain('base-sepolia');
+      // Presented as an estimate, never as a promise.
+      expect(r.stdout).toContain('estimate');
+    } finally { await stub.close(); }
+  });
+
+  it('publishes the estimate to machines too', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, REAL_TARGET()));
+    try {
+      const r = await certen(['--json', 'fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
+      expect((soleJson(r.stdout).data as Record<string, number>).estimated_wait_seconds).toBe(6);
+    } finally { await stub.close(); }
+  });
+});
+
+describe('certen fund: registering the payer at the moment it is known', () => {
+  const PAYER = '0x2222222222222222222222222222222222222222';
+
+  it('registers the sending wallet inline', async () => {
+    const seen: string[] = [];
+    const stub = await stubGateway((req, res) => {
+      seen.push(`${req.method} ${(req.url ?? '').split('?')[0]}`);
+      if ((req.url ?? '').includes('deposit-addresses')) {
+        return json(res, 201, { chain: 'base-sepolia', address: PAYER });
+      }
+      return json(res, 200, REAL_TARGET());
+    });
+    try {
+      const r = await certen([
+        'fund', '25', '--chain', 'base-sepolia', '--no-wait', '--payer', PAYER,
+      ], stub.url);
+
+      expect(r.code).toBe(0);
+      expect(seen).toContain('POST /v1/billing/deposit-addresses');
+      expect(r.stdout).toContain('will credit automatically');
+    } finally { await stub.close(); }
+  });
+
+  it('treats an already-registered wallet as nothing to do', async () => {
+    const stub = await stubGateway((req, res) => {
+      if ((req.url ?? '').includes('deposit-addresses')) {
+        return json(res, 409, { error: 'Address already registered', code: 'CONFLICT' });
+      }
+      return json(res, 200, REAL_TARGET());
+    });
+    try {
+      const r = await certen([
+        'fund', '25', '--chain', 'base-sepolia', '--no-wait', '--payer', PAYER,
+      ], stub.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('already registered');
+    } finally { await stub.close(); }
+  });
+
+  it('never lets a payer failure break the payment', async () => {
+    const stub = await stubGateway((req, res) => {
+      if ((req.url ?? '').includes('deposit-addresses')) {
+        return json(res, 500, { error: 'boom', code: 'INTERNAL_ERROR' });
+      }
+      return json(res, 200, REAL_TARGET());
+    });
+    try {
+      const r = await certen([
+        'fund', '25', '--chain', 'base-sepolia', '--no-wait', '--payer', PAYER,
+      ], stub.url);
+      // The deposit target is valid regardless. Reporting a payer problem as a payment problem
+      // would send someone hunting for a transfer that was never made.
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('0x1111111111111111111111111111111111111111');
+      expect(r.stdout).toContain('Could not register');
+    } finally { await stub.close(); }
+  });
+
+  it('rejects a malformed payer before opening a payment', async () => {
+    const r = await certen(['--json', 'fund', '25', '--chain', 'base-sepolia', '--payer', '0x123']);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as Record<string, unknown>).code).toBe('INVALID_PAYER_ADDRESS');
+  });
+
+  it('suggests registration without spending a request to find out', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, REAL_TARGET()));
+    try {
+      const r = await certen(['fund', '25', '--chain', 'base-sepolia', '--no-wait'], stub.url);
+      expect(r.stderr).toContain('--payer');
+      // Checking whether a payer is already registered would cost a round trip on the money command
+      // in exchange for a slightly better-targeted hint. Not a trade worth making.
+      expect(stub.hits()).toBe(1);
+    } finally { await stub.close(); }
+  });
+});
+
 describe('certen fund: waiting', () => {
   it('exits non-zero when the payment expires, so a script cannot read it as paid', async () => {
     const stub = await stubGateway((req, res) => {

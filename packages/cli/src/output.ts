@@ -39,7 +39,17 @@ export function resetOutput(): void {
  */
 export function printOutput(
   data: Record<string, unknown>[] | Record<string, unknown>,
-  opts?: { forceJson?: boolean },
+  opts?: {
+    forceJson?: boolean;
+    /**
+     * Emit for machines only, and print nothing in table mode.
+     *
+     * For a command that renders its own readable summary. Without this the payload and the summary
+     * both reach a person, so every figure appears twice — and any long or nested field (a payment
+     * URI, a credit object) lands in the middle of the instructions someone is trying to follow.
+     */
+    machineOnly?: boolean;
+  },
 ): void {
   if (jsonMode) {
     collected.push(data);
@@ -52,6 +62,7 @@ export function printOutput(
     return;
   }
 
+  if (opts?.machineOnly) return;
   printTable(data);
 }
 

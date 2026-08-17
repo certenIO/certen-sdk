@@ -62,6 +62,13 @@ token, get a key, create an identity, pay, prove the work. That path had never b
 a human in the middle, which is why the one journey every customer walks was the one with no
 automated coverage.
 
+### Changed — `billing.quoteById` returns `seconds_remaining`
+
+It returned `status` and `expires_at` and left the caller to parse a timestamp and subtract against a
+clock — on the value that decides whether a submission is refused partway through the work. The
+seconds are computed here instead. `null` when the gateway sent no expiry, which is not the same as
+zero and must not be read as it.
+
 ### Fixed — a gateway older than the client now says so
 
 `certen pricing` against production answered `Error [NOT_FOUND]: Not Found`. The command is

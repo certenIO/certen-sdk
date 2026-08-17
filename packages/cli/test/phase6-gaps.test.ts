@@ -303,6 +303,45 @@ describe('certen quote --id', () => {
     expect(res.stderr).not.toContain('Lock this price');
   });
 
+  it('says how long the price is still good for', async () => {
+    // The question anyone reads a quote back to answer is "can I act on this NOW?", and an ISO
+    // timestamp makes them do arithmetic to find out. Ten minutes out, expressed as a duration.
+    const s = await stub((_req, res) => {
+      json(res, 200, QUOTE('active', new Date(Date.now() + 600_000).toISOString()));
+    });
+
+    const res = await certen(['quote', '--id', 'q_123'], s.url);
+
+    expect(res.stdout).toMatch(/Valid for another (9m|10m)/);
+  });
+
+  it('publishes the remaining seconds to a machine', async () => {
+    const s = await stub((_req, res) => {
+      json(res, 200, QUOTE('active', new Date(Date.now() + 600_000).toISOString()));
+    });
+
+    const res = await certen(['quote', '--id', 'q_123', '--json'], s.url);
+
+    // Computed by the SDK rather than left to the caller: deriving it from `expires_at` means
+    // parsing a timestamp against a clock, on the value that decides whether a submission is
+    // refused partway through the work.
+    const remaining = soleJson(res.stdout).seconds_remaining as number;
+    expect(remaining).toBeGreaterThan(590);
+    expect(remaining).toBeLessThanOrEqual(600);
+  });
+
+  it('does not offer a duration for a quote that is already gone', async () => {
+    const s = await stub((_req, res) => {
+      json(res, 200, QUOTE('active', new Date(Date.now() - 60_000).toISOString()));
+    });
+
+    const res = await certen(['quote', '--id', 'q_123'], s.url);
+
+    // "Valid for another 0s" on an expired quote would be a contradiction in two lines.
+    expect(res.stdout).toContain('Expired at');
+    expect(res.stdout).not.toContain('Valid for another');
+  });
+
   it('refuses --id together with --chain rather than silently ignoring one', async () => {
     const s = await stub((_req, res) => { json(res, 200, QUOTE('active', new Date().toISOString())); });
 

@@ -3,6 +3,40 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen fund` closes the money path
+
+Four changes to the last step of onboarding, which is the only one where a mistake costs money
+rather than time.
+
+**A link a wallet can open.** `--uri` emits an EIP-681 request carrying the token contract, the
+numeric chain, the recipient and the amount in the token's smallest unit — so the transfer stops
+being four values transcribed by hand. **A mistyped recipient is the one error in this product that
+loses real money irreversibly.** The amount is converted with string and BigInt arithmetic, never
+floats: `25.10 * 1e6` is `25099999.999999996` in IEEE-754, which truncates to one unit short of the
+amount attribution matches on — a deposit that arrives and is never credited, with nothing on either
+side saying why. It is also in the machine payload unconditionally, so a script building a deep link
+never repeats that arithmetic.
+
+**Register the payer when you know which wallet you are sending from.** `--payer 0x…` registers it
+inline, so future deposits credit on sight with no exact-amount match to beat. `init --payer` existed
+but runs before anyone has chosen a wallet. A payer failure can never break the payment: the deposit
+target is valid regardless, and reporting a payer problem as a payment problem would send someone
+hunting for a transfer that was never made.
+
+**How long it will take.** `Credited after 3 confirmation(s)` became `— about 6 seconds on
+base-sepolia`, computed from block time and labelled an estimate. A confirmation count alone gives no
+way to tell a slow chain from a broken command, which is when people interrupt and send twice.
+
+**One payload per reader.** `fund` printed the raw table *and* the readable instructions, the same
+defect fixed in `balance`. It mattered more here once the table carried the payment URI: a person saw
+the long link whether or not they asked, which buried the deposit address.
+
+### Changed — `certen quote` says how long the price is good for
+
+`--id` reported a status and an expiry timestamp, leaving the reader to subtract against a clock to
+answer the only question they had. Now `Valid for another 4m 12s`, with `seconds_remaining` on the
+SDK response so a caller can branch without touching a date.
+
 ### Changed — `certen balance` answers the question instead of listing the figures
 
 Three things, all on the one command someone runs to find out whether they can keep working.
