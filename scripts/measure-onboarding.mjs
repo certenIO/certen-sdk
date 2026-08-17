@@ -109,8 +109,25 @@ const STEPS = [
   ['Where did the money go?', ['ledger', '--json']],
 ];
 
+/**
+ * `--full` adds the steps that COST something, so they are opt-in.
+ *
+ * Identity provisioning is billable ($5 on the current price book) and takes ~45s of real anchoring,
+ * so it is not something to run casually against a paid account.
+ *
+ * `--intent <id>` measures the proof read — the last step of the journey, and the one a counterparty
+ * actually consumes. It takes an id rather than creating work, because producing a fresh proof needs
+ * two things this script cannot conjure: an abstract account with gas on the destination chain, and
+ * a contract with a known ABI to call. Measuring an EXISTING proof is honest about what it covers;
+ * inventing a number for a cycle that never ran would not be.
+ */
 if (FULL) {
   STEPS.push(['Create an identity', ['identity', 'create', '--name', `probe-${Date.now()}`, '--wait', '--json']]);
+}
+
+const INTENT = arg('intent', '');
+if (INTENT) {
+  STEPS.push(['Fetch the proof', ['proof', 'get', INTENT, '--json']]);
 }
 
 console.log(`\nonboarding against ${TARGET}\n`);

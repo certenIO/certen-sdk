@@ -158,7 +158,8 @@ step.
 | Measured | Target | Result |
 |---|---|---|
 | Read path, 2026-08-17 | `gateway.kompendium.co` | **13 requests, 5.0s** — every step exit 0 |
-| Full journey, 2026-08-17 | `gateway.kompendium.co` | **46.9s** from nothing to a signing identity |
+| Read path + proof, 2026-08-17 | `gateway.kompendium.co` | **15 requests, 6.6s** — `--intent <id>` adds the proof read |
+| Signup → signing identity, 2026-08-17 | `gateway.kompendium.co` | **46.9s**, unattended, from no credential at all |
 
 The read-path figure dropped from 14 requests to 13 the moment the gateway was deployed, because
 `remaining_usd` now rides on the balance and the separate obligations read is gone. The previous
@@ -166,10 +167,15 @@ production run reported 14 requests / 5.5s **with two steps failing** — `GET /
 `GET /v1/scopes` were not deployed. Earlier local figures (12 requests / 4.9s) were taken against a
 gateway with every downstream absent and are a floor for reads, not a journey time.
 
-The full-journey figure comes from `e2e-onboarding.mjs`: keypair signup, identity created and
-confirmed able to sign, trial credit verified — with no human and no pre-existing credential. The
-proof cycle is **not** in that number; it needs a contract address (`--contract`) and a funded
-abstract account.
+The signup figure comes from `e2e-onboarding.mjs`: keypair signup, identity created and confirmed
+able to sign, trial credit verified — with no human and no pre-existing credential.
+
+**Producing a fresh proof is not in any of these numbers**, and the reason is environmental rather
+than missing code. It needs an abstract account holding gas on the destination chain and a contract
+with a known ABI to call; a brand-new organization has neither, so its call parks at `anchoring`.
+`--intent <id>` therefore measures the proof READ against an already-anchored intent, which is the
+step a counterparty actually performs. To measure a full cycle, pass `--contract` to
+`e2e-onboarding.mjs` with a funded identity.
 
 Re-run both on each release and diff. A regression in round trips is invisible in code review and
 obvious here.
