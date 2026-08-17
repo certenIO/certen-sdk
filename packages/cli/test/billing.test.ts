@@ -159,6 +159,61 @@ describe('certen balance', () => {
     } finally { await stub.close(); }
   });
 
+  /**
+   * A credit account reads its balance as a NEGATIVE `available_usd`. That is the drawdown, not an
+   * error — but "Available -$72.35" as the first line of the money command reads as a fault, and
+   * the thresholds that decide when service stops were printed with no statement of how close the
+   * account actually was to them. The reader had to find `available_usd`, negate it, and compare
+   * by hand, on the question of whether their work is about to be refused.
+   */
+  const CREDIT_BALANCE = {
+    currency: 'USD', available_usd: '-72.355716', held_usd: '0.000000',
+    credit_limit_usd: '250.000000', spendable_usd: '177.644284',
+    remaining_usd: '144.431871', pending_intents: 40, uncovered_usd: '33.212413',
+    status: 'active',
+    credit: {
+      kind: 'terms', label: 'Acme — invoiced account', granted_limit_usd: '250.000000',
+      expires_at: null, expired: false, warns_at_usd: '125.000000', suspends_at_usd: '250.000000',
+    },
+  };
+
+  it('calls a negative balance a drawdown, and says how close the stop is', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, CREDIT_BALANCE));
+    try {
+      const r = await certen(['balance'], stub.url);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain('Drawn on credit    $72.36');
+      // Never the bare negative, which is what made this read as a fault.
+      expect(r.stdout).not.toContain('Available          -$72.36');
+      // The threshold stated as a distance from where the account actually is.
+      expect(r.stdout).toContain('Drawn $72.36 of $250.00');
+      expect(r.stdout).toContain('first warning at $125.00');
+    } finally { await stub.close(); }
+  });
+
+  it('escalates once the warning threshold is passed', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, {
+      ...CREDIT_BALANCE, available_usd: '-200.000000',
+    }));
+    try {
+      const r = await certen(['balance'], stub.url);
+      // The number that matters when service is close to stopping is the headroom, not the total.
+      expect(r.stdout).toContain('$50.00 before service stops');
+      expect(r.stderr).toContain('certen fund');
+    } finally { await stub.close(); }
+  });
+
+  it('does not print the payload twice to a human', async () => {
+    const stub = await stubGateway((_req, res) => json(res, 200, CREDIT_BALANCE));
+    try {
+      const r = await certen(['balance'], stub.url);
+      // The raw key/value table used to print alongside the readable summary, so every figure
+      // appeared twice and `credit` — a nested object — rendered as a line of raw JSON above it.
+      expect(r.stdout).not.toContain('available_usd');
+      expect(r.stdout).not.toContain('"kind"');
+    } finally { await stub.close(); }
+  });
+
   it('tells a human what to do when nothing is left to commit', async () => {
     const stub = await stubGateway((req, res) => {
       if ((req.url ?? '').includes('obligations')) {

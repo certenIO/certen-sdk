@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CertenClient, CertenError } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl, readConfig } from '../config.js';
-import { printOutput, hint, human, isJsonMode } from '../output.js';
+import { printOutput, hint, human, isJsonMode, usd } from '../output.js';
 
 /**
  * `certen whoami` — which credential is this, against which gateway, and what standing does it
@@ -17,11 +17,6 @@ import { printOutput, hint, human, isJsonMode } from '../output.js';
  * org name. Inventing a plausible-looking value, or silently omitting the fields as though they
  * were merely absent, would both be worse than saying where they live.
  */
-
-function usd(amount: string): string {
-  const [whole, frac = ''] = String(amount).split('.');
-  return `$${whole}.${(frac + '00').slice(0, 2)}`;
-}
 
 export function registerWhoamiCommands(program: Command): void {
   program

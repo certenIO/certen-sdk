@@ -3,6 +3,34 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Changed — `certen balance` answers the question instead of listing the figures
+
+Three things, all on the one command someone runs to find out whether they can keep working.
+
+**It printed everything twice.** The raw key/value table rendered alongside the readable summary, so
+every figure appeared once as `available_usd  -72.355716` and again as `Available -$72.35` — with
+`credit`, a nested object, showing as a line of raw JSON in between. The useful rendering came
+second, under eleven lines of noise. Machine consumers now get the payload and a person gets the
+summary, which is what every other command in this group already did.
+
+**A negative balance is a drawdown, not a fault.** `Available -$72.35` was the first line a credit
+account saw, with nothing to say that drawing on a credit line is how the account is meant to work.
+It now reads `Drawn on credit $72.36`.
+
+**The thresholds are stated as a distance.** `Warning at $125.00 drawn · service stops at $250.00`
+published the limits without the number they are measured against, so the reader had to find
+`available_usd`, negate it, and compare by hand — to answer whether their service is about to stop.
+It now reads `Drawn $72.36 of $250.00 (first warning at $125.00)`, and past the warning threshold it
+leads with the headroom and the command to fix it.
+
+### Fixed — money rendered two different ways
+
+There were two copies of the currency formatter. `billing.ts` handled a leading minus and
+`whoami.ts` did not, so a drawn-down account rendered `-$72.35` in one command and the malformed
+`$-72.35` in the other. Both are replaced by one exported helper, which also rounds the cents
+half-up rather than truncating — the old one displayed `-72.355716` as `-$72.35`, a cent kinder to
+the account than the truth.
+
 ### Added — `certen identity mnemonic`
 
 Collect the mnemonic from a `signing_mode: "provider"` identity. There was no way to do this from

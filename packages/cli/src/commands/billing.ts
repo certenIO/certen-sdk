@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CertenClient, type DepositIntentStatus, type QuoteResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.js';
-import { printOutput, human, hint, isJsonMode } from '../output.js';
+import { printOutput, human, hint, isJsonMode, usd } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import { assertChain } from '../chains.js';
 
@@ -20,13 +20,6 @@ import { assertChain } from '../chains.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
-}
-
-/** "12.340000" -> "$12.34". Trims the string; never parses money into a float. */
-function usd(amount: string): string {
-  const [whole, frac = ''] = String(amount).split('.');
-  const neg = whole.startsWith('-');
-  return `${neg ? '-$' : '$'}${neg ? whole.slice(1) : whole}.${(frac + '00').slice(0, 2)}`;
 }
 
 /** Parse a whole-number option, refusing anything else before a network call is made. */
@@ -62,25 +55,42 @@ export function registerBillingCommands(program: Command): void {
         }
         : await client.billing.obligations();
 
-      printOutput({
-        currency: balance.currency,
-        available_usd: balance.available_usd,
-        held_usd: balance.held_usd,
-        credit_limit_usd: balance.credit_limit_usd,
-        spendable_usd: balance.spendable_usd,
-        remaining_usd: commitments.remaining_usd,
-        pending_intents: commitments.pending_intents,
-        uncovered_usd: commitments.uncovered_usd,
-        status: balance.status,
-        suspended_reason: balance.suspended_reason ?? null,
-        credit: balance.credit ?? null,
-      });
+      // Machine output only. In table mode this printed the whole payload AND the readable summary
+      // below it, so `certen balance` answered with the same figures twice — and `credit` is a
+      // nested object, which the generic key/value table renders as one line of raw JSON. The
+      // useful rendering came second, under eleven lines of noise. Every other command in this
+      // group early-returns for machines and then speaks to a person; this one did not.
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({
+          currency: balance.currency,
+          available_usd: balance.available_usd,
+          held_usd: balance.held_usd,
+          credit_limit_usd: balance.credit_limit_usd,
+          spendable_usd: balance.spendable_usd,
+          remaining_usd: commitments.remaining_usd,
+          pending_intents: commitments.pending_intents,
+          uncovered_usd: commitments.uncovered_usd,
+          status: balance.status,
+          suspended_reason: balance.suspended_reason ?? null,
+          credit: balance.credit ?? null,
+        });
+        return;
+      }
 
-      if (isJsonMode()) return;
+      // A negative `available` on a credit account is normal — it is the drawdown, not an error —
+      // but it reads as alarming with nothing beside it, and "Available -$72.35" is the first line
+      // anyone sees. Naming it as drawn-down turns a scare into a fact.
+      const drawn = Number(balance.available_usd) < 0;
 
       human('');
-      human(`  Available          ${usd(balance.available_usd)}`);
-      human(`  Held for in-flight ${usd(balance.held_usd)}`);
+      if (drawn) {
+        human(`  Drawn on credit    ${usd(String(-Number(balance.available_usd)))}`);
+      } else {
+        human(`  Available          ${usd(balance.available_usd)}`);
+      }
+      if (balance.held_usd !== '0.000000') {
+        human(`  Held for in-flight ${usd(balance.held_usd)}`);
+      }
       if (balance.credit_limit_usd !== '0.000000') {
         human(`  Credit line        ${usd(balance.credit_limit_usd)}`);
       }
@@ -113,7 +123,25 @@ export function registerBillingCommands(program: Command): void {
         } else {
           human(`  ${credit.label ?? credit.kind} — ${usd(credit.granted_limit_usd)} credit line.`);
         }
-        human(`  Warning at ${usd(credit.warns_at_usd)} drawn · service stops at ${usd(credit.suspends_at_usd)}.`);
+        // The thresholds were published without the one number they are measured against, so the
+        // reader had to find `available_usd` further up, negate it, and compare by hand — on the
+        // question of whether their service is about to stop. Stated as a distance instead.
+        const drawnNow = Math.max(0, -Number(balance.available_usd));
+        const stopsAt = Number(credit.suspends_at_usd);
+        const warnsAt = Number(credit.warns_at_usd);
+        const headroom = stopsAt - drawnNow;
+
+        if (drawnNow >= stopsAt) {
+          human(`  You have drawn ${usd(String(drawnNow))} of ${usd(credit.suspends_at_usd)} — service stops here.`);
+          hint('certen fund <amount> --chain base-sepolia');
+        } else if (drawnNow >= warnsAt) {
+          human(`  Drawn ${usd(String(drawnNow))} of ${usd(credit.suspends_at_usd)}. `
+            + `${usd(String(headroom))} before service stops.`);
+          hint('certen fund <amount> --chain base-sepolia');
+        } else {
+          human(`  Drawn ${usd(String(drawnNow))} of ${usd(credit.suspends_at_usd)} `
+            + `(first warning at ${usd(credit.warns_at_usd)}).`);
+        }
       }
 
       if (balance.status !== 'active') {

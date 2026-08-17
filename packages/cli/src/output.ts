@@ -72,6 +72,37 @@ export function hint(message: string): void {
 }
 
 /**
+ * `"12.340000"` -> `"$12.34"`, and `"-72.355716"` -> `"-$72.36"`.
+ *
+ * One implementation, here, because there were two. `billing.ts` handled a leading minus and
+ * `whoami.ts` did not, so the same drawn-down account rendered `-$72.35` in one command and the
+ * malformed `$-72.35` in the other. A money formatter is exactly the kind of four-line helper that
+ * gets copied rather than imported, and exactly the kind where the copy is wrong in the case nobody
+ * had yet.
+ *
+ * Works on the STRING. The gateway sends fixed-point decimal strings, and parsing money into a
+ * float to format it reintroduces the representation error those strings exist to avoid. The cents
+ * are rounded half-up from the remaining digits rather than truncated, so a balance of
+ * `-72.355716` reads `-$72.36` — a displayed figure should never flatter the account by a cent.
+ */
+export function usd(amount: string | number): string {
+  const raw = String(amount);
+  const negative = raw.trimStart().startsWith('-');
+  const [whole, frac = ''] = raw.replace('-', '').split('.');
+
+  // Round on the digit AFTER the cents, carrying into the whole part when it overflows.
+  const cents = Number((frac + '000').slice(0, 3));
+  let dollars = BigInt(whole || '0');
+  let rounded = Math.round(cents / 10);
+  if (rounded === 100) { dollars += 1n; rounded = 0; }
+
+  // A residue too small to show is not a debt. `-0.004` rounding to `-$0.00` would be the only
+  // place in the CLI where zero has a sign.
+  const sign = negative && (dollars !== 0n || rounded !== 0) ? '-' : '';
+  return `${sign}$${dollars}.${String(rounded).padStart(2, '0')}`;
+}
+
+/**
  * Emit the success envelope. No-op outside JSON mode, and safe to call more than once.
  *
  * A command that produced no payload still emits `{"ok":true,"data":null}` rather than nothing, so
