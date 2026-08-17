@@ -128,7 +128,21 @@ worth calling is reachable from a client, and that onboarding is fast. Both are 
 ```bash
 node scripts/coverage.mjs                  # which operations no client can reach
 node scripts/measure-onboarding.mjs --url https://gateway.kompendium.co --key ck_live_...
+node scripts/e2e-onboarding.mjs --url https://staging.example   # the whole journey, from nothing
 ```
+
+**The end-to-end check** signs up with a freshly generated keypair, creates an identity, confirms the
+trial credit covers new work, and — given `--contract` — executes a proof-gated call and verifies the
+proof. It holds no credential: the key is generated per run and discarded, which is the entire reason
+the keypair signup path exists. Every step asserts a PROPERTY rather than an exit code, because a run
+that passed on five zero exits would pass against a gateway that created an identity which cannot
+sign and a proof that does not verify — the two failures the journey exists to catch.
+`packages/cli/test/e2e-script.test.ts` tests the checker itself against a stub that returns
+plausible-but-wrong answers, since a green end-to-end run that cannot go red is worse than none.
+
+It runs nightly via `.github/workflows/e2e-onboarding.yml`, and on demand through
+`workflow_dispatch`. **It cannot pass until the gateway is deployed** — `/v1/signup/challenge` is one
+of 22 operations this build calls that production does not yet serve.
 
 **Coverage** was measured for a long time by a tool that matched paths as substrings, so a path in
 a code *comment* counted as implemented — `POST /v1/oauth/token` was reported covered while the SDK
