@@ -5,6 +5,13 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # Run it on demand.
+  #
+  # Push-only meant the sole way to exercise CI was to commit something, so verifying a change to
+  # the pipeline itself required a commit that existed to trigger it. It also meant that when
+  # Actions was first enabled for this repository there was no way to get a baseline run without
+  # inventing one.
+  workflow_dispatch:
 
 jobs:
   test:
