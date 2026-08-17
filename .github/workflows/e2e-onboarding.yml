@@ -15,8 +15,17 @@ name: Onboarding end-to-end
 
 on:
   schedule:
-    # 04:20 UTC. Offset from the CI cron at 03:30 so the two do not contend for runners.
-    - cron: '20 4 * * *'
+    # Weekly, not nightly — 04:20 UTC on Mondays. Offset from the CI cron at 03:30 so the two do not
+    # contend for runners.
+    #
+    # Each run signs up for real, so it creates a real organization and consumes a real trial grant.
+    # Nightly meant 365 abandoned orgs a year, each holding credit, accumulating in the operator
+    # console forever — a cost the workflow's author (me) did not think about when choosing the
+    # cadence. Weekly still catches a broken onboarding path within days.
+    #
+    # Revisit once abandoned self-service orgs are swept automatically; nightly is the better signal
+    # if the cleanup exists.
+    - cron: '20 4 * * 1'
   workflow_dispatch:
     inputs:
       gateway_url:
