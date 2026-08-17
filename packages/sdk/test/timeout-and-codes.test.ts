@@ -263,3 +263,65 @@ describe('backing off when the server says when', () => {
     });
   });
 });
+
+/**
+ * A gateway older than the client, told apart from a resource that is simply absent.
+ *
+ * Both are 404s, and collapsing them produced the least useful message on the whole surface:
+ * `certen pricing` — a command the CLI advertises in its own `--help` — answered
+ * `Error [NOT_FOUND]: Not Found` against production, because `GET /v1/pricing` had not been
+ * deployed yet. Nothing in that message says whether the key lacks access, the resource is missing,
+ * or the deployment is behind.
+ *
+ * Clients and the gateway deploy separately, so the window where one is ahead of the other is not
+ * an edge case — it is every release, and it is precisely when someone hits this.
+ *
+ * The bodies are the real ones, captured from the live gateway.
+ */
+describe('telling a missing endpoint from a missing resource', () => {
+  it('names version skew when the route is not registered', async () => {
+    const url = await serve((_req, res) => {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      // Fastify's unmatched-route 404: `statusCode` and a `Route …` message, and NO `code`.
+      res.end(JSON.stringify({ message: 'Route GET:/v1/pricing not found', error: 'Not Found', statusCode: 404 }));
+    });
+    const client = new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
+
+    const err = await client.billing.pricing().catch((e: unknown) => e as CertenError);
+
+    expect(err).toBeInstanceOf(CertenError);
+    expect((err as CertenError).code).toBe('ENDPOINT_NOT_ON_GATEWAY');
+    // The method and path are named, because "which endpoint" is the first thing anyone asks.
+    expect((err as CertenError).message).toContain('GET /v1/pricing');
+    expect((err as CertenError).message).toContain('older than this client');
+  });
+
+  it('leaves a genuine missing resource alone', async () => {
+    const url = await serve((_req, res) => {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      // A handler-raised 404 always carries `code`. Misreading this as version skew would be worse
+      // than the original bug: it would tell someone to upgrade their gateway over a bad id.
+      res.end(JSON.stringify({ error: 'Transaction intent not found', code: 'NOT_FOUND' }));
+    });
+    const client = new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
+
+    const err = await client.transaction.get('missing-id').catch((e: unknown) => e as CertenError);
+
+    expect((err as CertenError).code).toBe('NOT_FOUND');
+    expect((err as CertenError).message).toBe('Transaction intent not found');
+  });
+
+  it('does not mistake a 404 with no body for skew', async () => {
+    const url = await serve((_req, res) => {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('Not Found');
+    });
+    const client = new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
+
+    const err = await client.billing.pricing().catch((e: unknown) => e as CertenError);
+
+    // A proxy or CDN can return this for reasons that have nothing to do with versions. Claiming
+    // skew from an unparseable body would be a guess presented as a diagnosis.
+    expect((err as CertenError).code).toBe('NOT_FOUND');
+  });
+});

@@ -4,6 +4,20 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Fixed — a gateway older than the client now says so
+
+`certen pricing` against production answered `Error [NOT_FOUND]: Not Found`. The command is
+advertised in the CLI's own `--help`, and the message gave no way to tell whether the key lacked
+access, the resource was missing, or — the actual cause — `GET /v1/pricing` was not deployed yet.
+
+Both cases are 404s, but they are cleanly distinguishable: an unmatched route carries no `code` and
+a `Route GET:/v1/x not found` message, while every handler-raised 404 carries a `code`. An unmatched
+route now raises `ENDPOINT_NOT_ON_GATEWAY`, naming the method and path and saying the deployment is
+behind this client.
+
+Clients and the gateway deploy separately, so this is not an edge case — it is the state of things
+during every release window.
+
 ### Fixed — `webhooks.deliveries` documented a scope that did not work
 
 This method said it required `webhook:read`. It did not: `GET /v1/webhooks/deliveries` was missed

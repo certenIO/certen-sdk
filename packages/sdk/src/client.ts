@@ -257,10 +257,34 @@ export class CertenClient {
         // `data?.code` is undefined — fall back to the status map rather than to UNKNOWN_ERROR.
         const body = error.response?.data;
         const sentCode = typeof body === 'object' && body !== null ? body.code : undefined;
+
+        // "This gateway has no such endpoint" and "that thing does not exist" are both 404s, and
+        // collapsing them produced the least useful message on the surface: `certen pricing`, a
+        // command the CLI advertises in its own --help, answered `Error [NOT_FOUND]: Not Found`.
+        // Nothing in that says whether the key lacks access, the resource is missing, or — the
+        // actual cause — the deployed gateway is older than this client.
+        //
+        // The two are cleanly distinguishable. Fastify's unmatched-route 404 carries `statusCode`
+        // and a `Route GET:/v1/x not found` message and NO `code`; every handler-raised 404 carries
+        // a `code`. So an absent `code` plus that message shape means the route is not registered.
+        //
+        // This matters on every release: clients and gateway deploy separately, and the window
+        // where one is ahead of the other is exactly when someone hits it.
+        const skew = status === 404 && sentCode === undefined
+          && typeof (body as { message?: unknown })?.message === 'string'
+          && /^Route\s+\w+:/.test((body as { message: string }).message);
+
         const code = sentCode
-          ?? (status === 0 ? 'NETWORK_ERROR' : CODE_BY_STATUS[status] ?? 'UNKNOWN_ERROR');
+          ?? (skew ? 'ENDPOINT_NOT_ON_GATEWAY'
+            : status === 0 ? 'NETWORK_ERROR' : CODE_BY_STATUS[status] ?? 'UNKNOWN_ERROR');
         const sentMessage = typeof body === 'object' && body !== null ? body.error : undefined;
-        const message = sentMessage ?? error.message;
+        const method = (error.config?.method ?? 'GET').toUpperCase();
+        const path = error.config?.url ?? 'that endpoint';
+        const message = skew
+          ? `certen: this gateway does not serve ${method} ${path}. `
+            + 'The deployed gateway is older than this client — upgrade the gateway, or pin an '
+            + 'older client version.'
+          : sentMessage ?? error.message;
         const requestId = (error.response?.headers?.['x-request-id'] as string | undefined) ?? undefined;
         const retryAfter = error.response?.headers?.['retry-after'];
 
