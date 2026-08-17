@@ -65,10 +65,14 @@ export function registerInitCommands(program: Command): void {
     .option('--key <name>', 'Local signing key name to use or create', 'dev')
     .option('--chains <chains>', 'Chains to link', 'base-sepolia')
     .option('--yes', 'Accept every default without prompting (for CI)')
+    .option(
+      '--payer <address>',
+      'Wallet you will pay from. Deposits from it credit you automatically, with no payment intent.',
+    )
     .option('--timeout <minutes>', `How long to wait for provisioning (default ${IDENTITY_WAIT.timeoutMin})`)
     .option('--poll-interval <seconds>', `How often to check (default ${IDENTITY_WAIT.intervalSec})`)
     .action(async (opts: {
-      name?: string; key: string; chains: string; yes?: boolean;
+      name?: string; key: string; chains: string; yes?: boolean; payer?: string;
       timeout?: string; pollInterval?: string;
     }) => {
       const steps: StepResult[] = [];
@@ -250,6 +254,43 @@ export function registerInitCommands(program: Command): void {
       steps.push(unfunded.length === 0
         ? { step: 'funding', status: 'done', detail: 'abstract accounts have gas' }
         : { step: 'funding', status: 'done', detail: `needs gas on ${[...new Set(unfunded)].join(', ')}` });
+
+      // ── 4b. Where the money will come from ────────────────────────────────────────────────────
+      //
+      // Registering the wallet you pay from is what makes a deposit credit you ON SIGHT — no
+      // payment intent, no exact-amount match, no TTL to beat. Without it every top-up is a
+      // three-step dance: open an intent, send precisely that amount, wait for attribution.
+      //
+      // It is one API call and it was reachable only by knowing that `certen payers add` exists,
+      // which nothing in the setup flow said. Folding it in here removes a step a user could only
+      // take after learning it was available.
+      if (opts.payer) {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(opts.payer)) {
+          throw new UsageError(
+            `"${opts.payer}" is not an address. Expected 0x followed by 40 hex characters.`,
+            'INVALID_PAYER_ADDRESS',
+          );
+        }
+        const registered = await client.billing
+          .registerPayerAddress({ chain: chains[0], address: opts.payer })
+          .then(() => ({ ok: true as const }))
+          // A 409 means this address is already attributed — to this org, in which case there is
+          // nothing to do, or to another, which is a genuine conflict the user must resolve. Either
+          // way it must not fail the whole setup: everything above it already succeeded.
+          .catch((err: unknown) => ({
+            ok: false as const,
+            why: err instanceof CertenError && err.status === 409
+              ? 'already registered — to this organization, or to another one'
+              : err instanceof Error ? err.message : String(err),
+          }));
+
+        steps.push(registered.ok
+          ? { step: 'payer', status: 'done', detail: `${opts.payer} on ${chains[0]}` }
+          : { step: 'payer', status: 'done', detail: `not registered: ${registered.why}` });
+        say(registered.ok
+          ? `  Deposits from ${opts.payer} will credit you automatically.`
+          : `  Could not register ${opts.payer}: ${registered.why}`);
+      }
 
       // ── 5. Balance ────────────────────────────────────────────────────────────────────────────
       const balance = await client.billing.balance().catch(() => null);
