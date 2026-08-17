@@ -38,6 +38,12 @@ on:
 jobs:
   onboarding:
     name: Sign up from nothing and prove some work
+    # The `secrets` context is NOT available in an `if:` expression — using it there makes the whole
+    # workflow file invalid, not merely that step, so the failure is "Invalid workflow file" with no
+    # run at all. It IS available in `env:`, so the presence check is hoisted to a job-level variable
+    # and the step tests that instead.
+    env:
+      HAS_SIGNING_KEY: ${{ secrets.E2E_SIGNING_KEY != '' }}
     runs-on: ubuntu-latest
     # Generous: the run waits on real identity provisioning, which is a chain of Accumulate
     # transactions each waiting for the previous to anchor. Bounded so a hung downstream cannot hold
@@ -82,7 +88,7 @@ jobs:
       # isolated home — which is what keeps the API key this run obtains separate from everything
       # else on the machine.
       - name: Place the proof-cycle signing key
-        if: ${{ secrets.E2E_SIGNING_KEY != '' }}
+        if: env.HAS_SIGNING_KEY == 'true'
         env:
           KEY_JSON: ${{ secrets.E2E_SIGNING_KEY }}
           KEY_NAME: ${{ secrets.E2E_SIGNING_KEY_NAME }}
