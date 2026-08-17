@@ -17,6 +17,7 @@ import { WebhooksResource } from './resources/webhooks.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
 import { OAuthClientsResource } from './resources/oauth-clients.js';
+import { RegistrationTokensResource } from './resources/registration-tokens.js';
 import { fetchOAuthToken } from './oauth.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
 import type { CertenClientOptions,
@@ -131,6 +132,11 @@ export class CertenClient {
    * along; the client that issues them could only be created by hand in the portal.
    */
   public oauthClients: OAuthClientsResource;
+  /**
+   * Registration tokens — letting a new organization be created without a browser. Minting needs
+   * `org:invite`; redeeming needs nothing, and is the standalone `redeemRegistrationToken`.
+   */
+  public registrationTokens: RegistrationTokensResource;
 
   /**
    * Diagnose this setup and say what is blocking it.
@@ -457,6 +463,7 @@ export class CertenClient {
     this.proof = new ProofResource(this.http);
     this.device = new DeviceResource(this.http);
     this.oauthClients = new OAuthClientsResource(this.http);
+    this.registrationTokens = new RegistrationTokensResource(this.http);
   }
 }
 

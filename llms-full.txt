@@ -1117,6 +1117,49 @@ Takes effect immediately. Requires the proof:read scope.
 Path parameters:
   - `shareId`: string
 
+### certen.registration-tokens
+
+#### certen.registration-tokens.mint()
+
+Mint a token.
+
+POST /v1/registration-tokens — Mint a registration token
+
+Mints a one-time token that lets a machine create a NEW organization and its first API key without a browser session. The token is returned once and cannot be retrieved again. What the new organization will be — its plan, and what its first key may do — is fixed here by the minter, not chosen by the redeemer. Operator and wildcard scopes cannot be granted this way. Requires the org:invite scope.
+
+Request body:
+  - `org_name`: string — Name for the organization this creates. The redeemer may override it.
+  - `plan`: "starter" | "pro" | "enterprise" — Defaults to starter.
+  - `permissions`: string[] — Scopes for the redeemed org's first key. Defaults to a read/write set for identity, transactions, proofs and billing reads.
+  - `expires_in`: integer — Seconds until it expires. Default 86400, clamped to the configured ceiling.
+  - `note`: string — For your own records — who this was issued to.
+
+Response 201 — Token minted. The `token` field appears here and nowhere else:
+  - `token`: string
+  - `id`: string
+  - `expires_at`: any
+  - `permissions`: string[]
+  - `warning`: string
+
+#### certen.registration-tokens.list()
+
+Tokens this organization minted, newest first.
+
+GET /v1/registration-tokens — List registration tokens this organization minted
+
+Lists tokens minted by the caller's organization, newest first, with the state of each (active, redeemed, revoked, expired) and the organization it became. Never returns a token itself. Requires org:invite.
+
+#### certen.registration-tokens.revoke()
+
+Stop a token being redeemed.
+
+DELETE /v1/registration-tokens/{id} — Revoke an unredeemed registration token
+
+Stops a token being redeemed. Idempotent — revoking an already-revoked token succeeds, because the intent is already satisfied. A token that has ALREADY been redeemed cannot be revoked: the organization exists and cannot be un-created, so this returns 409 rather than implying otherwise. Requires org:invite.
+
+Path parameters:
+  - `id`: string
+
 ### certen.sign
 
 #### certen.sign.create()
@@ -1498,7 +1541,7 @@ Response 200 — Delivery requeued:
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 73 of the gateway's 119 operations. The rest are reachable only by
+The SDK wraps 76 of the gateway's 123 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -1554,4 +1597,7 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `POST /v1/portal/invites` — Invite a teammate
   - `POST /v1/portal/keys` — Create an API key for your organization
   - `POST /v1/portal/keys/{id}/rotate` — Rotate an API key
+
+**Registration**
+  - `POST /v1/registration-tokens/redeem` — Redeem a registration token for a new organization
 

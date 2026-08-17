@@ -751,6 +751,45 @@ export interface OAuthClientCredentials {
   warning?: string;
 }
 
+/** A registration token as a READ returns it — state, never the token itself. */
+export interface RegistrationToken {
+  id: string;
+  /** A recognisable fragment, so a list is readable without being redeemable. */
+  token_prefix: string;
+  state: 'active' | 'redeemed' | 'revoked' | 'expired';
+  org_name: string | null;
+  plan: string;
+  /** Scopes the redeemed org's first key receives. */
+  permissions: string[];
+  expires_at: string;
+  revoked_at: string | null;
+  redeemed_at: string | null;
+  /** The organization this became. Null until redeemed. */
+  redeemed_org_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** What `mint()` returns. `token` appears here and nowhere else, ever. */
+export interface MintedRegistrationToken extends RegistrationToken {
+  token: string;
+  warning?: string;
+}
+
+/**
+ * What redeeming produces: a new organization and its first API key.
+ *
+ * `api_key` is returned once. The token is single-use, so failing to store it cannot be fixed by
+ * redeeming again.
+ */
+export interface RedeemedRegistration {
+  org: { id: string; name: string; plan: string };
+  api_key: string;
+  key_prefix: string;
+  permissions: string[];
+  warning?: string;
+}
+
 /** One entry in the published error catalogue. See `admin.errors()`. */
 export interface ErrorCodeInfo {
   code: string;

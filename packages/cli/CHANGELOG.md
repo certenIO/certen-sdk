@@ -31,6 +31,25 @@ There were two copies of the currency formatter. `billing.ts` handled a leading 
 half-up rather than truncating — the old one displayed `-72.355716` as `-$72.35`, a cent kinder to
 the account than the truth.
 
+### Added — `certen orgs` and `certen signup --token`
+
+Onboarding an organization without a browser.
+
+```
+certen orgs invite --name "Acme" --expires 7d   # a human, once, in advance
+certen signup --token crt_...                   # the machine, later, alone
+```
+
+`certen signup` previously printed a code and waited — indefinitely — for somebody to open a
+browser and approve it. That is right for a person at a terminal and a wall for CI, for a platform
+provisioning its customers, and for an agent starting up. `--token` is the same command with the
+human moved earlier in time.
+
+`certen orgs list` shows what each token became, which is the link between a decision someone made
+and an organization now on their bill. `certen orgs revoke` stops an unredeemed one; a token that
+has already been redeemed cannot be revoked, and says so rather than implying the organization can
+be un-created.
+
 ### Added — `certen identity mnemonic`
 
 Collect the mnemonic from a `signing_mode: "provider"` identity. There was no way to do this from

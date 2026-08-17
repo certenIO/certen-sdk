@@ -55,7 +55,7 @@ const GROUPS: Group[] = [
   {
     title: 'Operate',
     blurb: 'across every identity and key',
-    commands: ['portfolio', 'webhooks', 'oauth-clients', 'admin', 'scopes', 'errors'],
+    commands: ['portfolio', 'webhooks', 'oauth-clients', 'orgs', 'admin', 'scopes', 'errors'],
   },
 ];
 

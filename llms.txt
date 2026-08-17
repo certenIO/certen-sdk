@@ -96,7 +96,7 @@ certen doctor                   # names the one thing blocking you
 
 ## Methods
 
-78 methods across 16 resources. Signatures and field-level detail: `llms-full.txt`.
+81 methods across 17 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.scopes()` — Every permission a key can be granted, and what each one covers.
@@ -179,6 +179,11 @@ certen doctor                   # names the one thing blocking you
   - `certen.proof.shares()` — Every share link this organization has created, including revoked and expired ones.
   - `certen.proof.revokeShare()` — Revoke a share link.
 
+**certen.registration-tokens**
+  - `certen.registration-tokens.mint()` — Mint a token.
+  - `certen.registration-tokens.list()` — Tokens this organization minted, newest first.
+  - `certen.registration-tokens.revoke()` — Stop a token being redeemed.
+
 **certen.sign**
   - `certen.sign.create()` — Sign or vote on a multi-signature transaction
   - `certen.sign.submitSignature()` — Submit signature for an external sign request
@@ -208,6 +213,6 @@ certen doctor                   # names the one thing blocking you
   - `certen.webhooks.delivery()` — One delivery, including the response body the endpoint returned.
   - `certen.webhooks.redeliver()` — Send a delivery again.
 
-The gateway exposes 119 operations; the SDK wraps 73 of them. Anything not listed
+The gateway exposes 123 operations; the SDK wraps 76 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

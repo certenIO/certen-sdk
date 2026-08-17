@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { hostname, userInfo } from 'node:os';
-import { CertenClient, CertenError, type DeviceAuthorization, type DeviceAuthorizationStatus } from '@certen.io/sdk';
+import { CertenClient, CertenError, redeemRegistrationToken, type DeviceAuthorization, type DeviceAuthorizationStatus } from '@certen.io/sdk';
 import { getApiUrl, getPortalUrl, setApiKey, readConfig } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -197,10 +197,11 @@ export function registerSignupCommands(program: Command): void {
     program
       .command(name)
       .description(description)
+      .option('--token <token>', 'Redeem a registration token instead of waiting for a human to approve a browser')
       .option('--no-browser', 'Do not try to open a browser; just print the URL')
       .option('--no-keyring', 'Store the key in ~/.certen/config.json instead of the OS keyring')
       .option('--timeout <minutes>', 'How long to wait for approval')
-      .action(async (opts: { browser: boolean; keyring: boolean; timeout?: string }) => {
+      .action(async (opts: { token?: string; browser: boolean; keyring: boolean; timeout?: string }) => {
         const existing = readConfig();
         if (process.env.CERTEN_API_KEY) {
           // The env var wins over stored config everywhere else, so a key obtained here would be
@@ -210,6 +211,39 @@ export function registerSignupCommands(program: Command): void {
             + 'Unset it first if you want to replace it.',
             'API_KEY_ENV_SET',
           );
+        }
+
+        // The unattended path. The device flow is correct for a person at a terminal and is a wall
+        // for everything else: it prints a code and waits, indefinitely, for somebody to open a
+        // browser. A registration token carries the same authority, granted in advance by a human
+        // who already decided this organization should exist — so CI, a platform provisioning its
+        // customers, and an agent starting up can all get their first credential with nobody
+        // present.
+        if (opts.token) {
+          const redeemed = await redeemRegistrationToken(opts.token, { baseUrl: getApiUrl() });
+          await setApiKey(redeemed.api_key, opts.keyring !== false && existing.storage === 'keyring');
+
+          printOutput({
+            org_id: redeemed.org.id,
+            org_name: redeemed.org.name,
+            plan: redeemed.org.plan,
+            key_prefix: redeemed.key_prefix,
+            permissions: redeemed.permissions,
+            api_url: getApiUrl(),
+          });
+
+          if (!isJsonMode()) {
+            human('');
+            human(`  Organization ${redeemed.org.name} created, and this machine is signed in.`);
+            human(`  ${redeemed.org.id}`);
+            human('');
+            // Said explicitly because the token is single-use: there is no second redemption to
+            // fall back on if the key is lost between here and the next command.
+            human('  The key is stored on this machine. It was returned once, and the token that');
+            human('  produced it is now spent.');
+            hint('certen init   # signing key, identity, and a check that it all works');
+          }
+          return;
         }
 
         let timeoutMs: number | undefined;

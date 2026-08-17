@@ -20,5 +20,8 @@ export { fetchOAuthToken, refreshOAuthToken, revokeOAuthToken } from './oauth.js
 // Exported so a caller can split `mnemonic_retrieval.url` the same way the SDK does, rather than
 // writing their own regex against a string whose parts they cannot afford to get wrong.
 export { parseMnemonicTarget } from './resources/identity.js';
+// Standalone for the same reason as the OAuth helpers: the caller has no credential yet, and
+// obtaining its first one is the entire purpose. See registration.ts.
+export { redeemRegistrationToken } from './registration.js';
 export { CertenUnfundedAccountError, movesValue, normalizeChainId } from './funding.js';
 export type { DoctorReport, DoctorCheck, CheckStatus } from './doctor.js';

@@ -4,6 +4,36 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `redeemRegistrationToken`, `client.registrationTokens`
+
+An organization could only be born in a browser. Creation happened inside the Firebase login
+exchange, so a platform could not provision its customers, a CI job could not create a scratch org,
+and an agent could not take its first step — every automated path stopped and waited for a person.
+
+A human still decides an org may exist; the decision and the provisioning no longer have to happen
+at the same keyboard. An owner mints a token with `client.registrationTokens.mint()` (scope
+`org:invite`), and whatever holds it calls `redeemRegistrationToken(token)` once to get a new
+organization and its first API key.
+
+`redeem` is standalone rather than a client method, for the same reason as `fetchOAuthToken`: the
+caller has no credential, and obtaining one is the entire purpose.
+
+What the new org will be — its plan, and what its first key may do — is fixed by the MINTER. A
+redeemer able to choose those would be choosing what someone else is billed for. Operator and
+wildcard scopes cannot be granted this way, and neither can `org:invite` itself, so one decision
+cannot become an unbounded tree of organizations.
+
+Single-use and claimed atomically, so a race cannot produce two organizations; expiring; revocable
+until redeemed. Unknown, expired, revoked and already-spent tokens are all reported identically, and
+the SDK says so in the error rather than letting a bare 404 read as a wrong URL.
+
+### Added — machine authentication end to end
+
+With this and client-credentials auth, the whole first-run journey now runs unattended: redeem a
+token, get a key, create an identity, pay, prove the work. That path had never been testable without
+a human in the middle, which is why the one journey every customer walks was the one with no
+automated coverage.
+
 ### Fixed — a gateway older than the client now says so
 
 `certen pricing` against production answered `Error [NOT_FOUND]: Not Found`. The command is

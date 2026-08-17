@@ -36,6 +36,7 @@ import { registerInitCommands } from './commands/init.js';
 import { registerSignupCommands } from './commands/signup.js';
 import { registerWebhookCommands } from './commands/webhooks.js';
 import { registerOAuthClientCommands } from './commands/oauth-clients.js';
+import { registerOrgCommands } from './commands/orgs.js';
 import { registerErrorsCommands } from './commands/errors-catalogue.js';
 import { formatRootHelp } from './help-root.js';
 
@@ -72,6 +73,7 @@ export function buildProgram(): Command {
   registerAdminCommands(program);
   registerWebhookCommands(program);
   registerOAuthClientCommands(program);
+  registerOrgCommands(program);
   registerErrorsCommands(program);
 
   // Every command, not just the root. `exitOverride()` is NOT inherited by subcommands, so without

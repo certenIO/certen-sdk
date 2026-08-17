@@ -5490,6 +5490,346 @@
         }
       }
     },
+    "/v1/registration-tokens": {
+      "post": {
+        "summary": "Mint a registration token",
+        "tags": [
+          "Registration"
+        ],
+        "description": "Mints a one-time token that lets a machine create a NEW organization and its first API key without a browser session. The token is returned once and cannot be retrieved again. What the new organization will be — its plan, and what its first key may do — is fixed here by the minter, not chosen by the redeemer. Operator and wildcard scopes cannot be granted this way. Requires the org:invite scope.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "org_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "description": "Name for the organization this creates. The redeemer may override it."
+                  },
+                  "plan": {
+                    "type": "string",
+                    "enum": [
+                      "starter",
+                      "pro",
+                      "enterprise"
+                    ],
+                    "description": "Defaults to starter."
+                  },
+                  "permissions": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Scopes for the redeemed org's first key. Defaults to a read/write set for identity, transactions, proofs and billing reads."
+                  },
+                  "expires_in": {
+                    "type": "integer",
+                    "minimum": 60,
+                    "description": "Seconds until it expires. Default 86400, clamped to the configured ceiling."
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "description": "For your own records — who this was issued to."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call mints a DIFFERENT token. A retry leaves a second live token that can create a second organization.",
+        "x-required-scopes": [
+          "org:invite",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "201": {
+            "description": "Token minted. The `token` field appears here and nowhere else.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Token minted. The `token` field appears here and nowhere else.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "expires_at": {},
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ungrantable scopes, or an empty permission list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Ungrantable scopes, or an empty permission list."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Missing or invalid API key."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "API key lacks the org:invite scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "API key lacks the org:invite scope."
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List registration tokens this organization minted",
+        "tags": [
+          "Registration"
+        ],
+        "description": "Lists tokens minted by the caller's organization, newest first, with the state of each (active, redeemed, revoked, expired) and the organization it became. Never returns a token itself. Requires org:invite.",
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "org:invite",
+          "admin:read",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/registration-tokens/{id}": {
+      "delete": {
+        "summary": "Revoke an unredeemed registration token",
+        "tags": [
+          "Registration"
+        ],
+        "description": "Stops a token being redeemed. Idempotent — revoking an already-revoked token succeeds, because the intent is already satisfied. A token that has ALREADY been redeemed cannot be revoked: the organization exists and cannot be un-created, so this returns 409 rather than implying otherwise. Requires org:invite.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "Revocation is a state, not an event.",
+        "x-required-scopes": [
+          "org:invite",
+          "admin:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "Token revoked and can no longer be redeemed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Token revoked and can no longer be redeemed."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such token in this organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "No such token in this organization."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already redeemed — the organization exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Already redeemed — the organization exists."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/registration-tokens/redeem": {
+      "post": {
+        "summary": "Redeem a registration token for a new organization",
+        "tags": [
+          "Registration"
+        ],
+        "description": "Exchanges a one-time registration token for a NEW organization and its first API key. Needs no credential — obtaining one is the point. The API key is returned once and cannot be retrieved again. Single-use: a second redemption of the same token is refused. Unknown, expired, revoked and already-redeemed tokens are all reported identically, so the endpoint cannot be used to probe which guesses were close.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 200
+                  },
+                  "org_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255,
+                    "description": "Overrides the name the minter pinned."
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "Single-use. A retry after success is refused, because the token was consumed when the organization was created.",
+        "responses": {
+          "201": {
+            "description": "Organization created. `api_key` appears here and nowhere else.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Organization created. `api_key` appears here and nowhere else.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "org": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "api_key": {
+                      "type": "string"
+                    },
+                    "key_prefix": {
+                      "type": "string"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token unknown, expired, revoked, or already redeemed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Token unknown, expired, revoked, or already redeemed."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/governance": {
       "post": {
         "summary": "Submit a governance operation",

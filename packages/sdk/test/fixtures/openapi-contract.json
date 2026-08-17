@@ -1087,6 +1087,80 @@
         }
       }
     },
+    "/v1/registration-tokens": {
+      "post": {
+        "required": [],
+        "properties": [
+          "org_name",
+          "plan",
+          "permissions",
+          "expires_in",
+          "note"
+        ],
+        "propertyTypes": {
+          "org_name": "string",
+          "plan": "string",
+          "permissions": "array",
+          "expires_in": "integer",
+          "note": "string"
+        },
+        "query": [],
+        "responses": {
+          "201": [
+            "token",
+            "id",
+            "expires_at",
+            "permissions",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      },
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/registration-tokens/{id}": {
+      "delete": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/registration-tokens/redeem": {
+      "post": {
+        "required": [
+          "token"
+        ],
+        "properties": [
+          "token",
+          "org_name"
+        ],
+        "propertyTypes": {
+          "token": "string",
+          "org_name": "string"
+        },
+        "query": [],
+        "responses": {
+          "201": [
+            "org",
+            "api_key",
+            "key_prefix",
+            "permissions",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
     "/v1/governance": {
       "post": {
         "required": [
