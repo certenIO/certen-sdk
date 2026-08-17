@@ -609,3 +609,71 @@ describe('an entitlement gap stops execution, not creation', () => {
     }
   });
 });
+
+/**
+ * Version skew, said BEFORE it causes a confusing failure.
+ *
+ * Clients and the gateway deploy separately, so one is routinely ahead — and the symptoms are the
+ * most misleading on the surface: a call to a path the deployment does not serve 404s, which reads
+ * as "wrong URL" until somebody thinks to compare versions. `ENDPOINT_NOT_ON_GATEWAY` names it once
+ * it happens; this names it in advance, which is what a diagnostic is for.
+ *
+ * The error catalogue is the cheapest probe available — public, one request, and its contents are a
+ * direct signal of how far apart the two are.
+ */
+describe('noticing that the gateway is ahead of this client', () => {
+  it('warns when the gateway raises codes this SDK has never heard of', async () => {
+    const stub = await startServer((req, res) => {
+      if ((req.url ?? '').split('?')[0] === '/v1/errors') {
+        return json(res, 200, {
+          errors: [
+            { code: 'BAD_REQUEST', status: 400, retryable: false, audience: 'caller', meaning: 'x' },
+            { code: 'QUANTUM_FLUX_DETECTED', status: 418, retryable: false, audience: 'platform', meaning: 'y' },
+          ],
+        });
+      }
+      return gateway()(req, res);
+    });
+    try {
+      const report = await client(stub.url).doctor();
+      const check = byName(report.checks, 'client matches gateway');
+      expect(check.status).toBe('warn');
+      expect(check.detail).toContain('QUANTUM_FLUX_DETECTED');
+      expect(check.fix).toContain('Upgrade');
+      // A warning, never a failure: skew is normal for hours during a release, and an SDK that
+      // refused to work would be worse than one that mentions it.
+      expect(report.ok).toBe(true);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('reports ok when every published code is known', async () => {
+    const stub = await startServer((req, res) => {
+      if ((req.url ?? '').split('?')[0] === '/v1/errors') {
+        return json(res, 200, {
+          errors: [{ code: 'BAD_REQUEST', status: 400, retryable: false, audience: 'caller', meaning: 'x' }],
+        });
+      }
+      return gateway()(req, res);
+    });
+    try {
+      const report = await client(stub.url).doctor();
+      expect(byName(report.checks, 'client matches gateway').status).toBe('ok');
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('says nothing at all when the gateway does not publish a catalogue', async () => {
+    // An older gateway has no /v1/errors. Absence is not skew, and inventing a warning from a 404
+    // would make `doctor` noisy against exactly the deployments it most needs to be trusted on.
+    const stub = await startServer(gateway());
+    try {
+      const report = await client(stub.url).doctor();
+      expect(report.checks.find((c) => c.name === 'client matches gateway')).toBeUndefined();
+    } finally {
+      await stub.close();
+    }
+  });
+});

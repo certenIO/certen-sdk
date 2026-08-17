@@ -1,5 +1,6 @@
 import type { CertenClient } from './client.js';
 import { CertenError } from './errors.js';
+import { VENDORED_ERROR_CODES } from './error-codes.js';
 
 /**
  * Diagnose a setup and say what is blocking it.
@@ -459,6 +460,39 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
   }
 
   checks.push(executionCheck(recentIntents));
+
+  // ── Is this SDK older than the gateway it is talking to? ────────────────────────────────────
+  //
+  // Clients and the gateway deploy separately, so one is routinely ahead of the other — and the
+  // symptoms of that are the most misleading failures on the surface. A method calling a path the
+  // deployment does not serve 404s, which reads as "wrong URL" or "no such resource" until someone
+  // thinks to compare versions. `ENDPOINT_NOT_ON_GATEWAY` names it once it happens; this says it
+  // BEFORE, which is the point of a diagnostic.
+  //
+  // The error catalogue is the cheapest possible probe: public, one request, and its size is a
+  // direct proxy for how far apart the two are. A gateway raising codes this SDK has never heard of
+  // means its surface has moved.
+  //
+  // A warning, never a failure. Version skew is normal for hours at a time during a release, and an
+  // SDK that refused to work would be worse than one that mentions it.
+  const live = await client.admin.errors().catch(() => null);
+  if (live?.errors?.length) {
+    const known = new Set(VENDORED_ERROR_CODES);
+    const unknown = live.errors.map((e) => e.code).filter((c) => !known.has(c));
+    checks.push(unknown.length === 0
+      ? {
+        name: 'client matches gateway',
+        status: 'ok',
+        detail: `${live.errors.length} error codes, all known to this SDK`,
+      }
+      : {
+        name: 'client matches gateway',
+        status: 'warn',
+        detail: `The gateway raises ${unknown.length} code(s) this SDK does not know: `
+          + `${unknown.slice(0, 5).join(', ')}${unknown.length > 5 ? '…' : ''}`,
+        fix: 'The gateway is ahead of this client. Upgrade @certen.io/sdk.',
+      });
+  }
 
   return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
 }

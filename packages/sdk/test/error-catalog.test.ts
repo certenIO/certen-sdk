@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { CertenError } from '../src/errors.js';
 // The shared catalog, also used to generate the table in llms-full.txt.
 import { ERROR_CODES } from '../../../tools/agentgen/lib/errors.mjs';
+import { VENDORED_ERROR_CODES } from '../src/error-codes.js';
 
 /**
  * The error catalog exists in three places, and this file is why they cannot disagree:
@@ -165,5 +166,23 @@ describe('the two codes where status alone gets retryability wrong', () => {
   it('leaves ordinary throttles and conflicts alone', async () => {
     expect(new CertenError('slow', 429, 'RATE_LIMIT_EXCEEDED').isRetryable).toBe(true);
     expect(new CertenError('dup', 409, 'CONFLICT').isRetryable).toBe(false);
+  });
+});
+
+/**
+ * The runtime list `doctor` compares against must match the vendored catalogue.
+ *
+ * `spec/errors.json` is not shipped inside the SDK package, so `doctor` carries its own copy of the
+ * code NAMES to notice a gateway that has moved ahead of it. Two copies of anything drift; this is
+ * the test that stops them.
+ */
+describe('the list doctor checks against', () => {
+  it('matches the vendored catalogue exactly', () => {
+    const vendored = JSON.parse(
+      readFileSync(join(REPO_ROOT, 'spec', 'errors.json'), 'utf8'),
+    ) as { errors: Array<{ code: string }> };
+
+    expect([...VENDORED_ERROR_CODES].sort())
+      .toEqual(vendored.errors.map((e) => e.code).sort());
   });
 });
