@@ -140,7 +140,22 @@ sign and a proof that does not verify — the two failures the journey exists to
 `packages/cli/test/e2e-script.test.ts` tests the checker itself against a stub that returns
 plausible-but-wrong answers, since a green end-to-end run that cannot go red is worse than none.
 
-It runs nightly via `.github/workflows/e2e-onboarding.yml`, and on demand through
+**To exercise the proof cycle in CI**, four repository secrets are needed — without them the run
+still passes and reports the proof step as *skipped*, never as passed:
+
+| Secret | |
+|---|---|
+| `E2E_PROOF_IDENTITY` | A funded identity's uuid |
+| `E2E_PROOF_FROM` | Its abstract account address on the target chain |
+| `E2E_SIGNING_KEY` | The key file JSON that authorizes it |
+| `E2E_SIGNING_KEY_NAME` | The name to store it under |
+
+`E2E_SIGNING_KEY` is a real private key in CI, so make it a **dedicated** one: used for nothing else,
+controlling a single testnet identity whose account holds a trivial balance. It authorizes transfers
+from that account and nothing more. Keep that account topped up, or the proof step starts failing for
+lack of gas rather than for a real regression.
+
+It runs weekly via `.github/workflows/e2e-onboarding.yml`, and on demand through
 `workflow_dispatch`. **It cannot pass until the gateway is deployed** — `/v1/signup/challenge` is one
 of 22 operations this build calls that production does not yet serve.
 

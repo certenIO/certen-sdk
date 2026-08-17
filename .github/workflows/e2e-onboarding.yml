@@ -32,10 +32,8 @@ on:
         description: 'Gateway to run against'
         required: false
         default: 'https://gateway.kompendium.co'
-      contract:
-        description: 'Contract address for the proof-gated call. Omit to skip that step.'
-        required: false
-        default: ''
+      # No `contract` input: the proof cycle is a value transfer, which exercises the same
+      # proof-gated path — open, sign, submit, anchor, prove — with no contract ABI to go stale.
 
 jobs:
   onboarding:
@@ -69,13 +67,48 @@ jobs:
           CERTEN_API_URL: ${{ github.event.inputs.gateway_url || 'https://gateway.kompendium.co' }}
         run: npm run check:gateway
 
+      # Place the signing key the proof cycle needs, if one is configured.
+      #
+      # The proof cycle cannot run on the organization this workflow just created: a brand-new
+      # abstract account holds no gas, so its execution leg parks at `anchoring` forever. It runs
+      # instead against a maintained, funded identity — which means the runner needs the key that
+      # authorizes it.
+      #
+      # That is a real private key in CI, so it must be a DEDICATED one: used for nothing else,
+      # controlling one testnet identity whose account holds a trivial balance. It authorizes
+      # transfers from that account and nothing more. Never reuse an operator key here.
+      #
+      # Written to the runner's home because the script copies the named key from there into its own
+      # isolated home — which is what keeps the API key this run obtains separate from everything
+      # else on the machine.
+      - name: Place the proof-cycle signing key
+        if: ${{ secrets.E2E_SIGNING_KEY != '' }}
+        env:
+          KEY_JSON: ${{ secrets.E2E_SIGNING_KEY }}
+          KEY_NAME: ${{ secrets.E2E_SIGNING_KEY_NAME }}
+        run: |
+          mkdir -p "$HOME/.certen/keys"
+          printf '%s' "$KEY_JSON" > "$HOME/.certen/keys/${KEY_NAME:-e2e}.json"
+          chmod 600 "$HOME/.certen/keys/${KEY_NAME:-e2e}.json"
+
       - name: Onboard from nothing
         env:
           CERTEN_API_URL: ${{ github.event.inputs.gateway_url || 'https://gateway.kompendium.co' }}
+          # All three are needed together, or the proof cycle is skipped rather than half-run. The
+          # script reports a skip as a skip and never as a pass, so an unconfigured repository gets
+          # an honest partial result instead of a green tick over work that never happened.
+          PROOF_IDENTITY: ${{ secrets.E2E_PROOF_IDENTITY }}
+          PROOF_FROM: ${{ secrets.E2E_PROOF_FROM }}
+          PROOF_KEY: ${{ secrets.E2E_SIGNING_KEY_NAME }}
         run: |
-          node scripts/e2e-onboarding.mjs \
-            --url "$CERTEN_API_URL" \
-            ${{ github.event.inputs.contract && format('--contract {0}', github.event.inputs.contract) || '' }}
+          ARGS="--url $CERTEN_API_URL"
+          if [ -n "$PROOF_IDENTITY" ] && [ -n "$PROOF_FROM" ] && [ -n "$PROOF_KEY" ]; then
+            ARGS="$ARGS --proof-identity $PROOF_IDENTITY --sign-with $PROOF_KEY --proof-from $PROOF_FROM"
+          else
+            echo "Proof cycle not configured — set E2E_PROOF_IDENTITY, E2E_PROOF_FROM,"
+            echo "E2E_SIGNING_KEY and E2E_SIGNING_KEY_NAME to exercise it."
+          fi
+          node scripts/e2e-onboarding.mjs $ARGS
 
       # Runs even when the e2e fails, because a regression in round trips is worth seeing next to the
       # failure rather than only when everything is green.
