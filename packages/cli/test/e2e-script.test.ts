@@ -170,7 +170,10 @@ describe('the end-to-end onboarding check', () => {
     const url = await stubGateway();
     const { out } = await e2e(url);
 
-    expect(out).toContain('skipped: proof-gated call executed');
-    expect(out).toContain('no --contract given');
+    expect(out).toContain('skipped: proof-gated transfer executed');
+    // Names all three inputs it needs. A proof cycle cannot run on the organization this script just
+    // created — a new abstract account holds no gas, so its execution leg parks at `anchoring` — so
+    // the skip has to say what would make it run rather than merely that it did not.
+    expect(out).toContain('--proof-identity');
   }, 30_000);
 });

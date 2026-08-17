@@ -174,6 +174,7 @@ step.
 | Read path, 2026-08-17 | `gateway.kompendium.co` | **13 requests, 5.0s** — every step exit 0 |
 | Read path + proof, 2026-08-17 | `gateway.kompendium.co` | **15 requests, 6.6s** — `--intent <id>` adds the proof read |
 | Signup → signing identity, 2026-08-17 | `gateway.kompendium.co` | **46.9s**, unattended, from no credential at all |
+| Proof cycle, 2026-08-17 | `gateway.kompendium.co` | **anchored**, receipt present — open, sign, submit, anchor, prove |
 
 The read-path figure dropped from 14 requests to 13 the moment the gateway was deployed, because
 `remaining_usd` now rides on the balance and the separate obligations read is gone. The previous
@@ -184,12 +185,20 @@ gateway with every downstream absent and are a floor for reads, not a journey ti
 The signup figure comes from `e2e-onboarding.mjs`: keypair signup, identity created and confirmed
 able to sign, trial credit verified — with no human and no pre-existing credential.
 
-**Producing a fresh proof is not in any of these numbers**, and the reason is environmental rather
-than missing code. It needs an abstract account holding gas on the destination chain and a contract
-with a known ABI to call; a brand-new organization has neither, so its call parks at `anchoring`.
-`--intent <id>` therefore measures the proof READ against an already-anchored intent, which is the
-step a counterparty actually performs. To measure a full cycle, pass `--contract` to
-`e2e-onboarding.mjs` with a funded identity.
+**The proof cycle cannot run on the organization the script just created**, and that is a fact about
+chains rather than a gap in the tooling: a brand-new abstract account holds no gas, so its execution
+leg parks at `anchoring` forever. Somebody has to put testnet ETH in the account.
+
+So the journey splits honestly. Signup and identity creation run **from nothing** — the part that was
+impossible before keypair signup. The proof cycle runs against an identity that is kept funded:
+
+```bash
+node scripts/e2e-onboarding.mjs --url …   --proof-identity <uuid> --sign-with <local-key> --proof-from <abstract-account>
+```
+
+It uses a value transfer rather than a contract call: same proof-gated path — open, sign, submit,
+anchor, prove — with no contract ABI to go stale. The proof is asserted **anchored and carrying a
+receipt**, because a proof that exists and is not anchored is a claim about a claim.
 
 Re-run both on each release and diff. A regression in round trips is invisible in code review and
 obvious here.

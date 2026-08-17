@@ -25,7 +25,8 @@
  * Exit codes: 0 all asserted steps passed · 1 an assertion failed · 2 the run could not be set up.
  */
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +43,25 @@ function arg(name, fallback) {
 const TARGET = (arg('url', process.env.CERTEN_API_URL ?? '') || '').replace(/\/+$/, '');
 const CHAIN = arg('chain', 'base-sepolia');
 const CONTRACT = arg('contract', '');
+/**
+ * A funded identity to run the proof cycle with, and the local key that signs for it.
+ *
+ * The proof cycle cannot run on the organization this script just created, and that is a fact about
+ * chains rather than a gap in the tooling: a brand-new abstract account holds no gas, so its
+ * execution leg parks at `anchoring` forever. Nothing the gateway or this script can do changes
+ * that — somebody has to put testnet ETH in the account.
+ *
+ * So the journey splits honestly. Signup and identity creation run FROM NOTHING, which is the part
+ * that was impossible until keypair signup existed. The proof cycle runs against an identity that is
+ * kept funded, because that is the only way to exercise it repeatedly.
+ *
+ * A value transfer is used rather than a contract call: it exercises the same proof-gated path —
+ * open, sign, submit, anchor, prove — and needs no contract ABI, so the check has one fewer external
+ * dependency to go stale.
+ */
+const PROOF_IDENTITY = arg('proof-identity', '');
+const PROOF_KEY = arg('sign-with', '');
+const PROOF_FROM = arg('proof-from', '');
 /**
  * How long to wait for provisioning, in minutes.
  *
@@ -66,6 +86,27 @@ if (!TARGET) {
  * developer's own key, and a CI job would leak state between runs.
  */
 const HOME = mkdtempSync(join(tmpdir(), 'certen-e2e-'));
+
+/**
+ * Carry ONE signing key into the isolated home, when the proof cycle needs it.
+ *
+ * The isolated `HOME` is what keeps this run from picking up — or overwriting — the operator's own
+ * credential, and it must stay that way: the point of the run is that signup obtains a fresh one.
+ * But the keystore lives under the same directory, so isolation also hides the local key the proof
+ * step signs with.
+ *
+ * Copying exactly the named key keeps both properties: the API key is still the one this run just
+ * obtained, and the private key never leaves the machine it was already on.
+ */
+if (PROOF_KEY) {
+  const from = join(homedir(), '.certen', 'keys', `${PROOF_KEY}.json`);
+  if (existsSync(from)) {
+    mkdirSync(join(HOME, '.certen', 'keys'), { recursive: true });
+    copyFileSync(from, join(HOME, '.certen', 'keys', `${PROOF_KEY}.json`));
+  } else {
+    console.error(`e2e: no local key named "${PROOF_KEY}" — the proof cycle will be skipped`);
+  }
+}
 const env = {
   ...process.env,
   HOME,
@@ -140,7 +181,8 @@ const PUBLIC_KEY_HEX = rawPub.toString('hex');
 
 console.log(`\ne2e onboarding against ${TARGET}`);
 console.log(`  chain ${CHAIN} · key ${PUBLIC_KEY_HEX.slice(0, 16)}…`
-  + `${CONTRACT ? ` · contract ${CONTRACT}` : ' · no --contract, proof cycle skipped'}\n`);
+  + `${PROOF_IDENTITY ? ` · proof via ${PROOF_IDENTITY.slice(0, 8)}` : ' · proof cycle skipped'}
+`);
 
 let orgId = null;
 
@@ -156,7 +198,18 @@ let orgId = null;
 
   if (!challenge?.nonce) {
     console.error(`FAIL  signup challenge — ${challenge?.error ?? 'no nonce returned'}`);
-    console.error('      Is SELF_SERVICE_ENABLED set on this gateway?');
+    // Name the actual cause rather than one plausible cause.
+    //
+    // This printed "Is SELF_SERVICE_ENABLED set?" for every failure, and the first time it fired in
+    // anger the reason was a rate limit — so it pointed at a config flag that was correctly set and
+    // said nothing about the ceiling that had actually been hit. A diagnostic that guesses is worse
+    // than one that reports, because it sends the reader somewhere confidently wrong.
+    if (challenge?.code === 'RATE_LIMIT_EXCEEDED' || /rate limit/i.test(String(challenge?.error))) {
+      console.error('      Signup is rate limited per address. This run is fine; it is too soon.');
+      console.error(`      ${challenge?.retry_after_seconds ?? '?'}s to wait.`);
+    } else {
+      console.error('      If this says the route is unknown, SELF_SERVICE_ENABLED may be off.');
+    }
     rmSync(HOME, { recursive: true, force: true });
     process.exit(1);
   }
@@ -236,15 +289,35 @@ await step(
 //
 // Needs a contract to call and a funded abstract account, neither of which this script can conjure.
 // Skipped explicitly rather than silently, so a green run never overstates what it covered.
-const skipReason = CONTRACT ? undefined : 'no --contract given';
+const canProve = Boolean(PROOF_IDENTITY && PROOF_KEY && PROOF_FROM);
+const skipReason = canProve
+  ? undefined
+  : 'needs --proof-identity, --sign-with and --proof-from (a funded abstract account)';
+
+// A tiny transfer to the burn address. The amount is irrelevant — what is being tested is that the
+// authorization anchors and the proof verifies — so it is kept as small as the chain allows.
 const call = await step(
-  'proof-gated call executed',
-  ['call', '--identity', identity?.id ?? 'missing', '--chain', CHAIN,
-    '--to', CONTRACT, '--fn', 'confirm(bytes32)', '--arg', `0x${'11'.repeat(32)}`,
-    '--sign-with', 'e2e', '--wait', '--json'],
+  'proof-gated transfer executed',
+  ['tx', 'create', '--identity', PROOF_IDENTITY, '--to-chain', CHAIN,
+    '--from', PROOF_FROM, '--to', '0x000000000000000000000000000000000000dEaD',
+    '--amount', '0.0001', '--sign-with', PROOF_KEY, '--json'],
   (data) => (data?.intent_id ? null : 'no intent_id returned'),
   { skipIf: skipReason },
 );
+
+// The proof cycle is real validator work — 60 to 110 seconds — so this waits for the intent to
+// reach a terminal state before asking for its proof. Asking immediately would reliably fail
+// against a system that is working correctly, which is the worst kind of check.
+if (call?.intent_id) {
+  const deadline = Date.now() + 6 * 60_000;
+  for (;;) {
+    const s = await certen(['tx', 'status', call.intent_id, '--json']);
+    const state = payload(s.stdout)?.status;
+    if (['completed', 'failed', 'error'].includes(String(state))) break;
+    if (Date.now() > deadline) break;
+    await new Promise((r) => { setTimeout(r, 15_000); });
+  }
+}
 
 await step(
   'proof anchored and verifiable',
@@ -254,9 +327,10 @@ await step(
     // Anchored is the property that makes the proof worth anything. A proof that exists and is not
     // anchored is a claim about a claim.
     if (data.anchored !== true) return `proof is not anchored (${JSON.stringify(data.anchored)})`;
+    if (!data.receipt) return 'proof carries no receipt';
     return null;
   },
-  { skipIf: skipReason ?? (call ? undefined : 'the call step did not produce an intent') },
+  { skipIf: skipReason ?? (call ? undefined : 'the transfer step did not produce an intent') },
 );
 
 // ── Summary ────────────────────────────────────────────────────────────────────────────────────
