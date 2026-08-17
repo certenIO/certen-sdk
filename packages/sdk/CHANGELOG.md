@@ -4,6 +4,48 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `identity.retrieveMnemonic`
+
+The most dangerous gap on the surface. Creating an identity with `signing_mode: "provider"` never
+returns the mnemonic inline — it returns a `mnemonic_retrieval.url` whose token is consumed
+atomically on first read and expires in about ten minutes. Nothing in this SDK could issue that
+request, so a caller who did not hand-roll HTTP lost the seed permanently, on the one flow where
+CERTEN generates the key material.
+
+Takes the URL from the create response, or an id and token separately. `parseMnemonicTarget` is
+exported for anyone who needs to split it themselves.
+
+`createAndWait` now carries `mnemonic_retrieval` through instead of discarding it — but it is a
+safety net, not the path: that call may wait five minutes against a token that lives ten. For
+provider mode, `create()`, collect, then poll.
+
+### Added — `client.oauthClients`
+
+Tokens could be obtained and revoked from code; the client that issues them could only be created by
+a human in the portal. So an integration could authenticate itself and not provision itself.
+
+`list`, `create`, `remove`, `rotateSecret`.
+
+**The operations moved from `/v1/admin/oauth-clients` to `/v1/oauth-clients`**, with the new
+`oauth:read` alongside `oauth:write`. Same misfiling webhooks had: the rows are org-scoped and the
+create route already refused to cross orgs without admin scope, so this was always a customer
+capability wearing an operator's path. Listing your own clients also required a WRITE scope, which
+it no longer does. Existing `admin:*` keys still work.
+
+### Added — `admin.errors`
+
+The error catalogue was published on the gateway and then had no client method for a release, so the
+codes stayed exactly as discoverable as before — by provoking them. Reads from the LIVE gateway,
+which is the point: the vendored `spec/errors.json` is only as current as this release, and a
+deployment ahead of it raises codes the local copy has never seen.
+
+### Added — `billing.quoteById`
+
+A quote could be issued and never read back. Someone who priced work, was interrupted, and returned
+had to guess whether their quote was still good or burn it and let the price move. `quote()` creates;
+this reads. Returns `status` alongside `expires_at`, which are the two ways a quote stops being
+usable.
+
 ### Added — `fetchOAuthToken`, `refreshOAuthToken`, `revokeOAuthToken`
 
 The whole OAuth2 token lifecycle was unreachable. A service using client credentials could obtain a

@@ -697,6 +697,44 @@ export interface ScopeInfo {
   operations: string[];
 }
 
+/** An OAuth2 client as any READ returns it — deliberately without a secret. */
+export interface OAuthClient {
+  id: string;
+  client_id: string;
+  org_id: string;
+  /** What tokens minted by this client are allowed to do. */
+  scopes: string[];
+  is_active: boolean;
+  created_at: string;
+  last_rotated_at?: string | null;
+}
+
+/**
+ * What `create()` and `rotateSecret()` return.
+ *
+ * `client_secret` is present here and NOWHERE else. There is no endpoint that will tell you again.
+ */
+export interface OAuthClientCredentials {
+  client_id: string;
+  client_secret: string;
+  org_id?: string;
+  scopes?: string[];
+  warning?: string;
+}
+
+/** One entry in the published error catalogue. See `admin.errors()`. */
+export interface ErrorCodeInfo {
+  code: string;
+  status: number;
+  meaning: string;
+  /** Will repeating this EXACT request eventually work? Not a statement about fault. */
+  retryable: boolean;
+  /** `platform` means there is nothing the caller can change. */
+  audience: 'caller' | 'platform';
+  /** What to do next, when there is something to do. */
+  action?: string;
+}
+
 /**
  * Who a credential is, and what it may do.
  *
@@ -1107,6 +1145,14 @@ export interface QuoteResponse {
     gas_estimate_basis?: 'class_specific' | 'class_thin' | 'unclassified_fallback';
     [k: string]: unknown;
   };
+  /**
+   * Where this quote stands. Only returned when reading one back with `quoteById()` — a quote you
+   * just created is `active` by construction, so the create response does not repeat it.
+   *
+   * A quote is single-use: once it has priced a transaction it is spent, and passing it again is
+   * refused. `expires_at` is the other way it stops being usable.
+   */
+  status?: string;
 }
 
 export interface Obligation {

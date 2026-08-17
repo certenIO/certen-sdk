@@ -96,10 +96,11 @@ certen doctor                   # names the one thing blocking you
 
 ## Methods
 
-71 methods across 15 resources. Signatures and field-level detail: `llms-full.txt`.
+78 methods across 16 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.scopes()` — Every permission a key can be granted, and what each one covers.
+  - `certen.admin.errors()` — Every error code this API can return, and what to do about each.
   - `certen.admin.createOrg()` — Create organization
   - `certen.admin.createApiKey()` — Mint API key
   - `certen.admin.listApiKeys()` — List API keys
@@ -112,6 +113,7 @@ certen doctor                   # names the one thing blocking you
   - `certen.billing.pricing()` — Every priced operation and what it costs — one call, no guessing.
   - `certen.billing.balance()` — Available, held, credit line, and spendable.
   - `certen.billing.quote()` — Price a piece of work before committing to it.
+  - `certen.billing.quoteById()` — Re-read a quote you already have.
   - `certen.billing.obligations()` — Pending intents and what they will cost — including `remaining_usd`, the amount that may actually be committed to new work.
   - `certen.billing.ledger()` — Every balance change, newest first.
   - `certen.billing.receipts()` — Signed receipts for every payment, charge, refund and adjustment.
@@ -152,6 +154,13 @@ certen doctor                   # names the one thing blocking you
   - `certen.identity.get()` — Fetch one identity.
   - `certen.identity.update()` — Link or unlink chains, set a webhook, or supply a `publicKey` to repair an identity created without one.
   - `certen.identity.retire()` — Retire an identity, freeing the slot it occupies against the org quota.
+  - `certen.identity.retrieveMnemonic()` — Collect the mnemonic generated for a `signing_mode: "provider"` identity.
+
+**certen.oauth-clients**
+  - `certen.oauth-clients.list()` — Clients this organization owns.
+  - `certen.oauth-clients.create()` — Create a client and receive its credentials once.
+  - `certen.oauth-clients.remove()` — Deactivate a client and revoke every token it ever issued.
+  - `certen.oauth-clients.rotateSecret()` — Issue a new client secret, optionally keeping the old one alive while you deploy.
 
 **certen.pending**
   - `certen.pending.list()` — List pending actions inbox
@@ -199,6 +208,6 @@ certen doctor                   # names the one thing blocking you
   - `certen.webhooks.delivery()` — One delivery, including the response body the endpoint returned.
   - `certen.webhooks.redeliver()` — Send a delivery again.
 
-The gateway exposes 119 operations; the SDK wraps 66 of them. Anything not listed
+The gateway exposes 119 operations; the SDK wraps 73 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

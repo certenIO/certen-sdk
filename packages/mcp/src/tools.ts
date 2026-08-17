@@ -358,6 +358,43 @@ const READ_TOOLS: ToolDef[] = [
     run: (c) => c.admin.scopes(),
   },
   {
+    name: 'certen_errors',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/errors',
+    description:
+      'Every error code this API can return, what each means, and whether retrying the same '
+      + 'request can ever succeed. Read this BEFORE deciding what to do about a failure, and '
+      + 'especially before retrying: `retryable` answers "will repeating this exact request '
+      + 'eventually work?", NOT "whose fault is it" — a 503 from an unavailable rate oracle is '
+      + 'retryable, a 402 is not, because retrying without paying changes nothing. `audience: '
+      + 'platform` means there is nothing in the request to change, so tell the user it is ours '
+      + 'and stop rather than sending them to debug their own setup. Read from the LIVE gateway, '
+      + 'so it includes codes newer than this SDK. Needs no API key.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => c.admin.errors(),
+  },
+  {
+    name: 'certen_quote_get',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/quote/{id}',
+    description:
+      'Read back a quote that was already issued, to find out whether its price can still be '
+      + 'used. A quote is SINGLE-USE and expires, so check `status` and `expires_at` before '
+      + 'passing a quote_id you obtained earlier in the conversation — a spent or expired quote is '
+      + 'refused at submission, partway into the work. Use this rather than asking for a new quote '
+      + 'when one may still be good: re-quoting is free but lets the price move. Requires '
+      + 'billing:read.',
+    inputSchema: {
+      type: 'object',
+      properties: { quote_id: str('The quote_id returned when the quote was created.') },
+      required: ['quote_id'],
+      additionalProperties: false,
+    },
+    run: (c, a) => c.billing.quoteById(String(a.quote_id)),
+  },
+  {
     name: 'certen_platform_ready',
     tier: 'read',
     mutates: false,

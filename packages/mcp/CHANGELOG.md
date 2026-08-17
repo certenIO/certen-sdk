@@ -4,6 +4,19 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.
 
+### Added — `certen_errors`, `certen_quote_get`
+
+Both read-tier. `certen_errors` is the one that changes agent behaviour: `retryable` says whether
+repeating a request can ever work, and an `audience: platform` code says there is nothing in the
+request to change — so an agent stops sending someone to debug their own setup during our outage.
+
+`certen_quote_get` checks whether a quote obtained earlier in a conversation can still be used. A
+quote is single-use and expires, and a spent one is refused at submission, partway into the work.
+
+Deliberately NOT exposed: retrieving a provider-mode mnemonic, and creating or rotating an OAuth
+client secret. Both hand long-lived key material to a model, and neither is something an agent
+should be doing on someone's behalf. They are in the SDK and the CLI, where a person is holding it.
+
 ### Added — `certen_webhook_endpoints`, `certen_webhook_deliveries`, `certen_webhook_redeliver`
 
 An agent asked "why did the event not arrive" had nothing to look at. `certen_webhook_deliveries` is

@@ -3,6 +3,43 @@
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.
+### Added — `certen identity mnemonic`
+
+Collect the mnemonic from a `signing_mode: "provider"` identity. There was no way to do this from
+the CLI at all, and the retrieval token is consumed on first read and expires in about ten minutes —
+so the seed was lost by default unless someone hand-rolled the request.
+
+**Writes to a file, mode 0600, rather than printing.** Stdout is scrollback, CI logs, and whatever
+is recording the session; a seed phrase outlives its usefulness there by years. `--print` is there
+for anyone who genuinely wants it on screen, and `--json` gives the value to a script that asked.
+
+Takes the `mnemonic_retrieval.url` straight from the create response, or an id and token separately.
+An unparseable target fails before any request is issued, because a half-parsed target would spend a
+one-shot token for nothing.
+
+### Added — `certen oauth-clients`
+
+`list`, `create`, `rotate-secret`, `remove`. A deployment could authenticate with client credentials
+and could not create the client those credentials belong to, which is where "automated" stopped
+being true.
+
+`rotate-secret --grace <seconds>` is the one worth knowing: the previous secret keeps working while
+the fleet picks up the new one, so changing a credential is not an outage. `remove` is the opposite
+and says so — it revokes every live token immediately.
+
+### Added — `certen errors`
+
+`certen errors` lists every code the gateway you are talking to can return; `certen errors <CODE>`
+explains one. Needs no API key. This is the command to run when a code shows up in a log and the
+question is whether to retry, pay, or wake someone — `retryable` answers "can this exact request
+ever work", and a `platform` audience says plainly that there is nothing on your side to change.
+
+### Added — `certen quote --id`
+
+Read back a quote you already hold instead of guessing whether it is still good. Same command as
+issuing one, because it is the same question; it answers "still usable" outright rather than leaving
+a status string and a timestamp to compare by hand.
+
 ### Added — `certen auth revoke-token`
 
 Revoke a leaked OAuth2 token from the terminal. **Works with no API key configured** — the gateway

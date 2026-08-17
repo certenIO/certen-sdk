@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import { CertenClient } from '@certen.io/sdk';
+import { writeFileSync, chmodSync } from 'node:fs';
+import { CertenClient, parseMnemonicTarget } from '@certen.io/sdk';
 import type { Identity, IdentityResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getOutputFormat, rememberIdentity, forgetIdentity } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
@@ -285,5 +286,48 @@ export function registerIdentityCommands(program: Command): void {
         linkChains: [chain],
       });
       printOutput(result as unknown as Record<string, unknown>);
+    });
+
+  identity
+    .command('mnemonic <id-or-url> [token]')
+    .description('Collect a provider-mode mnemonic — works exactly once')
+    .option('--out <file>', 'Where to write it. Defaults to ./<id>-mnemonic.txt, mode 0600.')
+    .option('--print', 'Print it to the terminal instead of writing a file')
+    .action(async (idOrUrl: string, token: string | undefined, opts: { out?: string; print?: boolean }) => {
+      const client = await getClient();
+      const { mnemonic } = await client.identity.retrieveMnemonic(idOrUrl, token);
+
+      // A machine consumer asked for the value in its output, so give it the value. Anything else
+      // would mean a script has to go read a file the CLI chose the name of.
+      if (isJsonMode() || getOutputFormat() === 'json') {
+        printOutput({ mnemonic });
+        return;
+      }
+
+      if (opts.print) {
+        human('');
+        human(`  ${mnemonic}`);
+        human('');
+        human('  That was the only read. The URL is dead now, and this phrase is in your');
+        human('  terminal scrollback — move it somewhere you trust and clear the buffer.');
+        return;
+      }
+
+      // Writing beats printing by default. A seed phrase on stdout lands in scrollback, in CI
+      // logs, and in whatever is recording the session — all places it outlives its usefulness by
+      // years. `--print` is there for anyone who genuinely wants that.
+      const { id } = parseMnemonicTarget(idOrUrl, token);
+      const path = opts.out ?? `${id}-mnemonic.txt`;
+      writeFileSync(path, `${mnemonic}\n`, { encoding: 'utf-8', mode: 0o600 });
+      try {
+        chmodSync(path, 0o600);
+      } catch {
+        // Windows has no POSIX mode. The file is still written; permissions are the OS's business.
+      }
+
+      human('');
+      human(`  Written to ${path}`);
+      human('  Read once and gone — the retrieval URL no longer works, and CERTEN cannot');
+      human('  produce this phrase again. Move it into your secret store and delete the file.');
     });
 }

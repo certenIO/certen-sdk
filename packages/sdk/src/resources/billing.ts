@@ -102,6 +102,21 @@ export class BillingResource {
   }
 
   /**
+   * Re-read a quote you already have.
+   *
+   * Quotes are single-use and expire, and there was no way to ask about one after it was issued —
+   * so a caller who priced some work, got interrupted, and came back had to either guess whether
+   * their quote was still good or throw it away and ask again. Guessing wrong means a 400 in the
+   * middle of a transaction; throwing it away means the price can move underneath them.
+   *
+   * `quote()` CREATES; this one READS. Requires `billing:read`.
+   */
+  async quoteById(id: string): Promise<QuoteResponse> {
+    const { data } = await this.http.get(`/v1/quote/${encodeURIComponent(id)}`);
+    return data;
+  }
+
+  /**
    * Pending intents and what they will cost — including `remaining_usd`, the
    * amount that may actually be committed to new work.
    */

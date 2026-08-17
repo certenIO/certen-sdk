@@ -2416,6 +2416,9 @@
     "/v1/webhooks/deliveries": {
       "get": {
         "summary": "List webhook deliveries",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Lists webhook delivery records for the caller's org (the delivery dead-letter queue view), optionally filtered by status. Results are paginated (limit clamps to 500, default 50) and include a total count. Requires the admin:read or admin:write scope.",
         "parameters": [
           {
@@ -2538,6 +2541,9 @@
     "/v1/webhooks/deliveries/{id}": {
       "get": {
         "summary": "Get webhook delivery",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Returns a single webhook delivery, including the exact signed_canonical_payload bytes the gateway HMAC'd plus the signature metadata so a customer-side verifier can reproduce the signature. Scoped to the caller's org. Requires the admin:read or admin:write scope.",
         "parameters": [
           {
@@ -2685,6 +2691,9 @@
     "/v1/webhooks/deliveries/{id}/redeliver": {
       "post": {
         "summary": "Redeliver webhook",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Requeues a webhook delivery and fires it immediately; if the attempt fails the retry poller resumes it. Scoped to the caller's org. Requires the admin:write scope.",
         "parameters": [
           {
@@ -2772,6 +2781,9 @@
     "/v1/webhooks/endpoints": {
       "post": {
         "summary": "Register webhook endpoint",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Registers a webhook endpoint for the caller's org (multiple endpoints per org are supported). Unless skip_verification is true, a verification ping carrying a challenge token is sent and the endpoint is marked verified on a 2xx response. A secret is generated when omitted, and the secret is returned ONCE and cannot be retrieved again. Requires the admin:write scope.",
         "requestBody": {
           "content": {
@@ -2920,6 +2932,9 @@
       },
       "get": {
         "summary": "List webhook endpoints",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Lists the webhook endpoints registered for the caller's org. Secrets are never returned — only metadata and health fields (verification and failure counts). Requires the admin:read or admin:write scope.",
         "security": [
           {
@@ -3029,6 +3044,9 @@
     "/v1/webhooks/endpoints/{id}/verify": {
       "post": {
         "summary": "Re-verify webhook endpoint",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Re-runs the verification ping against an existing webhook endpoint and marks it verified on a 2xx response. Returns 200 in both the success and failure cases with a verified flag and an error message. Scoped to the caller's org. Requires the admin:write scope.",
         "parameters": [
           {
@@ -3119,6 +3137,9 @@
     "/v1/webhooks/endpoints/{id}": {
       "patch": {
         "summary": "Update webhook endpoint",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Updates an existing webhook endpoint's url, event_types, description, or is_active flag. Changing the url re-validates it against outbound rules and invalidates the prior verification (verified_at is cleared). Scoped to the caller's org. Requires the admin:write scope.",
         "requestBody": {
           "content": {
@@ -3276,6 +3297,9 @@
       },
       "delete": {
         "summary": "Delete webhook endpoint",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Deactivates (deletes) a webhook endpoint in the caller's org so it stops receiving deliveries. Returns 204 with no body on success. Requires the admin:write scope.",
         "parameters": [
           {
@@ -3346,6 +3370,9 @@
     "/v1/webhooks/endpoints/{id}/rotate-secret": {
       "post": {
         "summary": "Rotate webhook secret",
+        "tags": [
+          "Webhooks"
+        ],
         "description": "Rotates the signing secret for a webhook endpoint. A new secret is generated when one is not supplied, and the new secret is returned ONCE and cannot be retrieved again. Scoped to the caller's org. Requires the admin:write scope.",
         "requestBody": {
           "content": {
@@ -6675,11 +6702,11 @@
         }
       }
     },
-    "/v1/admin/oauth-clients": {
+    "/v1/oauth-clients": {
       "post": {
         "summary": "Create an OAuth2 client",
         "tags": [
-          "Admin"
+          "OAuth"
         ],
         "description": "Create an OAuth2 client and return its generated client_id and one-time client_secret. Requires an API key with the oauth:write or admin:write scope. Non-admin callers may only create clients within their own org. The client_secret is shown once and cannot be retrieved again.",
         "security": [
@@ -6752,15 +6779,16 @@
       "get": {
         "summary": "List OAuth2 clients for the org",
         "tags": [
-          "Admin"
+          "OAuth"
         ],
-        "description": "List the OAuth2 clients belonging to the authenticated caller's org. Requires an API key with the oauth:write, admin:read, or admin:write scope. Never returns client secrets.",
+        "description": "List the OAuth2 clients belonging to the authenticated caller's org. Requires oauth:read — oauth:write, admin:read and admin:write also satisfy it, for keys issued before oauth:read existed. Never returns client secrets.",
         "security": [
           {
             "apiKey": []
           }
         ],
         "x-required-scopes": [
+          "oauth:read",
           "oauth:write",
           "admin:read",
           "admin:write"
@@ -6813,11 +6841,11 @@
         }
       }
     },
-    "/v1/admin/oauth-clients/{id}": {
+    "/v1/oauth-clients/{id}": {
       "delete": {
         "summary": "Deactivate an OAuth2 client",
         "tags": [
-          "Admin"
+          "OAuth"
         ],
         "description": "Deactivate an OAuth2 client and cascade-revoke all of its outstanding tokens. Requires an API key with the oauth:write or admin:write scope. Returns 204 No Content on success.",
         "security": [
@@ -6869,11 +6897,11 @@
         }
       }
     },
-    "/v1/admin/oauth-clients/{id}/rotate-secret": {
+    "/v1/oauth-clients/{id}/rotate-secret": {
       "post": {
         "summary": "Rotate an OAuth2 client secret",
         "tags": [
-          "Admin"
+          "OAuth"
         ],
         "description": "Rotate the client_secret for an OAuth2 client and return the new one-time secret. Requires an API key with the oauth:write or admin:write scope. The previous secret stays valid during an optional grace window (grace_seconds, default 300, max 7 days). The new client_secret is shown once and cannot be retrieved again.",
         "security": [

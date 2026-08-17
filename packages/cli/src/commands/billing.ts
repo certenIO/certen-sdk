@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { CertenClient, type DepositIntentStatus } from '@certen.io/sdk';
+import { CertenClient, type DepositIntentStatus, type QuoteResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.js';
 import { printOutput, human, hint, isJsonMode } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
@@ -191,14 +191,99 @@ export function registerBillingCommands(program: Command): void {
       hint('certen quote --chain <chain> --sku <sku>   # a binding price for real work');
     });
 
+  /**
+   * One renderer for both a freshly-issued quote and one read back later.
+   *
+   * The shape is identical on the wire, so printing them differently would only teach a reader that
+   * the two are different things when the whole point is that they are the same price.
+   */
+  function renderQuote(q: QuoteResponse): void {
+    printOutput({
+      quote_id: q.quote_id,
+      chain: q.chain,
+      proof_class: q.proof_class,
+      leg_count: q.leg_count,
+      platform_fee_usd: q.platform_fee_usd,
+      gas_usd: q.gas_usd,
+      total_usd: q.total_usd,
+      max_total_usd: q.max_total_usd,
+      expires_at: q.expires_at,
+      status: q.status ?? null,
+      gas_estimate_basis: q.computation?.gas_estimate_basis ?? null,
+    });
+
+    if (isJsonMode()) return;
+
+    human('');
+    human(`  ${q.chain}  ${q.proof_class ?? 'unclassified'}  ${q.leg_count} leg(s)`);
+    human('');
+    human(`  Platform fee   ${usd(q.platform_fee_usd)}`);
+    human(`  Gas            ${usd(q.gas_usd)}`);
+    human(`  Total          ${usd(q.total_usd)}`);
+    human(`  Capped at      ${usd(q.max_total_usd)}   (gas above this is on us)`);
+    human('');
+
+    // A thin basis is a real caveat, not a footnote: it means the median
+    // behind this gas figure rests on very few observations and can move
+    // materially. Saying so is the difference between a price and a guess
+    // presented as a price.
+    if (q.computation?.gas_estimate_basis === 'class_thin') {
+      human('  Note: this gas estimate comes from a small sample for this proof class,');
+      human('  so it may move as more of this class executes.');
+      human('');
+    } else if (q.computation?.gas_estimate_basis === 'unclassified_fallback') {
+      human('  Note: no cost history for this proof class yet — priced from mixed history.');
+      human('');
+    }
+
+    // Whether the price is still usable is the entire reason to read a quote back, so it is
+    // answered rather than left as a status string and a timestamp to compare by hand.
+    const expired = q.expires_at ? Date.parse(q.expires_at) <= Date.now() : false;
+    const spent = q.status !== undefined && q.status !== 'active';
+
+    if (spent) {
+      human(`  This quote is "${q.status}" — it can no longer be used. Ask for a new one.`);
+      hint(`certen quote --chain ${q.chain}${q.sku ? ` --sku ${q.sku}` : ''}`);
+      return;
+    }
+    if (expired) {
+      human(`  Expired at ${q.expires_at}. Ask for a new one.`);
+      hint(`certen quote --chain ${q.chain}${q.sku ? ` --sku ${q.sku}` : ''}`);
+      return;
+    }
+    hint(`Lock this price: pass quote_id=${q.quote_id} on the transaction (expires ${q.expires_at}).`);
+  }
+
   program
     .command('quote')
     .description('What a piece of work will cost, before you commit to it')
-    .requiredOption('--chain <chain>', 'Chain the work executes on, e.g. base-sepolia')
+    .option('--chain <chain>', 'Chain the work executes on, e.g. base-sepolia')
+    .option('--id <quote-id>', 'Read back a quote you already have, instead of asking for a new one')
     .option('--sku <sku>', 'Operation to price, e.g. identity.provision. See: certen pricing')
     .option('--proof-class <class>', 'on_cadence (batched, cheaper) or on_demand (immediate)', 'on_cadence')
     .option('--legs <n>', 'Number of legs in the intent', '1')
-    .action(async (opts: { chain: string; sku?: string; proofClass: string; legs: string }) => {
+    .action(async (opts: { chain?: string; id?: string; sku?: string; proofClass: string; legs: string }) => {
+      // Reading a quote back is the same question as asking for one — "what does this cost, and
+      // may I still use this price?" — so it is the same command rather than a second one to
+      // discover. Without it a caller who priced work, got interrupted, and came back had to
+      // either guess whether their quote was still good or burn it and let the price move.
+      if (opts.id) {
+        if (opts.chain) {
+          throw new CliError(
+            '--id reads an existing quote and --chain asks for a new one. Pass one or the other.',
+            'CONFLICTING_QUOTE_ARGS', EXIT.USAGE,
+          );
+        }
+        const existing = await (await getClient()).billing.quoteById(opts.id);
+        renderQuote(existing);
+        return;
+      }
+      if (!opts.chain) {
+        throw new CliError(
+          'Pass --chain to price new work, or --id to read back a quote you already have.',
+          'MISSING_CHAIN', EXIT.USAGE,
+        );
+      }
       if (opts.proofClass !== 'on_cadence' && opts.proofClass !== 'on_demand') {
         throw new CliError(
           `"${opts.proofClass}" is not a proof class. Use on_cadence or on_demand.`,
@@ -221,44 +306,7 @@ export function registerBillingCommands(program: Command): void {
         legCount: legs,
       });
 
-      printOutput({
-        quote_id: q.quote_id,
-        chain: q.chain,
-        proof_class: q.proof_class,
-        leg_count: q.leg_count,
-        platform_fee_usd: q.platform_fee_usd,
-        gas_usd: q.gas_usd,
-        total_usd: q.total_usd,
-        max_total_usd: q.max_total_usd,
-        expires_at: q.expires_at,
-        gas_estimate_basis: q.computation?.gas_estimate_basis ?? null,
-      });
-
-      if (isJsonMode()) return;
-
-      human('');
-      human(`  ${q.chain}  ${q.proof_class ?? 'unclassified'}  ${q.leg_count} leg(s)`);
-      human('');
-      human(`  Platform fee   ${usd(q.platform_fee_usd)}`);
-      human(`  Gas            ${usd(q.gas_usd)}`);
-      human(`  Total          ${usd(q.total_usd)}`);
-      human(`  Capped at      ${usd(q.max_total_usd)}   (gas above this is on us)`);
-      human('');
-
-      // A thin basis is a real caveat, not a footnote: it means the median
-      // behind this gas figure rests on very few observations and can move
-      // materially. Saying so is the difference between a price and a guess
-      // presented as a price.
-      if (q.computation?.gas_estimate_basis === 'class_thin') {
-        human('  Note: this gas estimate comes from a small sample for this proof class,');
-        human('  so it may move as more of this class executes.');
-        human('');
-      } else if (q.computation?.gas_estimate_basis === 'unclassified_fallback') {
-        human('  Note: no cost history for this proof class yet — priced from mixed history.');
-        human('');
-      }
-
-      hint(`Lock this price: pass quote_id=${q.quote_id} on the transaction (expires ${q.expires_at}).`);
+      renderQuote(q);
     });
 
   // ---- Evidence -----------------------------------------------------------------------------

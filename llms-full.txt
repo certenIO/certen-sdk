@@ -84,6 +84,17 @@ The full scope vocabulary, what each permits, and which operations require it. R
 Response 200 — Default Response:
   - `scopes`: { name, description, audience, operations }[]
 
+#### certen.admin.errors()
+
+Every error code this API can return, and what to do about each.
+
+GET /v1/errors — Every error code this API can return
+
+The full error vocabulary: what each code means, whether retrying an identical request can ever succeed, and whether it is something the caller can act on at all. Published because the codes were previously discoverable only by provoking them. `retryable` answers "will repeating this exact request eventually work?" — not "whose fault is it": a 503 from an unavailable rate oracle is retryable, a 402 is not, because retrying without paying changes nothing. Public: a client should be able to build its error handling before it holds a credential.
+
+Response 200 — Default Response:
+  - `errors`: { code, status, meaning, retryable, audience, action }[]
+
 #### certen.admin.createOrg()
 
 POST /v1/admin/org — Create organization
@@ -238,6 +249,17 @@ Request body:
   - `proof_class`: "on_demand" | "on_cadence" — Execution class to price for. on_cadence shares one anchor across a batch; on_demand pays for its own. A quote issued for one class cannot be spent on the other.
   - `sku`: string
   - `leg_count`: integer
+
+#### certen.billing.quoteById()
+
+Re-read a quote you already have.
+
+GET /v1/quote/{id} — Get a quote
+
+Retrieve a previously issued quote and its current status. Requires billing:read.
+
+Path parameters:
+  - `id`: string
 
 #### certen.billing.obligations()
 
@@ -868,6 +890,79 @@ Response 200 — The identity was retired. Its quota slot is now free; the on-ch
   - `adi_url`: string
   - `note`: string
 
+#### certen.identity.retrieveMnemonic()
+
+Collect the mnemonic generated for a `signing_mode: "provider"` identity.
+
+GET /v1/identity/{id}/mnemonic/{token} — Retrieve a generated mnemonic once
+
+One-shot retrieval of the mnemonic generated when an identity was created with signing_mode "provider". The token is validated against an HMAC of the server-side master secret and consumed atomically, so the mnemonic can be fetched exactly once and never again. Requires identity:write scope.
+
+Path parameters:
+  - `id`: string
+  - `token`: string
+
+Response 200 — The plaintext mnemonic plus a warning that it cannot be retrieved again:
+  - `mnemonic`: string
+  - `warning`: string
+
+### certen.oauth-clients
+
+#### certen.oauth-clients.list()
+
+Clients this organization owns.
+
+GET /v1/oauth-clients — List OAuth2 clients for the org
+
+List the OAuth2 clients belonging to the authenticated caller's org. Requires oauth:read — oauth:write, admin:read and admin:write also satisfy it, for keys issued before oauth:read existed. Never returns client secrets.
+
+Response 200 — OAuth2 clients for the caller's org:
+  - `clients`: { id, client_id, org_id, scopes, is_active, created_at, last_rotated_at }[]
+
+#### certen.oauth-clients.create()
+
+Create a client and receive its credentials once.
+
+POST /v1/oauth-clients — Create an OAuth2 client
+
+Create an OAuth2 client and return its generated client_id and one-time client_secret. Requires an API key with the oauth:write or admin:write scope. Non-admin callers may only create clients within their own org. The client_secret is shown once and cannot be retrieved again.
+
+Response 201 — Client created; client_secret returned once:
+  - `client_id`: string
+  - `client_secret`: string
+  - `org_id`: string
+  - `scopes`: string[]
+  - `warning`: string
+
+#### certen.oauth-clients.remove()
+
+Deactivate a client and revoke every token it ever issued.
+
+DELETE /v1/oauth-clients/{id} — Deactivate an OAuth2 client
+
+Deactivate an OAuth2 client and cascade-revoke all of its outstanding tokens. Requires an API key with the oauth:write or admin:write scope. Returns 204 No Content on success.
+
+Path parameters:
+  - `id`: string
+
+#### certen.oauth-clients.rotateSecret()
+
+Issue a new client secret, optionally keeping the old one alive while you deploy.
+
+POST /v1/oauth-clients/{id}/rotate-secret — Rotate an OAuth2 client secret
+
+Rotate the client_secret for an OAuth2 client and return the new one-time secret. Requires an API key with the oauth:write or admin:write scope. The previous secret stays valid during an optional grace window (grace_seconds, default 300, max 7 days). The new client_secret is shown once and cannot be retrieved again.
+
+Path parameters:
+  - `id`: string
+
+Response 200 — Secret rotated; new client_secret returned once:
+  - `client_id`: string
+  - `client_secret`: string
+  - `grace_seconds`: integer
+  - `previous_secret_expires_at`: any
+  - `warning`: string
+
 ### certen.pending
 
 #### certen.pending.list()
@@ -1403,11 +1498,10 @@ Response 200 — Delivery requeued:
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 66 of the gateway's 119 operations. The rest are reachable only by
+The SDK wraps 73 of the gateway's 119 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
-  - `DELETE /v1/admin/oauth-clients/{id}` — Deactivate an OAuth2 client
   - `DELETE /v1/admin/signing-providers/{id}` — Revoke signing provider
   - `GET /v1/admin/billing/accounts` — Who actually pays, and who is being carried
   - `GET /v1/admin/billing/balance-drift` — On-chain balances vs the ledger
@@ -1420,7 +1514,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `GET /v1/admin/billing/payments/unattributed` — Deposits that arrived but could not be attributed
   - `GET /v1/admin/billing/summary` — Everything the fee console landing page needs, in one call
   - `GET /v1/admin/billing/timeseries` — Revenue, cost and net over time
-  - `GET /v1/admin/oauth-clients` — List OAuth2 clients for the org
   - `GET /v1/admin/orgs` — List organizations (admin)
   - `GET /v1/admin/signing-providers` — List signing providers
   - `POST /v1/admin/billing/payments/{id}/attribute` — Attribute an unattributed deposit and credit it
@@ -1430,8 +1523,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `POST /v1/admin/billing/run-balance-check` — Snapshot on-chain balances and reconcile now
   - `POST /v1/admin/billing/signing-keys` — Register a receipt signing key
   - `POST /v1/admin/billing/signing-keys/{keyId}/revoke` — Revoke a receipt signing key
-  - `POST /v1/admin/oauth-clients` — Create an OAuth2 client
-  - `POST /v1/admin/oauth-clients/{id}/rotate-secret` — Rotate an OAuth2 client secret
   - `POST /v1/admin/org/{id}/webhook` — Configure org webhook
   - `POST /v1/admin/orgs/{id}/approve` — Approve an organization (admin)
   - `POST /v1/admin/orgs/{id}/suspend` — Suspend an organization (admin)
@@ -1439,9 +1530,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
 **Health**
   - `GET /v1/health` — Liveness probe
   - `GET /v1/health/detail` — Detailed component health
-
-**Identity**
-  - `GET /v1/identity/{id}/mnemonic/{token}` — Retrieve a generated mnemonic once
 
 **OAuth**
   - `POST /v1/oauth/revoke` — Revoke an OAuth2 token
@@ -1454,13 +1542,11 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
   - `GET /reference` — Human-readable API reference (HTML)
   - `GET /v1/entitlement/current` — Current signed entitlement epoch
   - `GET /v1/entitlement/health` — Entitlement publisher health
-  - `GET /v1/errors` — Every error code this API can return
   - `GET /v1/me` — Who this credential is, and what it may do
   - `GET /v1/portal/funding` — Funding overview for the active organization
   - `GET /v1/portal/funding/intents/{reference}` — Check a one-time payment
   - `GET /v1/portal/keys` — List your organization API keys
   - `GET /v1/portal/members` — List organization members
-  - `GET /v1/quote/{id}` — Get a quote
   - `POST /v1/portal/device/approve` — Approve a CLI device authorization
   - `POST /v1/portal/device/deny` — Deny a CLI device authorization
   - `POST /v1/portal/funding/addresses` — Register a wallet you pay from

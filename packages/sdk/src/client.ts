@@ -16,6 +16,7 @@ import { HealthResource } from './resources/health.js';
 import { WebhooksResource } from './resources/webhooks.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
+import { OAuthClientsResource } from './resources/oauth-clients.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
 import type { CertenClientOptions,
   MeResponse,
@@ -123,6 +124,11 @@ export class CertenClient {
   public proof: ProofResource;
   /** Device authorization, so a terminal can obtain its own key. Needs no API key. */
   public device: DeviceResource;
+  /**
+   * The OAuth2 clients your organization owns. Tokens could be obtained and revoked from code all
+   * along; the client that issues them could only be created by hand in the portal.
+   */
+  public oauthClients: OAuthClientsResource;
 
   /**
    * Diagnose this setup and say what is blocking it.
@@ -328,6 +334,7 @@ export class CertenClient {
     this.webhooks = new WebhooksResource(this.http);
     this.proof = new ProofResource(this.http);
     this.device = new DeviceResource(this.http);
+    this.oauthClients = new OAuthClientsResource(this.http);
   }
 }
 

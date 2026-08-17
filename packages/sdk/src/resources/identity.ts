@@ -13,6 +13,31 @@ const IN_FLIGHT = ['provisioning', 'pending', 'creating'];
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => { setTimeout(r, ms); });
 
+/**
+ * Accept what the gateway actually handed the caller.
+ *
+ * `mnemonic_retrieval.url` is a path, not an id and a token — so a method taking `(id, token)` only
+ * would make every caller split a string, and splitting it wrongly costs them the seed. Both forms
+ * are accepted, and an absolute URL works too in case the gateway ever returns one.
+ */
+export function parseMnemonicTarget(
+  idOrUrl: string,
+  token?: string,
+): { id: string; token: string } {
+  if (token) return { id: idOrUrl, token };
+
+  const path = idOrUrl.includes('://') ? new URL(idOrUrl).pathname : idOrUrl;
+  const m = /\/v1\/identity\/([^/]+)\/mnemonic\/([^/?#]+)/.exec(path);
+  if (!m) {
+    throw new CertenError(
+      `certen: "${idOrUrl}" is not a mnemonic retrieval URL. Pass the create response's `
+      + 'mnemonic_retrieval.url, or the identity id and token as two arguments.',
+      0, 'INVALID_MNEMONIC_TARGET',
+    );
+  }
+  return { id: decodeURIComponent(m[1]), token: decodeURIComponent(m[2]) };
+}
+
 export class IdentityResource {
   constructor(private http: AxiosInstance) {}
 
@@ -86,6 +111,12 @@ export class IdentityResource {
    *
    * A timeout is neither success nor failure — provisioning may still complete — so it throws
    * rather than returning something a caller could mistake for a ready identity.
+   *
+   * **Not the right call for `signing_mode: "provider"`.** The one-shot mnemonic URL expires in
+   * about ten minutes and this method is allowed to wait five, so waiting first burns most of the
+   * window on the one flow where losing the token loses the seed. Use `create()`, call
+   * `retrieveMnemonic()` immediately, then poll `get()`. If you do use this, the URL is carried
+   * through on `mnemonic_retrieval` rather than dropped — but it may already have expired.
    */
   async createAndWait(
     params: CreateIdentityParams,
@@ -95,7 +126,7 @@ export class IdentityResource {
       intervalMs?: number;
       onPoll?: (identity: Identity) => void;
     } = {},
-  ): Promise<Identity> {
+  ): Promise<Identity & Pick<IdentityResponse, 'mnemonic_retrieval'>> {
     const created = await this.create(params);
     const id = created.id;
     if (!id) {
@@ -136,7 +167,17 @@ export class IdentityResource {
           // One enriched read at the end, so what comes back is exactly what it always was.
           // Returning the lean poll result would silently drop `balances`, `governance` and
           // `pending` for anyone reading them off this — a saving not worth a surprise.
-          return await this.get(id).catch(() => identity);
+          const ready = await this.get(id).catch(() => identity);
+          // `mnemonic_retrieval` only ever appears on the create response, and this method used to
+          // throw that response away — so provider mode through `createAndWait` lost the seed with
+          // no way to notice. Carried through instead.
+          //
+          // It may already be too late: the token lives ~10 minutes and this call is allowed to
+          // wait five. A caller who needs the mnemonic should use `create()` and collect it first,
+          // then wait. This is a safety net, not the recommended path.
+          return created.mnemonic_retrieval
+            ? { ...ready, mnemonic_retrieval: created.mnemonic_retrieval }
+            : ready;
         }
 
         if (identity.can_sign === false) {
@@ -189,6 +230,44 @@ export class IdentityResource {
    *  the on-chain ADI, key book, and key page are untouched and keep existing on Accumulate. */
   async retire(id: string): Promise<{ success: boolean }> {
     const { data } = await this.http.delete(`/v1/identity/${id}`);
+    return data;
+  }
+
+  /**
+   * Collect the mnemonic generated for a `signing_mode: "provider"` identity. **Once.**
+   *
+   * This had no client surface at all, which made it the most dangerous gap in the SDK. Creating a
+   * provider-mode identity never returns the mnemonic inline — it returns a `mnemonic_retrieval.url`
+   * — and the token behind that URL is consumed atomically on first read. So a caller who did not
+   * hand-roll the HTTP request lost the seed permanently, on the one flow where the key material
+   * exists and CERTEN is holding it for them.
+   *
+   * **Two clocks are running.** The token expires (10 minutes by default, published as
+   * `mnemonic_retrieval.expires_in`) and it dies on first read. Call this immediately after
+   * `create()` and persist the result before doing anything else — including before waiting for
+   * provisioning to finish, which takes longer than the token lives.
+   *
+   * Pass either the URL the create response gave you, or the id and token separately:
+   *
+   * ```ts
+   * const created = await certen.identity.create({ name: 'ops', signingMode: 'provider' });
+   * if (created.mnemonic_retrieval) {
+   *   const { mnemonic } = await certen.identity.retrieveMnemonic(created.mnemonic_retrieval.url);
+   *   await saveToVault(mnemonic);   // there is no second chance
+   * }
+   * ```
+   *
+   * Requires `identity:write`. A second call fails with 404 — indistinguishable, by design, from a
+   * token that never existed.
+   */
+  async retrieveMnemonic(
+    idOrUrl: string,
+    token?: string,
+  ): Promise<{ mnemonic: string; warning?: string }> {
+    const { id, token: tok } = parseMnemonicTarget(idOrUrl, token);
+    const { data } = await this.http.get(
+      `/v1/identity/${encodeURIComponent(id)}/mnemonic/${encodeURIComponent(tok)}`,
+    );
     return data;
   }
 

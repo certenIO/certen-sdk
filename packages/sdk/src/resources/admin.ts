@@ -10,6 +10,7 @@ import type {
   AuditLogEntry,
   UsageSummaryResponse,
   ScopeInfo,
+  ErrorCodeInfo,
 } from '../types.js';
 
 export class AdminResource {
@@ -27,6 +28,25 @@ export class AdminResource {
    */
   async scopes(): Promise<{ scopes: ScopeInfo[] }> {
     const { data } = await this.http.get('/v1/scopes');
+    return data;
+  }
+
+  /**
+   * Every error code this API can return, and what to do about each.
+   *
+   * Reads the catalogue from the LIVE gateway, which is the point: the SDK ships a vendored copy in
+   * `spec/errors.json`, but that copy is only as current as the release, and a gateway ahead of the
+   * SDK raises codes the vendored file has never heard of. Asking the deployment you are actually
+   * talking to is the only way to see those.
+   *
+   * `retryable` answers "will repeating this exact request eventually work?" — not "whose fault is
+   * it". A 503 from an unavailable rate oracle is retryable; a 402 is not, because retrying without
+   * paying changes nothing.
+   *
+   * Needs no API key: error handling should be buildable before you hold a credential.
+   */
+  async errors(): Promise<{ errors: ErrorCodeInfo[] }> {
+    const { data } = await this.http.get('/v1/errors');
     return data;
   }
 

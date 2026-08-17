@@ -17,5 +17,8 @@ export { fetchSharedProof, parseShareTarget } from './shared-proof.js';
 // Standalone for the same reason: these carry their credential in the body and need no API key,
 // so a caller using OAuth is not made to hold one. See oauth.ts.
 export { fetchOAuthToken, refreshOAuthToken, revokeOAuthToken } from './oauth.js';
+// Exported so a caller can split `mnemonic_retrieval.url` the same way the SDK does, rather than
+// writing their own regex against a string whose parts they cannot afford to get wrong.
+export { parseMnemonicTarget } from './resources/identity.js';
 export { CertenUnfundedAccountError, movesValue, normalizeChainId } from './funding.js';
 export type { DoctorReport, DoctorCheck, CheckStatus } from './doctor.js';

@@ -1331,7 +1331,7 @@
         "responseShapes": {}
       }
     },
-    "/v1/admin/oauth-clients": {
+    "/v1/oauth-clients": {
       "post": {
         "required": [],
         "properties": [],
@@ -1373,7 +1373,7 @@
         }
       }
     },
-    "/v1/admin/oauth-clients/{id}": {
+    "/v1/oauth-clients/{id}": {
       "delete": {
         "required": [],
         "properties": [],
@@ -1383,7 +1383,7 @@
         "responseShapes": {}
       }
     },
-    "/v1/admin/oauth-clients/{id}/rotate-secret": {
+    "/v1/oauth-clients/{id}/rotate-secret": {
       "post": {
         "required": [],
         "properties": [],
