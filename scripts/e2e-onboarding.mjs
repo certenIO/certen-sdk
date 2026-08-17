@@ -29,7 +29,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateKeyPairSync, createHash, sign as edSign } from 'node:crypto';
+import { generateKeyPairSync, sign as edSign } from 'node:crypto';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(REPO_ROOT, 'packages', 'cli', 'dist', 'index.js');
@@ -137,7 +137,6 @@ const { privateKey, publicKey } = generateKeyPairSync('ed25519');
 // The last 32 bytes of the SPKI DER are the raw Ed25519 point, which is what the API expects.
 const rawPub = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
 const PUBLIC_KEY_HEX = rawPub.toString('hex');
-const PUBLIC_KEY_HASH = createHash('sha256').update(rawPub).digest('hex');
 
 console.log(`\ne2e onboarding against ${TARGET}`);
 console.log(`  chain ${CHAIN} · key ${PUBLIC_KEY_HEX.slice(0, 16)}…`
@@ -196,7 +195,14 @@ let orgId = null;
 const identity = await step(
   'identity created and can sign',
   ['identity', 'create', '--name', `e2e-${Date.now()}`, '--chains', CHAIN,
-    '--public-key-hash', PUBLIC_KEY_HASH, '--wait', '--timeout', WAIT_MINUTES, '--json'],
+    // The FULL public key, not its hash.
+    //
+    // Passing `--public-key-hash` alone is refused, and the gateway is right to refuse it: a hash
+    // cannot sign, so an identity registered with only a hash is accepted and then fails at the
+    // signing step of every later flow. That is the exact trap the SDK's own docs warn about, and
+    // this script walked straight into it on its first real run against production — which is
+    // precisely what an end-to-end check is for.
+    '--public-key', PUBLIC_KEY_HEX, '--wait', '--timeout', WAIT_MINUTES, '--json'],
   (data) => {
     if (!data?.id) return 'no identity id returned';
     // `can_sign` has three values and only one of them is usable, so this asserts on the value

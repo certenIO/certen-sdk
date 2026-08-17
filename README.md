@@ -153,11 +153,26 @@ that are unreachable **on purpose**, each with a written reason, so a newly unre
 fails the build instead of going unnoticed.
 
 **Onboarding** runs the real CLI through a counting proxy and reports round trips and wall-clock per
-step. Latest against production, 2026-08-16: **14 requests, 5.5s** — with two steps failing, because
-`GET /v1/pricing` and `GET /v1/scopes` are not deployed yet. Local runs against a gateway with no
-downstreams measure 12 requests / 4.9s and are a floor for the read path, not a journey time. Re-run
-it on each release and diff: a regression in round trips is invisible in code review and obvious
-here.
+step.
+
+| Measured | Target | Result |
+|---|---|---|
+| Read path, 2026-08-17 | `gateway.kompendium.co` | **13 requests, 5.0s** — every step exit 0 |
+| Full journey, 2026-08-17 | `gateway.kompendium.co` | **46.9s** from nothing to a signing identity |
+
+The read-path figure dropped from 14 requests to 13 the moment the gateway was deployed, because
+`remaining_usd` now rides on the balance and the separate obligations read is gone. The previous
+production run reported 14 requests / 5.5s **with two steps failing** — `GET /v1/pricing` and
+`GET /v1/scopes` were not deployed. Earlier local figures (12 requests / 4.9s) were taken against a
+gateway with every downstream absent and are a floor for reads, not a journey time.
+
+The full-journey figure comes from `e2e-onboarding.mjs`: keypair signup, identity created and
+confirmed able to sign, trial credit verified — with no human and no pre-existing credential. The
+proof cycle is **not** in that number; it needs a contract address (`--contract`) and a funded
+abstract account.
+
+Re-run both on each release and diff. A regression in round trips is invisible in code review and
+obvious here.
 
 ## Working with AI coding agents
 

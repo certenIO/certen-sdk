@@ -5,6 +5,7 @@ import type { Identity, IdentityResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getOutputFormat, rememberIdentity, forgetIdentity } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { resolveSigner } from '../signer.js';
+import { publicKeyHashOf } from '../keystore.js';
 import { assertChain, assertChains } from '../chains.js';
 import { UsageError } from '../errors.js';
 import { resolveWait, parseWaitBudget, waitForIdentity, IDENTITY_WAIT } from '../wait.js';
@@ -96,12 +97,42 @@ export function registerIdentityCommands(program: Command): void {
         publicKey = signer.publicKey;
       }
 
+      // Derive the hash from the public key rather than demanding both.
+      //
+      // The hash is sha256 of the RAW 32-byte key — a fact this file already documented while still
+      // making the caller compute it. Requiring it alongside the key was pure friction: the CLI has
+      // the bytes and the function, and every caller who supplied only `--public-key` was refused
+      // and sent to work out a digest by hand.
+      //
+      // Worse, the refusal steered them wrong. It said `--public-key-hash <hash>` was sufficient,
+      // and the gateway rejects a hash-only identity for external signing mode — correctly, since a
+      // hash cannot sign. So following the CLI's own advice produced an identity that consumes org
+      // quota and can never be used. Found by the end-to-end check on its first real run.
+      if (!publicKeyHash && publicKey) {
+        const clean = publicKey.trim().toLowerCase().replace(/^0x/, '');
+        if (!/^[0-9a-f]{64}$/.test(clean)) {
+          throw new UsageError(
+            `"${publicKey}" is not a public key. Expected 64 hex characters (32 bytes).`,
+            'INVALID_PUBLIC_KEY',
+          );
+        }
+        publicKey = clean;
+        publicKeyHash = publicKeyHashOf(Buffer.from(clean, 'hex'));
+      }
+
       if (!publicKeyHash) {
         throw new UsageError(
-          'Provide --sign-with <key>, or --public-key-hash <hash>. '
+          'Provide --sign-with <key>, or --public-key <hex>. '
           + 'To make a key: certen keys generate --name dev',
           'MISSING_SIGNING_KEY',
         );
+      }
+
+      // A hash with no key is accepted here and refused by the gateway, because a hash cannot sign.
+      // Saying so now costs nothing; discovering it after creation costs an identity slot.
+      if (!publicKey) {
+        hint('No --public-key given, only its hash. The gateway refuses this for external signing:');
+        hint('a hash cannot sign, so the identity would consume quota and never be usable.');
       }
 
       const client = await getClient();
