@@ -120,6 +120,31 @@ npm run agentgen       # rebuild the fixture, llms.txt and llms-full.txt
 
 `npm run agentgen:check` runs in CI and fails if any generated artifact is out of date.
 
+### Measuring, rather than asserting
+
+Two claims about this project were repeatedly made and never checked: that every gateway operation
+worth calling is reachable from a client, and that onboarding is fast. Both are now measured.
+
+```bash
+node scripts/coverage.mjs                  # which operations no client can reach
+node scripts/measure-onboarding.mjs --url https://gateway.kompendium.co --key ck_live_...
+```
+
+**Coverage** was measured for a long time by a tool that matched paths as substrings, so a path in
+a code *comment* counted as implemented — `POST /v1/oauth/token` was reported covered while the SDK
+had no OAuth surface at all. Its replacement then missed every path behind a local helper function.
+Both errors ran toward good news, which is the direction a coverage number always fails in.
+`packages/sdk/test/coverage.test.ts` now pins the result against an explicit list of the operations
+that are unreachable **on purpose**, each with a written reason, so a newly unreachable operation
+fails the build instead of going unnoticed.
+
+**Onboarding** runs the real CLI through a counting proxy and reports round trips and wall-clock per
+step. Latest against production, 2026-08-16: **14 requests, 5.5s** — with two steps failing, because
+`GET /v1/pricing` and `GET /v1/scopes` are not deployed yet. Local runs against a gateway with no
+downstreams measure 12 requests / 4.9s and are a floor for the read path, not a journey time. Re-run
+it on each release and diff: a regression in round trips is invisible in code review and obvious
+here.
+
 ## Working with AI coding agents
 
 | | |
