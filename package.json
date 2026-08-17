@@ -25,7 +25,8 @@
     "typecheck": "node scripts/typecheck-all.mjs",
     "spec:refresh": "node tools/agentgen/refresh-spec.mjs",
     "agentgen": "node tools/agentgen/index.mjs",
-    "agentgen:check": "node tools/agentgen/index.mjs --check"
+    "agentgen:check": "node tools/agentgen/index.mjs --check",
+    "check:gateway": "node scripts/check-gateway-serves.mjs"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

@@ -75,4 +75,31 @@ function gate(name, entry, args) {
 gate('build (tsc)', TSC, []);
 gate('tests (vitest run)', VITEST, ['run']);
 
+/**
+ * Everything above is offline, and that is the gap this closes.
+ *
+ * The vendored spec is generated from the gateway's SOURCE, so the whole suite can pass against a
+ * document describing a gateway that has not been deployed. The 2026-08 release moves paths — a
+ * client calling `/v1/webhooks/*` against a gateway still serving `/v1/admin/webhooks/*` 404s on
+ * every call, and looks to the user like the feature was never built.
+ *
+ * Exit 2 means the gateway could not be reached, which says nothing about whether it is current —
+ * so it warns rather than blocking. Only exit 1, a deployment provably behind this build, stops a
+ * publish. Set CERTEN_SKIP_GATEWAY_CHECK=1 to publish anyway; it is deliberately an explicit act.
+ */
+if (process.env.CERTEN_SKIP_GATEWAY_CHECK === '1') {
+  console.log('prepublish: gateway check SKIPPED by CERTEN_SKIP_GATEWAY_CHECK=1');
+} else {
+  const check = join(repoRoot, 'scripts', 'check-gateway-serves.mjs');
+  console.log('prepublish: deployed gateway serves this build');
+  const r = spawnSync(process.execPath, [check], { cwd: repoRoot, stdio: 'inherit' });
+  if (r.status === 1) {
+    console.error('prepublish: the live gateway cannot serve this build — nothing was published.');
+    process.exit(1);
+  }
+  if (r.status !== 0) {
+    console.warn('prepublish: could not verify the deployed gateway; continuing.');
+  }
+}
+
 console.log('prepublish: build and tests passed');

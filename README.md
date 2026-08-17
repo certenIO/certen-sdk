@@ -137,6 +137,24 @@ npm run agentgen       # rebuild the fixture, llms.txt and llms-full.txt
 Tag-driven, and nothing publishes until the packed tarball has been installed into a scratch project and
 run. npm versions are immutable — a bad publish can only be superseded, never fixed.
 
+**Deploy the gateway first.** The vendored spec is generated from the gateway's *source*, so the
+entire offline suite can pass against a document describing an API that is not deployed yet. That is
+the right trade — it lets the SDK be built before the gateway ships — but it means green tests are
+not evidence that anything works against production. Where a release moves paths, publishing first
+ships a client that 404s on every call to the moved routes.
+
+```bash
+npm run check:gateway                      # do the deployed operations cover this build?
+CERTEN_API_URL=https://staging npm run check:gateway
+```
+
+`prepublish-check.mjs` runs this and refuses to publish when the deployment is provably behind. An
+unreachable gateway warns instead of blocking — "no answer" is not the same as "out of date". Set
+`CERTEN_SKIP_GATEWAY_CHECK=1` to override, deliberately.
+
+Publish the three packages **together**. They are separately versioned and mutually dependent; an
+SDK calling `/v1/webhooks/*` paired with an older CLI is a combination nobody tested.
+
 ```bash
 cd packages/sdk && npm version minor
 git tag sdk-v0.2.0 && git push --follow-tags

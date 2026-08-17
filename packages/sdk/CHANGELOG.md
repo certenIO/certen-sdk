@@ -4,6 +4,17 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Fixed — `webhooks.deliveries` documented a scope that did not work
+
+This method said it required `webhook:read`. It did not: `GET /v1/webhooks/deliveries` was missed
+when the webhook group moved off `admin:*` and still demanded an admin scope, so a key holding
+`webhook:read` could list endpoints and fetch one delivery by id, and could not list deliveries at
+all — the one thing the group exists for.
+
+The same off-by-one gave `POST /v1/admin/org` a `webhook:write` alternative, letting a key scoped to
+webhooks create organizations. Both are fixed in the gateway, and both are now enforced by tests
+rather than remembered. Requires the 2026-08 gateway.
+
 ### Added — `identity.retrieveMnemonic`
 
 The most dangerous gap on the surface. Creating an identity with `signing_mode: "provider"` never

@@ -1443,7 +1443,7 @@ Delivery attempts, newest first.
 
 GET /v1/webhooks/deliveries — List webhook deliveries
 
-Lists webhook delivery records for the caller's org (the delivery dead-letter queue view), optionally filtered by status. Results are paginated (limit clamps to 500, default 50) and include a total count. Requires the admin:read or admin:write scope.
+Lists webhook delivery records for the caller's org (the delivery dead-letter queue view), optionally filtered by status. Results are paginated (limit clamps to 500, default 50) and include a total count. Requires webhook:read — admin:read and admin:write also satisfy it, for keys issued before webhook:read existed.
 
 Query parameters:
   - `status`: string — Filter by delivery status.

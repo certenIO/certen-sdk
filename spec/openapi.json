@@ -1454,7 +1454,6 @@
         "x-retry-safety": "idempotent-with-key",
         "x-retry-note": "Creates an organization.",
         "x-required-scopes": [
-          "webhook:write",
           "admin:write"
         ],
         "x-scope-mode": "any",
@@ -2419,7 +2418,7 @@
         "tags": [
           "Webhooks"
         ],
-        "description": "Lists webhook delivery records for the caller's org (the delivery dead-letter queue view), optionally filtered by status. Results are paginated (limit clamps to 500, default 50) and include a total count. Requires the admin:read or admin:write scope.",
+        "description": "Lists webhook delivery records for the caller's org (the delivery dead-letter queue view), optionally filtered by status. Results are paginated (limit clamps to 500, default 50) and include a total count. Requires webhook:read — admin:read and admin:write also satisfy it, for keys issued before webhook:read existed.",
         "parameters": [
           {
             "schema": {
@@ -2455,6 +2454,8 @@
           }
         ],
         "x-required-scopes": [
+          "webhook:read",
+          "webhook:write",
           "admin:read",
           "admin:write"
         ],
@@ -2524,11 +2525,11 @@
             }
           },
           "403": {
-            "description": "API key lacks an admin scope.",
+            "description": "API key lacks the webhook:read scope.",
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "API key lacks an admin scope.",
+                  "description": "API key lacks the webhook:read scope.",
                   "type": "object",
                   "additionalProperties": true
                 }

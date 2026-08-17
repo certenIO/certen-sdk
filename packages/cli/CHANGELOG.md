@@ -93,7 +93,14 @@ Records round trips, wall-clock and endpoints touched for each step of the first
 running the real CLI through a counting proxy. Onboarding had never been measured end to end, so
 there was no way to tell whether any of this work reduced friction or moved it.
 
-First run: 12 requests, 10.7s. After bounding the gateway health probe: **12 requests, 4.9s**.
+First run: 12 requests, 10.7s. After bounding the gateway health probe: **12 requests, 4.9s** — both
+measured against a local gateway with every downstream absent, so they are a floor for the read path
+and nothing more.
+
+Against production (`https://gateway.kompendium.co`, 2026-08-16): **14 requests, 5.5s**. Two of the
+eight steps exit non-zero there — `certen pricing` and `certen scopes` — not because of anything in
+the CLI, but because `GET /v1/pricing` and `GET /v1/scopes` are not deployed yet. The measurement
+found the same gap `npm run check:gateway` reports, from the other direction.
 
 ### Changed — `certen whoami` reports your organization and scopes instead of guessing
 
@@ -142,14 +149,14 @@ everything from published data and compares the folded root against a tree head 
 incomplete run is not a pass, and exiting 0 would let a script report an unverified receipt as
 verified. The report survives the failure under `error.details`, matching `certen doctor`.
 
-### Added — `certen ledger`, `certen receipts`, `certen receipt`
+### Added — `certen ledger`, `certen receipts`
 
 Where the money went, and proof of what you were charged — neither was reachable from the terminal.
 
 ```
 certen ledger --all                  # every balance change, paged for you
 certen receipts                      # NUMBER, WHEN, TYPE, AMOUNT, EVIDENCE
-certen receipt <id> --proof          # signature, and the inclusion proof
+certen receipts get <id> --proof     # signature, and the inclusion proof
 ```
 
 `EVIDENCE` shows `signed + logged`, because `logged` is what decides whether an inclusion proof
