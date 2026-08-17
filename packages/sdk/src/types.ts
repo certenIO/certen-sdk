@@ -1,7 +1,36 @@
 // ---- Client Options ----
 
+/**
+ * How this client authenticates. Exactly one of these three is needed.
+ *
+ * An API key is minted by a human in a portal or by approving a device — correct for a developer at
+ * a terminal, and a dead end for anything unattended. OAuth client credentials are the machine
+ * path: a human creates the client ONCE, and every process holding its id and secret authenticates
+ * itself from then on, with no browser and nobody to wake up.
+ */
 export interface CertenClientOptions {
-  apiKey: string;
+  /** A key from the portal or `certen login`. */
+  apiKey?: string;
+  /**
+   * An OAuth2 access token you already hold. Sent as `Authorization: Bearer`.
+   *
+   * Expires in an hour and is NOT refreshed for you — pass `clientId`/`clientSecret` instead unless
+   * you are managing the lifecycle yourself.
+   */
+  accessToken?: string;
+  /**
+   * OAuth2 client credentials. **The unattended path.**
+   *
+   * The client mints its own access token on first use and re-mints before expiry, so a long-lived
+   * process keeps working without anyone touching it. The secret never leaves this machine — only
+   * short-lived tokens go on the wire — and revoking the client kills every token it issued.
+   *
+   * Create one with `certen oauth-clients create --scopes …`, or `client.oauthClients.create()`.
+   */
+  clientId?: string;
+  clientSecret?: string;
+  /** Narrow what the minted token may do, within what the client was granted. */
+  scope?: string;
   baseUrl?: string;
   /**
    * Per-request timeout in ms. Default 30_000.

@@ -98,17 +98,34 @@ export async function runDeviceFlow(opts: {
     .start({ deviceName: deviceName() })
     .catch((err: unknown) => translate(err, `${apiUrl}/v1/portal/device`));
 
+  // RFC 8628 defines `verification_uri_complete` precisely so the code never has to be typed, and
+  // the gateway sends one. It was being handed to the browser and withheld from the terminal — so
+  // anyone the browser could not serve, which is every SSH session, container, WSL shell and CI
+  // job, got the bare URL and a code to retype. Those are the users with the most friction and the
+  // least patience for it, and `openBrowser` says as much three lines up: "it is the printed one
+  // people actually use."
+  const approvalUrl = start.verification_uri_complete ?? start.verification_uri;
+  const carriesCode = Boolean(start.verification_uri_complete);
+
   if (!isJsonMode()) {
     human('');
     human(`  Your code:  ${start.user_code}`);
     human('');
-    human(`  Open ${start.verification_uri} and enter it.`);
+    if (carriesCode) {
+      // The code is still shown above: it is what appears on the approval screen, and checking that
+      // the two match is how someone confirms they are approving THIS terminal and not another.
+      human('  Approve it here — the link carries the code:');
+      human(`  ${approvalUrl}`);
+    } else {
+      human(`  Open ${start.verification_uri} and enter it.`);
+    }
     human('');
+    if (opts.browser) human('  Opening your browser. If nothing happens, use the link above.');
     human('  Nothing is granted until you approve it there. Ctrl-C is safe.');
     human('');
   }
 
-  if (opts.browser) openBrowser(start.verification_uri_complete ?? start.verification_uri);
+  if (opts.browser) openBrowser(approvalUrl);
 
   const intervalMs = Math.max(1, start.interval || 5) * 1000;
   const deadline = Date.now() + (opts.timeoutMs ?? (start.expires_in || 600) * 1000);

@@ -17,9 +17,11 @@ import { WebhooksResource } from './resources/webhooks.js';
 import { ProofResource } from './resources/proof.js';
 import { DeviceResource } from './resources/device.js';
 import { OAuthClientsResource } from './resources/oauth-clients.js';
+import { fetchOAuthToken } from './oauth.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
 import type { CertenClientOptions,
   MeResponse,
+  OAuthTokens,
 } from './types.js';
 
 /**
@@ -152,6 +154,62 @@ export class CertenClient {
     return this.http.get('/v1/me').then((r) => r.data as MeResponse);
   }
 
+  /**
+   * How this client authenticates. Set once at construction.
+   *
+   * Not readonly-by-type only for the minted token, which is replaced as it is refreshed.
+   */
+  private auth:
+    | { kind: 'apiKey'; apiKey: string }
+    | { kind: 'token'; accessToken: string }
+    | { kind: 'clientCredentials'; clientId: string; clientSecret: string; scope?: string };
+
+  /** The current minted token and when it stops being usable. */
+  private minted?: { accessToken: string; expiresAt: number };
+
+  /** In-flight mint, so N concurrent requests cause ONE token request rather than N. */
+  private minting?: Promise<string>;
+
+  /**
+   * A usable bearer token, minting or re-minting as needed.
+   *
+   * Re-mints 60 seconds BEFORE expiry rather than on the 401 that expiry would otherwise cause.
+   * Waiting for the rejection means at least one request fails for a reason the caller can do
+   * nothing about, and on a long-running agent that is a failure every hour, forever.
+   *
+   * The single-flight guard matters more than it looks: a process that fires ten concurrent calls
+   * on a cold client would otherwise mint ten tokens, and every one but the last is immediately
+   * abandoned — an invisible leak of live credentials.
+   */
+  private async bearerToken(): Promise<string> {
+    // Narrowed on a LOCAL. `this.auth` is a property, so TypeScript discards a narrowing of it
+    // across the awaits below and the union widens back to include the api-key branch.
+    const auth = this.auth;
+    if (auth.kind === 'apiKey') throw new CertenError('certen: not a bearer credential', 0, 'NO_CREDENTIAL');
+    if (auth.kind === 'token') return auth.accessToken;
+
+    const REFRESH_MARGIN_MS = 60_000;
+    if (this.minted && this.minted.expiresAt - REFRESH_MARGIN_MS > Date.now()) {
+      return this.minted.accessToken;
+    }
+    if (this.minting) return this.minting;
+
+    this.minting = fetchOAuthToken(
+      { clientId: auth.clientId, clientSecret: auth.clientSecret, scope: auth.scope },
+      { baseUrl: this.http.defaults.baseURL ?? undefined },
+    ).then((tokens: OAuthTokens) => {
+      // A gateway that omits `expires_in` is treated as one hour — the documented lifetime — rather
+      // than as "never expires", which would strand this client on a dead token indefinitely.
+      const ttlMs = (tokens.expires_in ?? 3600) * 1000;
+      this.minted = { accessToken: tokens.access_token, expiresAt: Date.now() + ttlMs };
+      return tokens.access_token;
+    }).finally(() => {
+      this.minting = undefined;
+    });
+
+    return this.minting;
+  }
+
   doctor(): Promise<DoctorReport> {
     return runDoctor(this);
   }
@@ -180,10 +238,40 @@ export class CertenClient {
     this.baseBackoffMs = options.baseBackoffMs ?? DEFAULT_BASE_BACKOFF_MS;
     this.maxBackoffMs = options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS;
 
+    // Exactly one credential, checked here rather than at the first 401. A client constructed with
+    // none of them used to send `X-API-Key: undefined` and fail on whatever call happened to run
+    // first, which points the blame at that call instead of at the construction.
+    const credentials = [options.apiKey, options.accessToken, options.clientId].filter(Boolean);
+    if (credentials.length === 0) {
+      throw new CertenError(
+        'certen: no credential. Pass `apiKey`, or `clientId` and `clientSecret` for an unattended '
+        + 'process, or an `accessToken` you already hold.',
+        0, 'NO_CREDENTIAL',
+      );
+    }
+    if (options.clientId && !options.clientSecret) {
+      throw new CertenError(
+        'certen: `clientId` was given without `clientSecret`. Both are needed to mint a token.',
+        0, 'INCOMPLETE_CLIENT_CREDENTIALS',
+      );
+    }
+
+    this.auth = options.apiKey
+      ? { kind: 'apiKey', apiKey: options.apiKey }
+      : options.accessToken
+        ? { kind: 'token', accessToken: options.accessToken }
+        : {
+          kind: 'clientCredentials',
+          clientId: options.clientId as string,
+          clientSecret: options.clientSecret as string,
+          scope: options.scope,
+        };
+
     this.http = axios.create({
       baseURL: options.baseUrl ?? envBaseUrl() ?? DEFAULT_BASE_URL,
       headers: {
-        'X-API-Key': options.apiKey,
+        // The credential header is set per-request by the interceptor below, because a minted token
+        // changes over the client's life and a header baked in here never would.
         'Content-Type': 'application/json',
         'User-Agent': `certen-sdk-node/${process.env.npm_package_version ?? 'dev'}`,
       },
@@ -207,6 +295,16 @@ export class CertenClient {
     // Auto-stamp Idempotency-Key on every POST that didn't already supply one.
     this.http.interceptors.request.use(async (req) => {
       const reqPath = req.url ?? '';
+
+      // Attach the credential here, not at construction: a minted token is refreshed over this
+      // client's life, and a header fixed in the axios defaults could never change.
+      const headers = (req.headers ?? {}) as Record<string, string>;
+      if (this.auth.kind === 'apiKey') {
+        headers['X-API-Key'] = this.auth.apiKey;
+      } else {
+        headers.Authorization = `Bearer ${await this.bearerToken()}`;
+      }
+      req.headers = req.headers ?? headers;
       if (autoIdem && (req.method ?? 'GET').toUpperCase() === 'POST' && !shouldSkip(reqPath)) {
         const headers = req.headers ?? {};
         if (!('Idempotency-Key' in headers) && !('idempotency-key' in headers)) {
