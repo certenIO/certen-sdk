@@ -4,6 +4,34 @@
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
 this version will not read it; 0.6.0 and a current gateway are likewise incompatible. Upgrade both.
+### Added — `selfSignup`: an organization from a keypair, with nobody in the loop
+
+CERTEN is non-custodial, and every route to an organization still required a human — ours in an
+approvals queue, theirs in a browser, or an existing customer handing over a registration token.
+That made CERTEN a friction point in the one flow where it should be invisible.
+
+The anchor is now an Ed25519 keypair: free to create, impossible for us to hold, needs no inbox and
+no browser, and a credential the caller needs anyway since every CERTEN identity is an Ed25519 key.
+One step does two jobs.
+
+```ts
+const { org, api_key } = await selfSignup({
+  publicKey: myPublicKeyHex,
+  sign: (nonceHex) => signWithMyKey(nonceHex),   // detached ed25519 over the nonce BYTES
+});
+```
+
+`sign` is a callback rather than a key parameter, deliberately: the private half never reaches this
+SDK. `requestSignupChallenge` and `completeSignup` are exported for callers driving the two steps
+themselves.
+
+Challenge-response, because one step is not enough — a caller signing something they chose proves
+possession at a moment of their choosing and can be replayed forever. The nonce is server-issued,
+single-use, short-lived, and optionally bound to the key at issue time so an observer cannot race to
+answer it. **It is consumed whether or not the signature verified**, so a retry needs a fresh
+challenge; a nonce that survived a failed check would be an oracle. One key provisions one
+organization, ever.
+
 ### Added — `redeemRegistrationToken`, `client.registrationTokens`
 
 An organization could only be born in a browser. Creation happened inside the Firebase login

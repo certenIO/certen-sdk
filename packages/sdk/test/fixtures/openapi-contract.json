@@ -1161,6 +1161,59 @@
         "responseShapes": {}
       }
     },
+    "/v1/signup/challenge": {
+      "post": {
+        "required": [],
+        "properties": [
+          "public_key"
+        ],
+        "propertyTypes": {
+          "public_key": "string"
+        },
+        "query": [],
+        "responses": {
+          "201": [
+            "nonce",
+            "expires_in",
+            "algorithm",
+            "instructions"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/signup": {
+      "post": {
+        "required": [
+          "public_key",
+          "nonce",
+          "signature"
+        ],
+        "properties": [
+          "public_key",
+          "nonce",
+          "signature",
+          "org_name"
+        ],
+        "propertyTypes": {
+          "public_key": "string",
+          "nonce": "string",
+          "signature": "string",
+          "org_name": "string"
+        },
+        "query": [],
+        "responses": {
+          "201": [
+            "org",
+            "api_key",
+            "key_prefix",
+            "permissions",
+            "warning"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
     "/v1/governance": {
       "post": {
         "required": [

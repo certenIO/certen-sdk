@@ -31,6 +31,20 @@ There were two copies of the currency formatter. `billing.ts` handled a leading 
 half-up rather than truncating — the old one displayed `-72.355716` as `-$72.35`, a cent kinder to
 the account than the truth.
 
+### Added — `certen signup --with-key`
+
+Onboarding with nobody in the loop at all.
+
+```
+certen keys create dev              # a keypair, never leaves this machine
+certen signup --with-key dev        # an organization, in one step
+certen init --key dev               # identity, chains, verified
+```
+
+No browser, no email, no waiting for anyone to approve anything. The CLI signs a server-issued nonce
+with a key it already has; CERTEN sees a public key and a signature and never the private half —
+which is what non-custodial should mean at signup, not only afterwards.
+
 ### Added — `certen orgs` and `certen signup --token`
 
 Onboarding an organization without a browser.

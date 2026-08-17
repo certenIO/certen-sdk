@@ -5830,6 +5830,202 @@
         }
       }
     },
+    "/v1/signup/challenge": {
+      "post": {
+        "summary": "Get a nonce to sign",
+        "tags": [
+          "Registration"
+        ],
+        "description": "Issues a single-use, short-lived nonce for keypair-proof signup. Sign the RAW BYTES of the returned hex nonce with your Ed25519 private key and present the detached signature to POST /v1/signup. Needs no credential — obtaining one is the point. Supplying public_key binds the challenge to that key, so nobody else can answer it.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "public_key": {
+                    "type": "string",
+                    "description": "Your 32-byte Ed25519 public key as 64 hex characters. Recommended: it binds the challenge to you."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-retry-safety": "unsafe",
+        "x-retry-note": "Each call issues a DIFFERENT nonce. Harmless to repeat — the extra nonces simply expire unused — but the answer you must sign is the one from the LAST call.",
+        "responses": {
+          "201": {
+            "description": "A nonce to sign.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "A nonce to sign.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "nonce": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    },
+                    "algorithm": {
+                      "type": "string"
+                    },
+                    "instructions": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "public_key is not a 32-byte hex Ed25519 key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "public_key is not a 32-byte hex Ed25519 key."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Self-service signup is not enabled on this gateway.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Self-service signup is not enabled on this gateway."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/signup": {
+      "post": {
+        "summary": "Create an organization by proving you hold a key",
+        "tags": [
+          "Registration"
+        ],
+        "description": "Verifies an Ed25519 signature over a nonce from /v1/signup/challenge and provisions a NEW organization with its first API key. No browser, no email, no operator approval. The API key is returned once and cannot be retrieved again. One key provisions one organization, ever — a second attempt with the same key is refused.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "public_key",
+                  "nonce",
+                  "signature"
+                ],
+                "properties": {
+                  "public_key": {
+                    "type": "string",
+                    "description": "32-byte Ed25519 public key, 64 hex characters."
+                  },
+                  "nonce": {
+                    "type": "string",
+                    "description": "The nonce from /v1/signup/challenge."
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "Detached Ed25519 signature over the nonce BYTES, as hex."
+                  },
+                  "org_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "security": [],
+        "x-retry-safety": "guarded-by-state",
+        "x-retry-note": "The nonce is consumed on the first attempt whether or not the signature verified, and one key provisions one organization. A retry needs a fresh challenge.",
+        "responses": {
+          "201": {
+            "description": "Organization created. `api_key` appears here and nowhere else.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Organization created. `api_key` appears here and nowhere else.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "org": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "api_key": {
+                      "type": "string"
+                    },
+                    "key_prefix": {
+                      "type": "string"
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad signature, or a nonce that is unknown, expired or already used.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Bad signature, or a nonce that is unknown, expired or already used."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Self-service signup is not enabled on this gateway.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "Self-service signup is not enabled on this gateway."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "That key already provisioned an organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "description": "That key already provisioned an organization."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/governance": {
       "post": {
         "summary": "Submit a governance operation",

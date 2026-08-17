@@ -1541,7 +1541,7 @@ Response 200 — Delivery requeued:
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 76 of the gateway's 123 operations. The rest are reachable only by
+The SDK wraps 76 of the gateway's 125 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**
@@ -1600,4 +1600,6 @@ raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for
 
 **Registration**
   - `POST /v1/registration-tokens/redeem` — Redeem a registration token for a new organization
+  - `POST /v1/signup` — Create an organization by proving you hold a key
+  - `POST /v1/signup/challenge` — Get a nonce to sign
 

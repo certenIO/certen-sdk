@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { hostname, userInfo } from 'node:os';
-import { CertenClient, CertenError, redeemRegistrationToken, type DeviceAuthorization, type DeviceAuthorizationStatus } from '@certen.io/sdk';
+import { CertenClient, CertenError, redeemRegistrationToken, selfSignup, type DeviceAuthorization, type DeviceAuthorizationStatus } from '@certen.io/sdk';
+import { resolveSigner } from '../signer.js';
 import { getApiUrl, getPortalUrl, setApiKey, readConfig } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -197,11 +198,16 @@ export function registerSignupCommands(program: Command): void {
     program
       .command(name)
       .description(description)
+      .option('--with-key <name>', 'Sign up by proving you hold a local signing key — no browser, no waiting')
+      .option('--org-name <name>', 'Name for the organization (with --with-key)')
       .option('--token <token>', 'Redeem a registration token instead of waiting for a human to approve a browser')
       .option('--no-browser', 'Do not try to open a browser; just print the URL')
       .option('--no-keyring', 'Store the key in ~/.certen/config.json instead of the OS keyring')
       .option('--timeout <minutes>', 'How long to wait for approval')
-      .action(async (opts: { token?: string; browser: boolean; keyring: boolean; timeout?: string }) => {
+      .action(async (opts: {
+        withKey?: string; orgName?: string; token?: string;
+        browser: boolean; keyring: boolean; timeout?: string;
+      }) => {
         const existing = readConfig();
         if (process.env.CERTEN_API_KEY) {
           // The env var wins over stored config everywhere else, so a key obtained here would be
@@ -211,6 +217,46 @@ export function registerSignupCommands(program: Command): void {
             + 'Unset it first if you want to replace it.',
             'API_KEY_ENV_SET',
           );
+        }
+
+        // Self-service, with nobody in the loop at all — not a human at a browser, and not one at
+        // CERTEN handing out a token. CERTEN is non-custodial, so the anchor is a key the caller
+        // already holds and we never see: `certen keys` made it, the private half stays here, and
+        // the only thing that crosses the wire is a signature over a nonce.
+        if (opts.withKey) {
+          const signer = await resolveSigner(opts.withKey);
+          const redeemed = await selfSignup({
+            publicKey: signer.publicKey,
+            // The nonce arrives as hex and must be signed as BYTES. `signHash` does exactly that,
+            // which is why the key format lines up with no conversion here.
+            sign: (nonceHex) => signer.sign(nonceHex),
+            orgName: opts.orgName,
+          }, { baseUrl: getApiUrl() });
+
+          await setApiKey(redeemed.api_key, opts.keyring !== false && existing.storage === 'keyring');
+
+          printOutput({
+            org_id: redeemed.org.id,
+            org_name: redeemed.org.name,
+            plan: redeemed.org.plan,
+            key_prefix: redeemed.key_prefix,
+            permissions: redeemed.permissions,
+            signed_with: opts.withKey,
+            api_url: getApiUrl(),
+          });
+
+          if (!isJsonMode()) {
+            human('');
+            human(`  Organization ${redeemed.org.name} created, and this machine is signed in.`);
+            human(`  ${redeemed.org.id}`);
+            human('');
+            human(`  Proved with your local key "${opts.withKey}". CERTEN never saw the private half,`);
+            human('  and that key is the only thing that could have created this organization.');
+            human('');
+            human('  The API key is stored here and was returned once.');
+            hint(`certen init --key ${opts.withKey}   # identity, chains, and a check that it works`);
+          }
+          return;
         }
 
         // The unattended path. The device flow is correct for a person at a terminal and is a wall

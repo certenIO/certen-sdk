@@ -213,6 +213,6 @@ certen doctor                   # names the one thing blocking you
   - `certen.webhooks.delivery()` — One delivery, including the response body the endpoint returned.
   - `certen.webhooks.redeliver()` — Send a delivery again.
 
-The gateway exposes 123 operations; the SDK wraps 76 of them. Anything not listed
+The gateway exposes 125 operations; the SDK wraps 76 of them. Anything not listed
 above has **no SDK method** — see the closing section of `llms-full.txt` for what is reachable only
 by raw HTTP. Do not invent a method name.

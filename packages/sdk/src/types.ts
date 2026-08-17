@@ -751,6 +751,15 @@ export interface OAuthClientCredentials {
   warning?: string;
 }
 
+/** A nonce to sign, from `requestSignupChallenge`. Single-use and short-lived. */
+export interface SignupChallenge {
+  /** 32 bytes of hex. Sign the BYTES, not the hex text. */
+  nonce: string;
+  expires_in: number;
+  algorithm: string;
+  instructions: string;
+}
+
 /** A registration token as a READ returns it — state, never the token itself. */
 export interface RegistrationToken {
   id: string;

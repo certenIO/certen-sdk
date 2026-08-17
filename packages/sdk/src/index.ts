@@ -23,5 +23,8 @@ export { parseMnemonicTarget } from './resources/identity.js';
 // Standalone for the same reason as the OAuth helpers: the caller has no credential yet, and
 // obtaining its first one is the entire purpose. See registration.ts.
 export { redeemRegistrationToken } from './registration.js';
+// Keypair-proof self-service signup — no browser, no email, nobody at CERTEN. Standalone for the
+// same reason: the caller holds nothing yet. See self-signup.ts.
+export { selfSignup, requestSignupChallenge, completeSignup } from './self-signup.js';
 export { CertenUnfundedAccountError, movesValue, normalizeChainId } from './funding.js';
 export type { DoctorReport, DoctorCheck, CheckStatus } from './doctor.js';
