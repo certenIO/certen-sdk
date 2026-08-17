@@ -110,16 +110,10 @@ jobs:
           mkdir -p /tmp/mcp-consume && cd /tmp/mcp-consume && npm init -y >/dev/null
           npm install "$GITHUB_WORKSPACE/packages/sdk/$SDK_TGZ" "$GITHUB_WORKSPACE/packages/mcp/$TGZ"
           # Speak MCP to the installed binary and require it to serve its resources.
-          printf '%s\n%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-            '{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}' \
-            | node node_modules/@certen.io/mcp/dist/index.js > out.jsonl
-          node -e "
-            const lines = require('fs').readFileSync('out.jsonl','utf8').trim().split('\n').map(JSON.parse);
-            const n = lines.find(m => m.id === 2).result.resources.length;
-            if (n === 0) { console.error('published MCP package serves 0 resources'); process.exit(1); }
-            console.log('packed MCP server serves ' + n + ' resources');
-          "
+          # Driven by a script rather than a pipe: closing stdin immediately lets the server race
+          # its own shutdown against the second request, which failed a release once while the
+          # package itself was fine.
+          node "$GITHUB_WORKSPACE/scripts/mcp-serves-resources.mjs" .
 
       # package.json must not claim a licence the LICENSE file disagrees with. Not fixable with a patch
       # release once published.

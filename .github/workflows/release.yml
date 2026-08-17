@@ -118,16 +118,13 @@ jobs:
               ;;
             mcp)
               # Must serve its documentation resources; without the prepack bundling step it serves none.
-              printf '%s\n%s\n' \
-                '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}' \
-                '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/list\",\"params\":{}}' \
-                | node node_modules/@certen.io/mcp/dist/index.js > out.jsonl
-              node -e "
-                const lines = require('fs').readFileSync('out.jsonl','utf8').trim().split('\n').map(JSON.parse);
-                const n = lines.find(m => m.id === 2).result.resources.length;
-                if (n === 0) throw new Error('published MCP package serves 0 resources');
-                console.log('packed MCP server serves ' + n + ' resources');
-              "
+              # Driven by a script that waits for each response before sending the next.
+              #
+              # The previous form piped both requests and closed stdin immediately, so the server
+              # raced its own shutdown against the second request. It lost on a GitHub runner and
+              # failed a RELEASE after every other check had passed, while the package itself was
+              # fine. A harness that can fail a good artefact is worse than no harness.
+              node "$GITHUB_WORKSPACE/scripts/mcp-serves-resources.mjs" .
               ;;
           esac
 
