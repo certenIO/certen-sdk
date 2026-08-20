@@ -2,6 +2,7 @@ import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
 import { assertFundedForValue } from '../funding.js';
+import { SignResource } from './sign.js';
 import type { ContractAddresses, ContractCall, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
 
 /**
@@ -225,16 +226,19 @@ export class ExecuteResource {
     sign: SignFn;
     vote?: 'approve' | 'reject' | 'abstain';
   }): Promise<Record<string, unknown>> {
-    const { data: prep } = await this.http.post('/v1/sign', omitUndefined({
+    const prep = await new SignResource(this.http).create({
       type: 'pending_tx',
-      target_id: p.accumTxHash,
+      targetId: p.accumTxHash,
       identity: p.identity,
-      signer_url: p.signerUrl,
-      public_key: p.publicKey,
+      signerUrl: p.signerUrl,
+      publicKey: p.publicKey,
       vote: p.vote ?? 'approve',
-    }));
+    });
 
-    const toSign = prep?.signing_data?.data_for_signature ?? prep?.signing_data?.hash_to_sign;
+    // `POST /v1/sign` names the bytes `data_for_signature`; only the intent flow calls it
+    // `hash_to_sign`. This used to read both because the raw post returned `any` — going through
+    // the typed resource makes the second name a compile error, and it never arrives here.
+    const toSign = prep?.signing_data?.data_for_signature;
     if (!toSign) throw new Error(`certen: no signing data returned for ${p.accumTxHash}`);
 
     const signature = await p.sign(toSign);

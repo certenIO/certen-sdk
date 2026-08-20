@@ -979,7 +979,7 @@ const WRITE_TOOLS: ToolDef[] = [
         signerUrl: s(a, 'signerUrl'),
         publicKey: s(a, 'publicKey'),
         vote: optS(a, 'vote') ?? 'approve',
-      } as never),
+      }),
   },
   {
     name: 'certen_sign_submit_signature',
@@ -1004,7 +1004,7 @@ const WRITE_TOOLS: ToolDef[] = [
       c.sign.submitSignature(s(a, 'signRequestId'), {
         signature: s(a, 'signature'),
         publicKey: s(a, 'publicKey'),
-      } as never),
+      }),
   },
   {
     name: 'certen_governance_submit_signature',
