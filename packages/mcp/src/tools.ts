@@ -1,3 +1,4 @@
+import { CertenError, resolveSignTarget } from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 
 /**
@@ -957,29 +958,67 @@ const WRITE_TOOLS: ToolDef[] = [
       'Open a sign request — a vote on a multi-signature transaction. Returns signing data to be '
       + 'signed elsewhere. `vote` is a lowercase string: approve, reject or abstain (not "accept", '
       + 'not a number). The vote is folded into the signature preimage, so it is fixed here and '
-      + 'cannot be changed when the signature is submitted.',
+      + 'cannot be changed when the signature is submitted. '
+      + 'The kind of target is INFERRED from targetId, so there is no type to choose: a UUID is an '
+      + 'inbox action id from certen_pending_list and the gateway derives the signer from it, while '
+      + 'a 64-character transaction hash (bare, 0x-prefixed, or as an acc://<hash>@<account> TxID) '
+      + 'has no inbox row behind it and REQUIRES identity, signerUrl and publicKey. Pass a UUID '
+      + 'straight through from certen_pending_list rather than re-deriving a hash.',
     inputSchema: {
       type: 'object',
       properties: {
-        targetId: str('Accumulate transaction hash being voted on'),
-        identity: str('Identity ADI, e.g. acc://org.acme'),
-        signerUrl: str('Signer URL'),
-        publicKey: str('Public key that will sign, 64-char hex'),
+        targetId: str(
+          'Inbox action id (UUID) from certen_pending_list, or an Accumulate transaction hash / TxID',
+        ),
+        identity: str('Identity ADI, e.g. acc://org.acme — required with a transaction hash'),
+        signerUrl: str('Signer URL — required with a transaction hash'),
+        publicKey: str('Public key that will sign, 64-char hex — required with a transaction hash'),
         vote: { type: 'string', enum: ['approve', 'reject', 'abstain'], description: 'Vote to cast' },
         confirm: CONFIRM,
       },
-      required: ['targetId', 'identity', 'signerUrl', 'publicKey', 'confirm'],
+      // Only targetId is unconditionally required: an inbox id derives the other three. The hash
+      // path still needs them, and `run` refuses with a message naming what is missing — a schema
+      // cannot express "required only when targetId is a hash", and marking them required outright
+      // would make the inbox path unusable.
+      required: ['targetId', 'confirm'],
       additionalProperties: false,
     },
-    run: (c, a) =>
-      c.sign.create({
+    run: (c, a) => {
+      const target = resolveSignTarget(s(a, 'targetId'));
+      const vote = optS(a, 'vote') ?? 'approve';
+      if (target.type === 'pending_action') {
+        return c.sign.create({
+          type: 'pending_action',
+          targetId: target.targetId,
+          identity: optS(a, 'identity'),
+          signerUrl: optS(a, 'signerUrl'),
+          publicKey: optS(a, 'publicKey'),
+          vote,
+        });
+      }
+      const missing = (['identity', 'signerUrl', 'publicKey'] as const).filter((k) => !optS(a, k));
+      if (missing.length > 0) {
+        // Name the fields AND the reason, so the model can fix the call rather than retry it
+        // unchanged. A transaction hash carries no inbox row, so nothing on the gateway side can
+        // supply these.
+        throw new CertenError(
+          `certen: signing by transaction hash requires ${missing.join(', ')}. `
+          + 'targetId is a transaction hash, which has no pending-action row behind it, so the '
+          + 'gateway cannot derive the signer. An inbox action id (UUID) from certen_pending_list '
+          + 'needs none of them.',
+          0,
+          'MISSING_SIGNER_DETAILS',
+        );
+      }
+      return c.sign.create({
         type: 'pending_tx',
-        targetId: s(a, 'targetId'),
+        targetId: target.targetId,
         identity: s(a, 'identity'),
         signerUrl: s(a, 'signerUrl'),
         publicKey: s(a, 'publicKey'),
-        vote: optS(a, 'vote') ?? 'approve',
-      }),
+        vote,
+      });
+    },
   },
   {
     name: 'certen_sign_submit_signature',

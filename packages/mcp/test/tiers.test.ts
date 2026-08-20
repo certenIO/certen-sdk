@@ -234,6 +234,20 @@ describe('tool schemas describe calls that can actually succeed', () => {
     expect(schema.required).toContain('publicKeyHash');
   });
 
+  it('signing requires only the target and the confirmation', () => {
+    // The three signer fields apply to the transaction-hash path only. Marking them required made
+    // the inbox-id path — the one an agent reaches straight from certen_pending_list — impossible
+    // to call. `run` enforces them where the requirement actually is.
+    const tool = ALL_TOOLS.find((t) => t.name === 'certen_sign_create')!;
+    const schema = tool.inputSchema as { required?: string[] };
+    expect(schema.required).toEqual(['targetId', 'confirm']);
+    // The inference rule is in the description because that is what the model reads to decide what
+    // to pass.
+    expect(tool.description).toMatch(/UUID/);
+    expect(tool.description).toMatch(/certen_pending_list/);
+    expect(tool.description).toMatch(/TxID/);
+  });
+
   it('the identity tool says that it waits, and what can_sign: null means', () => {
     // Waiting by default replaces "poll certen_identity_get until terminal and can_sign is true" —
     // several more tool calls, and a contract an agent can get wrong invisibly, since reading a null
