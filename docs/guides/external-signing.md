@@ -124,9 +124,14 @@ goes through `POST /v1/sign`, and there are two ways to name what you are signin
 
 The by-hash route exists because the inbox is not universal. The pending poller enumerates the ADIs
 registered to an organization, so an **external identity** — someone with their own ADI who is not
-registered with you — is never polled and never gets an inbox row. There is no id to pass. Their
-route is the hash, and it is also the route for a transaction that names your key book in
-`header.authorities` without your ADI being an authority of the principal.
+registered with you — is never polled and never gets an inbox row. There is no id to pass, and the
+hash is the only route.
+
+It is also the route for anything the inbox has not caught up with. Discovery runs on a cycle and
+scans the accounts it knows about, so a transaction can be pending and signable for some time before
+an id for it exists — and a transaction that names your key book in `header.authorities`, where the
+principal is somebody else's account, is pending on THEIR account rather than yours. If you already
+hold the hash, you never have to wait to find out whether an id will appear.
 
 The clients infer which of the two you meant from the shape of the id, so neither takes a `type`:
 
