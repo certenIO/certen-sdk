@@ -27,4 +27,7 @@ export { redeemRegistrationToken } from './registration.js';
 // same reason: the caller holds nothing yet. See self-signup.ts.
 export { selfSignup, requestSignupChallenge, completeSignup } from './self-signup.js';
 export { CertenUnfundedAccountError, movesValue, normalizeChainId } from './funding.js';
+// One resolver, shared by the CLI and MCP. Two copies of this would drift — see sign-target.ts.
+export { resolveSignTarget } from './sign-target.js';
+export type { SignTarget } from './sign-target.js';
 export type { DoctorReport, DoctorCheck, CheckStatus } from './doctor.js';
