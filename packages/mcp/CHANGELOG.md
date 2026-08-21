@@ -1,5 +1,21 @@
 # Changelog — @certen.io/mcp
 
+## 0.4.1 — sign a pending action by its inbox id
+
+### Added — the sign tool takes the id an agent actually has
+
+`certen_sign` accepted only a transaction hash, so an agent that had just listed the pending inbox
+held exactly the id the tool would not take. It now accepts the inbox UUID, a 64-hex hash, a
+0x-prefixed hash, or a TxID, and infers which is which — the forms are disjoint, so no `type`
+parameter is needed and none can be got wrong.
+
+Resolution is `resolveSignTarget` from `@certen.io/sdk`, shared with the CLI rather than
+reimplemented. A drifted copy would sign the wrong preimage and produce a valid signature attached
+to nothing.
+
+Unchanged: this server still holds no key and cannot sign. It exchanges an id for a
+`hash_to_sign`; the signature is produced wherever the key actually lives.
+
 ## 0.4.0 — one response shape
 
 **Breaking.** Requires a gateway from 2026-08 or later, and `@certen.io/sdk` >= 0.7.0.

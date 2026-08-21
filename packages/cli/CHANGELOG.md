@@ -1,5 +1,29 @@
 # Changelog — @certen.io/cli
 
+## 0.7.1 — sign a pending transaction by hash
+
+### Added — `certen pending sign <target>` accepts what people actually have
+
+A pending transaction was signable only by its inbox UUID. But the id a person is holding usually
+comes from the explorer, from `queryTx`, or from a `/v1/sign` response — and that is a transaction
+hash or a TxID, not an inbox id. The gap forced a lookup to translate one into the other, and got
+an opaque gateway 400 when they guessed.
+
+All four forms now resolve, with no `--type` flag to get wrong:
+
+```
+certen pending sign 4f3c…-…-…                 # inbox id (UUID)      -> pending_action
+certen pending sign 882d1793…b1ad811          # 64-hex hash          -> pending_tx
+certen pending sign 0x882d1793…b1ad811        # the same, 0x-prefixed
+certen pending sign acc://882d…@panel.acme    # TxID, as pasted
+```
+
+The forms are disjoint, so the type is inferred rather than declared. Resolution lives in
+`@certen.io/sdk` (`resolveSignTarget`) and is shared with the MCP server — two copies would drift,
+and a drifted resolver signs the wrong preimage: a valid signature attached to nothing.
+
+An unrecognised target is refused with `INVALID_SIGN_TARGET` and never guessed at.
+
 ## 0.7.0 — one response shape
 
 **Breaking for `--json` consumers.** Requires a gateway from 2026-08 or later.

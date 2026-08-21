@@ -112,6 +112,41 @@ Two optional fields on `POST /v1/transaction` matter once more than one key is i
 `hash_to_sign` is bound to whichever key you nominate, so the signature you post must come from that key.
 `signer_public_key` cannot be combined with a provider-signed identity.
 
+## Voting on a transaction someone else opened
+
+Everything above opens an intent of your own. Adding your vote to a transaction that already exists
+goes through `POST /v1/sign`, and there are two ways to name what you are signing:
+
+| You hold | Send | Extra fields |
+|---|---|---|
+| An inbox action id (UUID) from `GET /v1/pending` | `type: "pending_action"` | none — the inbox row carries them |
+| An Accumulate transaction hash or TxID | `type: "pending_tx"` | `identity`, `signer_url`, `public_key` |
+
+The by-hash route exists because the inbox is not universal. The pending poller enumerates the ADIs
+registered to an organization, so an **external identity** — someone with their own ADI who is not
+registered with you — is never polled and never gets an inbox row. There is no id to pass, and the
+hash is the only route.
+
+It is also the route for anything the inbox has not caught up with. Discovery runs on a cycle and
+scans the accounts it knows about, so a transaction can be pending and signable for some time before
+an id for it exists — and a transaction that names your key book in `header.authorities`, where the
+principal is somebody else's account, is pending on THEIR account rather than yours. If you already
+hold the hash, you never have to wait to find out whether an id will appear.
+
+The clients infer which of the two you meant from the shape of the id, so neither takes a `type`:
+
+```bash
+certen pending sign f47ac10b-58cc-4372-a567-0e02b2c3d479          # inbox id
+certen pending sign 2e3d512d…79fc6   --identity acc://you.acme --signer-url acc://you.acme/book/1 --public-key <64 hex>
+```
+
+`acc://<hash>@<account>` works wherever the bare hash does — that is the form the explorer and
+`queryTx` hand you, and stripping it by hand is a step nobody should have to remember.
+
+The bytes to sign come back as `signing_data.data_for_signature` (not `hash_to_sign` — that name
+belongs to the intent flow above), and the vote is folded into them, so it is fixed when the sign
+request is created and cannot be changed at submit time.
+
 ## Failure modes worth handling
 
 | Symptom | Cause |

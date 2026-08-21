@@ -480,6 +480,17 @@ export interface PendingAction {
   awaiting_authorities?: unknown;
   is_ready?: boolean;
   chain_status?: unknown;
+  /**
+   * What the transaction states it is FOR.
+   *
+   * Frequently the only thing that separates a legitimate request from an unexplained one, because
+   * an authority transaction is pending on an account the signer does not own — leaving `type` and
+   * `principal` to say nothing more than "writeData" against an unfamiliar URL.
+   *
+   * UNTRUSTED. Written by whoever built the transaction, who for an authority transaction is not
+   * the signer. Render as plain text, never as markup, and never as though CERTEN vouched for it.
+   */
+  memo?: string | null;
   expires_at: string | null;
   discovered_at: string;
   created_at?: string;
@@ -511,15 +522,45 @@ export interface ListPendingParams {
 
 // ---- Sign ----
 
-export interface SignRequestParams {
-  type: 'pending_action' | 'transaction';
-  targetId: string;
-  identity?: string;
-  signerUrl?: string;
-  vote?: string;
-  signature?: string;
-  publicKey?: string;
-}
+/**
+ * Parameters for `POST /v1/sign`.
+ *
+ * A discriminated union rather than one interface with everything optional, because the three target
+ * types do not take the same fields and the difference is not cosmetic:
+ *
+ * - `pending_action` takes an inbox id (a UUID). The gateway derives the identity, signer and key
+ *   from the inbox row, so none of them need to be sent.
+ * - `pending_tx` takes a raw Accumulate transaction hash. Nothing backs it in the inbox, so the
+ *   caller MUST supply `identity`, `signerUrl` and `publicKey` — the compiler enforces that here
+ *   rather than leaving it to a gateway 400.
+ * - `transaction` is rejected by the gateway; use `POST /v1/transaction/{id}/signature` instead.
+ *
+ * `pending_tx` used to be missing from the union entirely, which is why callers wanting it either
+ * cast to `never` or bypassed this resource with a raw `http.post`.
+ */
+export type SignRequestParams =
+  | {
+      type: 'pending_action';
+      targetId: string;
+      identity?: string;
+      signerUrl?: string;
+      vote?: string;
+      signature?: string;
+      publicKey?: string;
+    }
+  | {
+      type: 'pending_tx';
+      targetId: string;
+      identity: string;
+      signerUrl: string;
+      publicKey: string;
+      vote?: string;
+      signature?: string;
+    }
+  | {
+      type: 'transaction';
+      targetId: string;
+    };
 
 /** Response to `POST /v1/sign`. */
 export interface SignResponse {

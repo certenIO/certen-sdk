@@ -211,6 +211,125 @@ describe('tools/call', () => {
     expect((res?.result as { isError: boolean }).isError).toBe(true);
   });
 
+  it('infers pending_action from a UUID target and needs no key fields', async () => {
+    const create = vi.fn().mockResolvedValue({ sign_request_id: 'sr-1' });
+    const client = { sign: { create } } as never;
+    const res = await dispatch(
+      req('tools/call', {
+        name: 'certen_sign_create',
+        arguments: { targetId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479', confirm: true },
+      }),
+      createHandlers({ env: WRITES_ON, client }),
+    );
+    expect(res?.error).toBeUndefined();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'pending_action',
+      targetId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+      vote: 'approve',
+    }));
+  });
+
+  it('infers pending_tx from a hash target', async () => {
+    const create = vi.fn().mockResolvedValue({ sign_request_id: 'sr-2' });
+    const client = { sign: { create } } as never;
+    const res = await dispatch(
+      req('tools/call', {
+        name: 'certen_sign_create',
+        arguments: {
+          targetId: 'a'.repeat(64),
+          identity: 'acc://org.acme',
+          signerUrl: 'acc://org.acme/book/1',
+          publicKey: 'b'.repeat(64),
+          confirm: true,
+        },
+      }),
+      createHandlers({ env: WRITES_ON, client }),
+    );
+    expect(res?.error).toBeUndefined();
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'pending_tx',
+      targetId: 'a'.repeat(64),
+      identity: 'acc://org.acme',
+      signerUrl: 'acc://org.acme/book/1',
+      publicKey: 'b'.repeat(64),
+    }));
+  });
+
+  it('accepts a TxID and passes only the hash', async () => {
+    const create = vi.fn().mockResolvedValue({});
+    const client = { sign: { create } } as never;
+    await dispatch(
+      req('tools/call', {
+        name: 'certen_sign_create',
+        arguments: {
+          targetId: `acc://${'A'.repeat(64)}@org.acme/data`,
+          identity: 'acc://org.acme',
+          signerUrl: 'acc://org.acme/book/1',
+          publicKey: 'b'.repeat(64),
+          confirm: true,
+        },
+      }),
+      createHandlers({ env: WRITES_ON, client }),
+    );
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'pending_tx', targetId: 'a'.repeat(64),
+    }));
+  });
+
+  it('names the missing field on a hash target, and calls nothing', async () => {
+    const create = vi.fn();
+    const client = { sign: { create } } as never;
+    const res = await dispatch(
+      req('tools/call', {
+        name: 'certen_sign_create',
+        arguments: {
+          targetId: 'a'.repeat(64),
+          identity: 'acc://org.acme',
+          signerUrl: 'acc://org.acme/book/1',
+          confirm: true,
+        },
+      }),
+      createHandlers({ env: WRITES_ON, client }),
+    );
+    const text = (res?.result as { content: Array<{ text: string }> }).content[0].text;
+    expect((res?.result as { isError: boolean }).isError).toBe(true);
+    expect(JSON.parse(text).error.code).toBe('MISSING_SIGNER_DETAILS');
+    expect(text).toContain('publicKey');
+    // The reason, not just the field — otherwise the model retries the same call.
+    expect(text).toContain('no pending-action row');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a target that is neither an inbox id nor a hash', async () => {
+    const create = vi.fn();
+    const client = { sign: { create } } as never;
+    const res = await dispatch(
+      req('tools/call', {
+        name: 'certen_sign_create',
+        arguments: { targetId: 'acc://alice.acme/book', confirm: true },
+      }),
+      createHandlers({ env: WRITES_ON, client }),
+    );
+    const text = (res?.result as { content: Array<{ text: string }> }).content[0].text;
+    expect(JSON.parse(text).error.code).toBe('INVALID_SIGN_TARGET');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('still refuses certen_sign_create without confirm', async () => {
+    const create = vi.fn();
+    const client = { sign: { create } } as never;
+    const res = await dispatch(
+      req('tools/call', {
+        name: 'certen_sign_create',
+        arguments: { targetId: 'f47ac10b-58cc-4372-a567-0e02b2c3d479' },
+      }),
+      createHandlers({ env: WRITES_ON, client }),
+    );
+    const text = (res?.result as { content: Array<{ text: string }> }).content[0].text;
+    expect(JSON.parse(text).status).toBe('confirmation_required');
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('asks for an API key rather than failing obscurely when none is set', async () => {
     const res = await dispatch(
       req('tools/call', { name: 'certen_portfolio_get', arguments: {} }),

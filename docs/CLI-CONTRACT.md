@@ -152,6 +152,29 @@ Each command carries `path` (how to invoke it), `arguments`, `options` and neste
 option, `required` means the flag must be present; `takesValue` means it accepts a value. They are
 different things, and conflating them is an easy mistake.
 
+### 6. `pending sign <target>` infers what it is signing
+
+`certen pending sign` takes one argument and works out from its shape which kind of target it is.
+There is no `--type` flag, because the two id formats are disjoint and a flag would only be a new
+way to disagree with the argument.
+
+| Form | Example | Resolves to |
+|---|---|---|
+| Inbox action id (UUID) | `f47ac10b-58cc-4372-a567-0e02b2c3d479` | `pending_action` |
+| Transaction hash | `2e3d512d…79fc6` (64 hex) | `pending_tx` |
+| Hash with a `0x` prefix | `0x2e3d512d…79fc6` | `pending_tx` |
+| TxID | `acc://2e3d512d…79fc6@alice.acme/data` | `pending_tx` |
+
+Anything else exits `2` with `error.code` `INVALID_SIGN_TARGET` and makes no request.
+
+An inbox id comes from `certen pending list`, and the gateway derives the identity, the signer and
+the key from the inbox row. A transaction hash has no such row behind it — it is the route for an
+identity that was never polled into anyone's inbox — so `--identity`, `--signer-url` and
+`--public-key` must all be supplied. Omitting any of them exits `2` with `error.code`
+`MISSING_SIGNER_DETAILS`, naming every flag that is missing, **before any request is made**.
+
+Both paths open a sign REQUEST and do not cast the vote; finish with `certen pending submit`.
+
 ## Example: a correct retry loop
 
 ```bash

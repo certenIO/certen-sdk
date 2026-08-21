@@ -66,7 +66,9 @@ export const RESOURCES: ResourceDef[] = [
   {
     uri: 'certen://guides/external-signing',
     name: 'Guide: sign while holding your own key',
-    description: 'The pattern almost every integration uses, and the one this server assumes.',
+    description:
+      'The pattern almost every integration uses, and the one this server assumes — including '
+      + 'voting by transaction hash, the only route open to an identity with no inbox row.',
     mimeType: 'text/markdown',
     file: 'docs/guides/external-signing.md',
   },
