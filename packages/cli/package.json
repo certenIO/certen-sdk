@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/cli",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Command line for the CERTEN Gateway API",
   "license": "MIT",
   "type": "module",

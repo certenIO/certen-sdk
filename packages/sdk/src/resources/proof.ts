@@ -92,10 +92,22 @@ export class ProofResource {
     return data;
   }
 
-  async share(proofId: string, params: { label?: string; expiresIn?: number } = {}): Promise<ProofShare> {
+  /**
+   * @param params.expiresInHours How long the link stays valid. Defaults to 168h (7 days),
+   *        capped at 2160h (90 days). `expiresIn` is accepted as a deprecated alias.
+   * @param params.maxViews Redemption ceiling. Omit for unlimited until expiry.
+   */
+  async share(
+    proofId: string,
+    params: { label?: string; expiresInHours?: number; maxViews?: number; expiresIn?: number } = {},
+  ): Promise<ProofShare> {
+    // The wire field is `expires_in_hours`. This sent `expires_in`, which the gateway does not
+    // read, so every requested TTL was silently discarded and every link got the 168h default —
+    // a share meant to expire in an hour outlived its purpose by a week.
     const { data } = await this.http.post(`/v1/proof/${proofId}/share`, {
       label: params.label,
-      expires_in: params.expiresIn,
+      expires_in_hours: params.expiresInHours ?? params.expiresIn,
+      max_views: params.maxViews,
     });
     return data;
   }

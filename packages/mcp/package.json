@@ -1,7 +1,7 @@
 {
   "name": "@certen.io/mcp",
-  "version": "0.4.0",
-  "description": "Model Context Protocol server for the CERTEN Gateway \u2014 read-only by default, and it never holds a signing key",
+  "version": "0.4.1",
+  "description": "Model Context Protocol server for the CERTEN Gateway — read-only by default, and it never holds a signing key",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -34,7 +34,7 @@
     "prepublishOnly": "node ../../scripts/prepublish-check.mjs",
     "//build": "dist/ is gitignored and tsc does not prune outputs whose source was deleted, so a stale artifact survives forever locally and ships on a local publish. CI never sees it. Clean first so both produce the same tarball."
   },
-  "//dependencies": "The SDK is the only runtime dependency. MCP's stdio transport is newline-delimited JSON-RPC 2.0 \u2014 a small, stable surface implemented directly in src/protocol.ts. For a server that can authorize value-bearing operations, every avoided transitive dependency is avoided supply-chain risk.",
+  "//dependencies": "The SDK is the only runtime dependency. MCP's stdio transport is newline-delimited JSON-RPC 2.0 — a small, stable surface implemented directly in src/protocol.ts. For a server that can authorize value-bearing operations, every avoided transitive dependency is avoided supply-chain risk.",
   "dependencies": {
     "@certen.io/sdk": "^0.7.0"
   },

@@ -1,5 +1,28 @@
 # Changelog — @certen.io/sdk
 
+## 0.7.1 — share links honour the TTL you asked for
+
+### Fixed — `proof.share()` sent a field the gateway does not read
+
+`share()` put the requested lifetime on the wire as `expires_in`. The gateway reads
+`expires_in_hours`. The unknown field was ignored and the requested TTL silently discarded, so
+**every share link got the 168h default** regardless of what was asked for — a link meant to expire
+in an hour outlived its purpose by a week.
+
+Nothing errored, and the response looked correct, so the only way to notice was to read the
+returned `expires_at` and compare it with what you passed.
+
+```ts
+// now actually expires in 72h
+await certen.proof.share(proofId, { expiresInHours: 72 });
+
+// also newly plumbed through — the gateway has always accepted it
+await certen.proof.share(proofId, { maxViews: 1 });
+```
+
+`expiresIn` is still accepted as a deprecated alias for `expiresInHours`, so existing callers keep
+working — and now actually get the lifetime they asked for.
+
 ## 0.7.0 — one response shape, and nulls that stay null
 
 **Breaking.** Requires a gateway from 2026-08 or later. An older gateway sends the previous shape and
