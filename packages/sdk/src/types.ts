@@ -480,6 +480,17 @@ export interface PendingAction {
   awaiting_authorities?: unknown;
   is_ready?: boolean;
   chain_status?: unknown;
+  /**
+   * What the transaction states it is FOR.
+   *
+   * Frequently the only thing that separates a legitimate request from an unexplained one, because
+   * an authority transaction is pending on an account the signer does not own — leaving `type` and
+   * `principal` to say nothing more than "writeData" against an unfamiliar URL.
+   *
+   * UNTRUSTED. Written by whoever built the transaction, who for an authority transaction is not
+   * the signer. Render as plain text, never as markup, and never as though CERTEN vouched for it.
+   */
+  memo?: string | null;
   expires_at: string | null;
   discovered_at: string;
   created_at?: string;
