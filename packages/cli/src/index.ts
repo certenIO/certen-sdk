@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Command, CommanderError } from 'commander';
@@ -157,13 +157,40 @@ export async function run(argv: string[]): Promise<ExitCode> {
 }
 
 /* c8 ignore start — entrypoint wiring, exercised by the conformance suite as a subprocess */
-// Run only when executed as the binary, not when imported by a test. `pathToFileURL` is what makes
-// this correct on Windows, where a naive `file://` + path concatenation produces a URL that never
-// matches `import.meta.url`.
-const invokedDirectly =
-  Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+/**
+ * Was this file run as the program, rather than imported by a test?
+ *
+ * `import.meta.url` is always the REAL path of this module — node resolves symlinks before it
+ * records one. `process.argv[1]` is not: it is the path as typed. Every POSIX install of this
+ * package puts a SYMLINK at `node_modules/.bin/certen` pointing into `dist/`, and `npx` is no
+ * exception, so on Linux and macOS the two strings never matched and this comparison was false
+ * for every real user. The CLI then did nothing at all: no parse, no request, no output, exit 0.
+ * "It seems to run and prints nothing" is exactly what a silent `if` at the bottom of a binary
+ * looks like from outside.
+ *
+ * Windows hid it, which is why it shipped. npm writes a `.cmd` shim there instead of a symlink,
+ * and the shim invokes node on the real path — so argv[1] arrived already resolved and the guard
+ * passed. Every test hid it too: they all spawn `node dist/index.js` directly, never through the
+ * installed bin, which is the only path with a symlink in it.
+ *
+ * Resolving argv[1] the way node already resolved `import.meta.url` is what makes the two
+ * comparable. `realpathSync` throws on a path that does not exist, and a path that does not
+ * exist is not this module either way, so the fallback is the unresolved string rather than a
+ * crash in the first statement the binary runs.
+ */
+function isMainModule(): boolean {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  let resolved = argv1;
+  try {
+    resolved = realpathSync(argv1);
+  } catch {
+    // Ignored: see above — the comparison below reaches the same answer without throwing.
+  }
+  return import.meta.url === pathToFileURL(resolved).href;
+}
 
-if (invokedDirectly) {
+if (isMainModule()) {
   run(process.argv).then((code) => {
     process.exitCode = code;
   });

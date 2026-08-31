@@ -1,5 +1,39 @@
 # Changelog — @certen.io/cli
 
+## 0.7.2 — the CLI runs when you install it
+
+### Fixed — the binary did nothing at all on Linux and macOS
+
+`npx @certen.io/cli signup ...` printed nothing, sent nothing, and exited **0**. So did every other
+command. Not a failure anyone could act on: no error, no output, no request reaching the gateway,
+and therefore nothing in the gateway's logs to find either. From outside it looked like a CLI that
+installed correctly and had simply decided not to speak.
+
+The last statement in the entrypoint decides whether the file was run as a program or imported by
+a test:
+
+```js
+import.meta.url === pathToFileURL(process.argv[1]).href   // 0.7.1
+```
+
+Node resolves symlinks before it records `import.meta.url`, and does not for `process.argv[1]` —
+that stays the path as typed. Every POSIX install exposes this package as a **symlink** at
+`node_modules/.bin/certen` pointing into `dist/`, and `npx` is no exception. So the two strings
+were never equal, the guard was false, and `run()` was never called. The whole CLI was inside an
+`if` that could not be true for a real user.
+
+Windows is why it shipped: npm writes a `.cmd` shim there rather than a symlink, and the shim
+invokes node on the real path, so `argv[1]` arrived already resolved and the comparison passed.
+The test suite is why it stayed: all of it — conformance included — spawns `node dist/index.js`
+directly, which is the one invocation path with no symlink in it, and the one no user takes.
+
+`argv[1]` is now resolved with `realpathSync` before the comparison, so both sides are the real
+path. A new test, `test/installed-bin.test.ts`, runs the built binary **through a symlink** and
+asserts it produces output — the case the suite could not previously express.
+
+Nothing else changed. There is no behaviour difference for anyone on Windows, and none for anyone
+who was invoking `dist/index.js` by path.
+
 ## 0.7.1 — sign a pending transaction by hash
 
 ### Added — `certen pending sign <target>` accepts what people actually have

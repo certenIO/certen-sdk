@@ -1,5 +1,19 @@
 # Changelog — @certen.io/mcp
 
+## 0.4.2 — the server starts when you install it
+
+### Fixed — the same silent entrypoint as the CLI
+
+`certen-mcp` compared `import.meta.url` against an unresolved `process.argv[1]` to decide whether
+it had been run as a program. A POSIX install exposes it through a symlink in `node_modules/.bin`,
+`import.meta.url` is the resolved real path, and so the comparison was false: the process started
+nothing and exited 0. To an MCP client that is a server closing the pipe on connect, with no error
+to read.
+
+Unaffected on Windows, where npm writes a `.cmd` shim carrying the real path. `realpathSync` now
+resolves `argv[1]` first so the two sides are comparable. See `@certen.io/cli` 0.7.2 — same bug,
+same line, found there first.
+
 ## 0.4.1 — sign a pending action by its inbox id
 
 ### Added — the sign tool takes the id an agent actually has

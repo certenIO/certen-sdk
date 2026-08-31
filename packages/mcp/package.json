@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/mcp",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Model Context Protocol server for the CERTEN Gateway — read-only by default, and it never holds a signing key",
   "license": "MIT",
   "type": "module",
