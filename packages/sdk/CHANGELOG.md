@@ -1,5 +1,16 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased
+
+### Fixed — `execute.transfer()` documented `amount` as wei; the wire takes WHOLE units
+
+The bridge multiplies `amount` by the chain's decimals. This SDK said "base units (wei)" — the exact
+inverse — so a caller following the doc would move 10^18 times what they meant, and `"1"` for one wei
+would move a whole ETH, silently, on a funded account. The doc now says whole units, and
+`transfer()` refuses locally, before any request: an integer of ten or more digits (that is wei in
+every real case), a non-decimal string, and a missing `adiUrl` (which the bridge turned into a
+bodyless 502). `ContractCall.value` is unchanged and IS wei, because it is forwarded verbatim.
+
 ## 0.7.1 — share links honour the TTL you asked for
 
 ### Fixed — `proof.share()` sent a field the gateway does not read
