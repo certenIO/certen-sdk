@@ -20,3 +20,6 @@ packages/mcp/bundled/
 
 *.log
 .DS_Store
+
+# Per-machine Claude Code permissions — never commit
+.claude/settings.local.json
