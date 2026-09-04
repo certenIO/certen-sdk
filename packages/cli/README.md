@@ -155,7 +155,9 @@ certen portfolio                                 # balances across every identit
 certen tx status <id> --wait | tx list
 certen pricing                                   # everything CERTEN charges for, in one call
 certen balance | quote --chain <chain> [--sku <sku>] | fund <amount> --chain <chain>
-certen governance add-delegate | set-threshold
+certen governance add-key | remove-key | set-threshold | add-authority | remove-authority | add-delegate | sign
+                                                 # --sign-with <key> signs and submits in one step; add-authority is how
+                                                 # a policy signer becomes a required co-signer on an agent
 certen admin api-keys list | create | rotate | revoke
 certen admin audit-log | usage
 ```

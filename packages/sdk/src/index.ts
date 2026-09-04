@@ -29,5 +29,9 @@ export { selfSignup, requestSignupChallenge, completeSignup } from './self-signu
 export { CertenUnfundedAccountError, movesValue, normalizeChainId } from './funding.js';
 // One resolver, shared by the CLI and MCP. Two copies of this would drift — see sign-target.ts.
 export { resolveSignTarget } from './sign-target.js';
+
+// An autonomous agent's identity and every proof-gated verb it needs, composed once. See agent.ts.
+export { CertenAgent, ed25519Signer } from './agent.js';
+export type { AgentSigner, CertenAgentState, ProvisionParams } from './agent.js';
 export type { SignTarget } from './sign-target.js';
 export type { DoctorReport, DoctorCheck, CheckStatus } from './doctor.js';

@@ -1,6 +1,6 @@
 # CERTEN TypeScript SDK
 
-> Proof-gated cross-chain execution on Accumulate. Package: `@certen.io/sdk` (v0.7.1).
+> Proof-gated cross-chain execution on Accumulate. Package: `@certen.io/sdk` (v0.8.0).
 
 ## Install
 ```

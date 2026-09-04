@@ -270,12 +270,19 @@ export function registerProofCommands(program: Command): void {
     .command('share <proofId>')
     .description('Mint a link a counterparty can open without an API key')
     .option('--label <label>', 'What this share is for — shown in `proof shares`')
-    .option('--expires-in <seconds>', 'Lifetime in seconds', parseInt)
-    .action(async (proofId: string, opts: { label?: string; expiresIn?: number }) => {
+    .option('--hours <n>', 'Lifetime in hours (default 72, gateway cap 2160)', parseInt)
+    .option('--max-views <n>', 'Stop resolving after this many opens', parseInt)
+    // Deprecated: this flag took SECONDS and the SDK put the number on the wire as HOURS, so
+    // --expires-in 259200 asked for 259200 hours. Kept as an alias that converts, so a script
+    // written against it keeps working and gets the lifetime it meant.
+    .option('--expires-in <seconds>', 'Deprecated — use --hours. Lifetime in seconds', parseInt)
+    .action(async (proofId: string, opts: { label?: string; hours?: number; maxViews?: number; expiresIn?: number }) => {
       const client = await getClient();
+      const hours = opts.hours ?? (opts.expiresIn !== undefined ? Math.max(1, Math.round(opts.expiresIn / 3600)) : 72);
       const share = await client.proof.share(proofId, {
         label: opts.label,
-        expiresIn: opts.expiresIn,
+        expiresInHours: hours,
+        maxViews: opts.maxViews,
       });
 
       printOutput(share as Record<string, unknown>);

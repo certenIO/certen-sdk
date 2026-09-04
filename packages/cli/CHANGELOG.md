@@ -1,5 +1,23 @@
 # Changelog — @certen.io/cli
 
+## 0.8.0 — governance from the command line, signed in one step
+
+### Added — `governance add-key`, `remove-key`, `add-authority`, `remove-authority`, `sign`
+
+The gateway's governance endpoint has taken these operations for months; the CLI exposed two of
+them and could not sign any. Every governance command now accepts `--sign-with <key>` and submits
+the signature in the same step, or prints `signing_data.hash_to_sign` for an external signer and
+`governance sign` submits what it produced. `--signer-key-page` picks a page of the book.
+
+`add-authority --authority acc://owner-policy.acme/book` is the one that matters for autonomous
+agents: from then on every transaction the identity submits waits for that book to sign too, which
+is how the headless policy signer regulates an agent that cannot opt out.
+
+### Fixed — `proof share --expires-in` took seconds and sent them as hours
+
+`--expires-in 259200` (three days) asked the gateway for 259,200 hours. The flag is deprecated
+and now converts; `--hours <n>` is the replacement, with `--max-views <n>` alongside it.
+
 ## 0.7.2 — the CLI runs when you install it
 
 ### Fixed — the binary did nothing at all on Linux and macOS

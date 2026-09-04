@@ -1,6 +1,35 @@
 # Changelog — @certen.io/sdk
 
-## Unreleased
+## 0.8.0 — an agent is one object
+
+### Added — `CertenAgent`: one identity, any chain, every verb an autonomous agent needs
+
+```ts
+import { CertenClient, CertenAgent, ed25519Signer } from '@certen.io/sdk';
+
+const signer = ed25519Signer(process.env.AGENT_SEED);          // or ed25519Signer() and persist .seedHex
+const agent = new CertenAgent(new CertenClient({ apiKey }), signer);
+await agent.provision({ name: 'seller-bot', chains: ['base-sepolia'] });
+await agent.linkChain('arbitrum-sepolia');                      // same ADI, same key book, no new identity
+const intent = await agent.call({ chain: 'base-sepolia', call: { target, functionSignature: 'ship(bytes32,string)', args } });
+await agent.wait(intent.intentId);
+const link = await agent.share(intent.intentId);                // a URL a stranger verifies with no account
+await agent.governance.requireSigner('acc://owner-policy.acme/book');  // the owner's policy signer gates every spend
+```
+
+Every integration composed the resources by hand and made the same mistakes — the ASCII of a hash
+signed instead of its bytes, a transfer with no ADI, a token amount in whole units, a governance
+operation created and never signed, a share link minted before the proof existed. `CertenAgent`
+is that composition written once and tested for each of those. It is escrow-free: an escrow ABI
+is one partner's contract, and it belongs on top of `call()`, not inside the core.
+
+`ed25519Signer(seedHex?)` makes a signer from a 32-byte seed, or a fresh key when called without
+one. The agent holds a signer and hands the gateway signatures; the key never leaves.
+
+`token()` moves an ERC-20 as a proof-gated `transfer(to, amount)` on the token contract, gated on
+the `Transfer` event, with the amount in the token's base units. `governance.requireSigner(book)`
+names a key book as a required authority, which is how the headless policy signer regulates an
+agent without changing how the agent builds transactions.
 
 ### Fixed — `execute.transfer()` documented `amount` as wei; the wire takes WHOLE units
 

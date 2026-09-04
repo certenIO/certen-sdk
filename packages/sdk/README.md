@@ -94,6 +94,35 @@ try {
 
 **Pagination helpers.** `paginate` and `paginateWithTotal` iterate a paged endpoint as an async generator.
 
+## An agent, as one object
+
+`CertenAgent` is the composition an autonomous agent needs: one identity, accounts on any chain,
+and every proof-gated verb, with the key held by a signer that never leaves the process.
+
+```ts
+import { CertenClient, CertenAgent, ed25519Signer } from '@certen.io/sdk';
+
+const signer = ed25519Signer(process.env.AGENT_SEED);            // 64 hex; or ed25519Signer() and persist .seedHex
+const agent = new CertenAgent(new CertenClient({ apiKey }), signer);
+
+await agent.provision({ name: 'seller-bot', chains: ['base-sepolia'] });
+await agent.linkChain('arbitrum-sepolia');                        // same ADI, no new identity, no new key
+
+const intent = await agent.call({
+  chain: 'base-sepolia',
+  call: { target: escrobot, functionSignature: 'ship(bytes32,string)', args: [orderId, 'TRACK-1'],
+          expectedEvents: [{ contract: escrobot, topic0: shippedTopic }] },
+});
+await agent.wait(intent.intentId);
+const link = await agent.share(intent.intentId);                  // verifiable by a stranger, no account needed
+
+await agent.token({ chain: 'base-sepolia', token: usdc, to, amount: '1000000' });   // 1 USDC, proof-gated
+await agent.governance.requireSigner('acc://owner-policy.acme/book');               // the owner's rules gate every spend
+```
+
+Resume an existing agent by passing its saved `state` (identity id, ADI, accounts) as the third
+constructor argument. An escrow or any other contract ABI belongs on top of `call()`, not inside.
+
 ## Resources
 
 | | |
