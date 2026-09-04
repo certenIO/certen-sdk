@@ -93,6 +93,8 @@ export class ProofResource {
   }
 
   /**
+   * Create a shareable link for a proof — a URL a counterparty verifies with no CERTEN account.
+   *
    * @param params.expiresInHours How long the link stays valid. Defaults to 168h (7 days),
    *        capped at 2160h (90 days). `expiresIn` is accepted as a deprecated alias.
    * @param params.maxViews Redemption ceiling. Omit for unlimited until expiry.

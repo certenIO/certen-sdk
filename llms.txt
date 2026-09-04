@@ -175,7 +175,7 @@ certen doctor                   # names the one thing blocking you
   - `certen.proof.bundle()` — The full bundle.
   - `certen.proof.custody()` — The custody chain for a proof.
   - `certen.proof.shared()` — Read a proof someone shared with you.
-  - `certen.proof.share()` — @param params.expiresInHours How long the link stays valid.
+  - `certen.proof.share()` — Create a shareable link for a proof — a URL a counterparty verifies with no CERTEN account.
   - `certen.proof.shares()` — Every share link this organization has created, including revoked and expired ones.
   - `certen.proof.revokeShare()` — Revoke a share link.
 

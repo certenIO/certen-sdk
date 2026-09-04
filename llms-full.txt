@@ -1078,7 +1078,7 @@ Path parameters:
 
 #### certen.proof.share()
 
-@param params.expiresInHours How long the link stays valid.
+Create a shareable link for a proof — a URL a counterparty verifies with no CERTEN account.
 
 POST /v1/proof/{id}/share — Create a shareable link for a proof
 
