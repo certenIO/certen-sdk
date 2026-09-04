@@ -1,6 +1,6 @@
 # CERTEN TypeScript SDK
 
-> Proof-gated cross-chain execution on Accumulate. Package: `@certen.io/sdk` (v0.7.0).
+> Proof-gated cross-chain execution on Accumulate. Package: `@certen.io/sdk` (v0.7.1).
 
 ## Install
 ```
@@ -175,7 +175,7 @@ certen doctor                   # names the one thing blocking you
   - `certen.proof.bundle()` — The full bundle.
   - `certen.proof.custody()` — The custody chain for a proof.
   - `certen.proof.shared()` — Read a proof someone shared with you.
-  - `certen.proof.share()` — Create a shareable link for a proof
+  - `certen.proof.share()` — Create a shareable link for a proof — a URL a counterparty verifies with no CERTEN account.
   - `certen.proof.shares()` — Every share link this organization has created, including revoked and expired ones.
   - `certen.proof.revokeShare()` — Revoke a share link.
 

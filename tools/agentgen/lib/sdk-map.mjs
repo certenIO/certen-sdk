@@ -34,6 +34,9 @@ function normalizePath(raw, specPaths) {
  * declared here. Both fallbacks are visible in resources/execute.ts a line or two above the call.
  */
 const DYNAMIC_CALLS = [
+  // cosign opens the sign request through SignResource.create() rather than a literal path, so the
+  // regex sees nothing; without this line the whole cosign entry silently vanished from llms-full.txt.
+  { file: 'execute.ts', in: 'cosign', method: 'POST', path: '/v1/sign', via: 'new SignResource(' },
   { file: 'execute.ts', in: 'cosign', method: 'POST', path: '/v1/sign/{id}/signature', via: 'submit_url' },
   { file: 'execute.ts', in: 'open', method: 'POST', path: '/v1/transaction/{id}/signature', via: 'submit_url' },
 ];

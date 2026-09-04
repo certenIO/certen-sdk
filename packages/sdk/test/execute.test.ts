@@ -170,15 +170,50 @@ describe('execute.transfer', () => {
     } finally { g.close(); }
   });
 
-  it('keeps the amount a string so wei past 2^53 is not rounded', async () => {
+  it('keeps the amount a string so a long decimal is not rounded', async () => {
     const g = await gateway(okFlow);
     try {
-      const huge = '90071992547409910000';
+      const precise = '0.900719925474099133';
       await clientFor(g.url).execute.transfer({
         identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'eth', fromAddress: 'a', toAddress: 'b',
-        amount: huge, publicKey: PUBKEY, sign: () => 'sig',
+        amount: precise, publicKey: PUBKEY, sign: () => 'sig',
       });
-      expect(openReq(g).body.intent.amount).toBe(huge);
+      expect(openReq(g).body.intent.amount).toBe(precise);
+    } finally { g.close(); }
+  });
+
+  it('refuses an amount that is wei written into the whole-unit field, before any request is sent', async () => {
+    // The bridge converts `amount` with the chain's decimals. Until 2026-09-03 this SDK documented the
+    // field as wei — the exact inverse — so a caller following the doc would move 10^18 times what
+    // they meant. Ten or more digits with no decimal point is wei in every real case.
+    const g = await gateway(okFlow);
+    try {
+      await expect(clientFor(g.url).execute.transfer({
+        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'ethereum-sepolia', toChain: 'ethereum-sepolia',
+        fromAddress: '0xA', toAddress: '0xB', amount: '1000000000000000', publicKey: PUBKEY, sign: () => 'sig',
+      })).rejects.toThrow(/WHOLE units/);
+      expect(g.seen.filter((e) => e.path === '/v1/transaction')).toHaveLength(0);
+    } finally { g.close(); }
+  });
+
+  it('refuses a non-decimal amount', async () => {
+    const g = await gateway(okFlow);
+    try {
+      await expect(clientFor(g.url).execute.transfer({
+        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'ethereum-sepolia', toChain: 'ethereum-sepolia',
+        fromAddress: '0xA', toAddress: '0xB', amount: '1e15', publicKey: PUBKEY, sign: () => 'sig',
+      })).rejects.toThrow(/decimal string/);
+    } finally { g.close(); }
+  });
+
+  it('refuses a missing adiUrl locally instead of letting the bridge return a bodyless 502', async () => {
+    const g = await gateway(okFlow);
+    try {
+      await expect(clientFor(g.url).execute.transfer({
+        identityId: 'id-1', fromChain: 'ethereum-sepolia', toChain: 'ethereum-sepolia',
+        fromAddress: '0xA', toAddress: '0xB', amount: '0.001', publicKey: PUBKEY, sign: () => 'sig',
+      } as any)).rejects.toThrow(/adiUrl is required/);
+      expect(g.seen.filter((e) => e.path === '/v1/transaction')).toHaveLength(0);
     } finally { g.close(); }
   });
 

@@ -80,7 +80,19 @@ export interface TransferParams {
   toChain: string;
   fromAddress: string;
   toAddress: string;
-  /** Base units (wei) as a STRING — a JSON number silently loses precision past 2^53. */
+  /**
+   * WHOLE UNITS as a decimal STRING: `"0.001"` is a thousandth of an ETH, `"1"` is one ETH.
+   *
+   * Not wei. The bridge multiplies this by the chain's decimals (`convertToBaseUnits`), so a caller
+   * who sends wei here moves 10^18 times what they meant — and "1" for one wei moves a whole ETH,
+   * which succeeds silently on a funded account. This comment said "base units (wei)" until
+   * 2026-09-03, the exact inverse of what the wire does; the gateway's own schema had documented the
+   * same inversion on the multi-leg shape since 2026-08-11. `transfer()` now refuses an integer of
+   * ten or more digits, because no one means 10^9 whole ETH and everyone who writes it meant wei.
+   *
+   * A string, never a number: JSON numbers lose precision past 2^53 and "0.1" is not exactly 0.1.
+   * Contrast `ContractCall.value`, which IS wei, because it is forwarded verbatim into the call.
+   */
   amount: string;
   tokenSymbol?: string;
   sign: SignFn;
@@ -95,6 +107,33 @@ export interface TransferParams {
   idempotencyKey?: string;
   /** Submit even if the abstract account is known to hold no gas. See ProofGatedCallParams. */
   skipFundingCheck?: boolean;
+}
+
+/**
+ * Refuse locally what the gateway would either reject as a bodyless 502 or, worse, accept.
+ *
+ * - `adiUrl` missing: the upstream path dereferences it with no null check. TypeScript makes it
+ *   required, but a JavaScript caller or a spread from a partial object still reaches here.
+ * - `amount` not a decimal string: the bridge's converter splits on "." and pads; anything else is
+ *   garbage in, and garbage here is money.
+ * - `amount` an integer of ten or more digits: that is wei written into a whole-unit field. The
+ *   largest native supply on any supported chain is under 10^9 whole units, so no genuine transfer
+ *   trips this and every mistaken one does.
+ */
+export function assertTransferParams(p: TransferParams): void {
+  if (!p.adiUrl || !p.adiUrl.startsWith('acc://')) {
+    throw new Error('transfer: adiUrl is required (the signing identity\'s ADI, e.g. acc://your-org.acme)');
+  }
+  const amount = String(p.amount ?? '');
+  if (!/^\d+(\.\d+)?$/.test(amount)) {
+    throw new Error(`transfer: amount must be a decimal string in WHOLE units, e.g. "0.001" — got ${JSON.stringify(p.amount)}`);
+  }
+  if (/^\d{10,}$/.test(amount)) {
+    throw new Error(
+      `transfer: amount "${amount}" looks like wei. This field is WHOLE units — "0.001" for a thousandth of an ETH. `
+      + 'The bridge multiplies by the chain decimals, so wei here moves 10^18 times what you meant.',
+    );
+  }
 }
 
 export interface OpenedIntent {
@@ -182,6 +221,7 @@ export class ExecuteResource {
       });
     }
 
+    assertTransferParams(p);
     return this.open({
       identity_id: p.identityId,
       intent: {
