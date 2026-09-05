@@ -1,5 +1,11 @@
 # Changelog — @certen.io/cli
 
+## 0.8.1 — `--account` on add-authority and remove-authority
+
+`governance add-authority --account book` puts the authority on the identity's key book as well as
+the identity, so seats and thresholds face the policy signer, not only spends. `--account <url>`
+names any account under the identity. Ships against `@certen.io/sdk` 0.8.1.
+
 ## 0.8.0 — governance from the command line, signed in one step
 
 ### Added — `governance add-key`, `remove-key`, `add-authority`, `remove-authority`, `sign`
