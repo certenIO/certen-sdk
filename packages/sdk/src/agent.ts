@@ -350,14 +350,31 @@ export class CertenAgent {
      * Name a key book as a REQUIRED AUTHORITY on the agent's identity. From then on every transaction
      * the agent submits sits pending until that book signs too — which is how the headless policy
      * signer regulates an agent: the owner's rules gate every spend, and the agent cannot opt out.
+     *
+     * Accumulate authorizes each account by ITS OWN authority set, and a key book's default authority
+     * is itself. So an authority on the identity governs its data and token accounts but not
+     * `addSeat` / `setThreshold` on the agent's page. Pass `{ account: 'book' }` (or a full account
+     * URL under the identity) to name the book on the key book too: then who may act for the agent
+     * is also the owner's decision, and the agent cannot undo it with its own key.
      */
-    requireSigner: (bookUrl: string, opts: { signerKeyPage?: string } = {}) =>
-      this.governanceOp({ type: 'add_authority', authority_url: bookUrl }, opts),
+    requireSigner: (bookUrl: string, opts: { signerKeyPage?: string; account?: 'identity' | 'book' | string } = {}) =>
+      this.governanceOp({ type: 'add_authority', authority_url: bookUrl, ...this.authorityTarget(opts.account) }, opts),
 
-    /** Remove a required authority. */
-    releaseSigner: (bookUrl: string, opts: { signerKeyPage?: string } = {}) =>
-      this.governanceOp({ type: 'remove_authority', authority_url: bookUrl }, opts),
+    /** Remove a required authority (from the identity, or from the account named by `account`). */
+    releaseSigner: (bookUrl: string, opts: { signerKeyPage?: string; account?: 'identity' | 'book' | string } = {}) =>
+      this.governanceOp({ type: 'remove_authority', authority_url: bookUrl, ...this.authorityTarget(opts.account) }, opts),
   };
+
+  /** The `account_url` for an authority operation: nothing for the identity, the key book for 'book', a URL as given. */
+  private authorityTarget(account?: string): { account_url?: string } {
+    if (!account || account === 'identity') return {};
+    if (account === 'book') {
+      this.requireIdentity();
+      const book = this.state.keyPageUrl ? this.state.keyPageUrl.replace(/\/\d+$/, '') : `${this.state.adiUrl}/book`;
+      return { account_url: book };
+    }
+    return { account_url: account };
+  }
 
   private async governanceOp(operation: Record<string, unknown>, opts: { signerKeyPage?: string }): Promise<CreateGovernanceResponse> {
     this.requireIdentity();

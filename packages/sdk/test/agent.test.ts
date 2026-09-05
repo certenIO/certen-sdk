@@ -138,6 +138,21 @@ describe('CertenAgent', () => {
     } finally { g.close(); }
   });
 
+  it('requireSigner({ account: "book" }) names the authority on the key book, so key-page changes face it too', async () => {
+    const g = await gateway((e) => {
+      if (e.path === '/v1/governance' && e.method === 'POST') return { status: 201, body: { governance_op_id: 'gov-2', status: 'pending_signature', signing_data: { hash_to_sign: HASH } } };
+      return { body: { ok: true } };
+    });
+    try {
+      const agent = new CertenAgent(clientFor(g.url), signer, STATE);
+      await agent.governance.requireSigner('acc://owner-policy.acme/book', { account: 'book' });
+      await agent.governance.releaseSigner('acc://owner-policy.acme/book', { account: 'acc://bot.acme/vault' });
+      const ops = g.seen.filter((e) => e.path === '/v1/governance' && e.method === 'POST').map((e) => e.body.operations[0]);
+      expect(ops[0]).toEqual({ type: 'add_authority', authority_url: 'acc://owner-policy.acme/book', account_url: 'acc://bot.acme/book' });
+      expect(ops[1]).toEqual({ type: 'remove_authority', authority_url: 'acc://owner-policy.acme/book', account_url: 'acc://bot.acme/vault' });
+    } finally { g.close(); }
+  });
+
   it('adds a seat and sets a threshold through the same signed path', async () => {
     const g = await gateway((e) => (e.path === '/v1/governance' && e.method === 'POST'
       ? { status: 201, body: { governance_op_id: 'gov-2', status: 'pending_signature', signing_data: { hash_to_sign: HASH } } } : { body: {} }));

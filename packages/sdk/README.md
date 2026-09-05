@@ -118,6 +118,7 @@ const link = await agent.share(intent.intentId);                  // verifiable 
 
 await agent.token({ chain: 'base-sepolia', token: usdc, to, amount: '1000000' });   // 1 USDC, proof-gated
 await agent.governance.requireSigner('acc://owner-policy.acme/book');               // the owner's rules gate every spend
+await agent.governance.requireSigner('acc://owner-policy.acme/book', { account: 'book' }); // ...and who may act for the agent
 ```
 
 Resume an existing agent by passing its saved `state` (identity id, ADI, accounts) as the third
