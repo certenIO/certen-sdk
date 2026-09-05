@@ -1,5 +1,22 @@
 # Changelog — @certen.io/sdk
 
+## 0.8.1 — the owner governs the key book too
+
+### Added — `requireSigner(book, { account })` and `releaseSigner(book, { account })`
+
+Accumulate authorizes each account by ITS OWN authority set, and a key book's default authority is
+itself. So a policy signer named on the identity gates every spend but not `addSeat` /
+`setThreshold` on the agent's page: an agent could reseat itself without its owner noticing.
+`{ account: 'book' }` names the same book on the agent's key book (`acc://<adi>/book`), so who
+may act for the agent is also the owner's decision, and the agent cannot undo it with its own key.
+A full account URL under the identity is accepted too. Needs api-gateway with `account_url` on
+authority operations (PR #34, deployed 2026-09-05).
+
+```ts
+await agent.governance.requireSigner('acc://owner-policy.acme/book');                     // every spend
+await agent.governance.requireSigner('acc://owner-policy.acme/book', { account: 'book' }); // every seat and threshold
+```
+
 ## 0.8.0 — an agent is one object
 
 ### Added — `CertenAgent`: one identity, any chain, every verb an autonomous agent needs
