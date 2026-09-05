@@ -1,5 +1,16 @@
 # Changelog — @certen.io/sdk
 
+## 0.8.2 — waits that survive a slow poll
+
+### Fixed — `execute.wait` and `identity.createAndWait` no longer give up on one failed poll
+
+Both loops threw on the first GET that timed out or met a 5xx, even with minutes left on the
+caller's deadline. For `createAndWait` that also lost the new identity's id, so the next attempt
+provisioned a second identity. Now a retryable failure (the client has already retried it) sleeps
+one interval and polls again until the deadline; a terminal status or a non-retryable error still
+ends the wait at once. Seen in the field on 2026-09-05: an identity poll that the gateway did not
+answer for two minutes, and a transaction poll that timed out once while the leg completed on chain.
+
 ## 0.8.1 — the owner governs the key book too
 
 ### Added — `requireSigner(book, { account })` and `releaseSigner(book, { account })`

@@ -158,7 +158,16 @@ export class IdentityResource {
       // iteration bought nothing. At the default 3s interval a 90s provisioning wait is ~30
       // polls, each of which was making a governance network call, a balance network call PER
       // LINKED CHAIN, and a pending lookup, then discarding all of it.
-      const identity = await this.get(id, { include: [] });
+      // A poll that times out or meets a 5xx does not mean the identity failed: the gateway is
+      // slow, the identity is still being created, and the id is known. Keep waiting for the
+      // deadline. Throwing here used to lose the id to the caller, who then provisioned a second
+      // identity on the next attempt.
+      let identity: Identity;
+      try { identity = await this.get(id, { include: [] }); }
+      catch (err) {
+        if (err instanceof CertenError && err.isRetryable && Date.now() + pollInterval < deadline) { await sleep(pollInterval); continue; }
+        throw err;
+      }
       last = identity;
       onPoll?.(identity);
 

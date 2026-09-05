@@ -290,6 +290,23 @@ describe('execute.wait', () => {
     } finally { g.close(); }
   });
 
+  /** A poll that fails with a retryable error is not the end of the intent: keep waiting. */
+  it('survives a 503 mid-wait and returns the terminal status that follows', async () => {
+    const g = await gateway((e, n) => n <= 2 ? { status: 503, body: { error: 'upstream slow' } } : { body: { status: 'completed', proof_id: 'p-2' } });
+    try {
+      const out = await clientFor(g.url).execute.wait('i-1', { timeoutMs: 5_000, intervalMs: 1 });
+      expect((out as { status: string }).status).toBe('completed');
+      expect(g.seen.length).toBeGreaterThanOrEqual(3);
+    } finally { g.close(); }
+  });
+
+  it('still gives up at the deadline when every poll fails', async () => {
+    const g = await gateway(() => ({ status: 503, body: { error: 'down' } }));
+    try {
+      await expect(clientFor(g.url).execute.wait('i-1', { timeoutMs: 40, intervalMs: 5 })).rejects.toThrow();
+    } finally { g.close(); }
+  });
+
   /** A timeout is neither outcome — the intent may still complete. Say that distinctly. */
   it('reports a timeout as a timeout, not as either outcome', async () => {
     const g = await gateway(() => ({ body: { status: 'submitted' } }));
