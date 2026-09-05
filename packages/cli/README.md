@@ -157,7 +157,9 @@ certen pricing                                   # everything CERTEN charges for
 certen balance | quote --chain <chain> [--sku <sku>] | fund <amount> --chain <chain>
 certen governance add-key | remove-key | set-threshold | add-authority | remove-authority | add-delegate | sign
                                                  # --sign-with <key> signs and submits in one step; add-authority is how
-                                                 # a policy signer becomes a required co-signer on an agent
+                                                 # a policy signer becomes a required co-signer on an agent;
+                                                 # --account book puts it on the key book too, so seats and
+                                                 # thresholds face the signer as well as spends
 certen admin api-keys list | create | rotate | revoke
 certen admin audit-log | usage
 ```

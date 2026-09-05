@@ -4,6 +4,13 @@ import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint } from '../output.js';
 import { resolveSigner } from '../signer.js';
 
+/** `--account` for an authority operation: nothing for the identity, `<adi>/book` for "book", a URL as given. */
+function accountTarget(opts: { identity: string; account?: string }): { account_url?: string } {
+  if (!opts.account || opts.account === 'identity') return {};
+  if (opts.account === 'book') return { account_url: `${opts.identity.replace(/\/+$/, '')}/book` };
+  return { account_url: opts.account };
+}
+
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
 }
@@ -80,18 +87,20 @@ export function registerGovernanceCommands(program: Command): void {
     .command('add-authority')
     .description('Name a key book as a REQUIRED authority: every transaction then waits for it to sign too — how a policy signer regulates an agent')
     .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
-    .requiredOption('--authority <book-url>', 'The key book that must co-sign, e.g. acc://owner-policy.acme/book'))
+    .requiredOption('--authority <book-url>', 'The key book that must co-sign, e.g. acc://owner-policy.acme/book')
+    .option('--account <url>', 'The account to put it on: the identity (default), "book" for its key book — so seats and thresholds face the authority too — or a full account URL under the identity'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'add_authority', authority_url: opts.authority }, opts);
+      await submitGovernance({ type: 'add_authority', authority_url: opts.authority, ...accountTarget(opts) }, opts);
     });
 
   signing(governance
     .command('remove-authority')
     .description('Release a required authority')
     .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
-    .requiredOption('--authority <book-url>', 'The key book to release'))
+    .requiredOption('--authority <book-url>', 'The key book to release')
+    .option('--account <url>', 'The account to release it from: the identity (default), "book", or a full account URL under the identity'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'remove_authority', authority_url: opts.authority }, opts);
+      await submitGovernance({ type: 'remove_authority', authority_url: opts.authority, ...accountTarget(opts) }, opts);
     });
 
   signing(governance
