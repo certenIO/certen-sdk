@@ -1,5 +1,16 @@
 # Changelog — @certen.io/cli
 
+## 0.9.0 — `proof verify` checks the outcome, locally, from a share link
+
+`certen proof verify <share-link>` fetches the bundle with no API key and, when it carries the
+execution proof (component 5), walks the receipt's trie proof to the receipts root from the bundle's
+own bytes and lists the receipt's events. `--expect <address:topic0[:topic1]>` names an event that
+must be there; `--rpc <url>` fetches block N's header from a node you trust and compares its
+receipts root and hash, at which point Certen was not trusted for the outcome at all. Inclusion is
+read from the bundle's chained proof. Line 3 of the verdict, "Outcome", used to say NOT CHECKED on
+every run; it now says VERIFIED, FAILED, or why it could not be checked. A bundle file (`@path`) is
+accepted the same way. Exit status is non-zero when the outcome fails or the expected event is absent.
+
 ## 0.8.2 — ships against SDK 0.8.2
 
 No CLI change. `identity create --wait` and every command that waits on an intent inherit the SDK's

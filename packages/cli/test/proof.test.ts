@@ -494,3 +494,39 @@ describe('certen proof open — the counterparty command', () => {
     expect(r.stderr).toMatch(/not a share link/);
   });
 });
+
+describe('proof verify checks the outcome from the bundle\'s own bytes', () => {
+  // The SDK's fixture: a real Base Sepolia receipt (block 46437431) with the validator's trie proof,
+  // wrapped as a bundle. Inclusion is not in it, so the command must still fail on inclusion while
+  // reporting the outcome as verified.
+  const fixture = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'sdk', 'test', 'fixtures', 'execution-proof-base-46437431.json');
+  const LEDGER = '0x41bc4283624ff703a6e15b1c2aafae95a5eb335e';
+  const CLAIM_PAID = '0x81eb79acc6a0ef94dfb507ea35363f86d0d190b46f4d608dc4c1d7480a7c7cbc';
+
+  it('walks the receipt proof, finds the expected event, and names what is still someone\'s word', async () => {
+    const r = await certen(['proof', 'verify', `@${fixture}`, '--expect', `${LEDGER}:${CLAIM_PAID}`], 'http://127.0.0.1:1');
+    expect(r.stdout + r.stderr).toMatch(/3\. Outcome\s+VERIFIED against the bundle's receipts root/);
+    expect(r.stdout + r.stderr).toMatch(/index 23 · status 1/);
+    expect(r.stdout + r.stderr).toMatch(/expected event: PRESENT/);
+    expect(r.stdout + r.stderr).toMatch(/Only the receipts root is still the validator's word/);
+  });
+
+  it('reports the expected event as absent, and fails, when the receipt does not carry it', async () => {
+    const r = await certen(['proof', 'verify', `@${fixture}`, '--expect', `${LEDGER}:${CLAIM_PAID}:0x${'ab'.repeat(32)}`], 'http://127.0.0.1:1');
+    expect(r.stdout + r.stderr).toMatch(/expected event: ABSENT/);
+    expect(r.code).not.toBe(0);
+  });
+
+  it('fails plainly on a tampered receipt', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'certen-verify-'));
+    const bundle = JSON.parse(readFileSync(fixture, 'utf8'));
+    const c = bundle.proof_components['5_execution_proof'];
+    c.raw_receipt = c.raw_receipt.slice(0, -2) + (c.raw_receipt.endsWith('00') ? '01' : '00');
+    const path = join(dir, 'tampered.json');
+    writeFileSync(path, JSON.stringify(bundle));
+    const r = await certen(['proof', 'verify', `@${path}`], 'http://127.0.0.1:1');
+    expect(r.stdout + r.stderr).toMatch(/3\. Outcome\s+FAILED — the trie resolves to a different receipt/);
+    expect(r.stdout + r.stderr).toMatch(/did NOT verify/);
+    expect(r.code).not.toBe(0);
+  });
+});

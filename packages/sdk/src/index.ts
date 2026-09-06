@@ -13,7 +13,14 @@ export type { PaymentResolution } from './errors.js';
 export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';
 // Standalone on purpose: redeeming a share link needs no API key and therefore no client. See
 // shared-proof.ts.
-export { fetchSharedProof, parseShareTarget } from './shared-proof.js';
+export { fetchSharedProof, parseShareTarget, decodeSharedBundle } from './shared-proof.js';
+// execution-proof.ts: verify a bundle's component 5 (the receipt and its trie proof) with no
+// dependencies and no gateway — what a counterparty runs.
+export {
+  verifyExecutionProof, checkAgainstHeader, executionComponentOf, decodeReceipt, verifyTrieProof,
+  keccak256, rlpDecode, rlpEncodeUint, bytesFrom,
+} from './execution-proof.js';
+export type { ExecutionProofComponent, ExecutionVerification, DecodedReceipt, DecodedLog } from './execution-proof.js';
 // Standalone for the same reason: these carry their credential in the body and need no API key,
 // so a caller using OAuth is not made to hold one. See oauth.ts.
 export { fetchOAuthToken, refreshOAuthToken, revokeOAuthToken } from './oauth.js';

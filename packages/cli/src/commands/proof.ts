@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { writeFileSync, readFileSync } from 'node:fs';
-import { CertenClient, CertenError, fetchSharedProof, type ChainReceipt } from '@certen.io/sdk';
+import { CertenClient, CertenError, fetchSharedProof, decodeSharedBundle, verifyExecutionProof, executionComponentOf, checkAgainstHeader, type ChainReceipt, type ExecutionVerification } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -313,9 +313,10 @@ export function registerProofCommands(program: Command): void {
       // asking someone to strip the token out of a link and then name the gateway it came from is
       // work invented for no reason.
       const shared = await fetchSharedProof(link);
+      const decoded = decodeSharedBundle(shared.bundle) ?? shared.bundle;
 
       if (opts.out) {
-        writeFileSync(opts.out, JSON.stringify(shared.bundle, null, 2));
+        writeFileSync(opts.out, JSON.stringify(decoded, null, 2));
         printOutput({
           proof_id: shared.proof_id, expires_at: shared.expires_at,
           view_count: shared.view_count, written_to: opts.out,
@@ -339,8 +340,9 @@ export function registerProofCommands(program: Command): void {
       human(`  Proof ${shared.proof_id}`);
       human(`  Link expires ${shared.expires_at} - viewed ${shared.view_count} time(s).`);
       human('');
-      process.stdout.write(`${JSON.stringify(shared.bundle, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify(decoded, null, 2)}\n`);
       hint('certen proof open <link> --out proof.json   # keep a copy');
+      hint('certen proof verify <link>                  # check the receipt against the block, locally');
     });
 
   const shares = proof.command('shares').description('Share links this organization has created');
@@ -390,16 +392,24 @@ export function registerProofCommands(program: Command): void {
 
   proof
     .command('verify <target>')
-    .description('Check a proof, and state plainly what was and was not verified')
-    .action(async (target: string) => {
-      // A saved bundle is checked as a file; anything else is fetched.
+    .description('Check a proof, and state plainly what was and was not verified. A share link or a bundle file is checked locally, no API key.')
+    .option('--rpc <url>', 'A JSON-RPC endpoint of the execution chain you trust: the bundle\'s receipts root and block hash are compared to the header it returns')
+    .option('--expect <address:topic0[:topic1]>', 'An event the receipt must contain (contract address and event topic, optionally the first indexed argument)')
+    .action(async (target: string, opts: { rpc?: string; expect?: string }) => {
       const fromFile = target.startsWith('@');
-      const client = fromFile ? null : await getClient();
+      const fromShare = /^https?:\/\//i.test(target) || /^cps_/.test(target);
+      const client = fromFile || fromShare ? null : await getClient();
 
       let receipt: ChainReceipt | null = null;
       let bundle: Record<string, unknown> | null = null;
 
-      if (fromFile) {
+      if (fromShare) {
+        // The counterparty's path: the link they were sent, nothing else. No key, no gateway trust —
+        // the bundle is fetched and everything below is computed from its own bytes.
+        const shared = await fetchSharedProof(target);
+        bundle = decodeSharedBundle(shared.bundle);
+        if (!bundle) throw new CliError('The shared bundle is not JSON this tool can read.', 'UNREADABLE_BUNDLE', EXIT.FAILED);
+      } else if (fromFile) {
         const path = target.slice(1);
         try {
           bundle = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
@@ -410,6 +420,7 @@ export function registerProofCommands(program: Command): void {
             'UNREADABLE_BUNDLE',
           );
         }
+        bundle = decodeSharedBundle(bundle.bundle ?? bundle) ?? bundle;
         const hash = extractTxHash(String(bundle.tx_hash ?? bundle.accum_tx_hash ?? ''));
         if (hash) receipt = (bundle.receipt ? bundle : null) as ChainReceipt | null;
       } else {
@@ -424,18 +435,47 @@ export function registerProofCommands(program: Command): void {
         receipt = await client!.proof.receipt(resolved.txHash);
       }
 
-      const inclusion = Boolean(receipt?.anchored && receipt?.receipt?.anchor);
+      // Inclusion, from a bundle: the chained proof the validators verified to consensus.
+      const components = (bundle?.proof_components ?? null) as Record<string, Record<string, unknown>> | null;
+      const chained = components?.['3_chained_proof'];
+      const bundleInclusion = Boolean(chained && chained.verified === true);
+      const inclusion = Boolean(receipt?.anchored && receipt?.receipt?.anchor) || bundleInclusion;
+
+      // Outcome, from component 5: the receipt walked to the receipts root with the bundle's own
+      // trie nodes, then (with --rpc) that root compared to the block header from YOUR node.
+      let outcome: ExecutionVerification | null = null;
+      let header: { ok: boolean; reasons: string[] } | null = null;
+      const component = bundle ? executionComponentOf(bundle) : null;
+      if (component) {
+        let expect: { address?: string; topic0?: string; topic1?: string } | undefined;
+        if (opts.expect) {
+          const [address, topic0, topic1] = opts.expect.split(':');
+          expect = { address: address || undefined, topic0: topic0 || undefined, topic1: topic1 || undefined };
+        }
+        outcome = verifyExecutionProof(component, expect);
+        if (opts.rpc && outcome.ok) {
+          const res = await fetch(opts.rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBlockByNumber', params: ['0x' + outcome.blockNumber.toString(16), false] }) });
+          const j = await res.json() as { result?: { hash?: string; receiptsRoot?: string; number?: string } };
+          header = j.result ? checkAgainstHeader(outcome, j.result) : { ok: false, reasons: ['the RPC returned no block for that number'] };
+        }
+      }
+      const outcomeLine = !component ? 'NOT CHECKED — the bundle carries no execution proof (component 5); read the destination chain'
+        : !outcome!.ok ? `FAILED — ${outcome!.error}`
+        : header ? (header.ok ? 'VERIFIED against the block header from your RPC' : `FAILED against your RPC — ${header.reasons.join('; ')}`)
+        : 'VERIFIED against the bundle\'s receipts root (pass --rpc to compare that root to the chain)';
+      const outcomeOk = Boolean(component && outcome!.ok && (!header || header.ok) && (outcome!.expectedLogFound !== false));
 
       const summary = {
         checked: {
-          inclusion: inclusion ? 'asserted by the gateway' : 'not established',
+          inclusion: bundleInclusion ? 'verified by the validators to Accumulate consensus (chained proof)' : inclusion ? 'asserted by the gateway' : 'not established',
           authorization: 'NOT CHECKED — requires your own record of what was agreed',
-          outcome: 'NOT CHECKED — requires reading the destination chain',
+          outcome: outcomeLine + (outcome?.expectedLogFound === false ? ' — the expected event is NOT in the receipt' : outcome?.expectedLogFound ? ' — the expected event is in the receipt' : ''),
         },
-        anchored: receipt?.anchored ?? null,
-        anchor: receipt?.receipt?.anchor ?? null,
-        tx_hash: receipt?.tx_hash ?? null,
-        independent: false,
+        anchored: receipt?.anchored ?? bundleInclusion,
+        anchor: receipt?.receipt?.anchor ?? components?.['2_anchor_reference'] ?? null,
+        tx_hash: receipt?.tx_hash ?? (bundle?.transaction_reference as { accum_tx_hash?: string } | undefined)?.accum_tx_hash ?? null,
+        execution: outcome ? { chain_id: outcome.chainId, tx_hash: outcome.txHash, block_number: outcome.blockNumber, receipts_root: outcome.receiptsRoot, transaction_index: outcome.transactionIndex, status: outcome.receipt?.status, logs: outcome.receipt?.logs, header_checked: header?.ok ?? null } : null,
+        independent: Boolean(component && outcome?.ok && header?.ok),
       };
 
       // JSON only for the payload: the `checked` object is three sentences the table renderer
@@ -447,26 +487,46 @@ export function registerProofCommands(program: Command): void {
       if (isJsonMode()) {
         printOutput(summary);
         failIfNotIncluded(inclusion);
+        if (component && !outcomeOk) process.exitCode = EXIT.FAILED;
         return;
       }
 
       human('');
       human('  A verifier should satisfy themselves of three separate things.');
       human('');
-      human(`  1. Inclusion      ${inclusion ? 'the gateway returned an anchored merkle receipt' : 'NOT ESTABLISHED — not anchored, or no anchor in the receipt'}`);
+      human(`  1. Inclusion      ${bundleInclusion ? 'the bundle\'s chained proof is verified to Accumulate consensus (the validators\' statement)' : inclusion ? 'the gateway returned an anchored merkle receipt' : 'NOT ESTABLISHED — not anchored, or no anchor in the receipt'}`);
       human('  2. Authorization  NOT CHECKED. Compare the operation against your own record of');
       human('                    what was agreed — recipient, amount, target, calldata.');
       human('                    A valid proof of the WRONG call is still a valid proof.');
-      human('  3. Outcome        NOT CHECKED. Read the destination chain for the execution.');
+      human(`  3. Outcome        ${outcomeLine}`);
+      if (outcome?.ok) {
+        human(`                    chain ${outcome.chainId} · tx ${outcome.txHash} · block ${outcome.blockNumber} · index ${outcome.transactionIndex} · status ${outcome.receipt?.status}`);
+        for (const l of outcome.receipt?.logs ?? []) {
+          human(`                    log ${l.address} ${l.topics[0]?.slice(0, 10)}…${l.topics[1] ? ' ' + l.topics[1].slice(0, 10) + '…' : ''} data ${l.data.length > 2 ? (l.data.length - 2) / 2 + ' bytes' : 'none'}`);
+        }
+        if (outcome.expectedLogFound !== undefined) human(`                    expected event: ${outcome.expectedLogFound ? 'PRESENT' : 'ABSENT'}`);
+        if (!header) human('                    the receipts root is the validator\'s statement of the header; --rpc <url> compares it to the chain');
+      }
       human('');
-      // The load-bearing sentence. Everything above came from the gateway, and a verifier who
-      // does not trust the gateway has learned nothing by asking it.
-      human('  This command asked the GATEWAY. That is not independent verification.');
-      human('  To verify without trusting Certen:');
-      human('    - query an Accumulate node directly and check the receipt against roots you fetch;');
-      human('    - read the execution and its events on the destination chain.');
+      if (component) {
+        // The load-bearing sentence, now with something to bear: what was computed here from the
+        // bundle's own bytes, and what still rests on someone's word.
+        human(`  ${outcomeOk && header?.ok
+          ? 'The receipt was verified from the bundle\'s own bytes and the block header from your RPC. Certen was not trusted for the outcome.'
+          : outcomeOk
+            ? 'The receipt was verified from the bundle\'s own bytes. Only the receipts root is still the validator\'s word — close that with --rpc <url>.'
+            : 'The outcome did NOT verify. Do not rely on this bundle for what executed.'}`);
+      } else {
+        // The load-bearing sentence. Everything above came from the gateway, and a verifier who
+        // does not trust the gateway has learned nothing by asking it.
+        human('  This command asked the GATEWAY. That is not independent verification.');
+        human('  To verify without trusting Certen:');
+        human('    - query an Accumulate node directly and check the receipt against roots you fetch;');
+        human('    - read the execution and its events on the destination chain.');
+      }
       human('');
 
       failIfNotIncluded(inclusion);
+      if (component && !outcomeOk) process.exitCode = EXIT.FAILED;
     });
 }
