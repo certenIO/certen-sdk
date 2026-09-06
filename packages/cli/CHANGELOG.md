@@ -1,5 +1,10 @@
 # Changelog — @certen.io/cli
 
+## 0.8.2 — ships against SDK 0.8.2
+
+No CLI change. `identity create --wait` and every command that waits on an intent inherit the SDK's
+fix: a wait no longer gives up on one slow or failed poll while its deadline has time left.
+
 ## 0.8.1 — `--account` on add-authority and remove-authority
 
 `governance add-authority --account book` puts the authority on the identity's key book as well as
