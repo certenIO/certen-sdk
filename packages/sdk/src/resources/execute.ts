@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
+import { CertenError } from '../errors.js';
 import { assertFundedForValue } from '../funding.js';
 import { SignResource } from './sign.js';
 import type { ContractAddresses, ContractCall, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
@@ -306,7 +307,16 @@ export class ExecuteResource {
     const deadline = Date.now() + timeoutMs;
     let last: TransactionResponse | undefined;
     while (Date.now() < deadline) {
-      const { data } = await this.http.get(`/v1/transaction/${intentId}`);
+      // One poll that times out or meets a 5xx is not the end of the intent. The client already
+      // retries such a request a few times; if it still fails, keep waiting for the deadline the
+      // caller set rather than throwing away a wait that may be minutes in — a slow gateway answer
+      // used to abort a proof-gated call that then completed on chain anyway.
+      let data: unknown;
+      try { ({ data } = await this.http.get(`/v1/transaction/${intentId}`)); }
+      catch (err) {
+        if (err instanceof CertenError && err.isRetryable && Date.now() + intervalMs < deadline) { await sleep(intervalMs); continue; }
+        throw err;
+      }
       last = data as TransactionResponse;
       onPoll?.(last);
       const status = String((last as unknown as { status?: string }).status ?? '');
