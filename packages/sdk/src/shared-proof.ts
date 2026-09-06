@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import axios, { AxiosError } from 'axios';
 import { DEFAULT_BASE_URL } from './client.js';
 import { CertenError } from './errors.js';
@@ -46,6 +47,26 @@ export async function fetchSharedProof(
   } catch (err) {
     throw translate(err);
   }
+}
+
+/**
+ * The bundle as JSON. The share endpoint returns `bundle` as the stored bytes — serialized the
+ * way Node serializes a Buffer ({ type: 'Buffer', data: [...] }), sometimes gzip-compressed —
+ * and a counterparty should not have to know that. Returns null when the bytes are not JSON.
+ */
+export function decodeSharedBundle(bundle: unknown): Record<string, unknown> | null {
+  if (bundle && typeof bundle === 'object' && !('data' in (bundle as object)) && ('proof_components' in (bundle as object) || 'bundle_id' in (bundle as object))) {
+    return bundle as Record<string, unknown>;
+  }
+  let bytes: Buffer | null = null;
+  if (bundle && typeof bundle === 'object' && Array.isArray((bundle as { data?: unknown }).data)) bytes = Buffer.from((bundle as { data: number[] }).data);
+  else if (typeof bundle === 'string') bytes = /^[A-Za-z0-9+/=]+$/.test(bundle) && !bundle.trim().startsWith('{') ? Buffer.from(bundle, 'base64') : Buffer.from(bundle, 'utf8');
+  if (!bytes) return null;
+  let out: Buffer = bytes;
+  if (out[0] === 0x1f && out[1] === 0x8b) {
+    try { out = gunzipSync(out); } catch { return null; }
+  }
+  try { return JSON.parse(out.toString('utf8')) as Record<string, unknown>; } catch { return null; }
 }
 
 /** `https://host/v1/proof/shared/<token>`, or the token on its own. */

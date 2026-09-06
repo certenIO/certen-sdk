@@ -1,5 +1,35 @@
 # Changelog — @certen.io/sdk
 
+## 0.9.0 — verify the outcome from the bundle's own bytes
+
+### Added — `verifyExecutionProof`, `checkAgainstHeader`, `decodeSharedBundle`
+
+A proof bundle now carries component 5, the execution proof: the receipt of the target-chain
+transaction and the Merkle-Patricia inclusion proofs the validators' RB-2 gate verified against the
+block header (raw trie nodes and the leaf value, so nothing has to be fetched). This module checks
+it with no dependencies and no gateway:
+
+```ts
+import { fetchSharedProof, decodeSharedBundle, executionComponentOf, verifyExecutionProof, checkAgainstHeader } from '@certen.io/sdk';
+
+const shared = await fetchSharedProof(link);                      // no API key
+const bundle = decodeSharedBundle(shared.bundle)!;                 // the share endpoint returns bytes
+const v = verifyExecutionProof(executionComponentOf(bundle)!, { address: LEDGER, topic0: CLAIM_PAID });
+// v.ok: the receipt with these logs is in a receipts trie with root v.receiptsRoot
+// v.expectedLogFound: the event is in it
+const header = (await rpc('eth_getBlockByNumber', ['0x' + v.blockNumber.toString(16), false])).result;
+checkAgainstHeader(v, header).ok;                                  // and that root IS block N's header
+```
+
+What it proves and what it does not, in the function's own words (`caveats`): the receipt is in a
+trie with that root; that the root is the header of block N is the validator's statement until you
+compare it to a header from an RPC you trust. keccak-256, RLP and the trie walk are implemented in
+the module (Node has SHA-3 but not Ethereum's keccak padding); the test walks a real Base Sepolia
+receipt at index 23 of block 46437431 to its root and refuses a tampered root, receipt or proof.
+
+Bundles from validators older than certen-validator PR #5 carry no component 5; the verifier says
+so rather than guessing.
+
 ## 0.8.2 — waits that survive a slow poll
 
 ### Fixed — `execute.wait` and `identity.createAndWait` no longer give up on one failed poll
