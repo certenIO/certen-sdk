@@ -1,5 +1,24 @@
 # Changelog — @certen.io/cli
 
+## 0.9.1 — the passphrase prompt answers the keyboard
+
+### Fixed — `keys generate` hung forever at the passphrase prompt
+
+The hidden prompt called `stdin.setEncoding('binary')` before reading, which makes every `data`
+event a **string**. The reader iterated it expecting bytes, so `case 0x0a` never matched and
+`byte >= 0x20` compared a string to a number: Enter did nothing, typing did nothing, and Ctrl-C
+did nothing. The only way out was killing the terminal. Present in 0.7.1, 0.7.2, 0.8.0, 0.8.1,
+0.8.2 and 0.9.0, and hit by the first partner to run the first command in the README.
+
+The stream now stays in buffer mode. While fixing it the reader also gained what a terminal
+actually sends: Ctrl-D as cancel on an empty line, Ctrl-U to clear, CRLF counted as one Enter,
+and multi-byte characters kept whole — including one split across two chunks by a paste, and
+backspace deleting a whole character rather than one byte of it. Fourteen tests drive the prompt
+against a fake TTY; thirteen of them fail against the old code.
+
+Both documented escape hatches were unaffected and still work:
+`keys generate --name dev --no-passphrase`, and `CERTEN_KEY_PASSPHRASE=… keys generate`.
+
 ## 0.9.0 — `proof verify` checks the outcome, locally, from a share link
 
 `certen proof verify <share-link>` fetches the bundle with no API key and, when it carries the
