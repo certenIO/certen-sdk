@@ -6,6 +6,7 @@
  * on a hidden prompt inside a pipeline looks like a hang, which is the worst failure mode here.
  */
 
+import { StringDecoder } from 'node:string_decoder';
 import { UsageError } from './errors.js';
 
 const ENV_VAR = 'CERTEN_KEY_PASSPHRASE';
@@ -43,29 +44,69 @@ export function readSecretFromStdin(): Promise<string> {
  *
  * Written against raw stdin rather than readline's historical `output: null` trick, which echoes
  * on some Windows terminals — and a passphrase echoed into scrollback is worse than no prompt.
+ *
+ * THE STREAM MUST STAY IN BUFFER MODE. This called `stdin.setEncoding('binary')` before handing
+ * the stream to `onData`, which makes every `data` event a STRING. `for (const byte of chunk)`
+ * then yielded one-character strings, so `case 0x0a` never matched, `byte >= 0x20` compared a
+ * string to a number (always false), and nothing was ever collected or resolved: Enter did
+ * nothing, typing did nothing, and Ctrl-C did nothing, so the only way out was killing the
+ * terminal. Shipped in 0.7.1 through 0.9.0 and found by a partner on first contact with the
+ * product — `keys generate` is the first command anyone runs. Bytes in, characters out, and a
+ * test below drives this function with a fake TTY so a regression cannot ship silently again.
  */
 function readHidden(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const stdin = process.stdin;
     process.stdout.write(prompt);
 
-    const chars: string[] = [];
+    // Full characters, not bytes and not UTF-16 code units, so backspace deletes one thing the
+    // person typed — an accented letter or an emoji included.
+    let chars: string[] = [];
+    // Holds a multi-byte character that arrives split across two chunks, which a paste can do.
+    const decoder = new StringDecoder('utf8');
     const wasRaw = stdin.isRaw === true;
 
     const cleanup = (): void => {
       stdin.removeListener('data', onData);
+      stdin.removeListener('error', onError);
       if (stdin.setRawMode) stdin.setRawMode(wasRaw);
       stdin.pause();
       process.stdout.write('\n');
     };
 
-    const onData = (chunk: Buffer): void => {
-      for (const byte of chunk) {
+    const take = (bytes: Buffer): void => {
+      if (bytes.length === 0) return;
+      const text = decoder.write(bytes);
+      if (text.length > 0) chars.push(...Array.from(text));
+    };
+
+    const onData = (input: Buffer | string): void => {
+      // Defensive: nothing here sets an encoding, but another code path in the same process might
+      // have (`readSecretFromStdin` sets utf8), and the stream would then hand us a string.
+      const chunk = typeof input === 'string' ? Buffer.from(input, 'utf8') : input;
+
+      let start = 0;
+      for (let i = 0; i < chunk.length; i++) {
+        const byte = chunk[i];
+        // Every UTF-8 continuation byte is >= 0x80, so a byte below 0x20 (or DEL) is always a
+        // control character in its own right and can never be part of a larger character.
+        if (byte >= 0x20 && byte !== 0x7f) continue;
+
+        take(chunk.subarray(start, i));
+        start = i + 1;
+
         switch (byte) {
           case 0x03: // Ctrl-C
             cleanup();
             reject(new Error('Cancelled.'));
             return;
+          case 0x04: // Ctrl-D on an empty line: EOF, the terminal's other way of saying cancel
+            if (chars.length === 0) {
+              cleanup();
+              reject(new Error('Cancelled.'));
+              return;
+            }
+            break;
           case 0x0d: // CR
           case 0x0a: // LF
             cleanup();
@@ -75,21 +116,25 @@ function readHidden(prompt: string): Promise<string> {
           case 0x08: // BS
             chars.pop();
             break;
+          case 0x15: // Ctrl-U clears the line
+            chars = [];
+            break;
           default:
-            // Ignore other control characters; accept everything else as passphrase content.
-            if (byte >= 0x20) chars.push(String.fromCharCode(byte));
+            break; // every other control character is ignored
         }
       }
+      take(chunk.subarray(start));
+    };
+
+    const onError = (err: Error): void => {
+      cleanup();
+      reject(err);
     };
 
     if (stdin.setRawMode) stdin.setRawMode(true);
     stdin.resume();
-    stdin.setEncoding('binary');
     stdin.on('data', onData);
-    stdin.on('error', (err) => {
-      cleanup();
-      reject(err);
-    });
+    stdin.on('error', onError);
   });
 }
 
