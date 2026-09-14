@@ -83,6 +83,28 @@ Without it you get "the transaction succeeded". With it you get "the transaction
 meaningfully stronger claim, and the one an escrow counterparty actually needs. `dataHash` is optional; add
 it when the event's non-indexed data is what matters (an amount, a recipient), not just that it fired.
 
+If the call executes but a committed event is missing from the destination receipt, the gateway does
+**not** complete the intent: it ends `status: failed` with `reason_code: expectation_unmet`, and no
+`transaction.completed` webhook fires. Treat it as a failure. A call that merely did not revert is never
+enough for a contract call.
+
+## Deadlines and extra authorities
+
+```ts
+import { expiresIn } from '@certen.io/sdk';
+
+await certen.execute.contractCall({ ...call, expiresAt: expiresIn('30m') });   // or a Date / RFC 3339 string
+```
+
+`expiresAt` (`expires_at`) is forwarded as the Accumulate transaction deadline. If a required signature is
+still missing when it passes, the intent ends `failed` / `reason_code: expired`: nothing executes and no
+fee or gas is charged. Held (`pending`), denied (`policy_denied`) and expired (`expired`) are distinct.
+
+`additionalAuthorities` (`additional_authorities`) adds key books to the transaction header. **The gateway
+refuses it by default** with 422 `HEADER_AUTHORITY_NOT_EXECUTABLE`, because CERTEN validators do not yet
+count a header authority's signature, so such an intent would never execute. To require a co-signer, make
+its key book an authority on the account instead.
+
 ---
 
 ## Getting the calldata right

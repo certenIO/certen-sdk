@@ -150,6 +150,22 @@ timeout.
 
 **`vote` is `approve` | `reject` | `abstain`** — a lowercase string, not a number, and not `accept`.
 
+## Deadlines, header authorities and failure reasons
+
+`execute.contractCall`, `execute.transfer`, `transaction.create`, `agent.call` and `agent.transfer` accept
+`expiresAt` (a `Date` or RFC 3339 string, or `expiresIn('30m')`) and `additionalAuthorities` (`acc://` key
+books, at most 8). Both are validated before anything is sent.
+
+- **`expiresAt`** — unsigned past the deadline, the intent ends `failed` with `reason_code: 'expired'`:
+  nothing executes, no fee or gas.
+- **`additionalAuthorities` is refused by the gateway by default** — HTTP 422, thrown as
+  `CertenHeaderAuthorityNotExecutableError` (see its `guidance`). Validators do not yet count a header
+  authority's signature, so such an intent would never execute. Make a required co-signer an authority on
+  the account instead (`agent.governance.requireSigner`).
+- **`execute.wait()` throws `CertenIntentFailedError`** on a failed intent, with `reasonCode`
+  (`'expired'`, `'expectation_unmet'`, `'target_reverted'`, …). `describeReasonCode()` renders it.
+  `expectation_unmet` means the call ran but its `expectedEvents` are missing: it is not a success.
+
 ## Guides
 
 - [Onboard an identity](https://docs.kompendium.co/onboard-an-identity.html)

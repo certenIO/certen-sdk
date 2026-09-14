@@ -6961,6 +6961,21 @@
                     "type": "string",
                     "pattern": "^[a-fA-F0-9]{64}$",
                     "description": "Which seat on the identity's key page will sign this intent, as 64-char hex. Optional; defaults to the identity's bound key. Use it on an M-of-N panel so any seat can open a transaction — for example an agent proposing a resolution that a human then finalizes. Must be the bound key or a current member of the key page, and cannot be combined with a provider-signed identity. The returned hash_to_sign is bound to this key, so the signature posted to /signature must come from it."
+                  },
+                  "additional_authorities": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^acc://",
+                      "maxLength": 512
+                    },
+                    "description": "Extra Accumulate key books (acc://…, at most 8) added to the transaction HEADER as authorities that must also sign. Lowercased and de-duplicated by the gateway. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead."
+                  },
+                  "expires_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "RFC 3339 deadline forwarded to Accumulate as the transaction header expiry. Must be in the future. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged."
                   }
                 }
               }
@@ -7261,6 +7276,35 @@
               "application/json": {
                 "schema": {
                   "description": "Identity not found for this organization.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "HEADER_AUTHORITY_NOT_EXECUTABLE — additional_authorities was non-empty and this gateway refuses header authorities (INTENT_HEADER_AUTHORITIES=reject, the default).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "HEADER_AUTHORITY_NOT_EXECUTABLE — additional_authorities was non-empty and this gateway refuses header authorities (INTENT_HEADER_AUTHORITIES=reject, the default).",
                   "type": "object",
                   "additionalProperties": true
                 }
@@ -7719,6 +7763,42 @@
                         "string"
                       ]
                     },
+                    "reason_code": {
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "description": "Why the intent ended where it did, as a stable value. `target_reverted`: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call (a business outcome; retrying the identical call reverts again). `expired`: the Accumulate deadline (expires_at) passed before every required signature arrived; nothing executed, no fee or gas. `expectation_unmet`: a contract call executed but its committed expectedEvents are absent from the destination receipt; not a success. Other values: `policy_denied`, `network_failed`, `post_submission_timeout`, `pre_submission_error`; the set may grow. Null when the intent has not ended, or ended without a recorded reason."
+                    },
+                    "additional_authorities": {
+                      "type": [
+                        "null",
+                        "array"
+                      ],
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Header authorities the intent was opened with, as normalised by the gateway."
+                    },
+                    "expires_at": {
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "description": "The Accumulate deadline the intent was opened with (RFC 3339), or null."
+                    },
+                    "completion_basis": {
+                      "type": [
+                        "null",
+                        "string"
+                      ],
+                      "enum": [
+                        "proof_artifact",
+                        "execution_observed",
+                        null
+                      ],
+                      "description": "What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed."
+                    },
                     "created_at": {},
                     "updated_at": {},
                     "completed_at": {},
@@ -7947,6 +8027,42 @@
                               "null",
                               "string"
                             ]
+                          },
+                          "reason_code": {
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "description": "Why the intent ended where it did — `target_reverted`, `expired`, `expectation_unmet`, … See GET /v1/transaction/{id}."
+                          },
+                          "additional_authorities": {
+                            "type": [
+                              "null",
+                              "array"
+                            ],
+                            "items": {
+                              "type": "string"
+                            },
+                            "description": "Header authorities the intent was opened with, as normalised by the gateway."
+                          },
+                          "expires_at": {
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "description": "The Accumulate deadline the intent was opened with (RFC 3339), or null."
+                          },
+                          "completion_basis": {
+                            "type": [
+                              "null",
+                              "string"
+                            ],
+                            "enum": [
+                              "proof_artifact",
+                              "execution_observed",
+                              null
+                            ],
+                            "description": "What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed."
                           },
                           "created_at": {},
                           "updated_at": {},

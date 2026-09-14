@@ -1,4 +1,8 @@
-import { CertenPaymentRequiredError } from '@certen.io/sdk';
+import {
+  CertenPaymentRequiredError,
+  CertenHeaderAuthorityNotExecutableError,
+  HEADER_AUTHORITY_NOT_EXECUTABLE,
+} from '@certen.io/sdk';
 import { getOutputFormat } from './config.js';
 import { CliError, EXIT, type ExitCode } from './errors.js';
 
@@ -156,6 +160,15 @@ export function emitFailure(err: unknown): ExitCode {
   // already in a terminal; the next command belongs there, not in documentation.
   const payment = err instanceof CertenPaymentRequiredError ? err : null;
 
+  // The other refusal that carries its remedy: header authorities are refused by design, and
+  // retrying cannot help. Keyed on the code as well as the class, so an error that lost its class
+  // on the way here still gets the guidance.
+  const guidance = err instanceof CertenHeaderAuthorityNotExecutableError
+    ? err.guidance
+    : code === HEADER_AUTHORITY_NOT_EXECUTABLE
+      ? new CertenHeaderAuthorityNotExecutableError(message, e.status ?? 422, code).guidance
+      : undefined;
+
   if (jsonMode) {
     flushed = true;
     process.stdout.write(
@@ -170,6 +183,7 @@ export function emitFailure(err: unknown): ExitCode {
           // A failure that still produced a result carries it, rather than throwing the result
           // away in order to signal the failure. See CliError.details.
           ...(e.details ? { details: e.details } : {}),
+          ...(guidance ? { guidance } : {}),
           // Additive: a consumer that ignores unknown keys is unaffected, and one
           // that wants to settle automatically no longer has to parse prose.
           ...(payment
@@ -185,6 +199,11 @@ export function emitFailure(err: unknown): ExitCode {
   } else {
     console.error(code === 'UNKNOWN_ERROR' ? `Error: ${message}` : `Error [${code}]: ${message}`);
     if (payment) emitPaymentFix(payment);
+    if (guidance) {
+      console.error('');
+      console.error(`  ${guidance}`);
+      console.error('  Nothing was opened, signed or charged.');
+    }
   }
 
   return exitCode;

@@ -87,6 +87,44 @@ produces a bodyless 502.
 `--dry-run` prints the intent that would be sent without sending it — also the starting point if
 you need a multi-leg intent, which you then pass to `tx create --intent @file.json`.
 
+### Deadlines: `--expires-in`
+
+```bash
+certen call … --expires-in 30m        # s, m, h or d
+```
+
+Sets `expires_at` to now plus the duration. If a required signature is still missing when it
+passes, the intent ends `failed` with `reason_code: expired`: nothing executes, no fee or gas.
+`certen tx status <id>` shows `expires_at`, and the reason once it has ended. Also on `tx create`.
+
+### Extra header authorities: `--authority` (refused by default)
+
+```bash
+certen call … --authority acc://fictional-firm.acme/book --authority acc://fictional-bank.acme/book
+```
+
+Repeatable, up to 8 `acc://` key books, added to the Accumulate transaction header as authorities
+that must also sign. **The gateway refuses this by default** with `HEADER_AUTHORITY_NOT_EXECUTABLE`
+(HTTP 422, exit 1): CERTEN validators do not yet count a header authority's signature, so the intent
+would collect every signature and still never execute. To require a co-signer, make its key book an
+authority on the **account** (`certen governance add-authority`), or have it accept in a separate
+transaction before the intent is opened. The flag exists for gateways configured to allow header
+authorities, and for when validators support them.
+
+### Why an intent failed: `reason_code`
+
+`certen tx status <id>` (and `--json`) always includes `reason_code`, `completion_basis`,
+`expires_at` and `additional_authorities` (null when unset). The reasons worth telling apart:
+
+| `reason_code` | Meaning |
+|---|---|
+| `expired` | The deadline passed with signatures missing. Nothing executed. |
+| `expectation_unmet` | The call executed, but its `expectedEvents` are not in the receipt. Not a success. |
+| `target_reverted` | The contract rejected the call. Retrying the same call reverts again. |
+| `policy_denied`, `network_failed`, `post_submission_timeout`, `pre_submission_error` | CERTEN did not complete. |
+
+`completion_basis` says what a `completed` status rests on: `proof_artifact` or `execution_observed`.
+
 ## Transfers
 
 ```bash

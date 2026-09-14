@@ -103,6 +103,14 @@ export interface ProvisionParams {
 
 /** Common knobs on every proof-gated action. */
 interface ActionOpts {
+  /**
+   * Extra header authorities (`acc://` key books, at most 8). The gateway refuses these by default
+   * (`HEADER_AUTHORITY_NOT_EXECUTABLE`) — use `governance.requireSigner` to make a book an account
+   * authority instead. See `HeaderFields`.
+   */
+  additionalAuthorities?: string[];
+  /** Deadline: a Date or RFC 3339 string. Unsigned past it, the intent ends `failed/expired`. */
+  expiresAt?: string | Date;
   proofClass?: ProofClass;
   idempotencyKey?: string;
   /** Sign with a different page of the book, e.g. a priority page — the seat still has to be on it. */
@@ -236,6 +244,8 @@ export class CertenAgent {
       proofClass: p.proofClass,
       idempotencyKey: p.idempotencyKey,
       skipFundingCheck: p.skipFundingCheck,
+      additionalAuthorities: p.additionalAuthorities,
+      expiresAt: p.expiresAt,
     });
   }
 
@@ -259,6 +269,8 @@ export class CertenAgent {
       proofClass: p.proofClass,
       idempotencyKey: p.idempotencyKey,
       skipFundingCheck: p.skipFundingCheck,
+      additionalAuthorities: p.additionalAuthorities,
+      expiresAt: p.expiresAt,
     });
   }
 

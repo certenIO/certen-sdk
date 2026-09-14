@@ -1,4 +1,5 @@
 import { CertenError, resolveSignTarget } from '@certen.io/sdk';
+import * as sdkModule from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 
 /**
@@ -83,6 +84,30 @@ function s(args: Record<string, unknown>, key: string): string {
 function optS(args: Record<string, unknown>, key: string): string | undefined {
   const v = args[key];
   return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+/**
+ * Refuse header fields the installed SDK would silently drop.
+ *
+ * `transaction.create` builds its body from a fixed list of keys, so an SDK release that predates
+ * `additionalAuthorities` / `expiresAt` would open the intent WITHOUT the deadline or authorities
+ * the caller asked for — an intent with no expiry when one was requested is worse than no intent.
+ * The SDK that knows these fields also exports `normalizeExpiresAt`; its absence is the signal.
+ */
+export function assertHeaderFieldsSupported(
+  args: Record<string, unknown>,
+  sdk: Record<string, unknown> = sdkModule as unknown as Record<string, unknown>,
+): void {
+  const asked = (Array.isArray(args.additionalAuthorities) && args.additionalAuthorities.length > 0)
+    || (typeof args.expiresAt === 'string' && args.expiresAt.length > 0);
+  if (asked && typeof sdk.normalizeExpiresAt !== 'function') {
+    throw new CertenError(
+      'additionalAuthorities / expiresAt need a newer @certen.io/sdk than this MCP server is running; it would '
+      + 'drop them silently, so nothing was sent. Upgrade @certen.io/mcp, or omit these fields.',
+      0,
+      'HEADER_FIELDS_UNSUPPORTED',
+    );
+  }
 }
 
 function optN(args: Record<string, unknown>, key: string): number | undefined {
@@ -481,7 +506,9 @@ const READ_TOOLS: ToolDef[] = [
     endpoint: 'GET /v1/transaction/{id}',
     description:
       'Status of one transaction intent. Terminal states are completed/delivered/proven (success) '
-      + 'and failed/error. Anything else means it is still in flight.',
+      + 'and failed/error. Anything else means it is still in flight. On failure `reason_code` says why: '
+      + '`expired` (deadline passed with signatures missing, nothing executed), `expectation_unmet` (the call '
+      + 'ran but its committed events are missing, NOT a success), `target_reverted` (the contract said no).',
     inputSchema: {
       type: 'object',
       properties: { intentId: str('Intent id returned when the transaction was opened') },
@@ -903,14 +930,29 @@ const WRITE_TOOLS: ToolDef[] = [
             + '60-110 seconds. `on_cadence` batches it with other proofs: cheaper, slower. Affects when '
             + 'the proof is produced, never what it proves.',
         },
+        additionalAuthorities: {
+          type: 'array',
+          maxItems: 8,
+          items: { type: 'string', pattern: '^acc://' },
+          description:
+            'OPTIONAL, and normally OMIT. Extra acc:// key books (at most 8) added to the transaction header as '
+            + 'authorities that must also sign. The gateway REFUSES this by default with 422 '
+            + 'HEADER_AUTHORITY_NOT_EXECUTABLE, because validators do not yet execute intents carrying header '
+            + 'authorities. To require a co-signer, make its book an authority on the account instead.',
+        },
+        expiresAt: str(
+          'OPTIONAL deadline, RFC 3339 with an offset (e.g. 2026-09-14T12:30:00Z), in the future. If signatures '
+          + 'are still missing when it passes, the intent ends failed with reason_code "expired" and nothing executes.',
+        ),
         idempotencyKey: str('Idempotency key. One is generated if omitted — do not omit it on a retry.'),
         confirm: CONFIRM,
       },
       required: ['identityId', 'intent', 'confirm'],
       additionalProperties: false,
     },
-    run: (c, a) =>
-      c.transaction.create({
+    run: async (c, a) => {
+      assertHeaderFieldsSupported(a);
+      return c.transaction.create({
         identityId: s(a, 'identityId'),
         intent: a.intent as never,
         // Pass through only when it is the object the endpoint expects; an array here is the caller
@@ -920,8 +962,12 @@ const WRITE_TOOLS: ToolDef[] = [
         signerKeyPage: optS(a, 'signerKeyPage'),
         signerPublicKey: optS(a, 'signerPublicKey'),
         proofClass: optS(a, 'proofClass') as never,
+        // Validated (and normalised) by the SDK before anything is sent; a bad value is refused there.
+        additionalAuthorities: a.additionalAuthorities as never,
+        expiresAt: optS(a, 'expiresAt'),
         idempotencyKey: optS(a, 'idempotencyKey'),
-      } as never),
+      } as never);
+    },
   },
   {
     name: 'certen_transaction_submit_signature',

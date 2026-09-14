@@ -196,6 +196,14 @@ function redact(args: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+function extraErrorFields(err: unknown): Record<string, unknown> {
+  const e = err as { guidance?: unknown; reasonCode?: unknown };
+  return {
+    ...(typeof e.guidance === 'string' ? { guidance: e.guidance } : {}),
+    ...(e.reasonCode !== undefined ? { reason_code: e.reasonCode } : {}),
+  };
+}
+
 function describeError(err: unknown): Record<string, unknown> {
   if (err instanceof CertenError) {
     return {
@@ -205,6 +213,9 @@ function describeError(err: unknown): Record<string, unknown> {
         status: err.status,
         retryable: err.isRetryable,
         requestId: err.requestId,
+        // Additive: the refusal carries its remedy, and a failed intent its reason. Read by shape,
+        // not by class, because this package may run against an SDK release that predates both.
+        ...extraErrorFields(err),
       },
       // Say it outright: the SDK already retried the retryable ones with backoff.
       note: err.isRetryable

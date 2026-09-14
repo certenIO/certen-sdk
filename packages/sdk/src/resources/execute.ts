@@ -1,10 +1,11 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
-import { CertenError } from '../errors.js';
+import { CertenError, CertenIntentFailedError } from '../errors.js';
+import { headerFieldsBody } from '../header-fields.js';
 import { assertFundedForValue } from '../funding.js';
 import { SignResource } from './sign.js';
-import type { ContractAddresses, ContractCall, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
+import type { ContractAddresses, ContractCall, HeaderFields, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
 
 /**
  * The proof-gated execution flow, as one call instead of four.
@@ -26,7 +27,7 @@ export interface SignFn {
   (hashToSign: string): string | Promise<string>;
 }
 
-export interface ProofGatedCallParams {
+export interface ProofGatedCallParams extends HeaderFields {
   identityId: string;
   /** The signing identity's ADI, e.g. `acc://your-org.acme`. */
   adiUrl: string;
@@ -62,7 +63,7 @@ export interface ProofGatedCallParams {
   skipFundingCheck?: boolean;
 }
 
-export interface TransferParams {
+export interface TransferParams extends HeaderFields {
   identityId: string;
   /**
    * The signing identity's ADI, e.g. `acc://your-org.acme`.
@@ -170,6 +171,9 @@ export class ExecuteResource {
    * signature is in — which on an M-of-N page is not the same as executed. Follow with `wait()`.
    */
   async contractCall(p: ProofGatedCallParams): Promise<OpenedIntent> {
+    // Local checks first: a malformed header field costs a message, not a portfolio read.
+    const header = headerFieldsBody(p);
+
     // Before the intent exists, not after: an intent that can never execute should never be
     // opened. A call forwarding no value is unaffected — the guard checks the amount first.
     if (!p.skipFundingCheck) {
@@ -208,11 +212,14 @@ export class ExecuteResource {
       signer_public_key: p.signerPublicKey ?? p.publicKey,
       proof_class: p.proofClass,
       signer_key_page: p.signerKeyPage,
+      ...header,
     }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);
   }
 
   /** Authorize a native transfer, gated on proof. Same flow, simpler intent. */
   async transfer(p: TransferParams): Promise<OpenedIntent> {
+    const header = headerFieldsBody(p);
+
     if (!p.skipFundingCheck) {
       await assertFundedForValue(this.http, {
         identityId: p.identityId,
@@ -249,6 +256,7 @@ export class ExecuteResource {
       signer_public_key: p.signerPublicKey ?? p.publicKey,
       proof_class: p.proofClass,
       signer_key_page: p.signerKeyPage,
+      ...header,
     }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);
   }
 
@@ -323,7 +331,13 @@ export class ExecuteResource {
       if (DONE.includes(status)) return last;
       if (FAILED.includes(status)) {
         const msg = (last as unknown as { error_message?: string }).error_message ?? '';
-        throw new Error(`certen: intent ${intentId} ${status}${msg ? `: ${msg}` : ''}`);
+        // The reason travels with the error: `expired`, `expectation_unmet` and `target_reverted`
+        // want three different responses, and a caller should not have to re-fetch to tell them apart.
+        const reason = last.reason_code ?? null;
+        throw new CertenIntentFailedError(
+          `certen: intent ${intentId} ${status}${reason ? ` (${reason})` : ''}${msg ? `: ${msg}` : ''}`,
+          intentId, reason, last,
+        );
       }
       await sleep(intervalMs);
     }

@@ -1,4 +1,5 @@
 import type { CertenClient, Identity } from '@certen.io/sdk';
+import { CertenIntentFailedError, describeReasonCode } from '@certen.io/sdk';
 import { CliError, UsageError, EXIT } from './errors.js';
 import { human, isJsonMode } from './output.js';
 
@@ -205,6 +206,19 @@ export async function waitForTransaction(
     // "still <status> after <n>ms" is the SDK's timeout wording. A timeout is not a failed intent
     // — it may still complete — and conflating the two would tell a user their work was lost.
     const timedOut = /still .* after \d+ms/.test(message);
+    if (err instanceof CertenIntentFailedError) {
+      // The reason is the part a caller acts on — `expired` wants a new intent, `expectation_unmet`
+      // wants the target investigated, `target_reverted` wants neither a retry nor a support ticket.
+      // It rides in `details`, which is additive to the envelope.
+      const reason = describeReasonCode(err.reasonCode);
+      throw new CliError(
+        `${message.replace(/^certen: /, '')}${reason ? `\n  ${reason}` : ''}`,
+        'TX_FAILED',
+        EXIT.FAILED,
+        false,
+        { intent_id: intentId, reason_code: err.reasonCode, reason: reason ?? null },
+      );
+    }
     throw new CliError(
       timedOut
         ? `${message.replace(/^certen: /, '')}. It may yet complete. Check with: certen tx status ${intentId}`

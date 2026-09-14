@@ -102,11 +102,20 @@ certen call --identity <id> --chain base-sepolia --to <contract> \
 - `--proof-class on_cadence` batches the proof (cheaper, default in most kits); `on_demand` is
   immediate and costs more on Ethereum.
 
-Wait for the outcome with `certen tx status <intent_id> --wait --json`. Two failures mean
-different things:
+- `--expires-in 30m` (s, m, h, d) sets a deadline. Unsigned past it, the intent ends failed.
+- `--authority acc://…` (header authority) is REFUSED by the gateway by default
+  (`HEADER_AUTHORITY_NOT_EXECUTABLE`): validators do not yet execute such intents. Do not retry it;
+  the owner makes a required co-signer an authority on the account instead.
 
-- `status: failed` with `reason_code: target_reverted` — CERTEN did its whole job and the contract
-  said no. A business outcome. Retrying the identical call reverts again.
+Wait for the outcome with `certen tx status <intent_id> --wait --json`. Failures mean different
+things — read `reason_code`:
+
+- `target_reverted` — CERTEN did its whole job and the contract said no. A business outcome.
+  Retrying the identical call reverts again.
+- `expired` — the deadline passed before every required signature arrived. Nothing executed, no fee
+  or gas. Open a new intent if it should still happen.
+- `expectation_unmet` — the call ran but the events it committed to are missing from the receipt.
+  It is NOT a success; do not report it as one.
 - anything else — CERTEN did not complete. Infrastructure or funding. Read `certen errors --json`
   for the code you got.
 

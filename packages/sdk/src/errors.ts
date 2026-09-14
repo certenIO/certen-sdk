@@ -75,6 +75,10 @@ export class CertenError extends Error {
     // and a host product needs to tell those apart to know whether to show a
     // "top up" prompt or a validation message.
     if (status === 402) return new CertenPaymentRequiredError(message, status, code, opts);
+    // By code, not status: the refusal has one remedy whatever status a gateway sends it with.
+    if (code === HEADER_AUTHORITY_NOT_EXECUTABLE) {
+      return new CertenHeaderAuthorityNotExecutableError(message, status, code, opts);
+    }
     if (status >= 500) return new CertenServerError(message, status, code, opts);
     if (status >= 400) return new CertenBadRequestError(message, status, code, opts);
     return new CertenError(message, status, code, opts);
@@ -91,6 +95,46 @@ export class CertenRateLimitError extends CertenError {
 }
 export class CertenBadRequestError extends CertenError {}
 export class CertenServerError extends CertenError {}
+
+export const HEADER_AUTHORITY_NOT_EXECUTABLE = 'HEADER_AUTHORITY_NOT_EXECUTABLE';
+
+/**
+ * The gateway refused `additional_authorities` on an intent. HTTP 422.
+ *
+ * Refused on purpose, and by default: CERTEN's validators do not yet count a signature from a
+ * header authority, so an intent carrying one would sit pending, collect every signature, and then
+ * never execute. Accepting it would turn a clear error now into a silent failure later.
+ *
+ * The remedy is not a retry. Make the party that must co-sign an authority on the ACCOUNT (a key
+ * book on the account's authority set, e.g. via `governance` `add_authority`), which validators do
+ * enforce; or, for a per-payment participant, have it accept in a separate transaction first.
+ */
+export class CertenHeaderAuthorityNotExecutableError extends CertenBadRequestError {
+  /** What to do instead, in one paragraph. */
+  get guidance(): string {
+    return 'Header authorities are refused by default because CERTEN validators do not yet execute '
+      + 'intents that carry them. Remove additional_authorities, and put the party that must co-sign '
+      + 'on the account\'s authorities instead (governance add_authority on the account), or have it '
+      + 'accept in a separate transaction before this intent is opened.';
+  }
+}
+
+/**
+ * An intent reached a failed state while `execute.wait()` was polling it.
+ *
+ * `reasonCode` says why (`expired`, `expectation_unmet`, `target_reverted`, …). Status 0: no HTTP
+ * request failed — the gateway answered, and its answer was that the intent failed.
+ */
+export class CertenIntentFailedError extends CertenError {
+  constructor(
+    message: string,
+    public readonly intentId: string,
+    public readonly reasonCode: string | null,
+    public readonly transaction: unknown,
+  ) {
+    super(message, 0, 'INTENT_FAILED', { body: transaction });
+  }
+}
 
 /** A live way to settle a 402, minted by the gateway with the refusal. */
 export interface PaymentResolution {

@@ -177,6 +177,19 @@ describe('SDK requests match the API contract', () => {
     expect(rec.seen[0].body.signer_key_page).toBe('acc://panel.acme/book/2');
   });
 
+  it('transaction.create sends the header fields in the declared shapes', async () => {
+    await certen.transaction.create({
+      identityId: 'id-1',
+      intent: { adiUrl: 'acc://panel.acme', legs: [] },
+      additionalAuthorities: ['acc://fictional-firm.acme/book'],
+      expiresAt: new Date(Date.UTC(2999, 0, 1)),
+    });
+    // The fixture pins `additional_authorities` as an array and `expires_at` as a string.
+    check();
+    expect(rec.seen[0].body.additional_authorities).toEqual(['acc://fictional-firm.acme/book']);
+    expect(rec.seen[0].body.expires_at).toBe('2999-01-01T00:00:00.000Z');
+  });
+
   it('governance.create sends identity + operations', async () => {
     await certen.governance.create({
       identity: 'acc://panel.acme',

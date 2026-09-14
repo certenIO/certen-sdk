@@ -8,7 +8,16 @@ export {
   CertenBadRequestError,
   CertenServerError,
   CertenPaymentRequiredError,
+  CertenHeaderAuthorityNotExecutableError,
+  CertenIntentFailedError,
+  HEADER_AUTHORITY_NOT_EXECUTABLE,
 } from './errors.js';
+// Transaction-header fields (additional authorities, deadline): the validators the SDK runs before
+// sending, exported so the CLI and MCP apply the identical rules. See header-fields.ts.
+export {
+  normalizeAdditionalAuthorities, normalizeExpiresAt, parseDuration, expiresIn, MAX_ADDITIONAL_AUTHORITIES,
+} from './header-fields.js';
+export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS } from './reason-codes.js';
 export type { PaymentResolution } from './errors.js';
 export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';
 // Standalone on purpose: redeeming a share link needs no API key and therefore no client. See

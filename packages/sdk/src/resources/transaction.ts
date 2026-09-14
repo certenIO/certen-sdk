@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { omitUndefined } from '../internal.js';
 import { paginate } from '../client.js';
+import { headerFieldsBody } from '../header-fields.js';
 import type {
   CreateTransactionParams,
   CreateTransactionResponse,
@@ -23,6 +24,8 @@ export class TransactionResource {
    * `test/contract.test.ts` now validates request shapes against a snapshot of the live OpenAPI spec.
    */
   async create(params: CreateTransactionParams): Promise<CreateTransactionResponse> {
+    // Validated before anything is sent — see header-fields.ts.
+    const header = headerFieldsBody(params);
     const headers: Record<string, string> = {};
     if (params.idempotencyKey) {
       headers['Idempotency-Key'] = params.idempotencyKey;
@@ -36,6 +39,7 @@ export class TransactionResource {
         proof_class: params.proofClass,
         signer_key_page: params.signerKeyPage,
         signer_public_key: params.signerPublicKey,
+        ...header,
       }),
       { headers },
     );
