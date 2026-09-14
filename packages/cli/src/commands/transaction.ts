@@ -8,6 +8,10 @@ import { assertChain } from '../chains.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
 import { assertFundedForValue } from '../funding-guard.js';
+import {
+  AUTHORITY_HELP, EXPIRES_IN_HELP, HEADER_FIELDS_HELP, collect, parseAuthorityFlags, parseExpiresIn,
+  withOutcomeFields, emitOutcomeHints,
+} from '../header-flags.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -105,7 +109,13 @@ export function registerTransactionCommands(program: Command): void {
     .option('--timeout <minutes>', `How long to wait (default ${TX_WAIT.timeoutMin})`)
     .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
     .option('--force', 'Submit even if the abstract account has no gas to execute with')
+    .option('--authority <acc-url>', AUTHORITY_HELP, collect)
+    .option('--expires-in <duration>', EXPIRES_IN_HELP)
+    .addHelpText('after', HEADER_FIELDS_HELP)
     .action(async (opts) => {
+      // Flag checks that need no network come first, as in `certen call`.
+      const additionalAuthorities = parseAuthorityFlags(opts.authority);
+      parseExpiresIn(opts.expiresIn); // validated now, measured just before the intent is opened
       const client = await getClient();
 
       // Resolve (and unlock) the signer BEFORE opening the intent. Prompting for a passphrase
@@ -181,6 +191,10 @@ export function registerTransactionCommands(program: Command): void {
         signerKeyPage: opts.signerKeyPage,
         proofClass: opts.proofClass,
         signerPublicKey: opts.signerPublicKey ?? signer?.publicKey,
+        additionalAuthorities,
+        // Computed here, after the signer prompt and the funding check, so none of that time comes
+        // out of the deadline.
+        expiresAt: parseExpiresIn(opts.expiresIn),
         idempotencyKey: opts.idempotencyKey,
       });
 
@@ -281,14 +295,18 @@ export function registerTransactionCommands(program: Command): void {
       const client = await getClient();
 
       if (!opts.wait) {
-        const result = await client.transaction.get(id);
-        printOutput(result as unknown as Record<string, unknown>);
-        emitTerminalHints(result as unknown as Record<string, unknown>, id);
+        // reason_code, completion_basis, expires_at and additional_authorities are always present
+        // in the output (null when unset), so a script need not probe for them.
+        const result = withOutcomeFields(await client.transaction.get(id) as unknown as Record<string, unknown>);
+        printOutput(result);
+        emitOutcomeHints(result);
+        emitTerminalHints(result, id);
         return;
       }
 
-      const final = await waitForTransaction(client, id, budget);
+      const final = withOutcomeFields(await waitForTransaction(client, id, budget));
       printOutput(final);
+      emitOutcomeHints(final);
       emitTerminalHints(final, id);
     });
 

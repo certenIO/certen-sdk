@@ -8,6 +8,10 @@ import { assertChain, normalizeChain, chainIdFor } from '../chains.js';
 import { parseSignature, checkArgs } from '../solidity-args.js';
 import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
 import { assertFundedForValue } from '../funding-guard.js';
+import {
+  AUTHORITY_HELP, EXPIRES_IN_HELP, HEADER_FIELDS_HELP, collect, parseAuthorityFlags, parseExpiresIn,
+  withOutcomeFields, emitOutcomeHints,
+} from '../header-flags.js';
 
 /**
  * `certen call` — a proof-gated contract call, as one command.
@@ -58,17 +62,26 @@ export function registerCallCommands(program: Command): void {
     .option('--timeout <minutes>', `How long to wait (default ${TX_WAIT.timeoutMin})`)
     .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
     .option('--force', 'Submit even if the abstract account has no gas to execute with')
+    .option('--authority <acc-url>', AUTHORITY_HELP, collect)
+    .option('--expires-in <duration>', EXPIRES_IN_HELP)
+    .addHelpText('after', HEADER_FIELDS_HELP)
     .action(async (opts: {
       identity: string; chain: string; to: string; fn: string; arg?: string[]; value: string;
       signWith?: string; signerKeyPage?: string; proofClass?: 'on_demand' | 'on_cadence';
       from?: string; adiUrl?: string; chainId?: number; idempotencyKey?: string;
       dryRun?: boolean; timeout?: string; pollInterval?: string; force?: boolean;
+      authority?: string[]; expiresIn?: string;
     }) => {
       // Everything checkable without the network is checked first, so a typo costs a message
       // rather than a round trip — and, with --sign-with, rather than a passphrase prompt too.
       const chain = assertChain(opts.chain);
       const signature = parseSignature(opts.fn);
       const args = checkArgs(signature, opts.arg ?? []);
+      const additionalAuthorities = parseAuthorityFlags(opts.authority);
+      // Validated here, but the deadline itself is computed again just before the intent is opened:
+      // the duration is relative, and measuring it before a passphrase prompt would let the prompt
+      // eat into it — or, for a short one, push it under the gateway minimum.
+      parseExpiresIn(opts.expiresIn);
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
 
@@ -142,6 +155,8 @@ export function registerCallCommands(program: Command): void {
           from_address: fromAddress,
           contract_call: contractCall,
           proof_class: opts.proofClass ?? null,
+          additional_authorities: additionalAuthorities ?? null,
+          expires_at: parseExpiresIn(opts.expiresIn) ?? null,
         });
         if (!isJsonMode()) {
           hint('');
@@ -183,6 +198,9 @@ export function registerCallCommands(program: Command): void {
         signerKeyPage: opts.signerKeyPage,
         proofClass: opts.proofClass,
         idempotencyKey: opts.idempotencyKey,
+        additionalAuthorities,
+        // After the prompt and the funding check, so the deadline is now + duration at submission.
+        expiresAt: parseExpiresIn(opts.expiresIn),
         sign: (hashHex) => signer.sign(hashHex),
         // The SDK runs the same guard. It is skipped here because the check above already ran and
         // produces the better refusal — it names the faucet for this chain and the --force flag —
@@ -197,13 +215,14 @@ export function registerCallCommands(program: Command): void {
         return;
       }
 
-      const final = await waitForTransaction(client, opened.intentId, budget);
+      const final = withOutcomeFields(await waitForTransaction(client, opened.intentId, budget));
       printOutput(final);
 
       if (isJsonMode()) return;
       const status = String(final.status ?? '');
       human('');
       human(`  Intent ${opened.intentId} is ${status}.`);
+      emitOutcomeHints(final);
       hint('');
       hint(`Next: certen proof get ${opened.intentId}`);
     });

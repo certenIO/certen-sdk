@@ -68,6 +68,7 @@ Catch `CertenError` and branch on `.code`. `.isRetryable` implements the table b
 | `TOO_MANY_REQUESTS` | 429 | yes | Generic throttle. | Wait for the `Retry-After` header. The SDK honours it automatically. |
 | `SLOW_DOWN` | 429 | yes | Polling the device-authorization flow faster than it allows. | Increase the poll interval to the value the flow published. |
 | `CHAIN_UNRESOLVED` | 400 | no | The chain identifier could not be resolved to a deployment. | List valid chains with `chains.list()`. |
+| `HEADER_AUTHORITY_NOT_EXECUTABLE` | 422 | no | The intent names `additional_authorities`, which the gateway refuses by default: validators do not yet execute intents carrying header authorities. | Remove `additional_authorities`. Make a required co-signer an authority on the ACCOUNT instead (governance `add_authority`), or have it accept in a separate transaction first. |
 
 ## Methods
 
@@ -492,6 +493,8 @@ Request body:
   - `idempotency_key`: string
   - `signer_key_page`: string — Which key PAGE signs this intent, e.g. "acc://org.acme/book/2". Optional; defaults to the identity's key page. Must belong to the same key book. A book can hold several pages at different priorities — lower index is higher priority — and Accumulate authorizes at BOOK level, so any page can act with its own threshold. Use this to separate routine operations on a lower-priority page from escalation on a higher-priority one.
   - `signer_public_key`: string — Which seat on the identity's key page will sign this intent, as 64-char hex. Optional; defaults to the identity's bound key. Use it on an M-of-N panel so any seat can open a transaction — for example an agent proposing a resolution that a human then finalizes. Must be the bound key or a current member of the key page, and cannot be combined with a provider-signed identity. The returned hash_to_sign is bound to this key, so the signature posted to /signature must come from it.
+  - `additional_authorities`: string[] — Extra Accumulate key books (acc://…, each at most 512 characters) added to the transaction HEADER as authorities that must also sign. Trimmed, lowercased, stripped of trailing slashes and de-duplicated by the gateway, then at most 8 distinct books. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead.
+  - `expires_at`: string — RFC 3339 deadline (with timezone) forwarded to Accumulate as the transaction header expiry, truncated to whole seconds. Must be between INTENT_EXPIRY_MIN_S (default 60) and INTENT_EXPIRY_MAX_S (default 604800, 7 days) seconds from now, else 400 EXPIRES_AT_OUT_OF_RANGE. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged.
 
 Response 201 — Intent created. External mode returns signing_data + submit_url (status `signing_required`); provider mode returns the submitted tx_hash (status `submitted`); an idempotent replay echoes the original intent with `idempotent: true`:
   - `intent_id`: string
@@ -542,6 +545,8 @@ Request body:
   - `idempotency_key`: string
   - `signer_key_page`: string — Which key PAGE signs this intent, e.g. "acc://org.acme/book/2". Optional; defaults to the identity's key page. Must belong to the same key book. A book can hold several pages at different priorities — lower index is higher priority — and Accumulate authorizes at BOOK level, so any page can act with its own threshold. Use this to separate routine operations on a lower-priority page from escalation on a higher-priority one.
   - `signer_public_key`: string — Which seat on the identity's key page will sign this intent, as 64-char hex. Optional; defaults to the identity's bound key. Use it on an M-of-N panel so any seat can open a transaction — for example an agent proposing a resolution that a human then finalizes. Must be the bound key or a current member of the key page, and cannot be combined with a provider-signed identity. The returned hash_to_sign is bound to this key, so the signature posted to /signature must come from it.
+  - `additional_authorities`: string[] — Extra Accumulate key books (acc://…, each at most 512 characters) added to the transaction HEADER as authorities that must also sign. Trimmed, lowercased, stripped of trailing slashes and de-duplicated by the gateway, then at most 8 distinct books. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead.
+  - `expires_at`: string — RFC 3339 deadline (with timezone) forwarded to Accumulate as the transaction header expiry, truncated to whole seconds. Must be between INTENT_EXPIRY_MIN_S (default 60) and INTENT_EXPIRY_MAX_S (default 604800, 7 days) seconds from now, else 400 EXPIRES_AT_OUT_OF_RANGE. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged.
 
 Response 201 — Intent created. External mode returns signing_data + submit_url (status `signing_required`); provider mode returns the submitted tx_hash (status `submitted`); an idempotent replay echoes the original intent with `idempotent: true`:
   - `intent_id`: string
@@ -638,6 +643,10 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `proof_id`: null,string
   - `proof_bundle_url`: null,string
   - `error_message`: null,string
+  - `reason_code`: null,string — Why the intent ended where it did, as a stable value. `target_reverted`: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call (a business outcome; retrying the identical call reverts again). `expired`: the Accumulate deadline (expires_at) passed before every required signature arrived; nothing executed, no fee or gas. `expectation_unmet`: a contract call executed but its committed expectedEvents are absent from the destination receipt; not a success. Other values: `policy_denied`, `network_failed`, `post_submission_timeout`, `pre_submission_error`; the set may grow. Null when the intent has not ended, or ended without a recorded reason.
+  - `additional_authorities`: null,array — Header authorities the intent was opened with, as normalised by the gateway.
+  - `expires_at`: null,string — The Accumulate deadline the intent was opened with (RFC 3339), or null.
+  - `completion_basis`: "proof_artifact" | "execution_observed" | null — What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed.
   - `created_at`: any
   - `updated_at`: any
   - `completed_at`: any
@@ -666,6 +675,10 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `proof_id`: null,string
   - `proof_bundle_url`: null,string
   - `error_message`: null,string
+  - `reason_code`: null,string — Why the intent ended where it did, as a stable value. `target_reverted`: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call (a business outcome; retrying the identical call reverts again). `expired`: the Accumulate deadline (expires_at) passed before every required signature arrived; nothing executed, no fee or gas. `expectation_unmet`: a contract call executed but its committed expectedEvents are absent from the destination receipt; not a success. Other values: `policy_denied`, `network_failed`, `post_submission_timeout`, `pre_submission_error`; the set may grow. Null when the intent has not ended, or ended without a recorded reason.
+  - `additional_authorities`: null,array — Header authorities the intent was opened with, as normalised by the gateway.
+  - `expires_at`: null,string — The Accumulate deadline the intent was opened with (RFC 3339), or null.
+  - `completion_basis`: "proof_artifact" | "execution_observed" | null — What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed.
   - `created_at`: any
   - `updated_at`: any
   - `completed_at`: any
@@ -1231,6 +1244,8 @@ Request body:
   - `idempotency_key`: string
   - `signer_key_page`: string — Which key PAGE signs this intent, e.g. "acc://org.acme/book/2". Optional; defaults to the identity's key page. Must belong to the same key book. A book can hold several pages at different priorities — lower index is higher priority — and Accumulate authorizes at BOOK level, so any page can act with its own threshold. Use this to separate routine operations on a lower-priority page from escalation on a higher-priority one.
   - `signer_public_key`: string — Which seat on the identity's key page will sign this intent, as 64-char hex. Optional; defaults to the identity's bound key. Use it on an M-of-N panel so any seat can open a transaction — for example an agent proposing a resolution that a human then finalizes. Must be the bound key or a current member of the key page, and cannot be combined with a provider-signed identity. The returned hash_to_sign is bound to this key, so the signature posted to /signature must come from it.
+  - `additional_authorities`: string[] — Extra Accumulate key books (acc://…, each at most 512 characters) added to the transaction HEADER as authorities that must also sign. Trimmed, lowercased, stripped of trailing slashes and de-duplicated by the gateway, then at most 8 distinct books. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead.
+  - `expires_at`: string — RFC 3339 deadline (with timezone) forwarded to Accumulate as the transaction header expiry, truncated to whole seconds. Must be between INTENT_EXPIRY_MIN_S (default 60) and INTENT_EXPIRY_MAX_S (default 604800, 7 days) seconds from now, else 400 EXPIRES_AT_OUT_OF_RANGE. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged.
 
 Response 201 — Intent created. External mode returns signing_data + submit_url (status `signing_required`); provider mode returns the submitted tx_hash (status `submitted`); an idempotent replay echoes the original intent with `idempotent: true`:
   - `intent_id`: string
@@ -1280,6 +1295,10 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `proof_id`: null,string
   - `proof_bundle_url`: null,string
   - `error_message`: null,string
+  - `reason_code`: null,string — Why the intent ended where it did, as a stable value. `target_reverted`: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call (a business outcome; retrying the identical call reverts again). `expired`: the Accumulate deadline (expires_at) passed before every required signature arrived; nothing executed, no fee or gas. `expectation_unmet`: a contract call executed but its committed expectedEvents are absent from the destination receipt; not a success. Other values: `policy_denied`, `network_failed`, `post_submission_timeout`, `pre_submission_error`; the set may grow. Null when the intent has not ended, or ended without a recorded reason.
+  - `additional_authorities`: null,array — Header authorities the intent was opened with, as normalised by the gateway.
+  - `expires_at`: null,string — The Accumulate deadline the intent was opened with (RFC 3339), or null.
+  - `completion_basis`: "proof_artifact" | "execution_observed" | null — What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed.
   - `created_at`: any
   - `updated_at`: any
   - `completed_at`: any
@@ -1297,7 +1316,7 @@ Query parameters:
   - `offset`: string — Rows to skip. Default 0; clamped to bounds.
 
 Response 200 — A page of transaction intents with the echoed pagination cursor:
-  - `transactions`: { intent_id, identity_id, status, intent_type, accum_tx_hash, proof_id, error_message, created_at, updated_at, completed_at }[]
+  - `transactions`: { intent_id, identity_id, status, intent_type, accum_tx_hash, proof_id, error_message, reason_code, additional_authorities, expires_at, completion_basis, created_at, updated_at, completed_at }[]
   - `limit`: integer
   - `offset`: integer
   - `pagination`: { limit, offset, has_more, returned } — Where this page sits. Loop until `has_more` is false — do NOT infer the end from a short page, which ends early whenever a page lands exactly on the page size.

@@ -1,5 +1,12 @@
 # Changelog — @certen.io/mcp
 
+## Unreleased — header fields on `certen_transaction_open`
+
+### Added
+- Optional `additionalAuthorities` and `expiresAt` on `certen_transaction_open`. Refused with
+  `HEADER_FIELDS_UNSUPPORTED` (nothing sent) when the installed `@certen.io/sdk` predates them, rather than
+  silently dropped. Tool errors now include `guidance` and `reason_code` when the SDK error carries them.
+
 ## 0.4.2 — the server starts when you install it
 
 ### Fixed — the same silent entrypoint as the CLI

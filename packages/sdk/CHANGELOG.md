@@ -1,5 +1,26 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — transaction deadlines, header authorities, failure reasons
+
+### Added
+- `expiresAt` (Date | RFC 3339 string) and `additionalAuthorities` (acc:// key books, max 8) on
+  `execute.contractCall`, `execute.transfer`, `transaction.create`, `agent.call`, `agent.transfer`
+  and `agent.token`, sent as `expires_at` / `additional_authorities` and validated before any request.
+  `expiresIn("30m")` and `parseDuration()` build a deadline. The checks mirror the gateway: authorities are
+  trimmed, lowercased, stripped of trailing slashes, need a non-empty host, at most 512 characters, and at
+  most 8 distinct after de-duplication; `expiresAt` must be 90 s (gateway minimum 60 s, plus latency margin)
+  to 7 days ahead.
+- `CertenHeaderAuthorityNotExecutableError` for HTTP 422 `HEADER_AUTHORITY_NOT_EXECUTABLE`, with
+  `guidance`. The gateway refuses header authorities by default because validators do not yet execute
+  intents that carry them.
+- `TransactionReasonCode` (now including `expired` and `expectation_unmet`), `CompletionBasis`,
+  `describeReasonCode()`; `TransactionResponse` gains `reason_code`, `additional_authorities`,
+  `expires_at` and `completion_basis`.
+
+### Changed
+- `execute.wait()` throws `CertenIntentFailedError` (a `CertenError`, code `INTENT_FAILED`) on a failed
+  intent, carrying `reasonCode`; the message now includes the reason in parentheses.
+
 ## 0.9.0 — verify the outcome from the bundle's own bytes
 
 ### Added — `verifyExecutionProof`, `checkAgainstHeader`, `decodeSharedBundle`

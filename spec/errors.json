@@ -82,6 +82,14 @@
       "meaning": "No signed FX observation is available, so a gas-priced charge cannot be converted to USD."
     },
     {
+      "code": "HEADER_AUTHORITY_NOT_EXECUTABLE",
+      "status": 422,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The intent names additional_authorities. CERTEN validators do not yet execute intents that carry header authorities, so the gateway refuses them instead of accepting an intent that could never execute.",
+      "action": "Remove additional_authorities. Put a party that must co-sign on the account's authorities instead, or have it accept in a separate transaction first."
+    },
+    {
       "code": "IDEMPOTENCY_KEY_IN_FLIGHT",
       "status": 409,
       "retryable": true,

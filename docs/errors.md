@@ -58,6 +58,7 @@ backoff — a second retry loop wrapped around it is wrong.
 | `PLAN_QUOTA_EXCEEDED` | 429 | no | A plan quota for the period is exhausted; waiting will not clear it |
 | `TOO_MANY_REQUESTS` | 429 | yes | Generic throttle; wait for `Retry-After` |
 | `SLOW_DOWN` | 429 | yes | Polling the device-authorization flow faster than it allows |
+| `HEADER_AUTHORITY_NOT_EXECUTABLE` | 422 | no | The intent named `additional_authorities`, refused by default because validators do not yet execute them; make the co-signer an account authority instead |
 | `INTERNAL_ERROR` | 500 | yes | An unexpected server error occurred |
 | `BAD_GATEWAY` | 502 | yes | A downstream service (api-bridge, proofs service) returned an error |
 | `NETWORK_ERROR` | — | yes | Synthesized by the SDK when the request never reached the gateway |
@@ -125,6 +126,38 @@ HTTP 502
 HTTP 429
 { "error": "Rate limit exceeded", "code": "RATE_LIMIT_EXCEEDED" }
 ```
+
+### Header Authorities Refused
+
+```
+HTTP 422
+{ "error": "…", "code": "HEADER_AUTHORITY_NOT_EXECUTABLE" }
+```
+
+The request named `additional_authorities` (SDK `additionalAuthorities`, CLI `--authority`). The
+gateway refuses it by default because CERTEN validators do not yet count a header authority's
+signature: the intent would collect every signature and still never execute. The SDK raises
+`CertenHeaderAuthorityNotExecutableError`, whose `guidance` says what to do instead: make the party
+that must co-sign an authority on the **account**, or have it accept in a separate transaction first.
+Retrying the same request is refused again.
+
+## Why an intent failed: `reason_code`
+
+A request can succeed and the intent can still fail later. `GET /v1/transaction/{id}` then reports
+`status: failed` and a `reason_code`. `execute.wait()` throws `CertenIntentFailedError` with that
+value as `reasonCode`, and `describeReasonCode()` turns it into one sentence.
+
+| `reason_code` | Meaning |
+|---|---|
+| `target_reverted` | The destination contract rejected the call. CERTEN completed its part; the identical call reverts again. |
+| `policy_denied` | A policy refused the intent. Nothing executed. |
+| `network_failed` | The network failed the transaction. |
+| `post_submission_timeout` | Submitted, but no outcome was observed in time. Check the chain before retrying. |
+| `pre_submission_error` | Failed before submission. Nothing executed. |
+| `expired` | `expires_at` passed before every required signature arrived. Nothing executed; no fee or gas. |
+| `expectation_unmet` | The call executed but its committed `expectedEvents` are missing from the destination receipt. Not a success. |
+
+Held (still `pending`), denied (`policy_denied`) and expired (`expired`) are three different outcomes.
 
 ## Retry Guidance
 

@@ -286,8 +286,75 @@ export interface CreateTransactionParams {
   signerKeyPage?: string;
   /** Which SEAT on the page signs, 64 hex. Defaults to the identity's bound key. */
   signerPublicKey?: string;
+  /** Extra header authorities (`acc://` key books, at most 8). Refused by default — see `HeaderFields`. */
+  additionalAuthorities?: string[];
+  /** Accumulate deadline. See `HeaderFields.expiresAt`. */
+  expiresAt?: string | Date;
   idempotencyKey?: string;
 }
+
+/**
+ * Optional transaction-header fields accepted by every intent-opening call.
+ *
+ * Sent as `additional_authorities` and `expires_at`.
+ */
+export interface HeaderFields {
+  /**
+   * Key books (`acc://…`, at most 8) added to the Accumulate transaction header as authorities that
+   * must also sign. Lowercased and de-duplicated before sending.
+   *
+   * **The gateway refuses this by default** with HTTP 422 `HEADER_AUTHORITY_NOT_EXECUTABLE`
+   * (`CertenHeaderAuthorityNotExecutableError`): validators do not yet count a header authority's
+   * signature, so the intent would collect every signature and still never execute. Make a party
+   * that must co-sign an authority on the ACCOUNT instead.
+   */
+  additionalAuthorities?: string[];
+  /**
+   * Deadline for the Accumulate transaction: a `Date`, or an RFC 3339 string with an offset. Must be
+   * 90 s to 7 days from now (the gateway's window is 60 s to 7 days; the SDK keeps a margin). If signatures are still missing when it passes, the intent ends
+   * `failed` with `reason_code: expired` and nothing executes, so no gas is spent. `expiresIn('30m')`
+   * builds one.
+   */
+  expiresAt?: string | Date;
+}
+
+/**
+ * Why an intent ended where it did — `TransactionResponse.reason_code`.
+ *
+ * - `target_reverted` — CERTEN did everything; the destination contract rejected the call. A
+ *   business outcome: retrying the identical call reverts again.
+ * - `policy_denied` — a required policy seat refused to sign.
+ * - `network_failed` — Accumulate or the execution network failed the transaction.
+ * - `post_submission_timeout` — submitted, but no outcome was observed in time.
+ * - `pre_submission_error` — the intent failed before it reached the network.
+ * - `expired` — the Accumulate deadline (`expires_at`) passed before every signature arrived.
+ *   Nothing executed; no fee or gas is charged.
+ * - `expectation_unmet` — the call executed, but events it committed to (`expectedEvents`) are
+ *   missing from the destination receipt. It is NOT a success.
+ *
+ * The response type also admits other strings: the gateway may add a value before this SDK knows
+ * it, and treating an unknown reason as impossible would be the wrong failure.
+ */
+export type TransactionReasonCode =
+  | 'target_reverted'
+  | 'policy_denied'
+  | 'network_failed'
+  | 'post_submission_timeout'
+  | 'pre_submission_error'
+  | 'expired'
+  | 'expectation_unmet';
+
+/**
+ * What a `completed` intent's success rests on.
+ *
+ * - `proof_artifact` — the proof service returned an indexed CERTEN proof artifact.
+ * - `execution_observed` — execution was measured on the destination chain. For a contract call the
+ *   gateway also checked the committed `expectedEvents` against the destination receipt; a mismatch
+ *   ends `failed/expectation_unmet` instead of completing.
+ *
+ * Other strings are admitted for rows written by an older gateway.
+ */
+export type CompletionBasis = 'proof_artifact' | 'execution_observed';
 
 /** @deprecated The flat shape this described was never accepted by POST /v1/transaction. Use `intent`. */
 export interface LegacyFlatTransactionParams {
@@ -366,6 +433,17 @@ export interface TransactionResponse {
   proof_id?: string | null;
   proof_bundle_url?: string | null;
   error_message?: string | null;
+  /**
+   * Why the intent ended where it did. Null while in flight or when no reason was recorded; absent
+   * on an older gateway. `describeReasonCode()` renders it for a person.
+   */
+  reason_code?: TransactionReasonCode | (string & {}) | null;
+  /** Header authorities the intent was opened with, normalised by the gateway. */
+  additional_authorities?: string[] | null;
+  /** The Accumulate deadline the intent was opened with, RFC 3339. */
+  expires_at?: string | null;
+  /** What a `completed` status rests on. Null until completed. */
+  completion_basis?: CompletionBasis | (string & {}) | null;
   created_at: string;
   updated_at?: string;
   /** Null while the transaction is still in flight — the gateway has always sent a real null here. */

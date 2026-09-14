@@ -166,6 +166,13 @@ export const ERROR_CODES = [
     meaning: 'The chain identifier could not be resolved to a deployment.',
     fix: 'List valid chains with `chains.list()`.',
   },
+  {
+    code: 'HEADER_AUTHORITY_NOT_EXECUTABLE',
+    status: 422,
+    retryable: false,
+    meaning: 'The intent names `additional_authorities`, which the gateway refuses by default: validators do not yet execute intents carrying header authorities.',
+    fix: 'Remove `additional_authorities`. Make a required co-signer an authority on the ACCOUNT instead (governance `add_authority`), or have it accept in a separate transaction first.',
+  },
 ];
 
 /**

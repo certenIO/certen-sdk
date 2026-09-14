@@ -75,9 +75,18 @@ So the failure envelope may carry an additive `details` object:
 - It is additive: a consumer that ignores unknown keys is unaffected. This is the same property the
   402 payment fields below rely on.
 
-`certen doctor` is currently the only command that uses it. Its `details.checks` is the same array
-`--json doctor` returns under `data.checks` on a successful run, so a caller can read one shape
-regardless of outcome.
+`certen doctor` uses it for `details.checks`, the same array `--json doctor` returns under
+`data.checks` on a successful run, so a caller can read one shape regardless of outcome.
+
+`TX_FAILED` (from `tx create --wait`, `tx status --wait` and `call --wait`) carries
+`details: { intent_id, reason_code, reason }`, where `reason_code` is the gateway's value (`expired`,
+`expectation_unmet`, `target_reverted`, …, or null) and `reason` is one readable sentence.
+
+#### Refused header authorities carry guidance
+
+`HEADER_AUTHORITY_NOT_EXECUTABLE` (HTTP 422, from `--authority`) adds an additive `guidance` string saying
+what to do instead: header authorities are refused by default because validators do not yet execute
+intents that carry them, so put the co-signer on the account's authorities. Not retryable.
 
 #### Payment failures carry the fix
 

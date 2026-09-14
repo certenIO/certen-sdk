@@ -753,7 +753,9 @@
           "proof_class",
           "idempotency_key",
           "signer_key_page",
-          "signer_public_key"
+          "signer_public_key",
+          "additional_authorities",
+          "expires_at"
         ],
         "propertyTypes": {
           "identity_id": "string",
@@ -763,7 +765,9 @@
           "proof_class": "string",
           "idempotency_key": "string",
           "signer_key_page": "string",
-          "signer_public_key": "string"
+          "signer_public_key": "string",
+          "additional_authorities": "array",
+          "expires_at": "string"
         },
         "query": [],
         "responses": {
@@ -830,6 +834,10 @@
             "proof_id",
             "proof_bundle_url",
             "error_message",
+            "reason_code",
+            "additional_authorities",
+            "expires_at",
+            "completion_basis",
             "created_at",
             "updated_at",
             "completed_at",
@@ -876,6 +884,10 @@
               "accum_tx_hash",
               "proof_id",
               "error_message",
+              "reason_code",
+              "additional_authorities",
+              "expires_at",
+              "completion_basis",
               "created_at",
               "updated_at",
               "completed_at"
