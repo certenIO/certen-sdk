@@ -90,10 +90,12 @@ you need a multi-leg intent, which you then pass to `tx create --intent @file.js
 ### Deadlines: `--expires-in`
 
 ```bash
-certen call … --expires-in 30m        # s, m, h or d
+certen call … --expires-in 30m        # s, m, h or d; 90s to 7d
 ```
 
-Sets `expires_at` to now plus the duration. If a required signature is still missing when it
+Sets `expires_at` to now plus the duration, measured when the intent is opened (after any
+passphrase prompt). The gateway accepts 60 seconds to 7 days; the CLI and SDK refuse under 90 seconds
+so request latency cannot push a deadline below the gateway minimum. If a required signature is still missing when it
 passes, the intent ends `failed` with `reason_code: expired`: nothing executes, no fee or gas.
 `certen tx status <id>` shows `expires_at`, and the reason once it has ended. Also on `tx create`.
 

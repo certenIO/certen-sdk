@@ -32,7 +32,8 @@ import {
 
 const HASH = 'ab'.repeat(32);
 const PUBKEY = '11'.repeat(32);
-const FUTURE = '2999-01-01T00:00:00Z';
+// Inside the gateway's window (60 s – 7 d) at any time the suite runs, and whole seconds.
+const FUTURE = new Date(Math.floor(Date.now() / 1000) * 1000 + 3 * 3600_000).toISOString().replace('.000Z', 'Z');
 
 interface Req { method: string; path: string; body?: any }
 
@@ -106,9 +107,9 @@ describe('request body mapping', () => {
   it('execute.transfer renders a Date as RFC 3339', async () => {
     const g = await gateway(okFlow);
     try {
-      const at = new Date(Date.UTC(2999, 0, 1, 12, 30, 0));
+      const at = new Date(Date.now() + 2 * 86_400_000);
       await clientFor(g.url).execute.transfer({ ...TRANSFER, expiresAt: at });
-      expect(openBody(g).expires_at).toBe('2999-01-01T12:30:00.000Z');
+      expect(openBody(g).expires_at).toBe(at.toISOString());
       expect(openBody(g)).not.toHaveProperty('additional_authorities');
     } finally { g.close(); }
   });
@@ -158,7 +159,12 @@ describe('client-side validation, before any request', () => {
     ['a non-acc URL', { additionalAuthorities: ['https://fictional-firm.example'] }, 'INVALID_ADDITIONAL_AUTHORITIES'],
     ['a non-array', { additionalAuthorities: 'acc://fictional-firm.acme/book' }, 'INVALID_ADDITIONAL_AUTHORITIES'],
     ['a past deadline', { expiresAt: '2001-01-01T00:00:00Z' }, 'INVALID_EXPIRES_AT'],
-    ['a deadline without an offset', { expiresAt: '2999-01-01T00:00:00' }, 'INVALID_EXPIRES_AT'],
+    ['a deadline without an offset', { expiresAt: FUTURE.replace('Z', '') }, 'INVALID_EXPIRES_AT'],
+    ['a deadline 60s away (under the local 90s margin)', { expiresAt: new Date(Date.now() + 60_000) }, 'INVALID_EXPIRES_AT'],
+    ['a deadline beyond 7 days', { expiresAt: new Date(Date.now() + 7 * 86_400_000 + 120_000) }, 'INVALID_EXPIRES_AT'],
+    ['an authority with an empty host', { additionalAuthorities: ['acc:///book'] }, 'INVALID_ADDITIONAL_AUTHORITIES'],
+    ['an authority that is only a scheme and slashes', { additionalAuthorities: ['acc:////'] }, 'INVALID_ADDITIONAL_AUTHORITIES'],
+    ['an authority over 512 characters', { additionalAuthorities: [`acc://${'a'.repeat(507)}`] }, 'INVALID_ADDITIONAL_AUTHORITIES'],
     ['an unparseable deadline', { expiresAt: 'tomorrow' }, 'INVALID_EXPIRES_AT'],
     ['an invalid Date', { expiresAt: new Date('nope') }, 'INVALID_EXPIRES_AT'],
   ];
@@ -176,13 +182,36 @@ describe('client-side validation, before any request', () => {
     });
   }
 
+  it('counts the limit of eight after normalising and de-duplicating, like the gateway', () => {
+    const spellings = Array.from({ length: 8 }, (_, i) => [`acc://f${i}.acme/book`, ` ACC://F${i}.acme/book/ `]).flat();
+    expect(spellings).toHaveLength(16);
+    expect(normalizeAdditionalAuthorities(spellings)).toEqual(Array.from({ length: 8 }, (_, i) => `acc://f${i}.acme/book`));
+    const nine = [...spellings, 'acc://f8.acme/book'];
+    expect(() => normalizeAdditionalAuthorities(nine)).toThrow(/9 distinct books/);
+  });
+
+  it('strips trailing slashes before comparing', () => {
+    expect(normalizeAdditionalAuthorities(['acc://fictional-firm.acme/book//', 'acc://fictional-firm.acme/book']))
+      .toEqual(['acc://fictional-firm.acme/book']);
+  });
+
+  it('applies the window in whole seconds: 90 s and 7 days are both accepted', () => {
+    const now = Date.UTC(2026, 8, 14, 12, 0, 0);
+    expect(normalizeExpiresAt(new Date(now + 90_000), now)).toBe('2026-09-14T12:01:30.000Z');
+    expect(normalizeExpiresAt(new Date(now + 604_800_000), now)).toBe('2026-09-21T12:00:00.000Z');
+    expect(() => normalizeExpiresAt(new Date(now + 89_000), now)).toThrow(/gateway requires at least 60s/);
+    expect(() => normalizeExpiresAt(new Date(now + 604_801_000), now)).toThrow(/at most 604800s/);
+    expect(() => normalizeExpiresAt(new Date(now - 1_000), now)).toThrow(/in the past/);
+  });
+
   it('accepts exactly eight authorities', () => {
     const eight = Array.from({ length: 8 }, (_, i) => `acc://f${i}.acme/book`);
     expect(normalizeAdditionalAuthorities(eight)).toEqual(eight);
   });
 
   it('accepts an RFC 3339 string with a numeric offset, verbatim', () => {
-    expect(normalizeExpiresAt('2999-01-01T00:00:00+02:00')).toBe('2999-01-01T00:00:00+02:00');
+    const now = Date.UTC(2026, 8, 14, 12, 0, 0);
+    expect(normalizeExpiresAt(' 2026-09-14T15:00:00+02:00 ', now)).toBe('2026-09-14T15:00:00+02:00');
   });
 });
 

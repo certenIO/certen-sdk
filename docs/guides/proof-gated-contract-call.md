@@ -96,7 +96,8 @@ import { expiresIn } from '@certen.io/sdk';
 await certen.execute.contractCall({ ...call, expiresAt: expiresIn('30m') });   // or a Date / RFC 3339 string
 ```
 
-`expiresAt` (`expires_at`) is forwarded as the Accumulate transaction deadline. If a required signature is
+`expiresAt` (`expires_at`) is forwarded as the Accumulate transaction deadline. The gateway accepts 60 seconds
+to 7 days ahead (`EXPIRES_AT_OUT_OF_RANGE` otherwise); the SDK refuses under 90 seconds locally, leaving room for latency. If a required signature is
 still missing when it passes, the intent ends `failed` / `reason_code: expired`: nothing executes and no
 fee or gas is charged. Held (`pending`), denied (`policy_denied`) and expired (`expired`) are distinct.
 

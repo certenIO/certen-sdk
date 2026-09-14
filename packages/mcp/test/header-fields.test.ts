@@ -13,6 +13,7 @@ import { ALL_TOOLS, assertHeaderFieldsSupported } from '../src/tools.js';
 
 const open = ALL_TOOLS.find((t) => t.name === 'certen_transaction_open')!;
 const FIRM = 'acc://fictional-firm.acme/book';
+const SOON = new Date(Math.floor(Date.now() / 1000) * 1000 + 3_600_000).toISOString();
 
 function fakeClient() {
   const calls: Array<Record<string, unknown>> = [];
@@ -40,7 +41,7 @@ describe('certen_transaction_open header fields', () => {
   });
 
   it('refuses the fields when the SDK cannot send them, and allows them when it can', () => {
-    const args = { additionalAuthorities: [FIRM], expiresAt: '2999-01-01T00:00:00Z' };
+    const args = { additionalAuthorities: [FIRM], expiresAt: SOON };
     expect(() => assertHeaderFieldsSupported(args, {})).toThrow(/nothing was sent/);
     expect(() => assertHeaderFieldsSupported(args, { normalizeExpiresAt: () => '' })).not.toThrow();
     expect(() => assertHeaderFieldsSupported({}, {})).not.toThrow();
@@ -48,10 +49,10 @@ describe('certen_transaction_open header fields', () => {
 
   it('with the fields, passes them through or refuses — never drops them', async () => {
     const f = fakeClient();
-    const args = { identityId: 'id', intent: {}, additionalAuthorities: [FIRM], expiresAt: '2999-01-01T00:00:00Z', confirm: true };
+    const args = { identityId: 'id', intent: {}, additionalAuthorities: [FIRM], expiresAt: SOON, confirm: true };
     if (typeof (sdk as Record<string, unknown>).normalizeExpiresAt === 'function') {
       await open.run(f.client as never, args);
-      expect(f.calls[0]).toMatchObject({ additionalAuthorities: [FIRM], expiresAt: '2999-01-01T00:00:00Z' });
+      expect(f.calls[0]).toMatchObject({ additionalAuthorities: [FIRM], expiresAt: SOON });
     } else {
       await expect(open.run(f.client as never, args)).rejects.toMatchObject({ code: 'HEADER_FIELDS_UNSUPPORTED' });
       expect(f.calls).toHaveLength(0);

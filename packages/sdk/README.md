@@ -153,7 +153,7 @@ timeout.
 ## Deadlines, header authorities and failure reasons
 
 `execute.contractCall`, `execute.transfer`, `transaction.create`, `agent.call` and `agent.transfer` accept
-`expiresAt` (a `Date` or RFC 3339 string, or `expiresIn('30m')`) and `additionalAuthorities` (`acc://` key
+`expiresAt` (a `Date` or RFC 3339 string, or `expiresIn('30m')`; 90 s to 7 days ahead — the gateway allows 60 s, the SDK keeps a margin) and `additionalAuthorities` (`acc://` key
 books, at most 8). Both are validated before anything is sent.
 
 - **`expiresAt`** — unsigned past the deadline, the intent ends `failed` with `reason_code: 'expired'`:

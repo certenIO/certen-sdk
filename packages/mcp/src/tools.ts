@@ -941,7 +941,8 @@ const WRITE_TOOLS: ToolDef[] = [
             + 'authorities. To require a co-signer, make its book an authority on the account instead.',
         },
         expiresAt: str(
-          'OPTIONAL deadline, RFC 3339 with an offset (e.g. 2026-09-14T12:30:00Z), in the future. If signatures '
+          'OPTIONAL deadline, RFC 3339 with an offset (e.g. 2026-09-14T12:30:00Z), between 90 seconds and 7 days from now '
+          + '(the gateway minimum is 60 s; 90 s leaves room for request latency). If signatures '
           + 'are still missing when it passes, the intent ends failed with reason_code "expired" and nothing executes.',
         ),
         idempotencyKey: str('Idempotency key. One is generated if omitted — do not omit it on a retry.'),

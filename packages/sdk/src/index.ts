@@ -16,6 +16,7 @@ export {
 // sending, exported so the CLI and MCP apply the identical rules. See header-fields.ts.
 export {
   normalizeAdditionalAuthorities, normalizeExpiresAt, parseDuration, expiresIn, MAX_ADDITIONAL_AUTHORITIES,
+  MAX_AUTHORITY_URL_LENGTH, GATEWAY_EXPIRY_MIN_S, GATEWAY_EXPIRY_MAX_S, LOCAL_EXPIRY_MIN_S, HEADER_FIELD_ERROR_CODES,
 } from './header-fields.js';
 export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS } from './reason-codes.js';
 export type { PaymentResolution } from './errors.js';

@@ -6970,12 +6970,12 @@
                       "pattern": "^acc://",
                       "maxLength": 512
                     },
-                    "description": "Extra Accumulate key books (acc://…, at most 8) added to the transaction HEADER as authorities that must also sign. Lowercased and de-duplicated by the gateway. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead."
+                    "description": "Extra Accumulate key books (acc://…, each at most 512 characters) added to the transaction HEADER as authorities that must also sign. Trimmed, lowercased, stripped of trailing slashes and de-duplicated by the gateway, then at most 8 distinct books. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead."
                   },
                   "expires_at": {
                     "type": "string",
                     "format": "date-time",
-                    "description": "RFC 3339 deadline forwarded to Accumulate as the transaction header expiry. Must be in the future. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged."
+                    "description": "RFC 3339 deadline (with timezone) forwarded to Accumulate as the transaction header expiry, truncated to whole seconds. Must be between INTENT_EXPIRY_MIN_S (default 60) and INTENT_EXPIRY_MAX_S (default 604800, 7 days) seconds from now, else 400 EXPIRES_AT_OUT_OF_RANGE. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged."
                   }
                 }
               }

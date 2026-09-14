@@ -28,7 +28,7 @@ export const AUTHORITY_HELP =
   + 'REFUSED BY DEFAULT by the gateway (HEADER_AUTHORITY_NOT_EXECUTABLE) — see below';
 
 export const EXPIRES_IN_HELP =
-  'Deadline for signatures, from now: e.g. 90s, 30m, 2h, 7d. Unsigned past it, the intent ends failed/expired';
+  'Deadline for signatures, from now: 90s to 7d, e.g. 30m, 2h. Unsigned past it, the intent ends failed/expired';
 
 export const HEADER_FIELDS_HELP = `
 Header authorities and deadlines:
@@ -38,8 +38,10 @@ Header authorities and deadlines:
   run. To require a co-signer, make its key book an authority on the ACCOUNT instead
   (certen governance add-authority), or have it accept in a separate transaction first.
 
-  --expires-in sets expires_at = now + duration. If a required signature is still missing when it
-  passes, the intent ends failed with reason_code "expired": nothing executes, no fee or gas.
+  --expires-in sets expires_at = now + duration, measured when the intent is opened (after any
+  passphrase prompt). Allowed: 90s to 7d (the gateway accepts 60s to 7d; the CLI keeps a margin for
+  latency). If a required signature is still missing when it passes, the intent ends failed with
+  reason_code "expired": nothing executes, no fee or gas.
 `;
 
 function asUsage(err: unknown, flag: string, code: string): never {

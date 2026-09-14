@@ -311,7 +311,7 @@ export interface HeaderFields {
   additionalAuthorities?: string[];
   /**
    * Deadline for the Accumulate transaction: a `Date`, or an RFC 3339 string with an offset. Must be
-   * in the future. If signatures are still missing when it passes, the intent ends
+   * 90 s to 7 days from now (the gateway's window is 60 s to 7 days; the SDK keeps a margin). If signatures are still missing when it passes, the intent ends
    * `failed` with `reason_code: expired` and nothing executes, so no gas is spent. `expiresIn('30m')`
    * builds one.
    */

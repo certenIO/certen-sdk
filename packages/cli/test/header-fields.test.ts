@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { collect, parseAuthorityFlags, parseExpiresIn, withOutcomeFields } from '../src/header-flags.js';
-import { UsageError } from '../src/errors.js';
+import { UsageError, EXIT } from '../src/errors.js';
+import { emitFailure, resetOutput, setJsonMode } from '../src/output.js';
+import { CertenError } from '@certen.io/sdk';
 
 /**
  * `--authority` and `--expires-in` on `certen call` / `certen tx create`, the outcome fields on
@@ -39,7 +41,7 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
 
 type Over = Record<string, (res: http.ServerResponse) => void>;
 
-async function stubGateway(over: Over = {}): Promise<Stub> {
+async function stubGateway(over: Over = {}, opts: { identityDelayMs?: number; identityAnsweredAt?: number[] } = {}): Promise<Stub> {
   const seen: Seen[] = [];
   const server = http.createServer((req, res) => {
     let raw = '';
@@ -50,11 +52,12 @@ async function stubGateway(over: Over = {}): Promise<Stub> {
       const key = `${req.method} ${path}`;
       if (over[key]) return over[key](res);
       if (path === `/v1/identity/${ID}`) {
-        return json(res, 200, {
+        const body = {
           id: ID, adi_url: 'acc://fictional-customer.acme', key_page_url: 'acc://fictional-customer.acme/book/1',
           status: 'active', can_sign: true, chain_accounts: [{ chain_id: '11155111', address: ABSTRACT, status: 'deployed' }],
           created_at: '2026-01-01T00:00:00Z',
-        });
+        };
+        return void setTimeout(() => { opts.identityAnsweredAt?.push(Date.now()); json(res, 200, body); }, opts.identityDelayMs ?? 0);
       }
       if (key === 'POST /v1/transaction') {
         return json(res, 201, { intent_id: 'intent-1', signing_data: { hash_to_sign: 'ab'.repeat(32) } });
@@ -120,7 +123,7 @@ describe('flag parsing', () => {
 
   it('--expires-in accepts s, m, h and d and resolves to now + duration', () => {
     const now = Date.UTC(2026, 8, 14, 12, 0, 0);
-    expect(parseExpiresIn('45s', now)).toBe('2026-09-14T12:00:45.000Z');
+    expect(parseExpiresIn('90s', now)).toBe('2026-09-14T12:01:30.000Z');
     expect(parseExpiresIn('30m', now)).toBe('2026-09-14T12:30:00.000Z');
     expect(parseExpiresIn('2h', now)).toBe('2026-09-14T14:00:00.000Z');
     expect(parseExpiresIn('1d', now)).toBe('2026-09-15T12:00:00.000Z');
@@ -128,7 +131,8 @@ describe('flag parsing', () => {
   });
 
   it('--expires-in refuses anything that is not a positive whole duration', () => {
-    for (const bad of ['30', '0m', '-1h', '1.5h', 'soon', '10w', '']) {
+    // 60s is the gateway minimum and 8d exceeds its 7-day maximum; the CLI keeps a 90s floor.
+    for (const bad of ['30', '0m', '-1h', '1.5h', 'soon', '10w', '', '60s', '89s', '8d']) {
       try { parseExpiresIn(bad); expect.unreachable(bad); } catch (err) {
         expect(err, bad).toBeInstanceOf(UsageError);
         expect((err as UsageError).code).toBe('INVALID_EXPIRES_IN');
@@ -209,6 +213,66 @@ describe('certen call --authority / --expires-in', () => {
     expect(r.stdout).toContain('--authority <acc-url>');
     expect(r.stdout).toContain('--expires-in <duration>');
     expect(r.stdout).toContain('HEADER_AUTHORITY_NOT_EXECUTABLE');
+  });
+});
+
+describe('local header-field refusals are usage errors, never "gateway unreachable"', () => {
+  // The SDK raises these with status 0 because no request was made — the same status it uses for a
+  // gateway that could not be reached. Without the mapping, a deadline that passed during a
+  // passphrase prompt exited 3 and invited a retry.
+  for (const code of ['INVALID_EXPIRES_AT', 'INVALID_ADDITIONAL_AUTHORITIES', 'INVALID_DURATION']) {
+    it(`${code} from the SDK exits 2`, () => {
+      resetOutput();
+      setJsonMode(true);
+      const write = process.stdout.write;
+      let out = '';
+      process.stdout.write = ((chunk: string) => { out += chunk; return true; }) as typeof process.stdout.write;
+      try {
+        expect(emitFailure(new CertenError('expiresAt is in the past', 0, code))).toBe(EXIT.USAGE);
+      } finally {
+        process.stdout.write = write;
+        resetOutput();
+      }
+      expect(JSON.parse(out).error).toMatchObject({ code, retryable: false });
+    });
+  }
+
+  it('a real network failure still exits 3', () => {
+    resetOutput();
+    setJsonMode(true);
+    const write = process.stdout.write;
+    process.stdout.write = (() => true) as typeof process.stdout.write;
+    try {
+      expect(emitFailure(new CertenError('connect ECONNREFUSED', 0, 'NETWORK_ERROR'))).toBe(EXIT.UNREACHABLE);
+    } finally {
+      process.stdout.write = write;
+      resetOutput();
+    }
+  });
+
+  it('--expires-in under the 90s floor exits 2 and names the gateway minimum', async () => {
+    const stub = await stubGateway();
+    try {
+      const r = await certen(['--json', ...CALL, '--expires-in', '60s', '--dry-run'], stub.url);
+      expect(r.code).toBe(2);
+      const err = envelope(r.stdout).error;
+      expect(err.code).toBe('INVALID_EXPIRES_IN');
+      expect(err.message).toContain('60s');
+      expect(stub.seen).toHaveLength(0);
+    } finally { await stub.close(); }
+  });
+
+  it('measures --expires-in when the intent is opened, not when the command started', async () => {
+    // A slow step between parsing and opening — here the identity lookup, in real use the
+    // passphrase prompt — must not come out of the deadline.
+    const answered: number[] = [];
+    const stub = await stubGateway({}, { identityDelayMs: 1_500, identityAnsweredAt: answered });
+    try {
+      const r = await certen(['--json', ...CALL, '--expires-in', '90s', '--sign-with', 'dev', '--no-wait'], stub.url, { withKey: 'dev' });
+      expect(r.code, r.stdout + r.stderr).toBe(0);
+      const at = Date.parse(opens(stub)[0].body.expires_at);
+      expect(at).toBeGreaterThanOrEqual(answered[0] + 90_000);
+    } finally { await stub.close(); }
   });
 });
 

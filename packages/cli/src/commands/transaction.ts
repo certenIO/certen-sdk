@@ -115,7 +115,7 @@ export function registerTransactionCommands(program: Command): void {
     .action(async (opts) => {
       // Flag checks that need no network come first, as in `certen call`.
       const additionalAuthorities = parseAuthorityFlags(opts.authority);
-      const expiresAt = parseExpiresIn(opts.expiresIn);
+      parseExpiresIn(opts.expiresIn); // validated now, measured just before the intent is opened
       const client = await getClient();
 
       // Resolve (and unlock) the signer BEFORE opening the intent. Prompting for a passphrase
@@ -192,7 +192,9 @@ export function registerTransactionCommands(program: Command): void {
         proofClass: opts.proofClass,
         signerPublicKey: opts.signerPublicKey ?? signer?.publicKey,
         additionalAuthorities,
-        expiresAt,
+        // Computed here, after the signer prompt and the funding check, so none of that time comes
+        // out of the deadline.
+        expiresAt: parseExpiresIn(opts.expiresIn),
         idempotencyKey: opts.idempotencyKey,
       });
 

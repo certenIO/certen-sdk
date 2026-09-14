@@ -78,9 +78,10 @@ export function registerCallCommands(program: Command): void {
       const signature = parseSignature(opts.fn);
       const args = checkArgs(signature, opts.arg ?? []);
       const additionalAuthorities = parseAuthorityFlags(opts.authority);
-      // Resolved once, here: the deadline is measured from when the command was run, and a dry run
-      // shows the exact value that would be sent.
-      const expiresAt = parseExpiresIn(opts.expiresIn);
+      // Validated here, but the deadline itself is computed again just before the intent is opened:
+      // the duration is relative, and measuring it before a passphrase prompt would let the prompt
+      // eat into it — or, for a short one, push it under the gateway minimum.
+      parseExpiresIn(opts.expiresIn);
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
 
@@ -155,7 +156,7 @@ export function registerCallCommands(program: Command): void {
           contract_call: contractCall,
           proof_class: opts.proofClass ?? null,
           additional_authorities: additionalAuthorities ?? null,
-          expires_at: expiresAt ?? null,
+          expires_at: parseExpiresIn(opts.expiresIn) ?? null,
         });
         if (!isJsonMode()) {
           hint('');
@@ -198,7 +199,8 @@ export function registerCallCommands(program: Command): void {
         proofClass: opts.proofClass,
         idempotencyKey: opts.idempotencyKey,
         additionalAuthorities,
-        expiresAt,
+        // After the prompt and the funding check, so the deadline is now + duration at submission.
+        expiresAt: parseExpiresIn(opts.expiresIn),
         sign: (hashHex) => signer.sign(hashHex),
         // The SDK runs the same guard. It is skipped here because the check above already ran and
         // produces the better refusal — it names the faucet for this chain and the --force flag —

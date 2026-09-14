@@ -5,6 +5,8 @@
 ### Added
 - `certen call` and `certen tx create`: `--expires-in <duration>` (s/m/h/d → `expires_at`) and
   repeatable `--authority <acc-url>` (→ `additional_authorities`). Invalid values exit 2 before any request.
+  `--expires-in` must be 90s to 7d and is measured when the intent is opened, after any passphrase prompt;
+  a local header-field refusal from the SDK (status 0) exits 2, never 3.
   Header authorities are refused by the gateway by default (`HEADER_AUTHORITY_NOT_EXECUTABLE`); the
   failure envelope carries `guidance` and human mode prints what to do instead.
 - `certen tx status` always includes `reason_code`, `completion_basis`, `expires_at` and
