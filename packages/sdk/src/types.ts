@@ -1455,6 +1455,18 @@ export interface ChainEntry {
   explorer: string;
   status: string;
   contracts: Record<string, ContractEntry>;
+  /**
+   * The gateway's enable switch for this network, once it publishes one. `false` means listed but
+   * not served; the SDK never offers such a chain. Absent on a gateway that predates the switch,
+   * where being listed is what serving means.
+   */
+  enabled?: boolean;
+  /** Native gas token symbol (`ETH`, `TEL`), when the gateway publishes it. */
+  nativeSymbol?: string;
+  /** Native gas token decimals, when the gateway publishes it. */
+  nativeDecimals?: number;
+  /** Typical seconds per block, when the gateway publishes it. */
+  blockSeconds?: number;
   [key: string]: unknown;
 }
 

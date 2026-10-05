@@ -140,6 +140,28 @@ The gateway serves ~80 endpoints; this covers the integration surface. For anyth
 [live spec](https://gateway.kompendium.co/docs/json) is authoritative and the client's `request` path will
 carry it.
 
+## Chains
+
+One typed catalogue, `CHAIN_CATALOGUE`, holds every chain fact the SDK, the CLI and the MCP server use:
+slug, numeric id, gas token and decimals, block time, faucet, aliases, and whether it is on by default.
+
+| Chain | Id | Gas | Default |
+|---|---|---|---|
+| `ethereum-sepolia` | 11155111 | ETH | on |
+| `base-sepolia` | 84532 | ETH | on |
+| `arbitrum-sepolia` | 421614 | ETH | on |
+| `telcoin-adiri` — Telcoin's **Adiri testnet** | 2017 | TEL (18 decimals) | off |
+
+The catalogue says what a chain IS; the gateway says whether it may be used. Offer what
+`client.chains.enabled(configured?)` returns: the configured chains (default: the three above) that
+`GET /v1/chains` serves right now. `parseEnabledChains('…,telcoin-adiri')` turns a setting into that list
+and refuses an unknown or retired chain by name.
+
+The funding guard reads each chain's own gas token (`readNativeBalance`). On Adiri an empty TEL account
+throws `CertenUnfundedAccountError`; a gas balance it cannot identify (an unknown chain, a balance row that
+is not the chain's gas token, or an unreadable one) throws `CertenFundingUnverifiableError` rather than
+letting the intent through.
+
 ## Three things to know
 
 **Identity creation is asynchronous.** `identity.create` resolves with a `202`-shaped result and provisioning

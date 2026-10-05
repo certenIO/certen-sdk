@@ -175,7 +175,7 @@ describe('execute.transfer', () => {
     try {
       const precise = '0.900719925474099133';
       await clientFor(g.url).execute.transfer({
-        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'eth', fromAddress: 'a', toAddress: 'b',
+        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'ethereum-sepolia', fromAddress: 'a', toAddress: 'b',
         amount: precise, publicKey: PUBKEY, sign: () => 'sig',
       });
       expect(openReq(g).body.intent.amount).toBe(precise);

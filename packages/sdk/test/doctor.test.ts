@@ -677,3 +677,53 @@ describe('noticing that the gateway is ahead of this client', () => {
     }
   });
 });
+
+describe('abstract accounts funded: each chain\'s own gas token', () => {
+  const withChains = (chains: unknown[]) => gateway({
+    '/v1/portfolio': { identities: [{ ...PORTFOLIO.identities[0], chains }], total_chains: chains.length },
+  });
+
+  it('warns on an empty TEL account on 2017 — before, it was skipped and "all 0 have gas" was reported', async () => {
+    const stub = await startServer(withChains([
+      { chain_id: '2017', address: '0xT', deployed: true, balances: [{ token: 'TEL', balance: '0' }] },
+    ]));
+    try {
+      const funding = byName((await client(stub.url).doctor()).checks, 'abstract accounts funded');
+      expect(funding.status).toBe('warn');
+      expect(funding.detail).toMatch(/1 of 1 chain account\(s\) have no gas, on telcoin-adiri/);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('counts a funded TEL account as funded', async () => {
+    const stub = await startServer(withChains([
+      { chain_id: 'telcoin-adiri', address: '0xT', deployed: true, balances: [{ token: 'TEL', balance: '4' }] },
+    ]));
+    try {
+      const funding = byName((await client(stub.url).doctor()).checks, 'abstract accounts funded');
+      expect(funding).toMatchObject({ status: 'ok', detail: 'all 1 chain account(s) have gas' });
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('names gas it cannot verify instead of reporting it as present', async () => {
+    const stub = await startServer(withChains([
+      { chain_id: 'base-sepolia', address: '0xB', deployed: true, balances: [{ token: 'ETH', balance: '7' }] },
+      { chain_id: '2017', address: '0xT', deployed: true, balances: [{ token: 'ETH', balance: '7' }] },
+      { chain_id: 'solana-devnet', address: 'So1', deployed: true, balances: [{ token: 'SOL', balance: '7' }] },
+      { chain_id: 'arbitrum-sepolia', address: '0xA', deployed: true, balances: [{ token: '', balance: 'unavailable' }] },
+    ]));
+    try {
+      const funding = byName((await client(stub.url).doctor()).checks, 'abstract accounts funded');
+      expect(funding.status).toBe('warn');
+      expect(funding.detail).toMatch(/3 of 4 chain account\(s\) have gas that cannot be verified/);
+      expect(funding.detail).toMatch(/gas token is TEL/);
+      expect(funding.detail).toMatch(/"solana-devnet"/);
+      expect(funding.detail).toMatch(/could not read the ETH balance on arbitrum-sepolia/);
+    } finally {
+      await stub.close();
+    }
+  });
+});
