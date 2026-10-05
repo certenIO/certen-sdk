@@ -12,6 +12,8 @@
  * looks like a plausible number, and a wait estimate that is silently zero looks like a fast chain.
  */
 
+import { chainInfo } from '@certen.io/sdk';
+
 /**
  * What the gateway sends back when a payment is opened. Only the fields a URI needs.
  *
@@ -97,24 +99,24 @@ export function buildPaymentUri(target: PaymentTargetFields, amountUsd: string):
 }
 
 /**
- * Seconds per block, for turning a confirmation count into a wait somebody can plan around.
+ * Seconds per block come from the chain catalogue (`blockSeconds` in `@certen.io/sdk`).
  *
  * Approximate on purpose, and every caller must present the result as an estimate. These are the
  * observed cadences of the testnets this CLI targets; an L2 that batches will occasionally be much
- * faster or much slower than its nominal block time.
+ * faster or much slower than its nominal block time. A chain that produces blocks only when there
+ * is traffic (Telcoin Adiri) makes every such estimate a lower bound, and it is labelled one.
  */
-const BLOCK_SECONDS: Record<string, number> = {
-  'ethereum-sepolia': 12,
-  'base-sepolia': 2,
-  'arbitrum-sepolia': 0.25,
-};
-
 export interface WaitEstimate {
   seconds: number;
-  /** Rendered for a person: `about 24 seconds`, `about 2 minutes`. */
+  /** Rendered for a person: `about 24 seconds`, `at least about 49 seconds`. */
   text: string;
   /** The chain whose cadence produced this, so the estimate is checkable rather than magic. */
   basis: string;
+  /**
+   * True when the chain produces blocks only when there is traffic: confirmations then take at
+   * least this long, and indefinitely longer while the chain is idle.
+   */
+  lowerBound: boolean;
 }
 
 /**
@@ -125,12 +127,18 @@ export interface WaitEstimate {
  * interrupt against, and interrupting a funding flow is how people send twice.
  */
 export function estimateWait(chain: string, confirmations: number): WaitEstimate | null {
-  const perBlock = BLOCK_SECONDS[chain];
-  if (perBlock === undefined) return null;
+  const info = chainInfo(chain);
+  if (info === undefined) return null;
   if (!Number.isFinite(confirmations) || confirmations <= 0) return null;
 
-  const seconds = Math.max(1, Math.round(perBlock * confirmations));
-  return { seconds, text: humanDuration(seconds), basis: chain };
+  const seconds = Math.max(1, Math.round(info.blockSeconds * confirmations));
+  const text = humanDuration(seconds);
+  return {
+    seconds,
+    text: info.blocksOnlyWithTraffic ? `at least ${text}` : text,
+    basis: info.slug,
+    lowerBound: info.blocksOnlyWithTraffic,
+  };
 }
 
 /** `95` -> `about 2 minutes`. Coarse by design: false precision reads as a promise. */

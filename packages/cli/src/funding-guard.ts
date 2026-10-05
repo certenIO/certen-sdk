@@ -1,4 +1,7 @@
-import type { CertenClient } from '@certen.io/sdk';
+import {
+  chainInfo, faucetForChain, nativeSymbolFor, readNativeBalance, describeUnverifiable,
+  type CertenClient, type NativeBalanceReading,
+} from '@certen.io/sdk';
 import { CliError, EXIT } from './errors.js';
 import { normalizeChain } from './chains.js';
 
@@ -14,22 +17,24 @@ import { normalizeChain } from './chains.js';
  *
  * So: refuse before submitting, and name the address that needs funding.
  *
- * The check is deliberately one-directional. It refuses ONLY on a positively observed zero
- * balance. If the balance cannot be read — the chain is not in the portfolio, the account is not
- * deployed yet, the lookup fails — the intent proceeds. A guard that blocked on missing data
- * would break legitimate work every time the portfolio view lagged, which is a worse failure than
- * the one it prevents.
+ * What it refuses:
+ * - a positively observed zero gas balance (`ABSTRACT_ACCOUNT_UNFUNDED`);
+ * - a gas balance that cannot be IDENTIFIED (`ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE`), by name: the
+ *   chain's gas token is unknown to the catalogue, the gateway reported balances none of which is
+ *   that token, or it reported the gas row as unreadable. The guard used to look for an `ETH` row on
+ *   every chain, so on a chain whose gas is not ETH it found nothing and let the intent through.
+ *
+ * What it lets through: the chain not appearing in the portfolio, the account having no balances
+ * reported yet, or the portfolio lookup failing. A guard that blocked every time the portfolio view
+ * lagged would break legitimate work, which is a worse failure than the one it prevents.
  */
 
-/** Where to send testnet gas, per chain. Printed with the refusal, because the fix is the point. */
-const FAUCETS: Record<string, string> = {
-  'ethereum-sepolia': 'https://sepoliafaucet.com',
-  'base-sepolia': 'https://www.alchemy.com/faucets/base-sepolia',
-  'arbitrum-sepolia': 'https://www.alchemy.com/faucets/arbitrum-sepolia',
-};
-
+/**
+ * Where to send testnet gas, per chain, from the SDK's chain catalogue. Printed with the refusal,
+ * because the fix is the point. Accepts a slug or a numeric chain id.
+ */
 export function faucetFor(chain: string): string | undefined {
-  return FAUCETS[chain];
+  return faucetForChain(chain);
 }
 
 /** Does this intent move value? A zero or absent amount needs no funded account. */
@@ -43,8 +48,8 @@ export function movesValue(intent: Record<string, unknown>): boolean {
 
 interface ChainFunding {
   address: string;
-  /** Native-token balance as the gateway reported it, or null when it could not be read. */
-  balance: string | null;
+  /** What the reported balances say about the gas, read by the chain's own native symbol. */
+  reading: NativeBalanceReading;
   deployed: boolean;
 }
 
@@ -72,11 +77,10 @@ function fromKnown(balances: KnownBalances, chain: string): ChainFunding | null 
   const onChain = balances.filter((b) => normalizeChain(b.chain_id) === want);
   if (onChain.length === 0) return null;
   // The NATIVE balance is what pays for execution; a token balance on the same account does not
-  // make the execution leg runnable.
-  const native = onChain.find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
+  // make the execution leg runnable, and on a chain whose gas is not ETH an `ETH` row is not gas.
   return {
     address: onChain[0].address,
-    balance: native ? native.balance : null,
+    reading: readNativeBalance(want, onChain),
     // Not reported by this endpoint, and not read by anything: the guard decides on the balance.
     deployed: true,
   };
@@ -97,12 +101,11 @@ async function fundingFor(
     for (const identity of portfolio.identities ?? []) {
       for (const c of identity.chains ?? []) {
         if (normalizeChain(c.chain_id) !== want) continue;
-        // The native balance is the one that pays for execution. A token balance on the same
-        // account does not make the execution leg runnable.
-        const native = (c.balances ?? []).find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
+        // The native balance is the one that pays for execution, found by the chain's own native
+        // symbol. A token balance on the same account does not make the execution leg runnable.
         return {
           address: c.address,
-          balance: native ? native.balance : null,
+          reading: readNativeBalance(want, c.balances),
           deployed: c.deployed,
         };
       }
@@ -141,22 +144,39 @@ export async function assertFundedForValue(
 ): Promise<void> {
   if (force || !chain || !movesValue(intent)) return;
 
+  const named = normalizeChain(chain);
+  // Before any read: on a chain whose gas token is unknown, no balance row can be identified as the
+  // gas, so the answer is already known to be unknowable.
+  if (nativeSymbolFor(named) === undefined) {
+    throw unverifiable(undefined, named, { state: 'unknown-native', chain: named });
+  }
+
   const funding = known ? fromKnown(known, chain) : await fundingFor(client, identityId, chain);
   if (!funding) return;
 
-  const balance = funding.balance;
-  if (balance === null) return;
-  if (Number(balance) > 0) return;
+  const reading = funding.reading;
+  if (reading.state === 'funded' || reading.state === 'no-balances') return;
+  if (reading.state !== 'empty') throw unverifiable(funding.address, named, reading);
 
-  const named = normalizeChain(chain);
   const faucet = faucetFor(named);
   throw new CliError(
-    `The abstract account ${funding.address} on ${named} holds no ${named.includes('sepolia') ? 'testnet ' : ''}`
+    `The abstract account ${funding.address} on ${named} holds no ${chainInfo(named)?.environment === 'testnet' ? 'testnet ' : ''}`
     + 'gas. This intent would be accepted, signed and submitted, and would then park at "anchoring" '
     + 'forever, because the execution leg cannot run on chain.\n'
     + `  Fund it first${faucet ? `: ${faucet}` : '.'}\n`
     + '  Then run this command again. Pass --force to submit anyway.',
     'ABSTRACT_ACCOUNT_UNFUNDED',
+    EXIT.FAILED,
+  );
+}
+
+function unverifiable(address: string | undefined, chain: string, reading: NativeBalanceReading): CliError {
+  return new CliError(
+    `Cannot verify that the abstract account${address ? ` ${address}` : ''} on ${chain} holds gas: `
+    + `${describeUnverifiable(chain, reading)}. An intent from an unfunded account is accepted, signed `
+    + 'and submitted, and then parks at "anchoring" forever.\n'
+    + '  Check the account\'s gas yourself, then pass --force to submit anyway.',
+    'ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE',
     EXIT.FAILED,
   );
 }
