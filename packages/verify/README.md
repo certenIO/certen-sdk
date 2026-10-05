@@ -22,7 +22,39 @@ const report = verifyPortable(JSON.parse(portableProofJson)); // throws VerifyEr
    the block and the partition's state root.
 5. **The governing pages** as of that block, each proven into that state root.
 6. **The validator set in force**, proven at a certified state root, its chain heights bound, equal to the set the walk
-   derived.
+   derived, at the certified block itself or at a later one reached by its own runs.
+7. **The Accumulate set root.** `report.accumulateSetRoot` is the `certen:accval:v1` root of the set the spine derived,
+   with its accept threshold, under the pin: the value a V8.2 anchor must have committed for the proof to be about this
+   set. Each page's chains are reported in `report.pageChains`: bound (with the main chain's height at the anchor's
+   block) when captured roots prove against the page's receipt, otherwise named unbound with the capture's reason. Roots
+   that are captured but do not bind are refused.
+
+## govRoot v3
+
+govRoot v3 (certen-validator `docs/proof/GOVROOT_V3.md`) is the per-intent commitment every validator signs, built from
+a verified report. The facts come from the report; the inputs that are not proof facts (sha256 of each governance
+level's canonical v2 JSON, the key page, key book and operation id) travel in the portable proof's `govRootV3Inputs`
+block.
+
+```ts
+import { verifyPortable, govRootV3FromPortable, govRootV3 } from '@certen.io/proof-verify';
+
+const report = verifyPortable(doc);
+const { root, pagesRoot, slots } = govRootV3FromPortable(report, doc); // inputs from doc.govRootV3Inputs
+// or, with the inputs supplied separately:
+govRootV3(report, doc.evidence.pages, { g0Hash, g1Hash, g2Hash, keyPageUrl, keyBookUrl, operationId });
+```
+
+- Ten slots, each `keccak256(tag || ":" || payload)` under `certen:l1:v3` ... `certen:g2:v3`, folded under the 32-byte
+  domain `certen:govroot:v3` (`computeGovRootV3`, `govRootV3SlotHash`, `GOVROOT_V3_TAGS`).
+- `pagesRoot` commits the proven pages sorted by canonical URL, each with its bound byte and main chain height
+  (`pagesRootV3`). The key page and book are committed as `keccak256` of their canonical spelling (`canonicalAccSpelling`,
+  `hashUrlString`), Go's exactly: trimmed as `strings.TrimSpace`, lowered one code point at a time as `unicode.ToLower`.
+- `accumulateSetRoot(validators, threshold, incarnation)` is the `certen:accval:v1` reduction on its own.
+
+Every refusal is Go's and throws `VerifyError`: a missing or malformed input, any zero slot (the first missing one is
+named), a set verdict weaker than `verified`, evidence pages that disagree with the report, a page captured twice, and
+no pages at all (`g1_historical_unavailable`).
 
 ## How it stays independent
 
@@ -51,4 +83,4 @@ upstream.
 
 `test/fixtures/proofv2` holds the conformance suite certen-validator generates (`cmd/proofv2conformance`): a live Kermit
 proof and 21 tamper patches. This package and the Go verifier must reach the same verdict on every case, and the same
-report on the valid one. Refresh the fixtures only by copying that generator's output; never edit them by hand.
+report on the valid one, govRoot v3 included; the suite also pins the valid case's Accumulate set root to Go's golden. Refresh the fixtures only by copying that generator's output; never edit them by hand.

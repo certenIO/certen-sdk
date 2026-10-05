@@ -5,7 +5,8 @@
  * validator-set check's verdict is reported as is.
  */
 import { account, encodeObject, keccak256, networkDefinition, networkGlobals, normalize, sameUrl, sequencedMessage, transactionHash } from './accumulate.js';
-import { equal, fail, hexBytes, merkleHashList, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
+import { accumulateSetRoot, validatorsOf } from './accset.js';
+import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
@@ -36,6 +37,28 @@ export interface Report {
   anchorBlock: number;
   /** The proven pages, as the SDK rebuilt them from their JSON. */
   pages: unknown[];
+  /** Per page, in the same order: whether its chains are proven at anchorBlock. */
+  pageChains: PageChain[];
+  /** The transaction the receipt starts at; the partition anchor transaction proven into the certified root, and that
+   * anchor's state tree anchor (the partition's state root at anchorBlock, which every page is proven into). govRoot
+   * v3 commits all three. Hex32. */
+  txHash: string;
+  anchorTxHash: string;
+  anchorStateRoot: string;
+  /** The certen:accval:v1 root of the validator set the spine derived, with its threshold, under the pinned
+   * incarnation: the value a V8.2 anchor must have committed for the proof to be about this set. Hex32. */
+  accumulateSetRoot: string;
+}
+
+/** What the verifier established about one page's chains (Go proofv2.PageChain). */
+export interface PageChain {
+  url: string;
+  /** The chain roots are proven at the anchor's block. */
+  bound: boolean;
+  /** When bound: the main chain's height at the anchor's block; 0 otherwise. */
+  mainHeight: number;
+  /** When not bound: why (from the capture). */
+  note?: string;
 }
 
 function u64be(n: number | bigint): Uint8Array {
@@ -118,10 +141,12 @@ export function verifyPortable(doc: any): Report {
   }
   const anchorRoot = hexBytes(body.rootChainAnchor, 'partition anchor rootChainAnchor', 32);
   if (!receiptPrefixTo(r, anchorRoot)) fail(`the transaction's receipt does not pass through the anchor's root chain anchor ${toHex(anchorRoot)}`);
+  if (anchorTx.length !== 32) fail(`partition anchor: its transaction hash is ${anchorTx.length} bytes, not 32`);
   const stateRoot = hexBytes(body.stateTreeAnchor, 'partition anchor stateTreeAnchor', 32);
 
   // G1(a): each page as of the anchor's block (page.go verifyPage).
   const pages: unknown[] = [];
+  const pageChains: PageChain[] = [];
   for (const [i, p] of (Array.isArray(ev.pages) ? ev.pages : []).entries()) {
     const acct = account(p.account, `page ${i}`);
     const state = encodeObject(acct);
@@ -132,13 +157,23 @@ export function verifyPortable(doc: any): Report {
     const url = String((normalize(p.account) as any).url ?? '');
     if (typeof p.url !== 'string' || !sameUrl(url, p.url)) fail(`page: the proven state is ${url}, not ${p.url}`);
     pages.push(acct);
+    pageChains.push(pageChain(p, pr));
   }
 
   // The validator set: walked to a certified block at or after the certified one, proven there, equal to the set the
-  // walk derived, with every write accounted for.
-  const chk = at.get(checkMajors)!.clone();
-  if (!Array.isArray(ev.check.hops) || ev.check.hops.length === 0) fail('set check has no minor-root run');
-  ev.check.hops.forEach((h: unknown, i: number) => chk.advanceEpoch(h, `set check hop ${i}`));
+  // walk derived, with every write accounted for. The set is checked either at the certified block itself (no runs:
+  // the check reuses the certification) or at a later certified block reached by its own runs.
+  const hops: unknown[] = Array.isArray(ev.check.hops) ? ev.check.hops : [];
+  let chk: Spine;
+  if (hops.length === 0) {
+    if (checkMajors !== evMajors) {
+      fail(`set check has no minor-root run of its own but builds on ${ev.check.majors} major blocks, not the certification's ${ev.majors}`);
+    }
+    chk = cert.clone();
+  } else {
+    chk = at.get(checkMajors)!.clone();
+  }
+  hops.forEach((h: unknown, i: number) => chk.advanceEpoch(h, `set check hop ${i}`));
   if (chk.lastMinorBlock < cert.lastMinorBlock) {
     fail(`the set is checked at DN ${chk.lastMinorBlock}, before the certified DN ${cert.lastMinorBlock}: updates between are unaccounted`);
   }
@@ -153,6 +188,8 @@ export function verifyPortable(doc: any): Report {
   if (height === undefined) fail('set check: no main chain on the network account');
   const applied = chk.applied.filter((a) => sameUrl(a.principal, 'acc://dn.acme/network')).length;
   if (height !== 1 + applied) fail(`set check: the network account's main chain has ${height} entries but the walk applied ${applied} updates after genesis`);
+  const thr = glob.record.validatorAcceptThreshold;
+  const setRoot = accumulateSetRoot(validatorsOf(net.record), { numerator: thr.numerator, denominator: thr.denominator }, toHex(pin));
 
   return {
     incarnation: toHex(id),
@@ -166,6 +203,11 @@ export function verifyPortable(doc: any): Report {
     partition: String(n.source),
     anchorBlock: Number(body.minorBlockIndex),
     pages,
+    pageChains,
+    txHash: toHex(tx),
+    anchorTxHash: toHex(anchorTx),
+    anchorStateRoot: toHex(stateRoot),
+    accumulateSetRoot: setRoot,
   };
 }
 
@@ -194,22 +236,52 @@ function provenAccount(pa: any, label: string): Proven {
   if (!equal(sha256(state), r.start)) fail(`validatorSetProof.${label}: accountState does not hash to the proven leaf`);
   if (!receiptValid(r)) fail(`validatorSetProof.${label}: state receipt does not recompute`);
 
-  // 13. the chain history is bound: the state hasher is [main, secondaryState, chains, pending].
-  if (r.entries.length < 2) fail(`validatorSetProof.${label}: state receipt has ${r.entries.length} steps`);
-  const sec = hexBytes(pa.secondaryHash, `${label}.secondaryHash`, 32);
-  if (!equal(r.entries[0].hash, sec)) fail(`validatorSetProof.${label}: secondaryHash is not the receipt's first sibling`);
+  // 13. the chain history is bound.
+  const mainHeight = chainBinding(r, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
+  return { root: r.anchor, entry, record: normalize(pa.record), mainHeight };
+}
+
+/**
+ * AccountStateProof.verifyChainBinding: the state hasher is [main, secondaryState, chains, pending], so the receipt's
+ * first sibling is the secondary component and its second H(merkle(chain anchors) || pending). Returns the height of
+ * the chain named main, when there is one.
+ */
+function chainBinding(r: Receipt, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
+  if (r.entries.length < 2) fail(`${label}: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
+  if (!secondaryHash || !pendingHash) {
+    fail(`${label}: secondaryHash and pendingHash are required: the receipt's second step is H(chains || pending), so the chain roots alone cannot be checked`);
+  }
+  const sec = hexBytes(secondaryHash, `${label}.secondaryHash`, 32);
+  if (!equal(r.entries[0].hash, sec)) fail(`${label}: secondaryHash is not the receipt's first sibling`);
   let mainHeight: number | undefined;
   const leaves: Uint8Array[] = [];
-  for (const [i, c] of (Array.isArray(pa.chains) ? pa.chains : []).entries()) {
+  for (const [i, c] of (Array.isArray(chains) ? chains : []).entries()) {
     const { count, anchor } = chainRoot(c, `${label}.chains[${i}]`);
-    if (c.name === 'main') mainHeight = count;
+    if (c.name === 'main' && mainHeight === undefined) mainHeight = count;
     leaves.push(count === 0 ? new Uint8Array(32) : anchor);
   }
-  const pend = hexBytes(pa.pendingHash, `${label}.pendingHash`, 32);
+  const pend = hexBytes(pendingHash, `${label}.pendingHash`, 32);
   if (!equal(sha256(merkleHashList(leaves), pend), r.entries[1].hash)) {
-    fail(`validatorSetProof.${label}: H(chains||pending) is not the receipt's second sibling - the chain heights are NOT bound`);
+    fail(`${label}: H(chains||pending) is not the receipt's second sibling - the chain heights are NOT bound`);
   }
-  return { root: r.anchor, entry, record: normalize(pa.record), mainHeight };
+  return mainHeight;
+}
+
+/**
+ * page.go verifyPage, the chains: a page captured with its chain roots must bind them to its receipt, which proves
+ * them the roots at the anchor's block (proof.VerifyChainBinding, the secondary component taken from the receipt
+ * itself); a page captured without them is named unbound, with the capture's reason.
+ */
+function pageChain(p: any, r: Receipt): PageChain {
+  const url = String(p.url);
+  if (!Array.isArray(p.chains) || p.chains.length === 0) {
+    const note = typeof p.chainError === 'string' && p.chainError !== '' ? p.chainError : 'g1_chain_uncaptured';
+    return { url, bound: false, mainHeight: 0, note };
+  }
+  if (r.entries.length < 2) fail(`page: ${url}: chains: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
+  const h = chainBinding(r, p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
+  if (h === undefined) fail(`page: ${url}: no main chain among the bound chains`);
+  return { url, bound: true, mainHeight: h };
 }
 
 /** ChainRoot.derive: count and anchor from Pending alone; the restated values must agree. */
@@ -223,7 +295,7 @@ function chainRoot(c: any, label: string): { count: number; anchor: Uint8Array }
     anchor = anchor === undefined ? h : sha256(h, anchor);
   }
   const a = anchor ?? new Uint8Array(32);
-  if (count !== Number(c?.count)) fail(`chain ${c?.name}: restated count ${c?.count} but its merkle state says ${count} - the height is not what the proof claims`);
+  if (count !== Number(c?.count ?? 0)) fail(`chain ${c?.name}: restated count ${c?.count} but its merkle state says ${count} - the height is not what the proof claims`);
   const restated = String(c?.anchor ?? '').toLowerCase().replace(/^0x/, '');
   if (restated !== '' && count > 0 && restated !== toHex(a)) fail(`chain ${c?.name}: restated anchor does not match its merkle state`);
   return { count, anchor: a };
