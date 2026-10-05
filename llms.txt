@@ -44,9 +44,13 @@ const proof = await certen.execute.proof(intentId);   // hand this to your count
   signed and submitted normally — and then sits at `anchoring` forever, because the execution leg
   cannot run on chain. **Fund the abstract account before transferring value.** Nothing in the API
   response tells you this; the intent simply never reaches a terminal state.
-- **Any chain the gateway lists works.** `GET /v1/chains` returns them (ethereum-sepolia,
-  base-sepolia, arbitrum-sepolia, optimism-sepolia, polygon-amoy, and more). Chain names and
-  `chainId` are passed straight through — there is nothing Ethereum-specific in this SDK.
+- **Chains: three live testnets, plus Telcoin Adiri on request.** `ethereum-sepolia` (11155111),
+  `base-sepolia` (84532) and `arbitrum-sepolia` (421614) are on by default; their gas is ETH.
+  `telcoin-adiri` (2017) is **Telcoin's Adiri testnet**, whose gas is **TEL** (18 decimals); it is
+  off unless your configuration enables it (`CERTEN_ENABLED_CHAINS` for the CLI, `chains.enabled([...])`
+  in the SDK) AND the gateway serves it. Other chains `GET /v1/chains` lists are not supported. The
+  SDK's `CHAIN_CATALOGUE` holds each chain's id, gas token, decimals, block time and faucet;
+  `client.chains.enabled()` is what to offer — the configured chains the gateway serves right now.
 - **`contract_addresses` is an OBJECT, not a list**, and you almost never set it. It names the CERTEN
   deployment (`anchor`, `abstractAccount`, …), not your call target; the gateway supplies the right
   defaults. Passing an array is rejected with `/contract_addresses must be object`.

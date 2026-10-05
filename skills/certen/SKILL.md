@@ -37,7 +37,9 @@ An identity costs money. Every proof-gated action costs money and moves the owne
    *` without an explicit yes for that specific action.
 
 If the owner has not told you which chain, use `base-sepolia` on testnet. It is the cheapest
-chain CERTEN runs and every command here works on it.
+chain CERTEN runs and every command here works on it. `telcoin-adiri` (chain 2017) is Telcoin's
+Adiri testnet, whose gas is TEL rather than ETH; use it only when the owner asks for it, has set
+`CERTEN_ENABLED_CHAINS` to include it, and `certen chains --refresh` lists it.
 
 ## One-time setup (owner runs this, or you run it with consent)
 
