@@ -13,7 +13,8 @@
   "workspaces": [
     "packages/sdk",
     "packages/cli",
-    "packages/mcp"
+    "packages/mcp",
+    "packages/verify"
   ],
   "engines": {
     "node": ">=18"

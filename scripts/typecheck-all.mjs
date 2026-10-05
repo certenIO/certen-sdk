@@ -19,7 +19,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PACKAGES = ['sdk', 'cli', 'mcp'];
+const PACKAGES = ['sdk', 'cli', 'mcp', 'verify'];
 
 const tsc = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
 if (!existsSync(tsc)) {
