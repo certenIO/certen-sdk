@@ -4,8 +4,8 @@ import { getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import {
-  SUPPORTED_CHAINS, isSupportedChain, writeChainCache, readChainCache, chainCacheIsFresh,
-  CHAIN_CACHE_FILE,
+  enabledChains, isSupportedChain, writeChainCache, readChainCache, chainCacheIsFresh, chainCacheFile,
+  servedFromCache, ENABLED_CHAINS_ENV_VAR,
 } from '../chains.js';
 import { faucetFor } from '../funding-guard.js';
 
@@ -64,7 +64,7 @@ export function registerChainsCommands(program: Command): void {
           environment: chain.environment,
           status: chain.status,
           explorer: chain.explorer,
-          supported_by_cli: isSupportedChain(chain.id),
+          supported_by_cli: isSupportedChain(chain.id, [chain]),
         });
 
         if (isJsonMode()) return;
@@ -92,9 +92,10 @@ export function registerChainsCommands(program: Command): void {
           human(`  Testnet gas: ${faucet}`);
         }
 
-        if (!isSupportedChain(chain.id)) {
+        if (!isSupportedChain(chain.id, [chain])) {
           hint('');
-          hint(`This CLI targets ${SUPPORTED_CHAINS.join(', ')}. Set CERTEN_ALLOW_ANY_CHAIN=1 to use others.`);
+          hint(`This CLI targets ${enabledChains().join(', ')} (set by ${ENABLED_CHAINS_ENV_VAR}). `
+            + 'Set CERTEN_ALLOW_ANY_CHAIN=1 to use others.');
         }
         return;
       }
@@ -103,20 +104,24 @@ export function registerChainsCommands(program: Command): void {
       if (!opts.refresh && chainCacheIsFresh(cache)) {
         // Cheap path: the list is static for hours and this is the command most likely to be run
         // repeatedly while someone is finding their footing.
-        const ids = opts.all ? cache!.ids : cache!.ids.filter(isSupportedChain);
-        printOutput(ids.map((chainId) => ({ id: chainId, supported_by_cli: isSupportedChain(chainId) })));
+        const served = servedFromCache();
+        const ids = opts.all ? cache!.ids : cache!.ids.filter((c) => isSupportedChain(c, served));
+        printOutput(ids.map((chainId) => ({ id: chainId, supported_by_cli: isSupportedChain(chainId, served) })));
         if (isJsonMode()) return;
         hint('');
-        hint(`From cache (${CHAIN_CACHE_FILE}). Refresh with: certen chains --refresh`);
+        hint(`From cache (${chainCacheFile()}). Refresh with: certen chains --refresh`);
         return;
       }
 
       const result = await client.chains.list();
       // Numeric ids are cached alongside the slugs so `normalizeChain` can resolve a numeric
       // `chain_id` from the portfolio without another round trip.
-      writeChainCache(result.chains.map((c) => ({ id: c.id, chainId: c.chainId })));
+      // The gateway's enable switch is cached too, so a chain it lists but does not serve is
+      // never offered offline either.
+      writeChainCache(result.chains.map((c) => ({ id: c.id, chainId: c.chainId, enabled: c.enabled })));
 
-      const shown = opts.all ? result.chains : result.chains.filter((c) => isSupportedChain(c.id));
+      // Shown = configured ∩ served, judged against the list just fetched.
+      const shown = opts.all ? result.chains : result.chains.filter((c) => isSupportedChain(c.id, result.chains));
 
       printOutput(shown.map((chain) => ({
         id: chain.id,

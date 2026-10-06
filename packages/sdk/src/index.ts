@@ -43,7 +43,17 @@ export { redeemRegistrationToken } from './registration.js';
 // Keypair-proof self-service signup — no browser, no email, nobody at CERTEN. Standalone for the
 // same reason: the caller holds nothing yet. See self-signup.ts.
 export { selfSignup, requestSignupChallenge, completeSignup } from './self-signup.js';
-export { CertenUnfundedAccountError, movesValue, normalizeChainId } from './funding.js';
+export { CertenUnfundedAccountError, CertenFundingUnverifiableError, movesValue, normalizeChainId } from './funding.js';
+export type { FundingUnverifiableReason } from './funding.js';
+// The chain catalogue: the single source the CLI and MCP derive every chain table from. See chains.ts.
+export {
+  CHAIN_CATALOGUE, chainInfo, chainSlug, nativeSymbolFor, faucetForChain, defaultEnabledChains, enablableChains,
+  parseEnabledChains, ChainConfigurationError, gatewayServes, chainAvailability, resolveEnabledChains,
+  readNativeBalance, describeUnverifiable,
+} from './chains.js';
+export type {
+  ChainCatalogueEntry, ChainSupport, ServedChain, ChainAvailability, BalanceRow, NativeBalanceReading,
+} from './chains.js';
 // One resolver, shared by the CLI and MCP. Two copies of this would drift — see sign-target.ts.
 export { resolveSignTarget } from './sign-target.js';
 

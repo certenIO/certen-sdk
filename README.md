@@ -202,7 +202,8 @@ able to sign, trial credit verified — with no human and no pre-existing creden
 
 **The proof cycle cannot run on the organization the script just created**, and that is a fact about
 chains rather than a gap in the tooling: a brand-new abstract account holds no gas, so its execution
-leg parks at `anchoring` forever. Somebody has to put testnet ETH in the account.
+leg parks at `anchoring` forever. Somebody has to put testnet gas in the account: ETH on the three
+live chains, TEL on Telcoin Adiri (a testnet, chain 2017, off by default).
 
 So the journey splits honestly. Signup and identity creation run **from nothing** — the part that was
 impossible before keypair signup. The proof cycle runs against an identity that is kept funded:

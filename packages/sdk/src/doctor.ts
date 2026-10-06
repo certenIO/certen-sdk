@@ -1,6 +1,7 @@
 import type { CertenClient } from './client.js';
 import { CertenError } from './errors.js';
 import { VENDORED_ERROR_CODES } from './error-codes.js';
+import { chainSlug, readNativeBalance, describeUnverifiable } from './chains.js';
 
 /**
  * Diagnose a setup and say what is blocking it.
@@ -75,7 +76,8 @@ const AWAITING_EXECUTION = ['anchoring', 'submitted', 'executing', 'proving'];
 const STALL_AFTER_MS = 15 * 60_000;
 
 /**
- * Numeric EVM chain id → registry slug, for chains where the portfolio may report either.
+ * Numeric EVM chain id → registry slug (from the chain catalogue), for chains where the portfolio
+ * may report either.
  *
  * `GET /v1/portfolio` used to return `chain_id` as a slug on some chain accounts and as a numeric
  * EVM id on others, in the same response. Anything that compares or de-duplicates on that field
@@ -85,18 +87,8 @@ const STALL_AFTER_MS = 15 * 60_000;
  * SDK is versioned independently of the gateway and may be pointed at an older one — and `doctor`
  * of all things must not be the command that misreports when talking to an older peer.
  */
-const NUMERIC_CHAIN_IDS: Record<string, string> = {
-  11155111: 'ethereum-sepolia',
-  84532: 'base-sepolia',
-  421614: 'arbitrum-sepolia',
-  11155420: 'optimism-sepolia',
-  80002: 'polygon-amoy',
-};
-
 function normalizeChain(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '';
-  const raw = String(value).trim();
-  return NUMERIC_CHAIN_IDS[raw] ?? raw;
+  return chainSlug(value);
 }
 
 function summarize(items: string[], max = 3): string {
@@ -373,27 +365,46 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
     // The silent failure this check exists for: an intent that moves value from an empty abstract
     // account is accepted, signed and submitted, and then parks at `anchoring` forever, because
     // the execution leg cannot run on chain. Nothing in any API response says so.
+    //
+    // The gas row is found by the chain's OWN native symbol from the catalogue. Matching `ETH` on
+    // every chain skipped any chain whose gas is something else and then reported "all have gas".
+    // A row that cannot be identified or read is named, never counted as funded.
     const empty: string[] = [];
+    const unverifiable: string[] = [];
     let accounts = 0;
     for (const identity of portfolio.identities) {
       for (const chain of identity.chains ?? []) {
-        const native = (chain.balances ?? [])
-          .find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
-        if (!native) continue;
+        const slug = normalizeChain(chain.chain_id);
+        const reading = readNativeBalance(slug, chain.balances);
+        if (reading.state === 'no-balances') continue;
         accounts += 1;
-        if (Number(native.balance) === 0) empty.push(normalizeChain(chain.chain_id));
+        if (reading.state === 'empty') empty.push(slug);
+        else if (reading.state !== 'funded') unverifiable.push(describeUnverifiable(slug, reading)!);
       }
     }
     const emptyChains = [...new Set(empty)];
-    checks.push(emptyChains.length === 0
-      ? { name: 'abstract accounts funded', status: 'ok', detail: `all ${accounts} chain account(s) have gas` }
-      : {
+    const cannotTell = [...new Set(unverifiable)];
+    if (emptyChains.length === 0 && cannotTell.length === 0) {
+      checks.push({ name: 'abstract accounts funded', status: 'ok', detail: `all ${accounts} chain account(s) have gas` });
+    } else {
+      const parts: string[] = [];
+      if (emptyChains.length > 0) {
+        parts.push(`${empty.length} of ${accounts} chain account(s) have no gas, on ${emptyChains.join(', ')}. `
+          + 'A value transfer from an empty one parks at "anchoring" forever.');
+      }
+      if (cannotTell.length > 0) {
+        parts.push(`${unverifiable.length} of ${accounts} chain account(s) have gas that cannot be verified: `
+          + `${cannotTell.join('; ')}.`);
+      }
+      checks.push({
         name: 'abstract accounts funded',
         status: 'warn',
-        detail: `${empty.length} of ${accounts} chain account(s) have no gas, on ${emptyChains.join(', ')}. `
-          + 'A value transfer from an empty one parks at "anchoring" forever.',
-        fix: 'Fund the abstract account on that chain before moving value from it.',
+        detail: parts.join(' '),
+        fix: emptyChains.length > 0
+          ? 'Fund the abstract account on that chain before moving value from it.'
+          : 'Check the gas on that chain yourself before moving value from it.',
       });
+    }
   }
 
   // ── 5. Is there anything left to spend? ─────────────────────────────────────────────────────

@@ -1,4 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   SUPPORTED_CHAINS, isSupportedChain, nearestChain, assertChain, assertChains,
 } from '../src/chains.js';
@@ -11,6 +13,16 @@ import {
  * `fund --chain base` is the case that matters: `base` is a real mainnet, so the failure mode of
  * a permissive check is money sent to a network this product does not operate on.
  */
+
+// Hermetic: the chain cache under the home directory decides what the gateway is known to serve,
+// so these cases run against an empty temporary home, never the real ~/.certen. (Vitest runs this
+// file in a worker thread, where changing process.env.HOME does not reach os.homedir().)
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>();
+  const home = mkdtempSync(join(actual.tmpdir(), 'certen-chains-'));
+  const homedir = (): string => home;
+  return { ...actual, default: { ...actual, homedir }, homedir };
+});
 
 afterEach(() => {
   delete process.env.CERTEN_ALLOW_ANY_CHAIN;

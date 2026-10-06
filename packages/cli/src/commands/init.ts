@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { CertenClient, CertenError } from '@certen.io/sdk';
+import { CertenClient, CertenError, readNativeBalance, describeUnverifiable } from '@certen.io/sdk';
 import {
   getApiKey, getApiUrl, getPortalUrl, setApiKey, readConfig, rememberIdentity, lastIdentity,
 } from '../config.js';
@@ -238,22 +238,33 @@ export function registerInitCommands(program: Command): void {
 
       // ── 4. Funding ────────────────────────────────────────────────────────────────────────────
       const unfunded: string[] = [];
+      const unverified: string[] = [];
       for (const account of accounts) {
         const chain = normalizeChain(account.chain_id);
         const balances = portfolio?.identities
           ?.flatMap((i) => i.chains ?? [])
           .find((c) => normalizeChain(c.chain_id) === chain && c.address === account.address);
-        const native = (balances?.balances ?? [])
-          .find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
+        // Read by the chain's OWN native symbol from the catalogue. Matching `ETH` everywhere
+        // reported a chain whose gas is something else as unfunded forever, however much it held.
+        const reading = readNativeBalance(chain, balances?.balances);
         // A freshly created identity is not in the portfolio snapshot taken above, so treat an
         // unknown balance as unfunded here: a new abstract account is empty by definition, and
         // telling someone to fund it costs them nothing if it turns out to be funded already.
-        if (!native || Number(native.balance) === 0) unfunded.push(chain);
+        if (reading.state !== 'funded') unfunded.push(chain);
+        // Rows that cannot be identified or read are also named, so "needs gas" is not mistaken for
+        // a reading of zero.
+        const why = describeUnverifiable(chain, reading);
+        if (why) unverified.push(why);
       }
 
       steps.push(unfunded.length === 0
         ? { step: 'funding', status: 'done', detail: 'abstract accounts have gas' }
-        : { step: 'funding', status: 'done', detail: `needs gas on ${[...new Set(unfunded)].join(', ')}` });
+        : {
+          step: 'funding',
+          status: 'done',
+          detail: `needs gas on ${[...new Set(unfunded)].join(', ')}`
+            + (unverified.length > 0 ? `; cannot verify gas: ${[...new Set(unverified)].join('; ')}` : ''),
+        });
 
       // ── 4b. Where the money will come from ────────────────────────────────────────────────────
       //
@@ -342,6 +353,7 @@ export function registerInitCommands(program: Command): void {
           const faucet = faucetFor(chain);
           human(`    ${chain.padEnd(18)} ${faucet ?? '(no faucet known)'}`);
         }
+        for (const why of [...new Set(unverified)]) human(`    (cannot verify: ${why})`);
         human('');
       }
 

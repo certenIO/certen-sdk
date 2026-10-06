@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
-import { CertenClient, CertenUnfundedAccountError } from '../src/index.js';
+import { CertenClient, CertenUnfundedAccountError, CertenFundingUnverifiableError } from '../src/index.js';
 
 /**
  * Two protections the CLI had first, moved into the SDK so an SDK caller gets them too.
@@ -293,5 +293,97 @@ describe('identity.createAndWait', () => {
       );
       expect(seenStatuses).toEqual(['provisioning', 'active']);
     } finally { g.close(); }
+  });
+});
+
+/** A portfolio where the identity's account on `chainId` holds `balance` of `token`. */
+function portfolioWith(chainId: string, token: string, balance: string): unknown {
+  return {
+    identities: [{
+      adi_url: 'acc://org.acme', status: 'active', credit_balance: 500, pending_actions: 0,
+      chains: [{ chain_id: chainId, address: '0xAbs', deployed: true, balances: [{ token, balance }] }],
+    }],
+    total_chains: 1,
+  };
+}
+
+const onPortfolio = (body: unknown) => opened((e) => (e.path === '/v1/portfolio' ? { body } : null));
+
+describe('the funding guard reads each chain\'s OWN gas token (it used to look only for ETH)', () => {
+  const TO_ADIRI = { ...TRANSFER, toChain: 'telcoin-adiri' };
+
+  it('refuses an empty TEL account on 2017 — before, no ETH row was found and the intent went through', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('2017', 'TEL', '0')));
+    try {
+      const err = await client(g.url).execute.transfer(TO_ADIRI).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CertenUnfundedAccountError);
+      expect((err as CertenUnfundedAccountError).chain).toBe('telcoin-adiri');
+      expect(g.seen.some((e) => e.path === '/v1/transaction')).toBe(false);
+    } finally { g.close(); }
+  });
+
+  it('allows a funded TEL account on 2017', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('telcoin-adiri', 'TEL', '2.5')));
+    try {
+      expect((await client(g.url).execute.transfer(TO_ADIRI)).intentId).toBe('intent-1');
+    } finally { g.close(); }
+  });
+
+  it('refuses by name when 2017 reports only an ETH row: that is not its gas', async () => {
+    // A gateway whose balance reader labels every EVM chain ETH. Reading that number as TEL gas
+    // would be reading the wrong thing; passing silently is the old failure.
+    const g = await gateway(onPortfolio(portfolioWith('2017', 'ETH', '5')));
+    try {
+      const err = await client(g.url).execute.transfer(TO_ADIRI).catch((e: unknown) => e as CertenFundingUnverifiableError);
+      expect(err).toBeInstanceOf(CertenFundingUnverifiableError);
+      expect(err.code).toBe('ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE');
+      expect(err.reason).toBe('native-not-reported');
+      expect(err.message).toMatch(/gas token is TEL/);
+      expect(err.isRetryable).toBe(false);
+      expect(g.seen.some((e) => e.path === '/v1/transaction')).toBe(false);
+    } finally { g.close(); }
+  });
+
+  it('refuses by name, before any request, on a chain whose gas token is unknown', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('solana-devnet', 'SOL', '9')));
+    try {
+      const err = await client(g.url).execute.transfer({ ...TRANSFER, toChain: 'solana-devnet' })
+        .catch((e: unknown) => e as CertenFundingUnverifiableError);
+      expect(err).toBeInstanceOf(CertenFundingUnverifiableError);
+      expect(err.reason).toBe('unknown-native');
+      expect(err.chain).toBe('solana-devnet');
+      expect(err.message).toMatch(/skipFundingCheck/);
+      expect(g.seen).toHaveLength(0);
+    } finally { g.close(); }
+  });
+
+  it('refuses by name when the gateway could not read the balance (was: "holds no gas", which was not known)', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('ethereum-sepolia', '', 'unavailable')));
+    try {
+      const err = await client(g.url).execute.transfer(TRANSFER).catch((e: unknown) => e as CertenFundingUnverifiableError);
+      expect(err).toBeInstanceOf(CertenFundingUnverifiableError);
+      expect(err.reason).toBe('unreadable');
+      expect(err.isRetryable).toBe(true);
+    } finally { g.close(); }
+  });
+
+  it('skipFundingCheck still bypasses it, deliberately', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('2017', 'TEL', '0')));
+    try {
+      expect((await client(g.url).execute.transfer({ ...TO_ADIRI, skipFundingCheck: true })).intentId).toBe('intent-1');
+    } finally { g.close(); }
+  });
+
+  it('leaves the live chains as they were: ETH zero refused, ETH funded allowed, numeric id matched', async () => {
+    for (const [chainId, toChain] of [['ethereum-sepolia', 'ethereum-sepolia'], ['84532', 'base-sepolia'], ['421614', 'arbitrum-sepolia']]) {
+      const empty = await gateway(onPortfolio(portfolioWith(chainId, 'ETH', '0')));
+      try {
+        await expect(client(empty.url).execute.transfer({ ...TRANSFER, toChain })).rejects.toBeInstanceOf(CertenUnfundedAccountError);
+      } finally { empty.close(); }
+      const funded = await gateway(onPortfolio(portfolioWith(chainId, 'ETH', '1')));
+      try {
+        expect((await client(funded.url).execute.transfer({ ...TRANSFER, toChain })).intentId).toBe('intent-1');
+      } finally { funded.close(); }
+    }
   });
 });

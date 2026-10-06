@@ -134,7 +134,7 @@ certen tx create --identity <uuid> --to-chain ethereum-sepolia \
   --from 0xYourAbstractAccount --to 0xRecipient --amount 0.001 --sign-with dev --wait
 ```
 
-**`--amount` is in WHOLE UNITS.** `1` means one ETH, `0.5` means half. This is the field most
+**`--amount` is in WHOLE UNITS** of the chain's native token. `1` means one ETH (one TEL on Telcoin Adiri), `0.5` means half. This is the field most
 worth reading twice: the gateway documented it as wei until 2026-08-11, and someone sending `1`
 meaning one wei moves a whole ETH — which on a funded account succeeds silently.
 
@@ -209,9 +209,22 @@ grouped by where you are in the journey.
 
 ## Chains
 
-This CLI targets `ethereum-sepolia`, `base-sepolia` and `arbitrum-sepolia`. A chain outside that
+This CLI targets `ethereum-sepolia`, `base-sepolia` and `arbitrum-sepolia` (gas: ETH). A chain outside that
 set is refused with the reason — and if the gateway genuinely serves it, the refusal says so
 rather than claiming it does not exist. `CERTEN_ALLOW_ANY_CHAIN=1` lifts the restriction.
+
+**Telcoin Adiri (`telcoin-adiri`, chain 2017) is a testnet whose gas is TEL**, not ETH. It is off by
+default. To use it, enable it and confirm the gateway serves it:
+
+```bash
+export CERTEN_ENABLED_CHAINS=ethereum-sepolia,base-sepolia,arbitrum-sepolia,telcoin-adiri
+certen chains --refresh   # records what the gateway serves; Adiri is accepted only if it is listed
+```
+
+`CERTEN_ENABLED_CHAINS` replaces the default set, and naming an unknown or retired chain in it is
+an error. Every chain fact the CLI uses (ids, aliases, gas token, faucet, block time) comes from the
+SDK's `CHAIN_CATALOGUE`. The funding guard reads each chain's own gas token: an account whose gas
+it cannot identify is refused by name (`ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE`), never waved through.
 
 ## Scripting and AI agents: `--json`
 

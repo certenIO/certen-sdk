@@ -1,5 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { CertenError } from './errors.js';
+import { chainSlug, nativeSymbolFor, readNativeBalance, describeUnverifiable } from './chains.js';
+import type { NativeBalanceReading } from './chains.js';
 
 /**
  * The unfunded abstract account guard.
@@ -13,11 +15,19 @@ import { CertenError } from './errors.js';
  *
  * So the SDK refuses before submitting, and says why.
  *
- * **The check is one-directional by design.** It refuses ONLY on a positively observed zero
- * balance. If the balance cannot be read — the chain is absent from the portfolio, the account is
- * not deployed, the lookup fails — the intent proceeds. A guard that blocked on missing data would
- * break legitimate work every time the portfolio view lagged, which is a worse failure than the one
- * it prevents. It is a courtesy, not a gate the product depends on.
+ * **What it refuses, and what it lets through.**
+ *
+ * - A positively observed zero gas balance is refused ({@link CertenUnfundedAccountError}).
+ * - A gas balance that cannot be IDENTIFIED is refused by name
+ *   ({@link CertenFundingUnverifiableError}): the chain's gas token is unknown to the catalogue,
+ *   the gateway reported balances none of which is that token, or it reported the gas row as
+ *   unreadable. The first two used to pass silently on any chain whose gas is not called `ETH` —
+ *   the guard looked for an `ETH` row, found none, and waved the intent through.
+ * - The portfolio being unreachable, or the chain not appearing in it at all, lets the intent
+ *   proceed. A guard that blocked every time the portfolio view lagged would break legitimate work,
+ *   which is a worse failure than the one it prevents.
+ *
+ * `skipFundingCheck: true` bypasses all of it, deliberately and visibly.
  */
 
 /** Thrown instead of submitting an intent that could never execute. */
@@ -46,8 +56,41 @@ export class CertenUnfundedAccountError extends CertenError {
   }
 }
 
+export type FundingUnverifiableReason = 'unknown-native' | 'native-not-reported' | 'unreadable';
+
 /**
- * Numeric EVM chain id → registry slug.
+ * Thrown instead of submitting a value-moving intent whose gas balance could not be identified.
+ *
+ * Not the same claim as {@link CertenUnfundedAccountError}: the account may well be funded. What is
+ * known is that this client cannot tell, and an unfunded account is a silent, permanent stall.
+ */
+export class CertenFundingUnverifiableError extends CertenError {
+  readonly address: string | undefined;
+  readonly chain: string;
+  readonly reason: FundingUnverifiableReason;
+
+  constructor(address: string | undefined, chain: string, reason: FundingUnverifiableReason, why: string) {
+    super(
+      `Cannot verify that the abstract account${address ? ` ${address}` : ''} on ${chain} holds gas: ${why}. `
+      + 'An intent from an unfunded account is accepted, signed and submitted, and then parks at '
+      + '"anchoring" forever. Check the account\'s gas yourself, then pass skipFundingCheck: true to submit.',
+      0,
+      'ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE',
+    );
+    this.name = 'CertenFundingUnverifiableError';
+    this.address = address;
+    this.chain = chain;
+    this.reason = reason;
+  }
+
+  /** Only an unreadable balance can change on its own; the other two are facts about the chain. */
+  get isRetryable(): boolean {
+    return this.reason === 'unreadable';
+  }
+}
+
+/**
+ * Numeric EVM chain id → registry slug, from the chain catalogue (`chains.ts`).
  *
  * `GET /v1/portfolio` used to return `chain_id` as a slug on some chain accounts and as a numeric
  * EVM id on others, in the same response, because the gateway stored whatever the caller sent.
@@ -59,18 +102,8 @@ export class CertenUnfundedAccountError extends CertenError {
  * independently and is routinely pointed at a gateway older than itself. A guard that silently
  * stops guarding against an older peer is worse than no guard, because nothing signals the gap.
  */
-const NUMERIC_CHAIN_IDS: Record<string, string> = {
-  11155111: 'ethereum-sepolia',
-  84532: 'base-sepolia',
-  421614: 'arbitrum-sepolia',
-  11155420: 'optimism-sepolia',
-  80002: 'polygon-amoy',
-};
-
 export function normalizeChainId(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return '';
-  const raw = String(value).trim();
-  return NUMERIC_CHAIN_IDS[raw] ?? raw;
+  return chainSlug(value);
 }
 
 /** Does this amount move value? A zero or absent amount needs no funded account. */
@@ -84,7 +117,8 @@ export function movesValue(amount: unknown): boolean {
 }
 
 /**
- * Refuse a value-moving intent from an abstract account positively known to be empty.
+ * Refuse a value-moving intent from an abstract account positively known to be empty, or whose gas
+ * balance cannot be identified.
  *
  * Reads the portfolio directly rather than taking a client, so this stays usable from inside
  * `ExecuteResource`, which holds only an axios instance.
@@ -95,11 +129,18 @@ export async function assertFundedForValue(
 ): Promise<void> {
   if (!params.chain || !movesValue(params.amount)) return;
 
+  const want = normalizeChainId(params.chain);
+  // Before any read: on a chain whose gas token is unknown, no balance row can be identified as the
+  // gas, so the answer is already known to be unknowable.
+  if (nativeSymbolFor(want) === undefined) {
+    const reading: NativeBalanceReading = { state: 'unknown-native', chain: want };
+    throw new CertenFundingUnverifiableError(undefined, want, 'unknown-native', describeUnverifiable(want, reading)!);
+  }
+
   let address: string | undefined;
-  let balance: string | undefined;
+  let reading: NativeBalanceReading | undefined;
   try {
     const { data } = await http.get('/v1/portfolio', { params: { identity: params.identityId } });
-    const want = normalizeChainId(params.chain);
     const identities = (data as {
       identities?: Array<{ chains?: Array<{ chain_id: string; address: string; balances?: Array<{ token?: string; balance: string }> }> }>;
     }).identities ?? [];
@@ -108,12 +149,13 @@ export async function assertFundedForValue(
       for (const chain of identity.chains ?? []) {
         if (normalizeChainId(chain.chain_id) !== want) continue;
         // The NATIVE balance is what pays for execution. A token balance on the same account does
-        // not make the execution leg runnable.
-        const native = (chain.balances ?? [])
-          .find((b) => !b.token || b.token === 'ETH' || b.token === 'native');
-        if (!native) return;
+        // not make the execution leg runnable — and on a chain whose gas is not ETH, an `ETH` row
+        // is not the gas either.
+        const r = readNativeBalance(want, chain.balances);
+        // Nothing reported for the account yet (not deployed, not indexed): not evidence of zero.
+        if (r.state === 'no-balances') return;
         address = chain.address;
-        balance = native.balance;
+        reading = r;
       }
     }
   } catch {
@@ -121,8 +163,17 @@ export async function assertFundedForValue(
     return;
   }
 
-  if (address === undefined || balance === undefined) return;
-  if (Number(balance) > 0) return;
-
-  throw new CertenUnfundedAccountError(address, normalizeChainId(params.chain));
+  if (address === undefined || reading === undefined) return;
+  switch (reading.state) {
+    case 'funded':
+      return;
+    case 'empty':
+      throw new CertenUnfundedAccountError(address, want);
+    case 'unknown-native':
+    case 'native-not-reported':
+    case 'unreadable':
+      throw new CertenFundingUnverifiableError(address, want, reading.state, describeUnverifiable(want, reading)!);
+    default:
+      return;
+  }
 }

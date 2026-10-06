@@ -1,5 +1,6 @@
 import { AxiosInstance } from 'axios';
 import type { ChainsListResponse, ChainDetailResponse } from '../types.js';
+import { resolveEnabledChains, defaultEnabledChains, type ChainCatalogueEntry } from '../chains.js';
 
 /**
  * The contract registry: which chains CERTEN is deployed on, and at what addresses.
@@ -43,5 +44,18 @@ export class ChainsResource {
   async get(idOrChainId: string | number): Promise<ChainDetailResponse> {
     const { data } = await this.http.get(`/v1/chains/${idOrChainId}`);
     return data;
+  }
+
+  /**
+   * The chains to offer: the configured set (default: the catalogue's live chains) narrowed to
+   * those the gateway serves right now.
+   *
+   * This is the runtime authority. The catalogue alone answers offline questions (what a numeric
+   * id means, which token is gas), but whether a chain may be USED is decided against the
+   * gateway: a chain it does not list, or lists with `enabled: false`, is never returned.
+   */
+  async enabled(configured: readonly string[] = defaultEnabledChains()): Promise<ChainCatalogueEntry[]> {
+    const { chains } = await this.list();
+    return resolveEnabledChains(configured, chains);
   }
 }
