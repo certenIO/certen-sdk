@@ -140,9 +140,9 @@ describe('the SDK catalogue against what the gateway actually raises', () => {
     const documented = new Set(ERROR_CODES.map((e) => e.code));
     const missing = callerFacing.filter((c) => !documented.has(c));
 
-    // Known gap, recorded rather than hidden: these are raised and not yet in the SDK docs.
-    // Shrinking this list is the work; growing it silently is the regression.
-    expect(missing.length).toBeLessThanOrEqual(12);
+    // Every caller-facing code the gateway raises is documented here. A refreshed spec that adds one
+    // fails this test until the SDK docs describe it, so the gap cannot grow silently again.
+    expect(missing, 'caller-facing codes the gateway raises that the SDK docs omit').toEqual([]);
   });
 });
 
