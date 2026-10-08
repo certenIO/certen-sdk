@@ -354,7 +354,64 @@ export type TransactionReasonCode =
  *
  * Other strings are admitted for rows written by an older gateway.
  */
-export type CompletionBasis = 'proof_artifact' | 'execution_observed';
+/**
+ * What a `completed` status rests on. `proof_artifact`: the validators produced an indexed proof
+ * (`proof_id`). `execution_observed`: the gateway observed the destination-chain settlement.
+ * `chain_receipt` appears only on legacy rows. Treat an unknown value as "completed" and read
+ * `proof_id` rather than branching on it.
+ */
+export type CompletionBasis = 'proof_artifact' | 'execution_observed' | 'chain_receipt';
+
+/**
+ * Present on a read that looked the proof id up because it was not yet recorded. A null `proof_id`
+ * with `unavailable` is NOT "not anchored yet": the proof service failed to answer.
+ */
+export interface ProofLookup {
+  state: 'resolved' | 'not_found' | 'unavailable';
+  /** The proof service's HTTP status; null when it was unreachable. */
+  status?: number | null;
+  reason?: string;
+}
+
+/** One chain member's proof, as the validators recorded it. */
+export interface ChainMemberProof {
+  chain_id: number;
+  /** For an intent on several chains: the indices of its request legs on this chain. */
+  legs?: number[];
+  proof_id: string;
+  proof_bundle_url?: string | null;
+  write_back_tx?: string | null;
+}
+
+export type ValidatorState =
+  | 'not_discovered' | 'in_progress' | 'awaiting_signatures' | 'settling' | 'settled' | 'refused'
+  | 'failed' | 'unavailable' | 'executed_proof_pending' | 'executed_proof_unavailable';
+
+/** One chain member as the validators recorded it. */
+export interface ValidatorMember {
+  chain_id: number;
+  recorded?: boolean;
+  settlement?: 'settled' | 'reverted' | 'unobserved' | 'none' | null;
+  proof_cycle?: 'written' | 'failed' | 'proof_pending' | 'proof_unavailable' | 'refused' | null;
+  settlement_tx?: string | null;
+  write_back_tx?: string | null;
+  proof_id?: string | null;
+  proof_bundle_url?: string | null;
+  effects_proven?: boolean | null;
+}
+
+/** What the CERTEN validators recorded for an intent, followed until it is final. */
+export interface ValidatorView {
+  state: ValidatorState;
+  /** When the validators entered this state, RFC 3339. */
+  since?: string;
+  /** Delivered on Accumulate and not discovered by the validators within the overdue window. */
+  overdue?: boolean;
+  /** Every chain member; null when the validators reported none. */
+  members?: ValidatorMember[] | null;
+  /** Set when the validators' final outcome contradicts how the gateway ended the intent. */
+  disagreement?: { what: string; since?: string } | null;
+}
 
 /** @deprecated The flat shape this described was never accepted by POST /v1/transaction. Use `intent`. */
 export interface LegacyFlatTransactionParams {
@@ -444,6 +501,12 @@ export interface TransactionResponse {
   expires_at?: string | null;
   /** What a `completed` status rests on. Null until completed. */
   completion_basis?: CompletionBasis | (string & {}) | null;
+  /** Present when this read had to look the proof id up; tells "not anchored yet" from "proof service down". */
+  proof_lookup?: ProofLookup | null;
+  /** Every chain member's proof, one per chain the intent settles on. Empty until the validators produced one. */
+  proofs?: ChainMemberProof[];
+  /** What the validators recorded for this intent. Null until first observed. */
+  validator?: ValidatorView | null;
   created_at: string;
   updated_at?: string;
   /** Null while the transaction is still in flight — the gateway has always sent a real null here. */

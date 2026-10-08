@@ -173,6 +173,55 @@ export const ERROR_CODES = [
     meaning: 'The intent names `additional_authorities`, which the gateway refuses by default: validators do not yet execute intents carrying header authorities.',
     fix: 'Remove `additional_authorities`. Make a required co-signer an authority on the ACCOUNT instead (governance `add_authority`), or have it accept in a separate transaction first.',
   },
+  {
+    code: 'ADDITIONAL_AUTHORITIES_INVALID',
+    status: 400,
+    retryable: false,
+    meaning: '`additional_authorities` is not a list of at most 8 `acc://` key book URLs, or its two spellings (top level and `intent.additionalAuthorities`) disagree. The message names the entry.',
+    fix: 'Fix the list: at most 8 `acc://` key book URLs, sent under one spelling or with both identical.',
+  },
+  {
+    code: 'ADDITIONAL_AUTHORITY_IS_PRINCIPAL_BOOK',
+    status: 400,
+    retryable: false,
+    meaning: '`additional_authorities` names the principal ADI\'s own key book, which already authorizes the intent through its account.',
+    fix: 'Remove it. List only OTHER parties whose signature this transaction also needs.',
+  },
+  {
+    code: 'CHAIN_NOT_ENABLED',
+    status: 422,
+    retryable: false,
+    meaning: 'The chain is in the CERTEN network catalogue but this gateway has not enabled it, so it is neither served, quoted nor linkable.',
+    fix: 'Use a chain listed by `chains.list()`. Retrying cannot enable it: that is an operator decision.',
+  },
+  {
+    code: 'EXPIRES_AT_INVALID',
+    status: 400,
+    retryable: false,
+    meaning: '`expires_at` is not an RFC 3339 date-time with a timezone, or its two spellings disagree.',
+    fix: 'Send e.g. `2026-09-14T12:00:00Z`.',
+  },
+  {
+    code: 'EXPIRES_AT_OUT_OF_RANGE',
+    status: 400,
+    retryable: false,
+    meaning: '`expires_at` is in the past, too soon, or too far ahead. The message states the accepted window.',
+    fix: 'Send a deadline inside the window the message names.',
+  },
+  {
+    code: 'INTENT_EXPIRED',
+    status: 409,
+    retryable: false,
+    meaning: 'The intent passed its `expires_at` before it was signed, so it can no longer complete. It is now failed with `reason_code` `expired` and nothing was charged.',
+    fix: 'Create a new intent, with a later `expires_at` if the signers need more time.',
+  },
+  {
+    code: 'UNKNOWN_CHAIN',
+    status: 400,
+    retryable: false,
+    meaning: 'No chain by that name is served. It never becomes valid on retry. The message names the closest match when there is one.',
+    fix: 'Use the closest match the message names, or list valid chains with `chains.list()`.',
+  },
 ];
 
 /**

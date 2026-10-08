@@ -59,6 +59,13 @@ backoff — a second retry loop wrapped around it is wrong.
 | `TOO_MANY_REQUESTS` | 429 | yes | Generic throttle; wait for `Retry-After` |
 | `SLOW_DOWN` | 429 | yes | Polling the device-authorization flow faster than it allows |
 | `HEADER_AUTHORITY_NOT_EXECUTABLE` | 422 | no | The intent named `additional_authorities`, refused by default because validators do not yet execute them; make the co-signer an account authority instead |
+| `ADDITIONAL_AUTHORITIES_INVALID` | 400 | no | `additional_authorities` is not a list of at most 8 `acc://` key books, or its two spellings disagree |
+| `ADDITIONAL_AUTHORITY_IS_PRINCIPAL_BOOK` | 400 | no | `additional_authorities` names the principal ADI's own key book, which already authorizes the intent |
+| `CHAIN_NOT_ENABLED` | 422 | no | The chain exists in the CERTEN catalogue but this gateway has not enabled it; use a chain from `chains.list()` |
+| `EXPIRES_AT_INVALID` | 400 | no | `expires_at` is not an RFC 3339 date-time with a timezone, or its two spellings disagree |
+| `EXPIRES_AT_OUT_OF_RANGE` | 400 | no | `expires_at` is in the past, too soon, or too far ahead; the message states the accepted window |
+| `INTENT_EXPIRED` | 409 | no | The intent passed its `expires_at` before it was signed; nothing was charged; create a new intent |
+| `UNKNOWN_CHAIN` | 400 | no | No chain by that name is served; the message names the closest match |
 | `INTERNAL_ERROR` | 500 | yes | An unexpected server error occurred |
 | `BAD_GATEWAY` | 502 | yes | A downstream service (api-bridge, proofs service) returned an error |
 | `NETWORK_ERROR` | — | yes | Synthesized by the SDK when the request never reached the gateway |

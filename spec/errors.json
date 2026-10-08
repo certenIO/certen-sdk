@@ -1,6 +1,21 @@
 {
   "errors": [
     {
+      "code": "ADDITIONAL_AUTHORITIES_INVALID",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "additional_authorities is not a list of at most 8 acc:// key book URLs, or its two spellings (top level and intent.additionalAuthorities) disagree. The message names the entry."
+    },
+    {
+      "code": "ADDITIONAL_AUTHORITY_IS_PRINCIPAL_BOOK",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "additional_authorities names the principal ADI's own key book, which already authorizes the intent through its account.",
+      "action": "Remove it. List only OTHER parties whose signature this transaction also needs."
+    },
+    {
       "code": "BAD_GATEWAY",
       "status": 502,
       "retryable": true,
@@ -21,6 +36,14 @@
       "retryable": false,
       "audience": "platform",
       "meaning": "Billing is switched off on this deployment; billing endpoints are unavailable."
+    },
+    {
+      "code": "CHAIN_NOT_ENABLED",
+      "status": 422,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The chain is in the CERTEN network catalogue but this gateway has not enabled it, so it is neither served, quoted nor linkable. Distinct from UNKNOWN_CHAIN (the name is real) and from CHAIN_NOT_PRICEABLE (no measurement will make it available; enabling it is an operator decision).",
+      "action": "Use a chain listed by GET /v1/chains."
     },
     {
       "code": "CHAIN_NOT_PRICEABLE",
@@ -60,11 +83,41 @@
       "meaning": "The resource already exists, or its state has moved on since you read it."
     },
     {
+      "code": "COST_HISTORY_ASSET_MISMATCH",
+      "status": 503,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "The measured cost history of the chain holds costs recorded in an asset other than its native asset in the network catalogue, so no quote is derived from it."
+    },
+    {
+      "code": "DB_CONNECTION_LOST",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The database ended the connection this request was using (for example an idle-in-transaction timeout or a failover). Nothing the request wrote was committed.",
+      "action": "Retry with the SAME Idempotency-Key where the operation accepts one."
+    },
+    {
       "code": "ENTITLEMENT_UNAVAILABLE",
       "status": 503,
       "retryable": true,
       "audience": "platform",
       "meaning": "No entitlement epoch has been published yet. Validators enforcing the gate refuse every intent."
+    },
+    {
+      "code": "EXPIRES_AT_INVALID",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "expires_at is not an RFC 3339 date-time with a timezone, or its two spellings disagree.",
+      "action": "Send e.g. 2026-09-14T12:00:00Z."
+    },
+    {
+      "code": "EXPIRES_AT_OUT_OF_RANGE",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "expires_at is in the past, too soon, or too far ahead. The message states the accepted window (INTENT_EXPIRY_MIN_S to INTENT_EXPIRY_MAX_S seconds from now)."
     },
     {
       "code": "FORBIDDEN",
@@ -73,6 +126,21 @@
       "audience": "caller",
       "meaning": "The credential is valid but lacks the scope this operation requires.",
       "action": "Check GET /v1/me for granted scopes and GET /v1/scopes for what each covers. Scopes are fixed at key creation — a key missing one has to be reissued."
+    },
+    {
+      "code": "FX_MANUAL_NOT_ALLOWED",
+      "status": 422,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A manual FX observation was submitted for an asset rated only from two agreeing independent sources (ETH and TEL). Only the FX feed records its rate, from both sources."
+    },
+    {
+      "code": "FX_NOT_CORROBORATED",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The chain pays gas in an asset rated only from two independent sources (CoinGecko and CoinPaprika; ETH and TEL), and no fresh rate on which both agreed within the configured tolerance exists: a source is failing or stale, or they disagree. No single-source or fallback rate is used, so nothing on the chain is quoted or priced until they agree again.",
+      "action": "Retry later; operators see the reason in certen_gateway_fx_feed_failures_total (status label SYMBOL:reason) and the FX feed log."
     },
     {
       "code": "FX_UNAVAILABLE",
@@ -86,8 +154,8 @@
       "status": 422,
       "retryable": false,
       "audience": "caller",
-      "meaning": "The intent names additional_authorities. CERTEN validators do not yet execute intents that carry header authorities, so the gateway refuses them instead of accepting an intent that could never execute.",
-      "action": "Remove additional_authorities. Put a party that must co-sign on the account's authorities instead, or have it accept in a separate transaction first."
+      "meaning": "This deployment refuses additional_authorities on intents: CERTEN validators do not yet count signatures from transaction-header authorities (gap G-18), so such an intent would be delivered on Accumulate and then never execute.",
+      "action": "Make the party an account-level authority instead: add its key book to the principal's <adi>/data account with POST /v1/governance add_authority, and omit additional_authorities."
     },
     {
       "code": "IDEMPOTENCY_KEY_IN_FLIGHT",
@@ -112,6 +180,14 @@
       "audience": "caller",
       "meaning": "The ledger refused the charge for lack of funds.",
       "action": "Add funds. Gate on `remaining_usd` from GET /v1/billing/balance, not `spendable_usd`."
+    },
+    {
+      "code": "INTENT_EXPIRED",
+      "status": 409,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The intent passed its expires_at before it was signed, so it can no longer complete. It is now failed with reason_code expired and nothing was charged.",
+      "action": "Create a new intent, with a later expires_at if the signers need more time."
     },
     {
       "code": "INTERNAL_ERROR",
@@ -167,7 +243,29 @@
       "status": 500,
       "retryable": false,
       "audience": "platform",
-      "meaning": "The transparency log diverged from its expected head."
+      "meaning": "The transparency log diverged from its expected head, or a proof built from its stored tree nodes did not verify against the published root. No proof is served rather than one that would not verify."
+    },
+    {
+      "code": "LOG_NODES_INCOMPLETE",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A stored transparency-log tree node needed for this proof is missing. No proof is served rather than one that could not be built."
+    },
+    {
+      "code": "NATIVE_ASSET_MISMATCH",
+      "status": 422,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A cost event reported a native asset or base unit other than the one the network catalogue gives the chain, so it was not priced. The reporting validator parks it with its gas facts intact."
+    },
+    {
+      "code": "NATIVE_ASSET_UNKNOWN",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The network catalogue gives the chain no native asset (networks.json \"nativeAsset\"), so its gas cannot be priced. CERTEN prices a chain only in its own native asset and never in a guessed one.",
+      "action": "Add the native asset of the chain to certen-contracts networks.json and regenerate the gateway catalogue."
     },
     {
       "code": "NO_PRICE_BOOK",
@@ -198,6 +296,22 @@
       "audience": "caller",
       "meaning": "A plan limit is exhausted — not a per-second rate, a quota for the period.",
       "action": "Waiting will not clear this within the period. Raise the plan limit."
+    },
+    {
+      "code": "PROOFS_TENANT_KEY_ORG_REQUIRED",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "A proof request reached the proof-service client without the organisation it is for, so no tenant key could be derived. The request was not sent.",
+      "action": "This is a gateway defect: report it to the platform operators with the intent id."
+    },
+    {
+      "code": "PROOFS_TENANT_KEY_SECRET_MISSING",
+      "status": 500,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "The gateway has no PROOFS_TENANT_KEY_SECRET (or one shorter than 32 bytes), so it cannot derive the API key the proof service requires for a tenant. The proof request was not sent.",
+      "action": "Platform operators: set PROOFS_TENANT_KEY_SECRET on the gateway and its worker. Callers cannot fix this."
     },
     {
       "code": "QUOTE_EXPIRED",
@@ -294,6 +408,13 @@
       "audience": "caller",
       "meaning": "No credential, or one the gateway does not recognise.",
       "action": "Send X-API-Key, or a portal session as Authorization: Bearer."
+    },
+    {
+      "code": "UNKNOWN_CHAIN",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "No chain by that name is served. Distinct from CHAIN_NOT_PRICEABLE, which is a real chain that cannot be priced yet: that one is worth retrying and this one never will be. The message names the closest match when there is one."
     },
     {
       "code": "VALIDATION_ERROR",

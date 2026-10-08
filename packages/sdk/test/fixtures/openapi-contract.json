@@ -156,6 +156,7 @@
             "can_sign",
             "error_message",
             "credit_balance",
+            "credit_balance_source",
             "chain_accounts",
             "created_at",
             "signing_mode",
@@ -192,6 +193,7 @@
             "can_sign",
             "error_message",
             "credit_balance",
+            "credit_balance_source",
             "chain_accounts",
             "created_at",
             "signing_mode",
@@ -647,10 +649,7 @@
         "propertyTypes": {
           "url": "string",
           "event_types": "array",
-          "description": [
-            "string",
-            "null"
-          ],
+          "description": "string",
           "is_active": "boolean"
         },
         "query": [],
@@ -751,11 +750,12 @@
           "intent",
           "contract_addresses",
           "proof_class",
+          "subject",
           "idempotency_key",
-          "signer_key_page",
-          "signer_public_key",
           "additional_authorities",
-          "expires_at"
+          "expires_at",
+          "signer_key_page",
+          "signer_public_key"
         ],
         "propertyTypes": {
           "identity_id": "string",
@@ -763,11 +763,12 @@
           "intent": "object",
           "contract_addresses": "object",
           "proof_class": "string",
+          "subject": "object",
           "idempotency_key": "string",
-          "signer_key_page": "string",
-          "signer_public_key": "string",
           "additional_authorities": "array",
-          "expires_at": "string"
+          "expires_at": "string",
+          "signer_key_page": "string",
+          "signer_public_key": "string"
         },
         "query": [],
         "responses": {
@@ -779,6 +780,8 @@
             "submit_url",
             "tx_hash",
             "proof_id",
+            "additional_authorities",
+            "expires_at",
             "idempotent"
           ]
         },
@@ -830,14 +833,17 @@
             "identity_id",
             "status",
             "intent_type",
+            "completion_basis",
             "accum_tx_hash",
+            "proof_lookup",
             "proof_id",
             "proof_bundle_url",
+            "proofs",
+            "validator",
             "error_message",
             "reason_code",
             "additional_authorities",
             "expires_at",
-            "completion_basis",
             "created_at",
             "updated_at",
             "completed_at",
@@ -846,12 +852,33 @@
         },
         "responseShapes": {
           "200": {
+            "proof_lookup": [
+              "state",
+              "status",
+              "reason"
+            ],
+            "proofs": [
+              "chain_id",
+              "legs",
+              "proof_id",
+              "proof_bundle_url",
+              "write_back_tx"
+            ],
+            "validator": [
+              "state",
+              "since",
+              "overdue",
+              "members",
+              "disagreement"
+            ],
             "proof": [
               "id",
               "bundle_url",
               "layers",
               "governance",
-              "attestations"
+              "attestations",
+              "parts",
+              "unavailable"
             ]
           }
         }
@@ -883,11 +910,11 @@
               "intent_type",
               "accum_tx_hash",
               "proof_id",
+              "proof_lookup",
               "error_message",
               "reason_code",
               "additional_authorities",
               "expires_at",
-              "completion_basis",
               "created_at",
               "updated_at",
               "completed_at"
@@ -1344,6 +1371,7 @@
               "required_signatures",
               "approved_authorities",
               "user_has_signed",
+              "memo",
               "expires_at",
               "discovered_at",
               "created_at"
@@ -2016,6 +2044,7 @@
             "uncovered_usd",
             "status",
             "suspended_reason",
+            "enforcing",
             "credit"
           ]
         },

@@ -595,6 +595,7 @@
         ],
         "description": "Compound method that provisions the entire CERTEN/Accumulate identity stack in a single call: it creates the Accumulate ADI (acc://<name>.acme), its key book, and the key page (book/1) keyed to the caller's public_key_hash so they can sign, then buys credits on that key page, and — when `chains` are supplied — derives and deploys the corresponding multi-chain accounts. With signing_mode \"external\" (the default) the caller supplies and retains their own keys via public_key_hash. With signing_mode \"provider\" the gateway generates and manages keys through the configured signing provider and returns a one-shot mnemonic retrieval URL (the mnemonic is never returned inline). Because each step waits for the previous transaction to anchor on-chain (Accumulate is eventually-consistent), provisioning typically completes in 60-90 seconds. The call itself returns a 202 immediately; see the polling block on the 202 response for how to wait. Requires the identity:write scope. If an idempotency_key is supplied the create is de-duplicated.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -650,8 +651,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -901,10 +901,7 @@
                       }
                     },
                     "resolve": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": "object",
                       "additionalProperties": true,
                       "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
                       "properties": {
@@ -936,7 +933,8 @@
                         "note": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "nullable": true
                     },
                     "how_to_pay": {
                       "type": "object",
@@ -1157,37 +1155,37 @@
                       "type": "string"
                     },
                     "book_url": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "key_page_url": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "status": {
                       "type": "string",
                       "description": "provisioning | active | error. Creation is async — poll until terminal."
                     },
                     "can_sign": {
-                      "type": [
-                        "null",
-                        "boolean"
-                      ],
-                      "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as \"do not proceed\", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches."
+                      "type": "boolean",
+                      "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as \"do not proceed\", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches.",
+                      "nullable": true
                     },
                     "error_message": {
-                      "type": [
-                        "null",
-                        "string"
-                      ],
-                      "description": "Why provisioning failed, when status is \"error\"."
+                      "type": "string",
+                      "description": "Why provisioning failed, when status is \"error\".",
+                      "nullable": true
                     },
                     "credit_balance": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Accumulate credits on the identity's key page (its creditBalance / 100: Accumulate keeps credits to two decimals). Read live from the key page when `credit_balance_source` is `key_page`; when that read failed it is the balance read when provisioning finished (`recorded`). RB4-F44."
+                    },
+                    "credit_balance_source": {
+                      "type": "string",
+                      "enum": [
+                        "key_page",
+                        "recorded"
+                      ]
                     },
                     "chain_accounts": {
                       "type": "array",
@@ -1362,6 +1360,7 @@
         ],
         "description": "Compound update for a stored identity (org-scoped). Links new multi-chain accounts (deriving and deploying each chain account, skipping chains already linked), unlinks chains, and/or sets the webhook URL — all in one call. Chain deploys are fired best-effort and reflected with a \"deploying\"/\"failed\" status. The webhook_url is shape-validated at the route layer and DNS-validated before write. Returns the freshly re-fetched identity (same shape as GET). Requires identity:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -1451,37 +1450,37 @@
                       "type": "string"
                     },
                     "book_url": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "key_page_url": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "status": {
                       "type": "string",
                       "description": "provisioning | active | error. Creation is async — poll until terminal."
                     },
                     "can_sign": {
-                      "type": [
-                        "null",
-                        "boolean"
-                      ],
-                      "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as \"do not proceed\", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches."
+                      "type": "boolean",
+                      "description": "False when an external-mode identity has no stored public key — it can never sign, and every POST /v1/sign for it will fail. Null means the on-chain key page could not be read: treat it as \"do not proceed\", never as a soft yes. Check this before building on the identity. Repairable with PATCH /v1/identity/{id} { public_key } if the hash matches.",
+                      "nullable": true
                     },
                     "error_message": {
-                      "type": [
-                        "null",
-                        "string"
-                      ],
-                      "description": "Why provisioning failed, when status is \"error\"."
+                      "type": "string",
+                      "description": "Why provisioning failed, when status is \"error\".",
+                      "nullable": true
                     },
                     "credit_balance": {
-                      "type": "number"
+                      "type": "number",
+                      "description": "Accumulate credits on the identity's key page (its creditBalance / 100: Accumulate keeps credits to two decimals). Read live from the key page when `credit_balance_source` is `key_page`; when that read failed it is the balance read when provisioning finished (`recorded`). RB4-F44."
+                    },
+                    "credit_balance_source": {
+                      "type": "string",
+                      "enum": [
+                        "key_page",
+                        "recorded"
+                      ]
                     },
                     "chain_accounts": {
                       "type": "array",
@@ -1634,10 +1633,7 @@
                       }
                     },
                     "resolve": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": "object",
                       "additionalProperties": true,
                       "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
                       "properties": {
@@ -1669,7 +1665,8 @@
                         "note": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "nullable": true
                     },
                     "how_to_pay": {
                       "type": "object",
@@ -2432,6 +2429,7 @@
         ],
         "description": "Provisions a new organization. Because the new org row can never match the caller's own org id, the request escalates to an admin context to bypass per-request row-level-security for the INSERT. Requires the admin:write scope and supports Idempotency-Key for safe retries.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -2460,8 +2458,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -2670,6 +2667,7 @@
         ],
         "description": "Sets the legacy single webhook_url and signing secret on an organization. The id MUST equal the caller's own org unless the key holds the wildcard (*) permission; cross-org writes are otherwise rejected 403. A secret is generated when omitted, and the secret is returned ONCE and cannot be retrieved again. Requires the admin:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -2690,8 +2688,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -2925,6 +2922,7 @@
         ],
         "description": "Mints a new API key for an organization. The body org_id MUST equal the caller's own org; cross-tenant minting is rejected 403. The raw key is returned ONCE and cannot be retrieved again. Requires the admin:write scope and supports Idempotency-Key.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -2961,8 +2959,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -3027,10 +3024,8 @@
                           "type": "string"
                         },
                         "rate_limit_rpm": {
-                          "type": [
-                            "null",
-                            "number"
-                          ]
+                          "type": "number",
+                          "nullable": true
                         },
                         "permissions": {
                           "type": "array",
@@ -3279,10 +3274,8 @@
                             }
                           },
                           "rate_limit_rpm": {
-                            "type": [
-                              "null",
-                              "number"
-                            ]
+                            "type": "number",
+                            "nullable": true
                           },
                           "is_active": {
                             "type": "boolean"
@@ -3291,16 +3284,12 @@
                             "type": "string"
                           },
                           "expires_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "last_used_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           }
                         }
                       }
@@ -3489,10 +3478,8 @@
                           "type": "string"
                         },
                         "rate_limit_rpm": {
-                          "type": [
-                            "null",
-                            "number"
-                          ]
+                          "type": "number",
+                          "nullable": true
                         },
                         "permissions": {
                           "type": "array",
@@ -4648,52 +4635,36 @@
                       "type": "number"
                     },
                     "response_status": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
+                      "type": "number",
+                      "nullable": true
                     },
                     "signature_version": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "signature_hex": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "signed_at_unix": {
-                      "type": [
-                        "null",
-                        "number"
-                      ]
+                      "type": "number",
+                      "nullable": true
                     },
                     "signed_canonical_payload": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "delivery_id_header": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "last_error": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "dlq_at": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "created_at": {
                       "type": "string"
@@ -5043,6 +5014,7 @@
         ],
         "description": "Registers a webhook endpoint for the caller's org (multiple endpoints per org are supported). Unless skip_verification is true, a verification ping carrying a challenge token is sent and the endpoint is marked verified on a 2xx response. A secret is generated when omitted, and the secret is returned ONCE and cannot be retrieved again. Requires the admin:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -5077,8 +5049,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -5126,19 +5097,15 @@
                       "type": "string"
                     },
                     "event_types": {
-                      "type": [
-                        "null",
-                        "array"
-                      ],
+                      "type": "array",
                       "items": {
                         "type": "string"
-                      }
+                      },
+                      "nullable": true
                     },
                     "description": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "is_active": {
                       "type": "boolean"
@@ -5147,10 +5114,8 @@
                       "type": "boolean"
                     },
                     "verification_error": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "created_at": {
                       "type": "string"
@@ -5355,34 +5320,26 @@
                             "type": "string"
                           },
                           "event_types": {
-                            "type": [
-                              "null",
-                              "array"
-                            ],
+                            "type": "array",
                             "items": {
                               "type": "string"
-                            }
+                            },
+                            "nullable": true
                           },
                           "description": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "is_active": {
                             "type": "boolean"
                           },
                           "verified_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "last_success_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "consecutive_failures": {
                             "type": "number"
@@ -5562,10 +5519,8 @@
                       "type": "boolean"
                     },
                     "error": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     }
                   }
                 }
@@ -5712,6 +5667,7 @@
         ],
         "description": "Updates an existing webhook endpoint's url, event_types, description, or is_active flag. Changing the url re-validates it against outbound rules and invalidates the prior verification (verified_at is cleared). Scoped to the caller's org. Requires the admin:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -5730,11 +5686,9 @@
                     "maxItems": 64
                   },
                   "description": {
-                    "type": [
-                      "string",
-                      "null"
-                    ],
-                    "maxLength": 500
+                    "type": "string",
+                    "maxLength": 500,
+                    "nullable": true
                   },
                   "is_active": {
                     "type": "boolean"
@@ -5801,28 +5755,22 @@
                       "type": "string"
                     },
                     "event_types": {
-                      "type": [
-                        "null",
-                        "array"
-                      ],
+                      "type": "array",
                       "items": {
                         "type": "string"
-                      }
+                      },
+                      "nullable": true
                     },
                     "description": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "is_active": {
                       "type": "boolean"
                     },
                     "verified_at": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "consecutive_failures": {
                       "type": "number"
@@ -6182,6 +6130,7 @@
         ],
         "description": "Rotates the signing secret for a webhook endpoint. A new secret is generated when one is not supplied, and the new secret is returned ONCE and cannot be retrieved again. Scoped to the caller's org. Requires the admin:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -6255,10 +6204,8 @@
                       "type": "string"
                     },
                     "secret_rotated_at": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "warning": {
                       "type": "string"
@@ -6492,19 +6439,15 @@
                             "type": "number"
                           },
                           "last_signed_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "created_at": {
                             "type": "string"
                           },
                           "revoked_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           }
                         }
                       }
@@ -6827,6 +6770,7 @@
         ],
         "description": "Prepares an Accumulate transaction intent following the propose -> sign -> submit pattern. For external-mode identities the response returns `signing_data.hash_to_sign` plus a `submit_url`; the caller signs client-side and posts the signature to POST /v1/transaction/{id}/signature. For provider-mode identities the gateway auto-signs and submits in one step, returning the submitted `tx_hash`. Supports an Idempotency-Key (header or `idempotency_key` body field): a prior non-failed intent for the same key is returned unchanged. Requires the `transaction:write` scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -6852,6 +6796,19 @@
                       "adiUrl": {
                         "type": "string",
                         "description": "Signer ADI for a multi-leg intent, e.g. acc://your-org.acme"
+                      },
+                      "additionalAuthorities": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "Same as the top-level `additional_authorities`. If both are sent they must agree.",
+                        "nullable": true
+                      },
+                      "expiresAt": {
+                        "type": "string",
+                        "description": "Same as the top-level `expires_at`. If both are sent they must agree.",
+                        "nullable": true
                       },
                       "legs": {
                         "type": "array",
@@ -6948,9 +6905,47 @@
                     "default": "on_demand",
                     "description": "How the proof cycle is scheduled. `on_demand` (default) starts immediately and completes in roughly 60-110 seconds — use it for anything a user is waiting on. `on_cadence` batches this proof with others, which costs less per proof and takes longer; use it for bulk settlement where latency does not matter. The choice affects only WHEN the proof is produced, never what it proves or how strong it is."
                   },
+                  "subject": {
+                    "type": "object",
+                    "required": [
+                      "adi"
+                    ],
+                    "additionalProperties": false,
+                    "description": "The end user this transaction is about, carried to your policy engine as `subject`. It is an ASSERTION by you, not a proof by the user — nothing on chain binds it — so an engine treats it as an input to a decision, never as an authorization.",
+                    "properties": {
+                      "adi": {
+                        "type": "string",
+                        "pattern": "^acc://",
+                        "description": "The user's Accumulate ADI, e.g. acc://alice.acme. The identity, and what enrollment bound."
+                      },
+                      "key_book": {
+                        "type": "string",
+                        "pattern": "^acc://",
+                        "description": "Optional hint, never the identity. A book can live under an ADI without governing it, and an ADI can be governed by several — so a book is one authority among N. It stops speaking for an identity when `UpdateAccountAuth` removes or disables it, not when its keys rotate; read the ADI authority set at verification time."
+                      },
+                      "id": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "description": "Your own opaque reference for this person."
+                      }
+                    }
+                  },
                   "idempotency_key": {
                     "type": "string",
                     "maxLength": 255
+                  },
+                  "additional_authorities": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Key books that must ALSO sign this one transaction, written into the Accumulate transaction header (`authorities`). At most 8; each an `acc://` key book URL; lowercased and deduplicated; never the principal ADI's own book (`<adi>/book`). Accumulate holds the transaction until every one signs. NOTE: refused with 422 `HEADER_AUTHORITY_NOT_EXECUTABLE` on deployments running the default `INTENT_HEADER_AUTHORITIES=reject`, because CERTEN validators do not yet count header-authority signatures (such an intent is delivered but never executes). Use an account-level authority on `<adi>/data` (POST /v1/governance add_authority) for a party that must approve execution.",
+                    "nullable": true
+                  },
+                  "expires_at": {
+                    "type": "string",
+                    "description": "RFC 3339 date-time with a timezone (e.g. `2026-09-14T12:00:00Z`), written into the transaction header as `expire.atTime` in whole seconds. Must be between INTENT_EXPIRY_MIN_S (default 60 s) and INTENT_EXPIRY_MAX_S (default 7 days) from now. If every required authority has not signed by then, the transaction can no longer complete and the intent ends `failed` with `reason_code: expired` (no fee, no gas). Omit, or send null, for no expiry.",
+                    "nullable": true
                   },
                   "signer_key_page": {
                     "type": "string",
@@ -6961,27 +6956,11 @@
                     "type": "string",
                     "pattern": "^[a-fA-F0-9]{64}$",
                     "description": "Which seat on the identity's key page will sign this intent, as 64-char hex. Optional; defaults to the identity's bound key. Use it on an M-of-N panel so any seat can open a transaction — for example an agent proposing a resolution that a human then finalizes. Must be the bound key or a current member of the key page, and cannot be combined with a provider-signed identity. The returned hash_to_sign is bound to this key, so the signature posted to /signature must come from it."
-                  },
-                  "additional_authorities": {
-                    "type": "array",
-                    "maxItems": 8,
-                    "items": {
-                      "type": "string",
-                      "pattern": "^acc://",
-                      "maxLength": 512
-                    },
-                    "description": "Extra Accumulate key books (acc://…, each at most 512 characters) added to the transaction HEADER as authorities that must also sign. Trimmed, lowercased, stripped of trailing slashes and de-duplicated by the gateway, then at most 8 distinct books. REFUSED BY DEFAULT: with INTENT_HEADER_AUTHORITIES=reject (the default) a non-empty list returns 422 HEADER_AUTHORITY_NOT_EXECUTABLE, because CERTEN validators do not yet count a header authority's signature and such an intent would never execute. Put a required co-signer on the ACCOUNT's authorities instead."
-                  },
-                  "expires_at": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": "RFC 3339 deadline (with timezone) forwarded to Accumulate as the transaction header expiry, truncated to whole seconds. Must be between INTENT_EXPIRY_MIN_S (default 60) and INTENT_EXPIRY_MAX_S (default 604800, 7 days) seconds from now, else 400 EXPIRES_AT_OUT_OF_RANGE. If required signatures are still missing when it passes, the intent ends failed with reason_code `expired`: nothing executes and no fee or gas is charged."
                   }
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -7062,22 +7041,29 @@
                       }
                     },
                     "submit_url": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "tx_hash": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "proof_id": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "additional_authorities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Transaction-header additional authorities the intent was created with; null when none.",
+                      "nullable": true
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "description": "Transaction-header deadline (RFC 3339, whole seconds); null when the intent never expires.",
+                      "nullable": true
                     },
                     "idempotent": {
                       "type": "boolean"
@@ -7088,7 +7074,7 @@
             }
           },
           "400": {
-            "description": "Validation failed (missing/invalid identity_id or intent, or identity not active/missing key configuration).",
+            "description": "Validation failed (missing/invalid identity_id or intent, or identity not active/missing key configuration). Header conditions carry specific codes: ADDITIONAL_AUTHORITIES_INVALID, ADDITIONAL_AUTHORITY_IS_PRINCIPAL_BOOK, EXPIRES_AT_INVALID, EXPIRES_AT_OUT_OF_RANGE.",
             "headers": {
               "x-ratelimit-limit": {
                 "schema": {
@@ -7109,7 +7095,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "Validation failed (missing/invalid identity_id or intent, or identity not active/missing key configuration).",
+                  "description": "Validation failed (missing/invalid identity_id or intent, or identity not active/missing key configuration). Header conditions carry specific codes: ADDITIONAL_AUTHORITIES_INVALID, ADDITIONAL_AUTHORITY_IS_PRINCIPAL_BOOK, EXPIRES_AT_INVALID, EXPIRES_AT_OUT_OF_RANGE.",
                   "type": "object",
                   "additionalProperties": true
                 }
@@ -7203,10 +7189,7 @@
                       }
                     },
                     "resolve": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": "object",
                       "additionalProperties": true,
                       "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
                       "properties": {
@@ -7238,7 +7221,8 @@
                         "note": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "nullable": true
                     },
                     "how_to_pay": {
                       "type": "object",
@@ -7283,7 +7267,7 @@
             }
           },
           "422": {
-            "description": "HEADER_AUTHORITY_NOT_EXECUTABLE — additional_authorities was non-empty and this gateway refuses header authorities (INTENT_HEADER_AUTHORITIES=reject, the default).",
+            "description": "`HEADER_AUTHORITY_NOT_EXECUTABLE`: `additional_authorities` was supplied on a deployment that refuses them (INTENT_HEADER_AUTHORITIES=reject, the default) because CERTEN validators do not yet count header-authority signatures. Use an account-level authority instead.",
             "headers": {
               "x-ratelimit-limit": {
                 "schema": {
@@ -7304,7 +7288,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "HEADER_AUTHORITY_NOT_EXECUTABLE — additional_authorities was non-empty and this gateway refuses header authorities (INTENT_HEADER_AUTHORITIES=reject, the default).",
+                  "description": "`HEADER_AUTHORITY_NOT_EXECUTABLE`: `additional_authorities` was supplied on a deployment that refuses them (INTENT_HEADER_AUTHORITIES=reject, the default) because CERTEN validators do not yet count header-authority signatures. Use an account-level authority instead.",
                   "type": "object",
                   "additionalProperties": true
                 }
@@ -7393,6 +7377,7 @@
         ],
         "description": "Submits the caller-computed signature for an external-mode transaction intent — the single initiating signature over the `hash_to_sign` returned by POST /v1/transaction. The submitted `public_key` must match the identity's bound key. On success the gateway relays the signed intent to api-bridge and atomically transitions the intent from `signing_required` to `submitted`. Requires the `transaction:write` scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -7413,8 +7398,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -7472,10 +7456,8 @@
                       "type": "string"
                     },
                     "tx_hash": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     }
                   }
                 }
@@ -7570,7 +7552,7 @@
             }
           },
           "409": {
-            "description": "Intent was already submitted by a concurrent request.",
+            "description": "Intent was already submitted by a concurrent request (`CONFLICT`), or its `expires_at` passed before it was signed (`INTENT_EXPIRED`; the intent is now failed/expired).",
             "headers": {
               "x-ratelimit-limit": {
                 "schema": {
@@ -7591,7 +7573,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "Intent was already submitted by a concurrent request.",
+                  "description": "Intent was already submitted by a concurrent request (`CONFLICT`), or its `expires_at` passed before it was signed (`INTENT_EXPIRED`; the intent is now failed/expired).",
                   "type": "object",
                   "additionalProperties": true
                 }
@@ -7734,70 +7716,210 @@
                       "type": "string"
                     },
                     "status": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Where the intent is: `created`, `signing_required`, `submitted`, `processing`, `anchoring` (in flight); `executed` - the action EXECUTED on its chain and its proof bundle is pending; CERTEN produces it automatically, the fee is held meanwhile, and the intent then reads `completed`. Not a failure. `completed` (executed and proven); `completed_unproven` - executed, and its proof can never be produced (declared by an operator with the evidence; billed gas only, fee waived); `failed`; `expired`."
                     },
                     "intent_type": {
                       "type": "string"
                     },
-                    "accum_tx_hash": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
-                    },
-                    "proof_id": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
-                    },
-                    "proof_bundle_url": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
-                    },
-                    "error_message": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
-                    },
-                    "reason_code": {
-                      "type": [
-                        "null",
-                        "string"
-                      ],
-                      "description": "Why the intent ended where it did, as a stable value. `target_reverted`: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call (a business outcome; retrying the identical call reverts again). `expired`: the Accumulate deadline (expires_at) passed before every required signature arrived; nothing executed, no fee or gas. `expectation_unmet`: a contract call executed but its committed expectedEvents are absent from the destination receipt; not a success. Other values: `policy_denied`, `network_failed`, `post_submission_timeout`, `pre_submission_error`; the set may grow. Null when the intent has not ended, or ended without a recorded reason."
-                    },
-                    "additional_authorities": {
-                      "type": [
-                        "null",
-                        "array"
-                      ],
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "Header authorities the intent was opened with, as normalised by the gateway."
-                    },
-                    "expires_at": {
-                      "type": [
-                        "null",
-                        "string"
-                      ],
-                      "description": "The Accumulate deadline the intent was opened with (RFC 3339), or null."
-                    },
                     "completion_basis": {
-                      "type": [
-                        "null",
-                        "string"
-                      ],
+                      "type": "string",
                       "enum": [
                         "proof_artifact",
                         "execution_observed",
+                        "chain_receipt",
                         null
                       ],
-                      "description": "What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed."
+                      "description": "What completion rested on. `proof_artifact`: the validators produced an indexed proof (`proof_id`). `execution_observed`: the gateway observed the destination-chain settlement; for a contract call it also read the settlement receipt and found every committed `expectedEvents` entry. A contract call whose committed events are absent never completes: it fails with `reason_code` `expectation_unmet` (or `expectation_unverifiable` when the receipt could not be read in time). Receipts are read on EVM chains only: a contract call whose legs are all on non-EVM chains completes on observed execution with `completion_evidence.expected_events.verified: false` (`reason: non_evm_receipts_not_supported`), and in a mixed intent only the EVM legs are checked. `chain_receipt` appears only on legacy rows. Null until the intent completes.",
+                      "nullable": true
+                    },
+                    "accum_tx_hash": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "proof_lookup": {
+                      "type": "object",
+                      "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+                      "additionalProperties": false,
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "resolved",
+                            "not_found",
+                            "unavailable"
+                          ]
+                        },
+                        "status": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "proof_id": {
+                      "type": "string",
+                      "description": "The CERTEN proof artifact for this transaction. Feed it to POST /v1/proof/{id}/share to mint a link a counterparty can resolve without a CERTEN account. An intent completes only on the verdict of the validators, with its proof (RB5-F39), so a `completed` intent carries it. It is null while the intent is in flight, and while it is `executed` with its proof bundle still pending. This endpoint resolves it from the proof service on read. An intent on several chains has one proof per chain member: it completes only when every chain names its own proof and none of them records a revert, this is its first declared chain's, and `proofs` lists every one with the legs it settles.",
+                      "nullable": true
+                    },
+                    "proof_bundle_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "proofs": {
+                      "type": "array",
+                      "description": "Every chain member's proof, as the validators recorded it: one per chain an intent settles on (a single-chain intent has one), each with its own bundle link. For an intent on several chains, in the order it declares them, each with `legs`. Empty until the validators have produced one.",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "chain_id": {
+                            "type": "integer"
+                          },
+                          "legs": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            },
+                            "description": "Present for an intent on several chains: the indices of its request legs on this chain, which share this chain's proof. Empty for a chain the intent does not declare."
+                          },
+                          "proof_id": {
+                            "type": "string"
+                          },
+                          "proof_bundle_url": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "write_back_tx": {
+                            "type": "string",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "validator": {
+                      "type": "object",
+                      "description": "What the CERTEN validators recorded for this intent, followed until it is final - also after the gateway has ended the intent. Null until first observed.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "not_discovered",
+                            "in_progress",
+                            "awaiting_signatures",
+                            "settling",
+                            "settled",
+                            "refused",
+                            "failed",
+                            "unavailable",
+                            "executed_proof_pending",
+                            "executed_proof_unavailable"
+                          ]
+                        },
+                        "since": {},
+                        "overdue": {
+                          "type": "boolean",
+                          "description": "Delivered on Accumulate and not discovered by the validators within VALIDATOR_DISCOVERY_OVERDUE_MIN."
+                        },
+                        "members": {
+                          "type": "array",
+                          "description": "Every chain member, each with its own settlement, write-back and proof. Null when the validators reported none.",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "chain_id": {
+                                "type": "integer"
+                              },
+                              "recorded": {
+                                "type": "boolean"
+                              },
+                              "settlement": {
+                                "type": "string",
+                                "enum": [
+                                  "settled",
+                                  "reverted",
+                                  "unobserved",
+                                  "none",
+                                  null
+                                ],
+                                "nullable": true
+                              },
+                              "proof_cycle": {
+                                "type": "string",
+                                "enum": [
+                                  "written",
+                                  "failed",
+                                  "proof_pending",
+                                  "proof_unavailable",
+                                  "refused",
+                                  null
+                                ],
+                                "nullable": true
+                              },
+                              "settlement_tx": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "write_back_tx": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "proof_id": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "proof_bundle_url": {
+                                "type": "string",
+                                "nullable": true
+                              },
+                              "effects_proven": {
+                                "type": "boolean",
+                                "nullable": true
+                              }
+                            }
+                          },
+                          "nullable": true
+                        },
+                        "disagreement": {
+                          "type": "object",
+                          "description": "When the validators' final outcome contradicts how the gateway ended the intent: what differs, and since when. Null while they agree or the validators have not finished.",
+                          "additionalProperties": false,
+                          "properties": {
+                            "what": {
+                              "type": "string"
+                            },
+                            "since": {}
+                          },
+                          "nullable": true
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "error_message": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "reason_code": {
+                      "type": "string",
+                      "description": "Why the intent ended where it did, as a stable value rather than prose. `target_reverted` is the one to branch on: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call. That is a business outcome — it is billed, and retrying the identical call reverts again. `validator_refused`: the validators refused the intent itself (it cannot be settled as written, no entitlement, or its governance fell short); nothing executed. `validator_unprocessed`, `chain_settlement_failed`, `validator_failed_unclassified`, `post_submission_timeout`, `network_failed`, `pre_submission_error`, `relayer_exhausted`, `expectation_unmet`, `expectation_unverifiable`: CERTEN did not complete. `execution_proof_unavailable` (status `completed_unproven`): the action executed, and its proof can never be produced. Null when the intent has not ended, or ended without a recorded reason. `expired` means the `expires_at` deadline passed before every required authority signed; nothing executed and nothing is charged. A deadline-derived `expired` on a submitted transaction is re-checked for INTENT_EXPIRY_RECHECK_HOURS and reopened if Accumulate reports it delivered after all.",
+                      "nullable": true
+                    },
+                    "additional_authorities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "Transaction-header additional authorities the intent was created with; null when none.",
+                      "nullable": true
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "description": "Transaction-header deadline (RFC 3339, whole seconds); null when the intent never expires.",
+                      "nullable": true
                     },
                     "created_at": {},
                     "updated_at": {},
@@ -7810,14 +7932,63 @@
                           "type": "string"
                         },
                         "bundle_url": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         },
                         "layers": {},
                         "governance": {},
-                        "attestations": {}
+                        "attestations": {},
+                        "parts": {
+                          "type": "object",
+                          "description": "Per part, what the proof service answered: `present`, `absent` (it holds none - its 404) or `unavailable` (it failed to answer; the part is null because it is not known, never because it is empty). RB4-F40.",
+                          "additionalProperties": false,
+                          "properties": {
+                            "layers": {
+                              "type": "string",
+                              "enum": [
+                                "present",
+                                "absent",
+                                "unavailable"
+                              ]
+                            },
+                            "governance": {
+                              "type": "string",
+                              "enum": [
+                                "present",
+                                "absent",
+                                "unavailable"
+                              ]
+                            },
+                            "attestations": {
+                              "type": "string",
+                              "enum": [
+                                "present",
+                                "absent",
+                                "unavailable"
+                              ]
+                            }
+                          }
+                        },
+                        "unavailable": {
+                          "type": "array",
+                          "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and reason. Empty when every part was answered.",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "part": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
                       }
                     }
                   }
@@ -8011,58 +8182,56 @@
                             "type": "string"
                           },
                           "accum_tx_hash": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "proof_id": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "proof_lookup": {
+                            "type": "object",
+                            "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+                            "additionalProperties": false,
+                            "properties": {
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "resolved",
+                                  "not_found",
+                                  "unavailable"
+                                ]
+                              },
+                              "status": {
+                                "type": "integer",
+                                "nullable": true
+                              },
+                              "reason": {
+                                "type": "string"
+                              }
+                            }
                           },
                           "error_message": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "reason_code": {
-                            "type": [
-                              "null",
-                              "string"
-                            ],
-                            "description": "Why the intent ended where it did — `target_reverted`, `expired`, `expectation_unmet`, … See GET /v1/transaction/{id}."
+                            "type": "string",
+                            "description": "Why the intent ended where it did. `target_reverted` means the destination contract rejected the call, which is a business outcome rather than a CERTEN failure. See GET /v1/transaction/{id}.",
+                            "nullable": true
                           },
                           "additional_authorities": {
-                            "type": [
-                              "null",
-                              "array"
-                            ],
+                            "type": "array",
                             "items": {
                               "type": "string"
                             },
-                            "description": "Header authorities the intent was opened with, as normalised by the gateway."
+                            "description": "Transaction-header additional authorities the intent was created with; null when none.",
+                            "nullable": true
                           },
                           "expires_at": {
-                            "type": [
-                              "null",
-                              "string"
-                            ],
-                            "description": "The Accumulate deadline the intent was opened with (RFC 3339), or null."
-                          },
-                          "completion_basis": {
-                            "type": [
-                              "null",
-                              "string"
-                            ],
-                            "enum": [
-                              "proof_artifact",
-                              "execution_observed",
-                              null
-                            ],
-                            "description": "What a completed status rests on: `proof_artifact` (an indexed CERTEN proof artifact) or `execution_observed` (execution measured on the destination chain; for a contract call, only after the committed expectedEvents were found in the receipt). Null until completed."
+                            "type": "string",
+                            "description": "Transaction-header deadline (RFC 3339, whole seconds); null when the intent never expires.",
+                            "nullable": true
                           },
                           "created_at": {},
                           "updated_at": {},
@@ -9245,6 +9414,7 @@
         ],
         "description": "Mint a time-boxed, revocable link that lets someone WITHOUT a Certen account fetch this proof bundle. The raw token is returned ONCE and is not recoverable afterwards — store the url or mint a new share. Requires the proof:read scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -10073,7 +10243,7 @@
     "/v1/chains": {
       "get": {
         "summary": "List the chains CERTEN is deployed on, with contract addresses",
-        "description": "The contract registry: anchor, account factory, and BLS/ZK verifier addresses per network, with explorer links and on-chain verification status. PUBLIC — no API key required. `verified: true` means the address was confirmed to carry contract bytecode via eth_getCode; non-EVM entries are transcribed from validator configuration and are not independently verified.",
+        "description": "The contract registry: anchor, account factory, and BLS/ZK verifier addresses per network, with explorer links and on-chain verification status. PUBLIC — no API key required. `verified: true` means the address was confirmed to carry contract bytecode via eth_getCode; non-EVM entries are transcribed from validator configuration and are not independently verified. Only the networks enabled on this gateway are listed; a chain that is not enabled is not quotable or linkable.",
         "parameters": [
           {
             "schema": {
@@ -10172,7 +10342,7 @@
     "/v1/chains/{id}": {
       "get": {
         "summary": "Get one chain and its contract addresses",
-        "description": "Accepts either the registry id (`ethereum-sepolia`) or the numeric EVM chain id (`11155111`). PUBLIC — no API key required.",
+        "description": "Accepts either the registry id (`ethereum-sepolia`) or the numeric EVM chain id (`11155111`). PUBLIC — no API key required. A network that is not enabled on this gateway answers 404, naming it.",
         "parameters": [
           {
             "schema": {
@@ -10518,6 +10688,7 @@
         ],
         "description": "Mints a one-time token that lets a machine create a NEW organization and its first API key without a browser session. The token is returned once and cannot be retrieved again. What the new organization will be — its plan, and what its first key may do — is fixed here by the minter, not chosen by the redeemer. Operator and wildcard scopes cannot be granted this way. Requires the org:invite scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -11069,6 +11240,7 @@
         ],
         "description": "Exchanges a one-time registration token for a NEW organization and its first API key. Needs no credential — obtaining one is the point. The API key is returned once and cannot be retrieved again. Single-use: a second redemption of the same token is refused. Unknown, expired, revoked and already-redeemed tokens are all reported identically, so the endpoint cannot be used to probe which guesses were close.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -11091,8 +11263,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [],
         "x-retry-safety": "guarded-by-state",
@@ -11241,6 +11412,7 @@
         ],
         "description": "Issues a single-use, short-lived nonce for keypair-proof signup. Sign the RAW BYTES of the returned hex nonce with your Ed25519 private key and present the detached signature to POST /v1/signup. Needs no credential — obtaining one is the point. Supplying public_key binds the challenge to that key, so nobody else can answer it.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -11413,6 +11585,7 @@
         ],
         "description": "Verifies an Ed25519 signature over a nonce from /v1/signup/challenge and provisions a NEW organization with its first API key. No browser, no email, no operator approval. The API key is returned once and cannot be retrieved again. One key provisions one organization, ever — a second attempt with the same key is refused.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -11443,8 +11616,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [],
         "x-retry-safety": "guarded-by-state",
@@ -11638,8 +11810,9 @@
         "tags": [
           "Governance"
         ],
-        "description": "Submit one or more governance operations against an identity's key page, its account authorities, or its key book. Key-page operations (add_key/remove_key, set_threshold for the M-of-N acceptThreshold, add_delegate/remove_delegate), authority operations (add_authority/remove_authority) and key-page creation (create_key_page) are three separate kinds and cannot be mixed in a single request. create_key_page takes public_key_hash and adds a page to the identity's book: a book holds pages at descending priority (lower index is higher priority) and a page may only be modified by one of equal or higher priority, so a new lower-priority page can carry automated seats while the existing page keeps the authority to rewrite it. Accumulate authorizes at BOOK level, so any page can act for the book's accounts with its own threshold — name the page on a transaction using signer_key_page. For external-mode identities the response returns signing_data (including hash_to_sign) and a submit_url for the two-step flow; for provider-mode identities the operation is auto-signed and submitted, returning a completed status with tx_hash. Build a multi-sig identity by adding keys (add_key) then raising the threshold (set_threshold) to reach M-of-N. Requires the governance:write scope and is idempotent via the Idempotency-Key header.",
+        "description": "Submit one or more governance operations against an identity's key page, its account authorities, or its key book. Authority operations take an optional account_url (the ADI or an account under it, e.g. its key book acc://<adi>/book) — Accumulate authorizes each account by its own authority set, so an authority on the ADI governs its data and token accounts, while one on the key book also governs changes to the key page. Key-page operations (add_key/remove_key, set_threshold for the M-of-N acceptThreshold, add_delegate/remove_delegate), authority operations (add_authority/remove_authority) and key-page creation (create_key_page) are three separate kinds and cannot be mixed in a single request. create_key_page takes public_key_hash and adds a page to the identity's book: a book holds pages at descending priority (lower index is higher priority) and a page may only be modified by one of equal or higher priority, so a new lower-priority page can carry automated seats while the existing page keeps the authority to rewrite it. Accumulate authorizes at BOOK level, so any page can act for the book's accounts with its own threshold — name the page on a transaction using signer_key_page. For external-mode identities the response returns signing_data (including hash_to_sign) and a submit_url for the two-step flow; for provider-mode identities the operation is auto-signed and submitted, returning a completed status with tx_hash. Build a multi-sig identity by adding keys (add_key) then raising the threshold (set_threshold) to reach M-of-N. Requires the governance:write scope and is idempotent via the Idempotency-Key header.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -11679,8 +11852,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -11872,10 +12044,7 @@
                       }
                     },
                     "resolve": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": "object",
                       "additionalProperties": true,
                       "description": "A live way to pay, built at the moment of refusal. Null if no chain accepts deposits.",
                       "properties": {
@@ -11907,7 +12076,8 @@
                         "note": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "nullable": true
                     },
                     "how_to_pay": {
                       "type": "object",
@@ -12033,6 +12203,7 @@
         ],
         "description": "Submit the detached signature for an external-mode governance operation that is awaiting signing. The operation must be in signing_required status; the signature is forwarded to the network and, on success, the operation transitions to completed with the resulting tx_hash. Requires the governance:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -12053,8 +12224,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -12690,6 +12860,11 @@
                             "type": "boolean",
                             "nullable": true
                           },
+                          "memo": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "What the transaction states it is FOR. Often the only thing separating a legitimate request from an unexplained one when the principal is an account the signer does not own. WRITTEN BY WHOEVER BUILT THE TRANSACTION — for an authority transaction that is not the signer — so treat it as untrusted text: render as plain text, never as markup, and never as though CERTEN endorsed the request. Truncated to 512 characters. Null when the transaction carries no memo."
+                          },
                           "expires_at": {
                             "type": "string",
                             "nullable": true
@@ -12921,6 +13096,7 @@
         ],
         "description": "Multi-signature signing entrypoint. Accumulate multi-sig: a transaction stays PENDING until the key page's acceptThreshold of signers have signed, at which point Accumulate executes it automatically. `type: \"pending_action\"` signs an inbox item (discovered via GET /v1/pending) by its pending-action id (`target_id`). `type: \"pending_tx\"` signs a pending transaction directly BY HASH (`target_id` = the pending tx hash, plus `identity`, `signer_url`, and `public_key`) — used to add an additional key-page signer's vote without waiting for inbox discovery. `type: \"transaction\"` is rejected (use POST /v1/transaction/{id}/signature instead). The signing data is computed for the ACTUAL signer's key, so any key on the page can cast a vote. Provider-mode identities auto-sign and submit the vote; external-mode identities receive signing_data + a submit_url for the 2-step flow. Requires the `sign:write` scope and supports an Idempotency-Key.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -12970,8 +13146,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -13240,6 +13415,7 @@
         ],
         "description": "Submits the caller-computed signature for an external-mode sign request created by POST /v1/sign. The request is claimed atomically (a duplicate or expired submit returns 404), then the vote is relayed to Accumulate via api-bridge. Once enough key-page signers reach acceptThreshold, Accumulate executes the transaction. Requires the `sign:write` scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -13260,8 +13436,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -14412,10 +14587,8 @@
                           "type": "string"
                         },
                         "name": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         }
                       }
                     },
@@ -14427,10 +14600,7 @@
                       "description": "What this credential may do. `*` is the wildcard. See GET /v1/scopes."
                     },
                     "key": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": "object",
                       "additionalProperties": true,
                       "description": "The API key, when one was used. Null for a portal session.",
                       "properties": {
@@ -14438,18 +14608,14 @@
                           "type": "string"
                         },
                         "rate_limit_rpm": {
-                          "type": [
-                            "null",
-                            "integer"
-                          ]
+                          "type": "integer",
+                          "nullable": true
                         }
-                      }
+                      },
+                      "nullable": true
                     },
                     "user": {
-                      "type": [
-                        "null",
-                        "object"
-                      ],
+                      "type": "object",
                       "additionalProperties": true,
                       "description": "The signed-in human, when a session was used. Null for an API key.",
                       "properties": {
@@ -14457,27 +14623,22 @@
                           "type": "string"
                         },
                         "email": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         },
                         "source": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "nullable": true
                     },
                     "active_org_id": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "role": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "orgs": {
                       "type": "array",
@@ -14489,10 +14650,8 @@
                             "type": "string"
                           },
                           "name": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "role": {
                             "type": "string"
@@ -14652,10 +14811,8 @@
                             "type": "string"
                           },
                           "name": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "key_prefix": {
                             "type": "string"
@@ -14667,10 +14824,8 @@
                             }
                           },
                           "rate_limit_rpm": {
-                            "type": [
-                              "null",
-                              "integer"
-                            ]
+                            "type": "integer",
+                            "nullable": true
                           },
                           "is_active": {
                             "type": "boolean"
@@ -14789,6 +14944,7 @@
         "summary": "Create an API key for your organization",
         "description": "Mints a scoped machine API key (ck_live_…) for the active organization; the raw key is returned ONCE. Scopes are restricted to an allowlist. Requires owner/admin role.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -14817,8 +14973,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -14869,10 +15024,8 @@
                           "type": "string"
                         },
                         "name": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         },
                         "permissions": {
                           "type": "array",
@@ -15082,10 +15235,8 @@
                           "type": "string"
                         },
                         "name": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         },
                         "permissions": {
                           "type": "array",
@@ -15466,10 +15617,8 @@
                             "type": "string"
                           },
                           "email": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "role": {
                             "type": "string"
@@ -15576,6 +15725,7 @@
         "summary": "Invite a teammate",
         "description": "Invites a user (by email) to the active organization; they join automatically on their first login. Requires owner/admin role.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -15598,8 +15748,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -15835,10 +15984,8 @@
                             "type": "string"
                           },
                           "label": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "is_active": {
                             "type": "boolean"
@@ -15879,10 +16026,8 @@
                           "expires_at": {},
                           "matched_at": {},
                           "payment_id": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           }
                         },
                         "headers": {
@@ -16013,6 +16158,7 @@
         "summary": "Open a one-time payment",
         "description": "Returns the address to send stablecoin to and opens a single-use intent matched on the EXACT amount within its TTL. Use this for a first deposit — it needs no registered wallet. Requires owner/admin role.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -16033,8 +16179,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -16312,10 +16457,8 @@
                     "expires_at": {},
                     "matched_at": {},
                     "payment_id": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     }
                   }
                 }
@@ -16456,6 +16599,7 @@
         "summary": "Register a wallet you pay from",
         "description": "Every future deposit from this address credits this organization automatically. An address may belong to only ONE organization per chain — a duplicate is refused rather than merged, because ambiguous attribution would credit the wrong customer. Requires owner/admin role.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -16480,8 +16624,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -16527,10 +16670,8 @@
                       "type": "string"
                     },
                     "label": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "is_active": {
                       "type": "boolean"
@@ -16946,6 +17087,7 @@
         "summary": "Start a CLI device authorization",
         "description": "Allocates a device code and a short user code so a terminal can obtain its own API key without a human copying a secret. PUBLIC — the caller has no credential yet, which is the point. This grants nothing on its own: the request belongs to no organization until a signed-in owner or admin approves it, and the key is minted only when the device collects it with the device code. The device code is returned ONCE and stored only as an HMAC.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -17281,6 +17423,7 @@
         "summary": "Approve a CLI device authorization",
         "description": "Attaches the caller's organization to a pending device request, allowing that device to collect an API key. Requires a Firebase ID token AND owner/admin role — the same bar as minting a key by hand, because that is what this authorizes.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -17296,8 +17439,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -17337,10 +17479,8 @@
                       "type": "boolean"
                     },
                     "device_name": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     },
                     "expires_at": {}
                   }
@@ -17530,6 +17670,7 @@
         "summary": "Deny a CLI device authorization",
         "description": "Refuses a pending device request. Exists so that someone shown a code they did not start has an action to take other than closing the tab — an unrecognised code is the signal that matters most here.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -17545,8 +17686,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -18416,10 +18556,11 @@
                       ]
                     },
                     "suspended_reason": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "enforcing": {
+                      "type": "boolean"
                     },
                     "credit": {
                       "type": "object",
@@ -18435,19 +18576,15 @@
                           ]
                         },
                         "label": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         },
                         "granted_limit_usd": {
                           "type": "string"
                         },
                         "expires_at": {
-                          "type": [
-                            "null",
-                            "string"
-                          ]
+                          "type": "string",
+                          "nullable": true
                         },
                         "expired": {
                           "type": "boolean"
@@ -18715,6 +18852,7 @@
         "summary": "Price a proof-gated execution before submitting it",
         "description": "Returns a single-use, expiring quote with a full breakdown and a `max_total_usd` cap that will not be exceeded even if gas moves during execution. Every input is published and the total is recomputable: the platform fee comes from a hash-identified price book, the FX rate from a signed observation, and the gas estimate from costs actually measured on that chain. Pass the returned `quote_id` to POST /v1/transaction to execute at this price. A quote must cover the WHOLE request: name every destination chain in `additional_chains` and the execution class in `proof_class`, or submission is refused as a mismatch. Requires billing:read.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -18756,8 +18894,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -18949,10 +19086,8 @@
                             "type": "string"
                           },
                           "max_charge_usd": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           }
                         }
                       }
@@ -19308,6 +19443,7 @@
         "summary": "Get stablecoin deposit instructions",
         "description": "Returns the CERTEN treasury address to send stablecoin to on the requested chain. Deposits are attributed to your organization in one of two ways: (a) you send from an address registered via POST /v1/billing/deposit-addresses — recommended, works for any amount and every future deposit; or (b) you supply `amount_usd` here, which opens a single-use deposit intent matched on the EXACT amount within its TTL. A deposit that matches neither is held as unattributed until an operator resolves it, so register an address if you can. Requires the billing:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19328,8 +19464,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -19510,10 +19645,8 @@
                     "expires_at": {},
                     "matched_at": {},
                     "payment_id": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
+                      "type": "string",
+                      "nullable": true
                     }
                   }
                 }
@@ -19598,6 +19731,7 @@
         "summary": "Register a sending address for deposit attribution",
         "description": "Registers a wallet address you will send stablecoin from, so any future deposit from it is automatically credited to this organization. An address may belong to only ONE organization per chain — a duplicate registration is rejected rather than merged, because ambiguous attribution would mean crediting the wrong customer. Requires the billing:write scope.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -19622,8 +19756,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -19910,16 +20043,12 @@
                             "type": "string"
                           },
                           "ref_type": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "ref_id": {
-                            "type": [
-                              "null",
-                              "string"
-                            ]
+                            "type": "string",
+                            "nullable": true
                           },
                           "digest": {
                             "type": "string"
@@ -21035,6 +21164,26 @@
               }
             }
           },
+          "304": {
+            "description": "Not modified: the caller already holds this epoch (its If-None-Match matched the ETag).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
             "headers": {
@@ -21073,6 +21222,43 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "No epoch has been published yet. Keep using the cached epoch; an empty set would refuse every intent.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "No epoch has been published yet. Keep using the cached epoch; an empty set would refuse every intent.",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
                 }
               }
             }
@@ -21469,6 +21655,7 @@
         ],
         "description": "Publishes an immutable, content-hashed price book and appends it to the transparency log. This is how fees are set — deliberately NOT environment variables, because every receipt cites the price-book hash it was computed under, and a customer must be able to fetch the exact prices that produced their charge. Republishing the same version with different content is rejected; publish a new version instead. The previous open-ended book of the same kind is closed automatically so exactly one is in force at any instant.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -21548,8 +21735,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -21669,6 +21855,7 @@
         ],
         "description": "Registers the ed25519 key that signs receipts, FX observations, and transparency-log heads, and appends the registration to the transparency log so the key history is itself anchored. The new key becomes active and the incumbent is retired with its validity window left open in the past, so receipts it already signed stay verifiable — that is what makes rotation safe rather than merely relocating trust.\n\nFor KMS/Vault-backed keys the private half never reaches this process: supply the public key and the provider config, and signing is delegated. `env-seed` is development-grade — it holds key material in process memory from BILLING_RECEIPT_SIGNING_SEED — and registering one in production is an explicit, logged choice rather than something that happens silently.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -21707,8 +21894,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "security": [
           {
@@ -21827,6 +22013,7 @@
         ],
         "description": "Marks a key revoked (or COMPROMISED) and logs the event. The distinction matters: signatures from a retired key remain trustworthy inside its validity window, while a compromised key means every signature under it is suspect from the compromise onward — bounded by whichever tree heads were anchored before it.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -21845,8 +22032,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -21947,6 +22133,7 @@
         ],
         "description": "Points one organization at a specific price book — used for partner wholesale rates and negotiated enterprise pricing. Orgs with no assignment use the current public book.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -21961,8 +22148,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -22155,6 +22341,7 @@
         ],
         "description": "Assigns a deposit to an organization and credits it through the normal ledger path — double entry, signed receipt, transparency log. Verify the sending address belongs to that customer BEFORE calling this: it moves real money and the resulting receipt is permanent and anchored. Set `register_address` to also record the sender so that customer's future deposits attribute automatically and never reach this queue again.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
@@ -22172,8 +22359,7 @@
                 }
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
