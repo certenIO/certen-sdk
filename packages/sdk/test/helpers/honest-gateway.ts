@@ -13,12 +13,12 @@ const hexOf = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('hex');
 
 export async function honestIntent(
   body: any,
-  opts: { intentId?: string; publicKey?: string; keyPage?: string; submitUrl?: string; status?: number } = {},
+  opts: { intentId?: string; publicKey?: string; keyPage?: string; submitUrl?: string; status?: number; adiUrl?: string } = {},
 ) {
   const intentId = opts.intentId ?? 'intent-1';
   const publicKey = opts.publicKey ?? body.signer_public_key ?? '11'.repeat(32);
   const intent = body.intent ?? {};
-  const adi = String(intent.adiUrl);
+  const adi = String(opts.adiUrl ?? intent.adiUrl);
   const legs = await legsFromIntent(intent);
   const blobs = [
     { kind: 'CERTEN_INTENT', version: '2.0', intent_id: intentId, leg_count: legs.length },

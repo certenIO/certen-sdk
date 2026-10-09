@@ -201,6 +201,8 @@ export function registerCallCommands(program: Command): void {
         additionalAuthorities,
         // After the prompt and the funding check, so the deadline is now + duration at submission.
         expiresAt: parseExpiresIn(opts.expiresIn),
+        // The SDK has rebuilt the transaction and matched it to this request by the time this runs; a person reads it before the signature.
+        beforeSign: (summary) => { hint(summary.text.join('\n')); },
         sign: (hashHex) => signer.sign(hashHex),
         // The SDK runs the same guard. It is skipped here because the check above already ran and
         // produces the better refusal — it names the faucet for this chain and the --force flag —

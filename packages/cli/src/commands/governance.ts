@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { CertenClient } from '@certen.io/sdk';
+import { CertenClient, checkGovernanceSigning, inspectSigningData, type ExpectedOperation } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint } from '../output.js';
 import { resolveSigner } from '../signer.js';
@@ -42,6 +42,14 @@ async function submitGovernance(
     }
     return;
   }
+  // Rebuild the transaction the gateway returned and match it to the operation asked for, before a signature exists. Nothing is signed on a mismatch.
+  const summary = await checkGovernanceSigning(created.signing_data, {
+    adiUrl: opts.identity,
+    operations: [operation as unknown as ExpectedOperation],
+    signerPublicKey: signer.publicKey,
+    signerKeyPage: opts.signerKeyPage,
+  });
+  hint(summary.text.join('\n'));
   const submitted = await client.governance.submitSignature(created.governance_op_id, {
     signature: signer.sign(hash),
     publicKey: signer.publicKey,
@@ -114,11 +122,27 @@ export function registerGovernanceCommands(program: Command): void {
     });
 
   governance
+    .command('inspect <governance-op-id>')
+    .description('Rebuild what a governance operation asks to be signed, check every hash, and show what a signature would change. Signs nothing.')
+    .option('--signer-public-key <hex>', 'The key that will sign: the signature metadata must name it')
+    .action(async (id, opts) => {
+      const client = await getClient();
+      const op = await client.governance.get(id);
+      if (!op.signing_data) {
+        throw new Error(`Governance operation ${id} carries no signing data (status ${op.status}): there is nothing to sign.`);
+      }
+      const summary = await inspectSigningData(op.signing_data, { signerPublicKey: opts.signerPublicKey });
+      printOutput({ governance_op_id: id, signing: summary } as unknown as Record<string, unknown>);
+      hint(summary.text.join('\n'));
+      hint('Every hash was recomputed and agrees. This shows what the change is; whether it is the change you meant is for you to read above.');
+    });
+
+  governance
     .command('sign <governance-op-id>')
     .description('Submit a signature for a governance operation created without --sign-with')
-    .option('--sign-with <key>', 'Local key to sign with (needs --hash)')
-    .option('--hash <hex>', 'The operation\'s signing_data.hash_to_sign')
-    .option('--signature <hex>', 'A signature produced elsewhere (with --public-key)')
+    .option('--sign-with <key>', 'Refused: a bare hash is never signed (use <operation> --sign-with, which opens and signs in one step)')
+    .option('--hash <hex>', 'Refused: a bare hash is never signed')
+    .option('--signature <hex>', 'A signature produced elsewhere, after `governance inspect` (with --public-key)')
     .option('--public-key <hex>', 'The signing key\'s public key, 64 hex')
     .action(async (id, opts) => {
       const { resolveSignature } = await import('../signer.js');

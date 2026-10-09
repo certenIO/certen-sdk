@@ -14,7 +14,7 @@ export { CertenAgent, ed25519Signer } from './agent.js';
 export type { AgentSigner, CertenAgentState, ProvisionParams } from './agent.js';
 
 export {
-  CertenSigningDataError, checkIntentSigning, checkCosigning, checkGovernanceSigning, legsFromIntent, toBaseUnits,
+  CertenSigningDataError, checkIntentSigning, checkCosigning, checkGovernanceSigning, inspectSigningData, legsFromIntent, toBaseUnits,
   SIGNING_DATA_MISMATCH, SIGNING_DATA_ABSENT, SIGNING_VERIFIER_UNAVAILABLE, SIGNING_EXPECTATION_UNAVAILABLE,
 } from './signing-check.js';
 export type { SigningSummary, ExpectedLeg, ExpectedOperation, Expectation } from './signing-check.js';

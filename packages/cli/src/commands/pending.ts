@@ -1,8 +1,8 @@
 import { Command } from 'commander';
-import { CertenClient, resolveSignTarget, type SignRequestParams } from '@certen.io/sdk';
+import { CertenClient, CertenSigningDataError, resolveSignTarget, checkCosigning, inspectSigningData, type SignRequestParams } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
-import { resolveSignature } from '../signer.js';
+import { resolveSignature, resolveSigner } from '../signer.js';
 import { UsageError } from '../errors.js';
 
 async function getClient(): Promise<CertenClient> {
@@ -84,6 +84,7 @@ export function registerPendingCommands(program: Command): void {
     // Was documented as "accept/reject". The API takes a lowercase `approve` | `reject` |
     // `abstain`; `accept` is rejected. The help text was sending people to a value that fails.
     .option('--vote <vote>', 'Vote: approve | reject | abstain')
+    .option('--sign-with <key>', 'Local key (the one for --public-key): rebuild the transaction, check it, show it, then sign and submit in one step. Transaction hashes only')
     .action(async (rawTarget: string, opts) => {
       // Inferred from the argument, not from a flag: an inbox id is a UUID and a transaction is a
       // 64-hex hash, so the two are disjoint and a --type flag would only be a new way to get it
@@ -133,8 +134,53 @@ export function registerPendingCommands(program: Command): void {
       }
 
       const client = await getClient();
+      if (opts.signWith && target.type !== 'pending_tx') {
+        throw new UsageError(
+          '--sign-with needs a transaction hash: an inbox id does not name the transaction, so there is nothing to check the signing data against. '
+          + 'Give the transaction hash (certen pending list shows it), or sign elsewhere after inspecting.',
+          'SIGN_WITH_NEEDS_TRANSACTION',
+        );
+      }
+      const signer = opts.signWith ? await resolveSigner(opts.signWith) : null;
+      if (signer && signer.publicKey.toLowerCase() !== String(opts.publicKey).toLowerCase()) {
+        throw new UsageError(`--sign-with is the key ${signer.publicKey}, but --public-key names ${opts.publicKey}; the signing data is computed for the key named.`, 'SIGNER_KEY_MISMATCH');
+      }
       const result = await client.sign.create(params);
-      printOutput(result as unknown as Record<string, unknown>);
+      const sd = (result as unknown as { signing_data?: unknown }).signing_data;
+
+      // The signing data is rebuilt and checked here whether or not this command signs: for a transaction named by hash, its own hash, the vote, the
+      // signer and the page. With --sign-with a failure ends the command and nothing is signed. Without it nothing is signed here, but the hash this
+      // prints is meant for a signer elsewhere, so a failure is reported loudly and the output says the data was NOT checked.
+      let summary;
+      let unchecked: { code: string; message: string } | undefined;
+      try {
+        if (target.type === 'pending_tx') {
+          summary = await checkCosigning(sd, {
+            transactionHash: target.targetId,
+            signerPublicKey: opts.publicKey,
+            signerKeyPage: opts.signerUrl,
+            vote: (opts.vote ?? 'approve') as 'approve' | 'reject' | 'abstain',
+          });
+        } else if (sd && (sd as { transaction?: unknown }).transaction) {
+          summary = await inspectSigningData(sd, { existing: true });
+        }
+      } catch (err) {
+        if (signer || !(err instanceof CertenSigningDataError)) throw err;
+        unchecked = { code: err.code, message: err.message };
+        hint(`WARNING: the signing data was NOT checked (${err.code}). Do not sign the hash below elsewhere: ${err.message}`);
+      }
+      if (summary) hint(summary.text.join(String.fromCharCode(10)));
+
+      if (signer) {
+        const r = result as unknown as { sign_request_id: string; signing_data: { data_for_signature: string } };
+        const submitted = await client.sign.submitSignature(r.sign_request_id, {
+          signature: signer.sign(r.signing_data.data_for_signature),
+          publicKey: signer.publicKey,
+        });
+        printOutput({ ...(result as unknown as Record<string, unknown>), ...(submitted as unknown as Record<string, unknown>), signing: summary } as Record<string, unknown>);
+        return;
+      }
+      printOutput({ ...(result as unknown as Record<string, unknown>), ...(summary ? { signing: summary } : {}), ...(unchecked ? { signing_unchecked: unchecked } : {}) } as Record<string, unknown>);
 
       if (isJsonMode()) return;
       // This command creates a sign REQUEST; it does not cast the vote. The two-step shape is not
@@ -148,7 +194,8 @@ export function registerPendingCommands(program: Command): void {
       if (requestId && hash) {
         hint('');
         hint('This opened a sign request — the vote is not cast until the signature is submitted:');
-        hint(`  certen pending submit ${requestId} --sign-with <key> --hash ${hash}`);
+        hint(`  certen pending sign ${rawTarget} ... --sign-with <key>   (rebuilds, checks and signs in one step)`);
+        hint(`  or, to sign elsewhere after reading the summary above: certen pending submit ${requestId} --signature <hex> --public-key <hex>`);
         if (target.type === 'pending_tx') {
           // The signing data was computed FOR the key named by --public-key, and the vote is folded
           // into the preimage. A signature from any other key verifies against nothing, which fails
@@ -161,9 +208,9 @@ export function registerPendingCommands(program: Command): void {
   pending
     .command('submit <id>')
     .description('Submit a signature for a pending sign request')
-    .option('--sign-with <key>', 'Local key to sign with (needs --hash)')
-    .option('--hash <hex>', 'Hash to sign, from the sign request\'s signing data')
-    .option('--signature <sig>', 'Signature (hex) — for an HSM or air-gapped signer')
+    .option('--sign-with <key>', 'Refused: a bare hash is never signed (use pending sign --sign-with)')
+    .option('--hash <hex>', 'Refused: a bare hash is never signed')
+    .option('--signature <sig>', 'Signature (hex) — for an HSM or air-gapped signer, made after reading the summary `pending sign` printed')
     .option('--public-key <key>', 'Public key (hex), required with --signature')
     .action(async (id: string, opts) => {
       const { signature, publicKey } = await resolveSignature({

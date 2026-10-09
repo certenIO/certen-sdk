@@ -146,7 +146,7 @@ export interface IntentSigningContext {
   adiUrl: string;
   /** The intent as sent. */
   intent: Record<string, unknown>;
-  signerPublicKey: string;
+  signerPublicKey?: string;
   signerKeyPage?: string;
   additionalAuthorities?: string[];
   expiresAt?: Date | string;
@@ -154,12 +154,13 @@ export interface IntentSigningContext {
 
 /** Before signing a new intent (`POST /v1/transaction`). */
 export async function checkIntentSigning(signingData: unknown, c: IntentSigningContext): Promise<SigningSummary> {
+  if (!c.adiUrl) unavailable('the identity\'s ADI is not known, so where the intent must be written cannot be checked');
   const legs = await legsFromIntent(c.intent);
   return run((v) => v.verifySigningData(signingData, {
     ...(c.intentId ? { intentId: c.intentId } : {}),
     adiUrl: c.adiUrl,
     legs,
-    signerPublicKey: c.signerPublicKey,
+    ...(c.signerPublicKey ? { signerPublicKey: c.signerPublicKey } : {}),
     ...(c.signerKeyPage ? { signerKeyPage: c.signerKeyPage } : {}),
     additionalAuthorities: c.additionalAuthorities ?? [],
     ...(c.expiresAt ? { expiresAt: c.expiresAt } : {}),
@@ -199,4 +200,13 @@ export async function checkGovernanceSigning(signingData: unknown, c: Governance
     ...(c.signerPublicKey ? { signerPublicKey: c.signerPublicKey } : {}),
     ...(c.signerKeyPage ? { signerKeyPage: c.signerKeyPage } : {}),
   }));
+}
+
+/**
+ * Rebuild and describe signing data without a request to compare it with: every hash is recomputed and must match, and the summary says what
+ * the signature would authorise. It cannot say whether that is what you meant, so it is for inspecting and for a person to read, and signing
+ * after it is the person's decision. `existing` is for a co-signature on a transaction that already exists.
+ */
+export async function inspectSigningData(signingData: unknown, opts: { existing?: boolean; signerPublicKey?: string } = {}): Promise<SigningSummary> {
+  return run((v) => v.verifySigningData(signingData, opts.signerPublicKey ? { signerPublicKey: opts.signerPublicKey } : {}, { existing: opts.existing === true }));
 }
