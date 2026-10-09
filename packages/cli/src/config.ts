@@ -225,8 +225,23 @@ export async function setApiKey(apiKey: string, useKeyring: boolean): Promise<vo
 export async function clearApiKey(): Promise<void> {
   const cfg = readConfig();
   if (cfg.storage === 'keyring') {
+    // The key lives in the OS keyring, so logging out means deleting it there. If the keyring cannot be reached, say so and leave the
+    // configuration as it is rather than reporting a logout that left the key behind.
     const kr = await loadKeyring();
-    if (kr) await kr.deletePassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
+    if (!kr) {
+      throw new UsageError(
+        'storage=keyring but the OS keyring module (`@napi-rs/keyring`) could not be loaded, so the saved key cannot be removed from it; reinstall the CLI with its optional dependencies, or delete the "certen" credential from your OS keyring yourself and then ~/.certen/config.json.',
+        'KEYRING_UNAVAILABLE',
+      );
+    }
+    try {
+      await kr.deletePassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
+    } catch (e) {
+      throw new UsageError(
+        `storage=keyring but the saved key could not be removed from the OS keyring (${e instanceof Error ? e.message : String(e)}); remove the "certen" credential yourself, then ~/.certen/config.json.`,
+        'KEYRING_UNAVAILABLE',
+      );
+    }
   }
   delete cfg.api_key;
   delete cfg.key_prefix;

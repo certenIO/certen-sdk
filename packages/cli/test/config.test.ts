@@ -162,8 +162,25 @@ describe('CLI config: keyring storage', () => {
     expect(pkg.optionalDependencies?.['@napi-rs/keyring']).toMatch(/^\d+\.\d+\.\d+$/);
     expect(JSON.stringify(pkg)).not.toMatch(/keytar/);
     const real = await import('@napi-rs/keyring');
+    // Loading proves the prebuilt native binary matches this platform. Constructing an entry is deliberately not asserted:
+    // on a headless Linux box it touches the (absent) secret service and refuses, which the test above pins by name.
     expect(typeof real.AsyncEntry).toBe('function');
-    expect(() => new real.AsyncEntry('certen-test-no-io', 'api_key')).not.toThrow();
+  });
+
+  it('logout does not claim success when the saved key cannot be removed from the keyring', async () => {
+    vi.doMock('@napi-rs/keyring', () => { throw new Error('native binary missing'); });
+    const c = await loadConfig();
+    mkdirSync(join(scratch, '.certen'), { recursive: true });
+    writeFileSync(CONFIG_FILE(), JSON.stringify({ storage: 'keyring', key_prefix: 'ck_live_pref' }));
+    await expect(c.clearApiKey()).rejects.toMatchObject({ code: 'KEYRING_UNAVAILABLE', message: expect.stringMatching(/cannot be removed from it/) });
+    expect(JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8'))).toMatchObject({ storage: 'keyring', key_prefix: 'ck_live_pref' });
+
+    vi.resetModules();
+    class Refusing { async setPassword(): Promise<void> {} async getPassword(): Promise<string | undefined> { return undefined; } async deletePassword(): Promise<boolean> { throw new Error('no secret service'); } }
+    vi.doMock('@napi-rs/keyring', () => ({ AsyncEntry: Refusing }));
+    const c2 = await loadConfig();
+    await expect(c2.clearApiKey()).rejects.toMatchObject({ code: 'KEYRING_UNAVAILABLE', message: expect.stringMatching(/could not be removed from the OS keyring \(no secret service\)/) });
+    expect(JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8')).storage).toBe('keyring');
   });
 });
 
