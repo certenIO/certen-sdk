@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,8 +11,7 @@ import { CUSTOM_OUTPUT_SCHEMAS, outputSchemaFor } from '../src/output-schemas.js
 import { GENERATED_OUTPUT_SCHEMAS } from '../src/output-schemas.generated.js';
 // @ts-expect-error - plain .mjs generator module, shared so the test and the generator cannot disagree about what is custom
 import { CUSTOM_TOOLS, INTENT_OUTCOME_SCHEMA, toolEndpoints } from '../../../tools/agentgen/emit/mcp-output-schemas.mjs';
-// @ts-expect-error - plain .mjs
-import { toJsonSchema, successSchemaOf } from '../../../tools/agentgen/lib/jsonschema.mjs';
+import { startSpecGateway, type SpecGateway } from './spec-gateway.js';
 
 /**
  * Every tool declares an `outputSchema` and returns `structuredContent` that conforms to it (MCP: "Servers MUST provide structured
@@ -29,68 +27,11 @@ const SPEC = JSON.parse(readFileSync(join(HERE, '..', '..', '..', 'spec', 'opena
 const PV = 'io.modelcontextprotocol/protocolVersion';
 const CAPS = 'io.modelcontextprotocol/clientCapabilities';
 
-// ── an instance that satisfies a JSON Schema ────────────────────────────────────────────────────────
-function example(s: any): any {
-  if (s === undefined || s === true || (typeof s === 'object' && Object.keys(s).length === 0)) return 'example';
-  if (s.const !== undefined) return s.const;
-  if (Array.isArray(s.enum)) return s.enum.find((v: unknown) => v !== null) ?? null;
-  if (s.oneOf) return example(s.oneOf[0]);
-  if (s.anyOf) return example(s.anyOf.find((x: any) => x.type !== 'null') ?? s.anyOf[0]);
-  if (s.allOf) return Object.assign({}, ...s.allOf.map(example));
-  const type = Array.isArray(s.type) ? s.type.find((t: string) => t !== 'null') ?? 'null' : s.type;
-  switch (type) {
-    case 'object': {
-      const out: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(s.properties ?? {})) out[k] = example(v);
-      return out;
-    }
-    case 'array': return [example(s.items ?? {})];
-    case 'string': return 'x'.repeat(Math.max(1, s.minLength ?? 1));
-    case 'integer': case 'number': return Math.max(1, s.minimum ?? 1);
-    case 'boolean': return true;
-    case 'null': return null;
-    default: return 'example';
-  }
-}
-
-// ── a gateway that answers every documented route with a conforming example ─────────────────────────
-const routes = Object.entries(SPEC.paths).flatMap(([template, ops]: [string, any]) =>
-  Object.entries(ops).map(([method, op]: [string, any]) => ({
-    method: method.toUpperCase(),
-    re: new RegExp(`^${template.replace(/[{][^}]+[}]/g, '[^/]+')}$`),
-    status: Object.keys(op.responses ?? {}).map(Number).find((c) => c >= 200 && c < 300) ?? 200,
-    schema: successSchemaOf(SPEC, `${method.toUpperCase()} ${template}`),
-  })));
-const seenRoutes: string[] = [];
-const FIXED_RESPONSES: Array<{ method: string; re: RegExp; body: unknown }> = [
-  { method: 'GET', re: /^\/v1\/chains$/, body: { chains: [{ id: 'ethereum-sepolia', chainId: 11155111 }, { id: 'base-sepolia', chainId: 84532 }, { id: 'arbitrum-sepolia', chainId: 421614 }] } },
-  // a terminal status, so certen_execute_wait returns instead of waiting out its budget on an invented one
-  { method: 'GET', re: /^\/v1\/transaction\/[^/]+$/, body: { intent_id: 'i1', status: 'completed', proof_id: 'p1', created_at: '2026-01-01T00:00:00Z' } },
-];
-
-let gateway: http.Server;
+// ── the stand-in gateway ────────────────────────────────────────────────────────────────────────────
+let gateway: SpecGateway;
 let baseUrl = '';
-beforeAll(async () => {
-  gateway = http.createServer((req, res) => {
-    const path = (req.url ?? '').split('?')[0];
-    const route = routes.find((r) => r.method === req.method && r.re.test(path));
-    seenRoutes.push(`${req.method} ${path}`);
-    req.resume();
-    req.on('end', () => {
-      // The spec documents a few responses only as "object"; where a tool needs a field the gateway really sends, the stub sends it.
-      const forced = FIXED_RESPONSES.find((f) => f.method === req.method && f.re.test(path));
-      if (forced) { res.statusCode = 200; res.setHeader('content-type', 'application/json'); return void res.end(JSON.stringify(forced.body)); }
-      if (!route) { res.statusCode = 404; res.setHeader('content-type', 'application/json'); return void res.end(JSON.stringify({ code: 'NOT_FOUND', error: `no route ${req.method} ${path}` })); }
-      res.statusCode = route.status;
-      if (route.status === 204 || !route.schema) return void res.end();
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify(example(toJsonSchema(route.schema, SPEC.components?.schemas ?? {}))));
-    });
-  });
-  await new Promise<void>((r) => gateway.listen(0, '127.0.0.1', r));
-  baseUrl = `http://127.0.0.1:${(gateway.address() as { port: number }).port}`;
-});
-afterAll(async () => { await new Promise<void>((r) => { gateway.closeAllConnections?.(); gateway.close(() => r()); }); });
+beforeAll(async () => { gateway = await startSpecGateway(); baseUrl = gateway.url; });
+afterAll(async () => { await gateway.close(); });
 
 // ── arguments for each tool ────────────────────────────────────────────────────────────────────────
 const UUID = '396f863c-879c-4046-8591-3f0405c5f6bd';
@@ -178,9 +119,9 @@ describe('every tool returns structuredContent that conforms to its outputSchema
   }
 
   it('actually reached the gateway for each family of route (the stub was exercised, not bypassed)', () => {
-    expect(seenRoutes.length).toBeGreaterThan(40);
-    expect(seenRoutes.some((r) => r.startsWith('GET /v1/transaction/'))).toBe(true);
-    expect(seenRoutes.some((r) => r.startsWith('POST /v1/transaction'))).toBe(true);
+    expect(gateway.seen.length).toBeGreaterThan(40);
+    expect(gateway.seen.some((r) => r.startsWith('GET /v1/transaction/'))).toBe(true);
+    expect(gateway.seen.some((r) => r.startsWith('POST /v1/transaction'))).toBe(true);
   });
 });
 
