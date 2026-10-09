@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ["18", "20", "22"]
+        node: ["22", "24"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,10 +47,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "20", cache: npm }
+        with: { node-version-file: .nvmrc, cache: npm }
       - run: npm ci
       - name: Generated artifacts are up to date
         run: npm run agentgen:check
+      # One Node policy, and no internal package resolved from the registry instead of the workspace.
+      - name: Node policy
+        run: npm run check:node
 
   # A published package is only as good as its tarball. `files`, `exports`, and `prepack` are all easy to
   # get wrong in ways that install cleanly and fail on first import — and npm versions are immutable, so
@@ -60,7 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "20", cache: npm }
+        with: { node-version-file: .nvmrc, cache: npm }
       - run: npm ci
       - name: Pack and consume from a scratch project
         run: |
