@@ -76,3 +76,40 @@ describe('proof v2 conformance', () => {
     });
   }
 });
+
+/**
+ * The manifest's additional documents: whole documents built from fixed keys (cmd/proofv2conformance/synthetic.go), the first
+ * with a network update in its spine. The Go suite (TestConformanceSyntheticDocuments) runs the same files. The proof verifies,
+ * the validator set is reported as asserted because it changed after genesis, and govRoot v3 refuses it with Go's message.
+ */
+describe('proof v2 conformance: whole documents with a network update', () => {
+  it('lists at least one additional document', () => {
+    expect(manifest.documents.length).toBeGreaterThanOrEqual(1);
+  });
+
+  for (const d of manifest.documents as any[]) {
+    const text = gunzipSync(readFileSync(new URL(d.file, dir))).toString('utf8');
+
+    it(`${d.name}: verifies, reports the update applied, and refuses govRoot v3 as Go does`, () => {
+      const doc = JSON.parse(text);
+      const r = verifyPortable(doc);
+      const { govRootV3: _omitted, ...expected } = d.report;
+      expect({
+        incarnation: r.incarnation, majors: r.majors, certifiedBlock: r.certifiedBlock, certifiedRoot: r.certifiedRoot,
+        checkBlock: r.checkBlock, setVerdict: r.setVerdict, validators: r.validators, threshold: r.threshold,
+        partition: r.partition, anchorBlock: r.anchorBlock, pages: r.pages.length,
+      }).toEqual(expected);
+      expect(r.setVerdict).toBe('validator_set_asserted');
+      expect(r.validators).toBe(4); // the genesis set had three
+      expect(() => govRootV3FromPortable(r, doc)).toThrow(d.govRootRefusal.replace(/^govRoot v3: /, 'govRoot v3: '));
+    });
+
+    for (const c of d.cases) {
+      it(`${d.name} / ${c.name}: refused (${c.attack})`, () => {
+        const doc = JSON.parse(text);
+        applyPatch(doc, c.patch);
+        expect(() => verifyPortable(doc)).toThrow(VerifyError);
+      });
+    }
+  }
+});
