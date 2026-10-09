@@ -90,30 +90,39 @@ function ed25519(pub: Uint8Array, msg: Uint8Array, sig: Uint8Array): boolean {
 }
 
 /**
- * protocol.ED25519Signature.Verify(nil, msg) - verifySig with merkle=true: the signature verifies over
- * sha256(metadataHash || msgHash), where the metadata is the signature with its signature and transaction hash
- * cleared, or else over sha256(initiatorMerkleHash || msgHash) when the initiator can be formed (public key, signer,
- * a non-zero signer version and a non-zero timestamp).
- *
- * Only ed25519 is implemented. Accumulate's validators sign anchors with ed25519 keys; any other type is refused by
- * name rather than guessed at.
+ * The signature types the Directory spine accepts. Go checks `protocol.KeySignature.Verify(nil, anchor)` and then matches
+ * the signer's public key to an active Directory validator's, whose key is a 32-byte ed25519 key. The key signatures that
+ * can carry such a key are ed25519, rcd1 and legacyED25519, and they are the three implemented; every other type (the
+ * btc / eth / rsa / ecdsa / typed-data families carry keys that cannot equal a validator's, and Go's Verify rejects a key of
+ * the wrong length) is refused by name here rather than guessed at.
+ */
+export const SPINE_SIGNATURE_TYPES = ['ed25519', 'rcd1', 'legacyED25519'] as const;
+
+/**
+ * KeySignature.Verify(nil, msg) for ed25519, rcd1 (verifySig, merkle=true: ed25519 over sha256(metadataHash || msgHash),
+ * the metadata being the signature with its signature and transaction hash cleared, or else over sha256(initiatorMerkleHash
+ * || msgHash) when the initiator can be formed: public key, signer, a non-zero signer version, a non-zero timestamp) and
+ * legacyED25519 (verifySigSplit with sha256(that hash || uvarint(timestamp) || msgHash)).
  */
 export function verifySignature(sigJson: unknown, msgHash: Uint8Array, label: string): boolean {
   if (!sigJson || typeof sigJson !== 'object') fail(`${label}: missing`);
   const s = sigJson as Record<string, unknown>;
-  if (s.type !== 'ed25519') fail(`${label}: signature type ${String(s.type)} is not supported by this verifier`);
+  const type = String(s.type);
+  if (!(SPINE_SIGNATURE_TYPES as readonly string[]).includes(type)) fail(`signature_type_unsupported: ${label}: signature type ${type} is not one this verifier supports (${SPINE_SIGNATURE_TYPES.join(', ')})`);
   const pub = hexBytes(s.publicKey, `${label}.publicKey`);
   const sig = hexBytes(s.signature, `${label}.signature`);
   if (pub.length !== 32 || sig.length !== 64) return false;
+
+  const timestamp = s.timestamp === undefined ? 0n : BigInt(s.timestamp as number);
+  const combine = (first: Uint8Array): Uint8Array => (type === 'legacyED25519' ? sha256(first, uvarint(timestamp), msgHash) : sha256(first, msgHash));
 
   const md: Record<string, unknown> = { ...s };
   delete md.signature;
   delete md.transactionHash;
   const mdHash = sha256(encodeObject((core as any).Signature.fromObject(md)));
-  if (ed25519(pub, sha256(mdHash, msgHash), sig)) return true;
+  if (ed25519(pub, combine(mdHash), sig)) return true;
 
   const signerVersion = Number(s.signerVersion ?? 0);
-  const timestamp = s.timestamp === undefined ? 0n : BigInt(s.timestamp as number);
   if (typeof s.signer !== 'string' || signerVersion === 0 || timestamp === 0n) return false;
   const init = new MerkleState();
   init.addEntry(sha256(pub));
@@ -121,7 +130,7 @@ export function verifySignature(sigJson: unknown, msgHash: Uint8Array, label: st
   init.addEntry(sha256(uvarint(signerVersion)));
   init.addEntry(sha256(uvarint(timestamp)));
   const initHash = init.anchor();
-  return initHash !== undefined && ed25519(pub, sha256(initHash, msgHash), sig);
+  return initHash !== undefined && ed25519(pub, combine(initHash), sig);
 }
 
 export { equal };

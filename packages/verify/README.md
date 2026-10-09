@@ -72,10 +72,14 @@ moves only as a deliberate bump with the conformance suite re-run, never through
 
 ## Scope and refusals
 
-- Only ed25519 signatures are verified; any other type is refused by name.
-- A spine containing a proven write to `acc://dn.acme/network` or `acc://dn.acme/globals` is refused by name
-  (`network_update_unsupported`), because the written record is binary. The Go verifier applies such writes. No Kermit
-  major block carries one.
+- Spine signatures: `ed25519`, `rcd1` and `legacyED25519` are verified, which are the key signatures Go's `KeySignature.Verify` accepts
+  for a 32-byte validator key. Any other type is refused by name (`signature_type_unsupported`).
+- A proven write to `acc://dn.acme/network` or `acc://dn.acme/globals` is **applied**, as Go's `applyProvenUpdate` does: the
+  record is decoded (`src/proof-v2/netrecord.ts`), the set and thresholds the spine tracks change, a definition whose version is
+  not above the current one is a counted no-op, and the next anchor is held to the new set (an anchor in the update's own block
+  may be signed by the set before it). The binary decoder is checked against vectors Go produced
+  (`test/fixtures/netrecords.json`, from certen-validator `cmd/netrecordvectors`) and proves every decode by re-encoding it with
+  the SDK's encoder: a record that does not encode back to the written bytes is refused (`network_update_undecodable`).
 
 ## Conformance
 

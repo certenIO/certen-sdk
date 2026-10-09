@@ -181,9 +181,9 @@ export function verifyPortable(doc: any): Report {
   const glob = provenAccount(ev.check.globals, 'globals');
   const verdict = setVerdict(ev.check, net, glob, chk.stateTreeAnchor, pin);
 
-  // The proven accounts must hold exactly what the walk derived: with no write applied, the genesis records.
-  if (!equal(net.entry, genesis.networkRecord)) fail('set check: network: the proven record differs from the one the walk derived');
-  if (!equal(glob.entry, genesis.globalsRecord)) fail('set check: globals: the proven record differs from the one the walk derived');
+  // The proven accounts must hold exactly what the walk derived: the genesis records with every proven write applied.
+  if (!equal(net.entry, chk.g.networkRecord)) fail('set check: network: the proven record differs from the one the walk derived');
+  if (!equal(glob.entry, chk.g.globalsRecord)) fail('set check: globals: the proven record differs from the one the walk derived');
   const height = net.mainHeight;
   if (height === undefined) fail('set check: no main chain on the network account');
   const applied = chk.applied.filter((a) => sameUrl(a.principal, 'acc://dn.acme/network')).length;
