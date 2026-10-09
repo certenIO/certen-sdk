@@ -88,7 +88,11 @@ export function computeIncarnation(g: any, networkRecord: Uint8Array, globalsRec
   );
 }
 
-export function verifyPortable(doc: any): Report {
+/** The stages verifyPortable completes, in order; a trace callback is told each as it is done (see layers.ts). */
+export type Stage = 'trust_base' | 'spine' | 'receipt' | 'anchor' | 'pages' | 'set';
+export type Trace = (stage: Stage, facts: Record<string, unknown>) => void;
+
+export function verifyPortable(doc: any, trace: Trace = () => {}): Report {
   if (!doc || doc.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(doc?.format)} is not ${PORTABLE_FORMAT}`);
   const ev = doc.evidence;
   if (!ev || ev.version !== VERSION) fail('not a v2 Accumulate proof');
@@ -101,6 +105,7 @@ export function verifyPortable(doc: any): Report {
   const id = computeIncarnation(g, networkRecord, globalsRecord);
   if (!equal(id, pin)) fail(`incarnation evidence is for ${toHex(id)}, not the pinned ${toHex(pin)}`);
   const genesis = genesisGlobals(g.network, networkRecord, g.globals, globalsRecord);
+  trace('trust_base', { incarnation: toHex(id), pin: toHex(pin) });
 
   // The spine to the larger of the two starting points, keeping the state at each.
   const majors: unknown[] = Array.isArray(doc.majors) ? doc.majors : [];
@@ -119,11 +124,13 @@ export function verifyPortable(doc: any): Report {
   const cert = at.get(evMajors)!.clone();
   if (!Array.isArray(ev.certify) || ev.certify.length === 0) fail('certify: no minor-root run');
   ev.certify.forEach((r: unknown, i: number) => cert.advanceEpoch(r, `certify run ${i}`));
+  trace('spine', { majors: need, certifiedBlock: cert.lastMinorBlock, certifiedRoot: toHex(cert.rootChainAnchor), validators: cert.validators().length, threshold: cert.directoryThreshold(), networkUpdatesApplied: cert.applied.length });
   const r = receiptFromJSON(ev.receipt, 'receipt');
   const tx = hexBytes(ev.txHash, 'txHash', 32);
   if (!equal(r.start, tx)) fail(`receipt starts at ${toHex(r.start)}, not the transaction ${toHex(tx)}`);
   if (!equal(r.anchor, cert.rootChainAnchor)) fail(`receipt ends at ${toHex(r.anchor)}, not the root ${toHex(cert.rootChainAnchor)} certified at DN ${cert.lastMinorBlock}`);
   if (!receiptValid(r)) fail('receipt does not validate');
+  trace('receipt', { txHash: toHex(tx), steps: r.entries.length, root: toHex(r.anchor), certifiedBlock: cert.lastMinorBlock });
 
   // The partition anchor (page.go anchorBody), proven into the same certified root.
   const msg = sequencedMessage(ev.anchor?.message, 'partition anchor');
@@ -143,6 +150,7 @@ export function verifyPortable(doc: any): Report {
   if (!receiptPrefixTo(r, anchorRoot)) fail(`the transaction's receipt does not pass through the anchor's root chain anchor ${toHex(anchorRoot)}`);
   if (anchorTx.length !== 32) fail(`partition anchor: its transaction hash is ${anchorTx.length} bytes, not 32`);
   const stateRoot = hexBytes(body.stateTreeAnchor, 'partition anchor stateTreeAnchor', 32);
+  trace('anchor', { partition: String(n.source), anchorBlock: Number(body.minorBlockIndex), anchorTxHash: toHex(anchorTx), stateRoot: toHex(stateRoot) });
 
   // G1(a): each page as of the anchor's block (page.go verifyPage).
   const pages: unknown[] = [];
@@ -159,6 +167,8 @@ export function verifyPortable(doc: any): Report {
     pages.push(acct);
     pageChains.push(pageChain(p, pr));
   }
+
+  trace('pages', { pages: pageChains.map((c) => ({ ...c })) });
 
   // The validator set: walked to a certified block at or after the certified one, proven there, equal to the set the
   // walk derived, with every write accounted for. The set is checked either at the certified block itself (no runs:
@@ -190,6 +200,7 @@ export function verifyPortable(doc: any): Report {
   if (height !== 1 + applied) fail(`set check: the network account's main chain has ${height} entries but the walk applied ${applied} updates after genesis`);
   const thr = glob.record.validatorAcceptThreshold;
   const setRoot = accumulateSetRoot(validatorsOf(net.record), { numerator: thr.numerator, denominator: thr.denominator }, toHex(pin));
+  trace('set', { verdict, checkBlock: chk.lastMinorBlock, validators: chk.validators().length, threshold: chk.directoryThreshold(), networkMainHeight: height, accumulateSetRoot: setRoot });
 
   return {
     incarnation: toHex(id),
