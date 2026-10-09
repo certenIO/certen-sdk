@@ -74,20 +74,22 @@ indistinguishable from success, and a blind retry can open a second intent or bu
 ```bash
 npm install          # workspaces: the CLI resolves @certen.io/sdk from packages/sdk
 npm run build
-npm test             # SDK 119, CLI 55, MCP 37 — no network, no key
+npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
+The suite today: <!-- test-counts:start -->888 tests in 59 files (sdk 409, cli 379, mcp 59, verify 41), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+
 ### On Windows, trust the summary over npm's exit code
 
-`npm test` here can exit 1 while printing `119 passed` and a clean summary, with no error output from
+`npm test` here can exit 1 while printing an all-passed summary and no failures, with no error output from
 npm at all. It gets worse under load — measured on npm 10.9.2 / Node 22.14:
 
 | invocation | exit 0 | tests |
 |---|:--:|---|
-| `node node_modules/vitest/vitest.mjs run` | 6/6 | 119/119 passing |
-| `npm test` | 1/6 | 119/119 passing |
-| `npm test`, with four CPU hogs running | 0/6 | 119/119 passing |
+| `node node_modules/vitest/vitest.mjs run` | 6/6 | all passing |
+| `npm test` | 1/6 | all passing |
+| `npm test`, with four CPU hogs running | 0/6 | all passing |
 
 It is a load-sensitive race in npm's script runner, not a fault in the tests or the tools: the same
 npm is clean in a scratch package and in a scratch workspaces monorepo, and `--loglevel=silly` stops
@@ -236,7 +238,7 @@ obvious here.
 Tag-driven, and nothing publishes until the packed tarball has been installed into a scratch project and
 run. npm versions are immutable — a bad publish can only be superseded, never fixed.
 
-**Deploy the gateway first.** The vendored spec is generated from the gateway's *source*, so the
+**Deploy the gateway first.** The vendored spec comes from the gateway — fetched from its `/docs/json`, or, for a change that is not deployed yet, built from the gateway's own route definitions (`CERTEN_SPEC_FILE`, see `spec/README.md`) — so the
 entire offline suite can pass against a document describing an API that is not deployed yet. That is
 the right trade — it lets the SDK be built before the gateway ships — but it means green tests are
 not evidence that anything works against production. Where a release moves paths, publishing first
@@ -251,8 +253,8 @@ CERTEN_API_URL=https://staging npm run check:gateway
 unreachable gateway warns instead of blocking — "no answer" is not the same as "out of date". Set
 `CERTEN_SKIP_GATEWAY_CHECK=1` to override, deliberately.
 
-Publish the three packages **together**. They are separately versioned and mutually dependent; an
-SDK calling `/v1/webhooks/*` paired with an older CLI is a combination nobody tested.
+Publish the released packages (`@certen.io/sdk`, `@certen.io/cli`, `@certen.io/mcp`) **together**. They are separately versioned and mutually dependent; an
+SDK calling `/v1/webhooks/*` paired with an older CLI is a combination nobody tested. `@certen.io/proof-verify` is a fourth workspace that is private until it is published deliberately; `npm run check:pins` fails CI if any package's range for another stops accepting the workspace version.
 
 ```bash
 cd packages/sdk && npm version minor

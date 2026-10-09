@@ -1,7 +1,7 @@
 # Vendored gateway spec
 
 `openapi.json` is a verbatim copy of the CERTEN Gateway's own OpenAPI document, fetched from
-`https://gateway.kompendium.co/docs/json`.
+`https://gateway.kompendium.co/docs/json` — or, for a change that is not deployed yet, built from the gateway's route definitions with its `scripts/dump-openapi.mjs` and read through `CERTEN_SPEC_FILE`.
 
 It is the **single source of truth** for everything generated in this repo:
 

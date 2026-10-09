@@ -40,7 +40,7 @@ describe('the configuration that governs this run', () => {
     expect(src).not.toMatch(/^\s*exclude:/m);
   });
 
-  it('still finds every test file across all three packages', () => {
+  it('still finds every test file across every package', () => {
     // The count is the actual protection. If a future config narrows discovery, this fails with a
     // number rather than by a suite silently shrinking.
     const found: string[] = [];
@@ -58,7 +58,7 @@ describe('the configuration that governs this run', () => {
     // does not need a matching edit here.
     expect(found.length).toBeGreaterThanOrEqual(36);
     // All three packages must be represented — the original bug was a run that covered one.
-    for (const pkg of ['sdk', 'cli', 'mcp']) {
+    for (const pkg of ['sdk', 'cli', 'mcp', 'verify']) {
       expect(
         found.some((f) => f.includes(join('packages', pkg))),
         `no test files discovered for packages/${pkg}`,
