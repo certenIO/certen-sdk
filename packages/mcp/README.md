@@ -25,6 +25,34 @@ Claude Desktop / any MCP client (`claude_desktop_config.json`):
 }
 ```
 
+## Protocol revisions
+
+`certen-mcp` speaks **MCP 2026-07-28** and, from the same process, the four earlier revisions (**2025-11-25, 2025-06-18, 2025-03-26,
+2024-11-05**). A client chooses by how it opens:
+
+- **2026-07-28 (stateless).** No `initialize`. Every request carries `_meta["io.modelcontextprotocol/protocolVersion"]` and
+  `_meta["io.modelcontextprotocol/clientCapabilities"]`; every result carries `resultType: "complete"`; lists and `resources/read`
+  carry `ttlMs` and `cacheScope`; `server/discover` reports the supported versions, capabilities and instructions. A version the
+  server does not serve is answered with `-32022` listing the ones it does.
+- **Earlier revisions.** `initialize` negotiates one of them. `annotations` are sent from 2025-03-26 and `outputSchema` /
+  `structuredContent` from 2025-06-18; a 2024-11-05 client gets neither.
+
+Interop is tested with the official clients, one per revision (`packages/mcp/test/interop.test.ts`): `@modelcontextprotocol/client`
+2.3.1 for 2026-07-28 (pinned, `auto`, and its legacy default) and `@modelcontextprotocol/sdk` 1.32.1, 1.13.0, 1.12.1 and 1.0.2 for
+the others. They are exact-pinned **devDependencies**, never installed with the package: the server's only runtime dependency is the CERTEN SDK.
+
+## What a tool tells a client
+
+Every tool carries MCP **annotations** derived from the metadata the server already enforces with: `readOnlyHint` is false exactly
+for the 12 tools that change something; revoke, retire, rotate, update and the signature submissions are `destructiveHint: true`;
+every tool is `openWorldHint: true`. Annotations are hints, not enforcement: the `confirm:true` stop and `CERTEN_MCP_ALLOW_WRITES`
+are what enforce.
+
+Every tool also declares an **`outputSchema`** and returns **`structuredContent`** that conforms to it, alongside the JSON text. Most
+schemas are generated from the gateway's own response schemas (`npm run agentgen`; CI fails if they are stale); the eight tools that
+build their own result have schemas written beside the server code, and a test runs all 48 tools and validates what each returns. A
+`confirmation_required` stop and any failure are returned with `isError: true` and no `structuredContent`.
+
 ## It also serves the documentation
 
 Nine MCP *resources*, so an agent can read the rules rather than guess them: the quickstart, the full

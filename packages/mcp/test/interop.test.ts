@@ -16,7 +16,7 @@ import { startSpecGateway, type SpecGateway } from './spec-gateway.js';
  *   2024-11-05  @modelcontextprotocol/sdk 1.0.2      (as `mcp-sdk-2024-11-05`)
  *
  * Each release asks for exactly one revision, which is what makes it a test of that revision. They are devDependencies of this package,
- * exact-pinned, and never shipped: `certen-mcp` itself has no runtime dependency (decision D6). The older ones carry advisories in the
+ * exact-pinned, and never shipped: `certen-mcp` itself depends at runtime only on the CERTEN SDK (decision D6). The older ones carry advisories in the
  * SDK's HTTP server and OAuth code, none of which a stdio client exercises (RUNLOG_RB7b Entry 10).
  *
  * The client does what a real client does: connect, list tools, call one, read a resource. The newer clients also validate

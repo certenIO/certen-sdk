@@ -153,6 +153,8 @@ Response 200 — API keys for the org:
 
 #### certen.admin.revokeApiKey()
 
+Revoke an API key.
+
 DELETE /v1/admin/api-keys/{id} — Revoke API key
 
 Deactivates (revokes) an API key in the caller's organization. The key is immediately unusable. Returns 204 with no body on success. Requires the admin:write scope.

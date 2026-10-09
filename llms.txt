@@ -108,7 +108,7 @@ certen doctor                   # names the one thing blocking you
   - `certen.admin.createOrg()` — Create organization
   - `certen.admin.createApiKey()` — Mint API key
   - `certen.admin.listApiKeys()` — List API keys
-  - `certen.admin.revokeApiKey()` — Revoke API key
+  - `certen.admin.revokeApiKey()` — Revoke an API key.
   - `certen.admin.rotateApiKey()` — Rotate an api key: the gateway provisions a fresh key with the same permissions and revokes the old one.
   - `certen.admin.getAuditLog()` — List audit log entries
   - `certen.admin.getUsage()` — Get usage summary
