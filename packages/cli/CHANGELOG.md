@@ -1,5 +1,16 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — sign what you see (RB7b Phase F)
+
+### Changed (breaking)
+- `tx create --sign-with`, `call`, `governance <operation> --sign-with` and `pending sign --sign-with` rebuild the transaction the gateway returned, check it against the request and print what the signature
+  authorises (stderr) before signing. A mismatch exits 1 with `SIGNING_DATA_MISMATCH`; nothing is signed. They need a gateway that returns the unsigned transaction.
+- A bare hash is never signed: `tx sign`, `pending submit` and `governance sign` no longer accept `--sign-with` / `--hash` (exit 2, `BLIND_SIGNING_REFUSED`). `--signature` + `--public-key` still work for a
+  signature made elsewhere. `pending sign --sign-with` replaces the two-step `pending sign` then `pending submit --sign-with --hash` (transaction hashes only).
+- `pending sign` without `--sign-with` reports `signing_unchecked` and a warning when the signing data could not be checked.
+
+### Added
+- `certen tx inspect <id>` and `certen governance inspect <id>`: recompute every hash of what is awaiting a signature and show what it would authorise; `tx inspect --intent` also matches it to your request. They sign nothing.
 ## Unreleased — `proof verify` checks the proof (RB7b Phase E)
 
 ### Changed (breaking)

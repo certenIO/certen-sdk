@@ -81,6 +81,13 @@ table, the chain catalogue and the pure helpers; it uses Web Crypto and no Node 
 `User-Agent` (it forbids scripts setting one). `verifyReceipt` uses Web Crypto's ed25519; a runtime without it reports the signature
 check as `skipped`, never as `ok`. CI bundles the browser entry and runs it with `process`, `Buffer` and `require` removed.
 
+## Every signature is checked first
+
+`execute.contractCall`, `execute.transfer`, `execute.cosign` and `CertenAgent`'s governance operations never sign a bare `hash_to_sign`. They rebuild the transaction the gateway returned
+(`signing_data.transaction`, `signing_data.signature_metadata`), recompute every hash and match what it would authorise to your request, then sign; any disagreement throws
+`SIGNING_DATA_MISMATCH` naming the field, and nothing is signed. `beforeSign(summary)` shows what the signature authorises and may decline. There is no option to sign without the check. It needs the
+optional peer `@certen.io/proof-verify`, and a gateway that returns the unsigned transaction; in a browser, signing through the SDK is refused until the verifier runs there.
+
 ## Verify a proof: `@certen.io/sdk/verify`
 
 A separate entry point, so the API client stays light: it needs the optional peer `@certen.io/proof-verify` (and, under it, the Accumulate encoder).

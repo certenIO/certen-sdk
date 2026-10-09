@@ -1,5 +1,10 @@
 # Changelog — @certen.io/mcp
 
+## Unreleased — the signing summary (RB7b Phase F)
+
+### Added
+- `certen_transaction_open` and `certen_sign_create` return `signing`, the rebuilt summary of what a signature on the returned hash would authorise (matched to the request, or to the transaction named), or `signing_check`
+  (`ok:false`, `code`, `message`) when the gateway's transaction could not be checked, in which case the hash must not be signed. The intent or request is returned either way. The server still signs nothing and holds no key.
 ## Unreleased — `certen_proof_verify` verifies (RB7b Phase E)
 
 ### Changed (breaking)

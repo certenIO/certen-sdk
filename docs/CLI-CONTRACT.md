@@ -157,6 +157,22 @@ raised locally, and they are **not** "unreachable": `WAIT_TIMEOUT`, `INTENT_FAIL
 are about an intent the gateway already holds, so they exit `1`; retrying the command by opening the
 intent again would be wrong. (Before, any status-0 error exited `3`.)
 
+### Signing: `SIGNING_DATA_MISMATCH`, `BLIND_SIGNING_REFUSED`
+
+Every command that signs with a local key (`tx create --sign-with`, `call`, `governance <operation> --sign-with`, `pending sign --sign-with`) first rebuilds the unsigned transaction the gateway returned
+(`signing_data.transaction` and `signing_data.signature_metadata`), recomputes the transaction hash, the signature-metadata hash and the signing hash, requires them to equal what the gateway sent, and
+matches what the transaction authorises (principal, each leg's chain, target, value and calldata, expected events, deadline, additional authorities, the signing key, the vote, or the governance operation) to
+the request. It prints the result on stderr before signing (`You are about to sign: …`); `--json` output carries it as `signing`.
+
+| `error.code` | Exit | Meaning |
+|---|:--:|---|
+| `SIGNING_DATA_MISMATCH` | 1 | The transaction is not what was asked for, or does not hash to what the gateway sent. `error.details` has `field`, `expected`, `actual`. Nothing was signed. |
+| `SIGNING_DATA_ABSENT` | 1 | The gateway returned no transaction or signature metadata to check. Nothing was signed. |
+| `SIGNING_EXPECTATION_UNAVAILABLE` | 1 | The request is one the CLI cannot state the meaning of (a token transfer, a tuple argument, a chain outside the catalogue). Nothing was signed. |
+| `BLIND_SIGNING_REFUSED` | 2 | `--sign-with` with `--hash` on `tx sign`, `pending submit` or `governance sign`. A bare hash is never signed; there is no override. Use the one-step command above, or `tx inspect` / `governance inspect`, then `--signature` + `--public-key`. |
+
+`certen tx inspect <id>` and `certen governance inspect <id>` recompute and show what is awaiting a signature, signing nothing; `tx inspect --intent` also matches it to your request.
+
 ### `certen proof verify`
 
 `proof verify <intent id | proof id | tx hash | share link | @bundle.json>` verifies the proof locally, layer by layer. The verdict is computed here from the

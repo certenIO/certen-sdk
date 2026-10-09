@@ -1,4 +1,4 @@
-import { CertenError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle } from '@certen.io/sdk';
+import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, type SigningSummary } from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
 
@@ -789,6 +789,20 @@ const READ_TOOLS: ToolDef[] = [
   },
 ];
 
+/**
+ * What the caller must know about the signing data the gateway just returned: either the rebuilt summary of what a signature would authorise, or why
+ * it could not be checked. Never thrown: the intent or request already exists, and an agent has to be told both things.
+ */
+async function signingFor(created: { signing_data?: unknown }, check: () => Promise<SigningSummary>): Promise<Record<string, unknown>> {
+  if (!created.signing_data) return {}; // provider mode: there is nothing for the caller to sign
+  try {
+    return { signing: await check() };
+  } catch (e) {
+    if (e instanceof CertenSigningDataError) return { signing_check: { ok: false, code: e.code, message: e.message, ...(e.details ? { details: e.details } : {}) } };
+    throw e;
+  }
+}
+
 // ── write tier ──────────────────────────────────────────────────────────────────────────────────
 
 const WRITE_TOOLS: ToolDef[] = [
@@ -961,7 +975,10 @@ const WRITE_TOOLS: ToolDef[] = [
     idempotent: false,
     endpoint: 'POST /v1/transaction',
     description:
-      'Open a transaction intent and return its `signing_data.hash_to_sign`. '
+      'Open a transaction intent and return its `signing_data.hash_to_sign`, with `signing`: what a signature on it would authorise, rebuilt '
+      + 'from the transaction the gateway returned and matched to this request (principal, each leg\'s chain, target, value and calldata, events, deadline, '
+      + 'authorities). Show `signing.text` to the person who will sign. If `signing_check` is present instead, the gateway\'s transaction could NOT be '
+      + 'checked or did not match: DO NOT SIGN the hash; its `code` and `message` say why. '
       + 'THIS SERVER DOES NOT SIGN AND HOLDS NO KEY. Nothing executes until a signature is submitted '
       + 'with certen_transaction_submit_signature. Sign the RAW BYTES of the returned hex hash '
       + 'wherever the key actually lives — do not hash it again and do not sign the ASCII of the hex.',
@@ -1019,7 +1036,7 @@ const WRITE_TOOLS: ToolDef[] = [
     },
     run: async (c, a) => {
       await assertIntentChains(c, a.intent);
-      return c.transaction.create({
+      const created = await c.transaction.create({
         identityId: s(a, 'identityId'),
         intent: a.intent as never,
         // Pass through only when it is the object the endpoint expects; an array here is the caller
@@ -1034,6 +1051,21 @@ const WRITE_TOOLS: ToolDef[] = [
         expiresAt: optS(a, 'expiresAt'),
         idempotencyKey: optS(a, 'idempotencyKey'),
       } as never);
+      // The intent is open now. Whether its signing data can be trusted is reported WITH it, never instead of it: an agent must see both.
+      const intent = a.intent as Record<string, unknown>;
+      const signing = await signingFor(created as unknown as { signing_data?: unknown; intent_id?: string }, async () => {
+        const adiUrl = typeof intent.adiUrl === 'string' && intent.adiUrl ? intent.adiUrl : (await c.identity.get(s(a, 'identityId'))).adi_url;
+        return checkIntentSigning((created as { signing_data?: unknown }).signing_data, {
+          intentId: (created as { intent_id?: string }).intent_id,
+          adiUrl,
+          intent,
+          signerPublicKey: optS(a, 'signerPublicKey'),
+          signerKeyPage: optS(a, 'signerKeyPage'),
+          additionalAuthorities: a.additionalAuthorities as string[] | undefined,
+          expiresAt: optS(a, 'expiresAt'),
+        });
+      });
+      return { ...(created as unknown as Record<string, unknown>), ...signing };
     },
   },
   {
@@ -1100,11 +1132,11 @@ const WRITE_TOOLS: ToolDef[] = [
       required: ['targetId', 'confirm'],
       additionalProperties: false,
     },
-    run: (c, a) => {
+    run: async (c, a) => {
       const target = resolveSignTarget(s(a, 'targetId'));
       const vote = optS(a, 'vote') ?? 'approve';
       if (target.type === 'pending_action') {
-        return c.sign.create({
+        const created = await c.sign.create({
           type: 'pending_action',
           targetId: target.targetId,
           identity: optS(a, 'identity'),
@@ -1112,6 +1144,10 @@ const WRITE_TOOLS: ToolDef[] = [
           publicKey: optS(a, 'publicKey'),
           vote,
         });
+        // An inbox id does not name the transaction, so the data can be rebuilt and described but not matched to anything the caller named.
+        const sd = (created as unknown as { signing_data?: unknown }).signing_data as { transaction?: unknown } | undefined;
+        const signing = await signingFor(created as never, () => inspectSigningData(sd, { existing: true }));
+        return { ...(created as unknown as Record<string, unknown>), ...signing };
       }
       const missing = (['identity', 'signerUrl', 'publicKey'] as const).filter((k) => !optS(a, k));
       if (missing.length > 0) {
@@ -1127,7 +1163,7 @@ const WRITE_TOOLS: ToolDef[] = [
           'MISSING_SIGNER_DETAILS',
         );
       }
-      return c.sign.create({
+      const created = await c.sign.create({
         type: 'pending_tx',
         targetId: target.targetId,
         identity: s(a, 'identity'),
@@ -1135,6 +1171,14 @@ const WRITE_TOOLS: ToolDef[] = [
         publicKey: s(a, 'publicKey'),
         vote,
       });
+      // For a transaction named by hash the data is rebuilt and matched to THAT transaction, the vote, the signer and the page.
+      const signing = await signingFor(created as never, () => checkCosigning((created as unknown as { signing_data?: unknown }).signing_data, {
+        transactionHash: target.targetId,
+        signerPublicKey: optS(a, 'publicKey')!,
+        signerKeyPage: optS(a, 'signerUrl')!,
+        vote: vote as 'approve' | 'reject' | 'abstain',
+      }));
+      return { ...(created as unknown as Record<string, unknown>), ...signing };
     },
   },
   {
