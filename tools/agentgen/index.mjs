@@ -14,6 +14,7 @@ import { join, relative } from 'node:path';
 import { REPO_ROOT } from './lib/paths.mjs';
 import { loadSpec, operations, SPEC_PATH } from './lib/spec.mjs';
 import { sdkMap } from './lib/sdk-map.mjs';
+import { sameText } from './lib/text.mjs';
 import { emitLlms } from './emit/llms.mjs';
 import { emitLlmsFull } from './emit/llms-full.mjs';
 import { buildContract, contractFixturePath } from '../../packages/sdk/scripts/build-contract-fixture.mjs';
@@ -64,7 +65,7 @@ let stale = 0;
 for (const a of artifacts) {
   const rel = relative(REPO_ROOT, a.path).replaceAll('\\', '/');
   const current = existsSync(a.path) ? readFileSync(a.path, 'utf8') : null;
-  if (current === a.content) {
+  if (sameText(current, a.content)) {
     if (!check) console.log(`  ok      ${rel}`);
     continue;
   }
