@@ -160,3 +160,30 @@ describe('input that is not a proof document', () => {
     expect(v.overall).toBe('failed');
   });
 });
+
+describe('a validator set that changed after genesis', () => {
+  const syn = manifest.documents[0];
+  const doc = () => JSON.parse(gunzipSync(readFileSync(new URL(syn.file, dir))).toString('utf8'));
+
+  it('is partial, never failed: the spine, receipts and anchors check, and the set and govRoot v3 are named as not established', () => {
+    const v = verifyProofDocument(doc());
+    expect(v.overall).toBe('partial');
+    expect(v.failure).toBeUndefined();
+    const by = Object.fromEntries(v.layers.map((l) => [l.id, l]));
+    for (const id of ['trust_base', 'L4', 'L1', 'L2', 'L3', 'G0']) expect(by[id]!.verdict, id).toBe('verified');
+    expect(by.L4_set!.verdict).toBe('not_checked');
+    expect(by.L4_set!.evidence.setVerdict).toBe('validator_set_asserted');
+    expect(by.govRootV3!.verdict).toBe('not_checked');
+    expect(by.govRootV3!.reason).toMatch(/validator_set_asserted, not verified from genesis/);
+    expect(v.independent).toBe(false);
+  });
+
+  it('is still failed, at the layer, when the update is tampered with', () => {
+    const d = doc();
+    const c = syn.cases.find((x: { name: string }) => x.name === 'update-record-altered');
+    applyPatch(d, c.patch);
+    const v = verifyProofDocument(d);
+    expect(v.overall).toBe('failed');
+    expect(v.failure?.layer).toBe('L4');
+  });
+});
