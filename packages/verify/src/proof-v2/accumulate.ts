@@ -5,7 +5,7 @@
  */
 import { createPublicKey, verify as nodeVerify } from 'node:crypto';
 import { core, messaging } from 'accumulate-sdk-opendlt';
-import { bytesMarshalBinary, encode, Encoding, Hash, uvarintMarshalBinary } from 'accumulate-sdk-opendlt/encoding';
+import { encode } from 'accumulate-sdk-opendlt/encoding';
 import { keccak256 as sdkKeccak256 } from 'accumulate-sdk-opendlt/common';
 import { equal, fail, hexBytes, MerkleState, sha256, uvarint } from './bytes.js';
 
@@ -29,59 +29,12 @@ export function keccak256(data: Uint8Array): Uint8Array {
 }
 
 /**
- * The binary encoding of an object, as Go's encoding.Writer produces it.
- *
- * This walks the SDK's field metadata exactly as its encode() does (same field order, same skip rules for zero
- * hashes, falsy values and keepEmpty, embedded groups and repeated fields), with one difference that is Go's rule
- * rather than a choice: a struct that writes no field is written as the single byte 0x80 (encoding.EmptyObject,
- * writer.go Reset), at the top level and at every nesting. The SDK writes nothing there, so a data account that
- * inherits its authorities (an empty AccountAuth) would otherwise hash differently from the network's.
+ * The binary encoding of an object, as Go's encoding.Writer produces it: accumulate-sdk-opendlt's own encoder, which since
+ * 2.5.0 writes an empty struct as the single byte 0x80 at every nesting and omits Go's zero time. test/upstream-encoder.test.ts
+ * pins both against bytes Go produced.
  */
-const EMPTY_OBJECT = new Uint8Array([0x80]);
-
 export function encodeObject(o: unknown): Uint8Array {
-  const enc = (Encoding as any).get(o);
-  if (!enc) fail('cannot encode object: no metadata');
-  const out = encodeFields(o, enc.fields);
-  return out.length === 0 ? EMPTY_OBJECT : out;
-}
-
-function encodeFields(target: any, fields: any[]): Uint8Array {
-  const parts: Uint8Array[] = [];
-  for (const field of fields) {
-    const value = field.type?.embedding ? target : target?.[field.name];
-    const emit = (v: any) => {
-      if (field.type?.embedding) {
-        // Embedded fields are always written (encodeValue never skips them).
-      } else if (field.type instanceof (Hash as any)) {
-        if (!field.keepEmpty && isZeroHash(v)) return;
-      } else if (!field.keepEmpty && !v) {
-        return;
-      }
-      parts.push(new Uint8Array(uvarintMarshalBinary(field.number)));
-      if (field.type?.embedding) {
-        const inner = encodeFields(v, field.embedded ?? []);
-        parts.push(new Uint8Array(bytesMarshalBinary(inner.length === 0 ? EMPTY_OBJECT : inner)));
-      } else if (field.type?.composite) {
-        parts.push(new Uint8Array(bytesMarshalBinary(encodeObject(v))));
-      } else {
-        parts.push(new Uint8Array(field.type.encode(v)));
-      }
-    };
-    if (!field.repeatable) emit(value);
-    else if (value) for (const item of value) emit(item);
-  }
-  return new Uint8Array(Buffer.concat(parts));
-}
-
-function isZeroHash(v: any): boolean {
-  if (!v) return true;
-  for (const b of v) if (b !== 0) return false;
-  return true;
-}
-
-/** The SDK's own encode(), kept only to show in tests that the two agree wherever no struct is empty. */
-export function sdkEncode(o: unknown): Uint8Array {
+  if (!o || typeof o !== 'object') fail('cannot encode object: not an object');
   return new Uint8Array(encode(o));
 }
 
