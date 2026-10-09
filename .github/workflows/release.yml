@@ -1,10 +1,10 @@
-# Publish @certen.io/sdk (and @certen.io/cli) to npm.
+# Publish @certen.io/sdk, @certen.io/cli and @certen.io/mcp to npm (each from its own tag).
 #
 # Triggered by a package-scoped tag so the SDK versions independently of the gateway service — they ship on
 # different clocks, and tying an SDK release to a server deploy means either stale clients or pointless
 # version churn.
 #
-#   cd sdk && npm version minor        # bump + commit
+#   cd packages/sdk && npm version minor   # bump + commit (likewise packages/cli, packages/mcp)
 #   git tag sdk-v0.2.0 && git push --follow-tags
 #
 # Nothing publishes unless the packed tarball has been installed into a scratch project and exercised. The
@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version-file: .nvmrc
           registry-url: "https://registry.npmjs.org"
 
       # sdk-v* -> sdk, cli-v* -> cli. workflow_dispatch passes it directly.

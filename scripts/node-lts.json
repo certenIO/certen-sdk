@@ -1,0 +1,10 @@
+{
+  "//": "Node release lines from https://github.com/nodejs/Release/blob/main/schedule.json, fetched 2026-10-09. Update this file when a new LTS line starts; scripts/check-node-policy.mjs fails CI if a workflow tests an end-of-life line or skips a supported LTS line at or above the engines floor.",
+  "asOf": "2026-10-09",
+  "lines": {
+    "18": { "ltsFrom": "2022-10-25", "end": "2025-04-30" },
+    "20": { "ltsFrom": "2023-10-24", "end": "2026-04-30" },
+    "22": { "ltsFrom": "2024-10-29", "end": "2027-04-30" },
+    "24": { "ltsFrom": "2025-10-28", "end": "2028-04-30" }
+  }
+}

@@ -17,7 +17,7 @@
     "packages/verify"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "//scripts": "spec:refresh is the only step that touches the network. Everything else is derived from the vendored spec/openapi.json, so tests and CI stay offline and deterministic.",
   "scripts": {
@@ -27,7 +27,11 @@
     "spec:refresh": "node tools/agentgen/refresh-spec.mjs",
     "agentgen": "node tools/agentgen/index.mjs",
     "agentgen:check": "node tools/agentgen/index.mjs --check",
-    "check:gateway": "node scripts/check-gateway-serves.mjs"
+    "check:gateway": "node scripts/check-gateway-serves.mjs",
+    "check:node": "node scripts/check-node-policy.mjs",
+    "check:pins": "node scripts/check-workspace-pins.mjs",
+    "test:counts": "node scripts/test-counts.mjs",
+    "test:counts:write": "node scripts/test-counts.mjs --write"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

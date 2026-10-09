@@ -1,3 +1,6 @@
-# Scripts and generators must keep LF endings: a CRLF shebang line breaks scripts/coverage.mjs under vitest on Windows checkouts.
-*.mjs text eol=lf
-*.sh text eol=lf
+# Every text file is LF in the index and in every checkout. On Windows, autocrlf used to rewrite the working tree to CRLF, which made
+# the generated agent artifacts byte-different from what the generator writes (npm run agentgen:check reported them STALE).
+* text=auto eol=lf
+*.gz binary
+*.png binary
+*.jpg binary

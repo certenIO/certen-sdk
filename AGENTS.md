@@ -29,10 +29,11 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | all three, one vitest process — 409 tests | no |
-| `node scripts/typecheck-all.mjs` | `tsc --noEmit` in all three | no |
-| `node scripts/build-all.mjs` | compiles all three, sdk first | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->888 tests in 59 files (sdk 409, cli 379, mcp 59, verify 41), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
+| `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |
+| `npm run test:counts` | runs the suite once and fails if the counts quoted in README.md and AGENTS.md are stale (`test:counts:write` refreshes them) | no |
 | `npm test --workspace packages/<pkg>` | one package, as CI invokes it | no |
 
 The npm forms and the `node scripts/*` forms do the same work; the npm ones are what CI invokes. If
@@ -138,6 +139,7 @@ catches both a wrong path in the SDK and a stale spec.
 packages/sdk/      @certen.io/sdk — the client. resources/ mirrors the API; execute.ts is the composite flow
 packages/cli/      @certen.io/cli — the `certen` command
 packages/mcp/      @certen.io/mcp — MCP server. protocol.ts is a direct JSON-RPC implementation (no deps)
+packages/verify/   @certen.io/proof-verify — the independent proof v2 verifier (offline; conformance-tested against the Go verifier)
 spec/openapi.json  vendored gateway spec; source of truth for everything generated
 tools/agentgen/    the generator + drift gate
 docs/guides/       task-shaped guides

@@ -23,7 +23,7 @@
     "url": "https://github.com/certenIO/certen-sdk/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

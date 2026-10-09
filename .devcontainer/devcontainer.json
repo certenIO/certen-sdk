@@ -1,7 +1,7 @@
 {
   "name": "certen-sdk",
-  "//image": "Node 20 is the middle of the CI matrix (18, 20, 22) and the version the repo is developed against. Pinning the major here means a container rebuild cannot silently move the toolchain.",
-  "image": "mcr.microsoft.com/devcontainers/typescript-node:1-20-bookworm",
+  "//image": "Node 24 is the repository's .nvmrc line and the newest in the CI matrix (22, 24). scripts/check-node-policy.mjs fails CI if this image drifts from .nvmrc. Pinning the major here means a container rebuild cannot silently move the toolchain.",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
 
   "//postCreateCommand": "Install and build on create. The CLI and MCP packages resolve @certen.io/sdk types from its dist/, which is gitignored — so without a build, a fresh container cannot typecheck them and the failure looks like a broken checkout.",
   "postCreateCommand": "npm install && npm run build",

@@ -20,7 +20,7 @@ import { defineConfig } from 'vitest/config';
  * `include` and `exclude` are left to vitest's defaults on purpose. Declaring them here would change
  * test DISCOVERY, and a root glob that is subtly narrower than the default makes files vanish
  * silently — a suite that quietly stops running part of itself is far worse than a slow one. The
- * default discovery currently finds 36 files across the three packages, and
+ * default discovery finds every test file of every package, and
  * `packages/sdk/test/test-config.test.ts` asserts that both this file exists and that the count has
  * not moved.
  */
