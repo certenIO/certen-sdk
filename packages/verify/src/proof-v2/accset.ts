@@ -5,6 +5,7 @@
  */
 import { keccak256 } from './accumulate.js';
 import { equal, fail, hexBytes } from './bytes.js';
+import { rec, type Rec } from './shapes.js';
 
 const DOMAIN = 'certen:accval:v1';
 
@@ -87,13 +88,14 @@ export function accumulateSetRoot(validators: AccumulateValidator[], threshold: 
  * pkg/proof decodeValidators: the set a NetworkDefinition (as JSON) carries, each validator active on the partitions
  * it is marked active on.
  */
-export function validatorsOf(network: any): AccumulateValidator[] {
-  const vs = network?.validators;
+export function validatorsOf(network: unknown): AccumulateValidator[] {
+  const vs = network && typeof network === 'object' ? (network as Rec).validators : undefined;
   if (!Array.isArray(vs) || vs.length === 0) fail('network account: NetworkDefinition carries no validators');
-  return vs.map((v: any, i: number) => {
+  return vs.map((validator: unknown, i: number) => {
+    const v = rec(validator, `validator ${i}`);
     const pk = hexBytes(v.publicKey, `validator ${i} publicKey`);
     if (pk.length !== 32) fail(`network account: validator ${i} has a ${pk.length}-byte public key, expected 32`);
-    const parts = Array.isArray(v.partitions) ? v.partitions : [];
-    return { publicKey: Buffer.from(pk).toString('hex'), activeOn: parts.filter((p: any) => p?.active === true).map((p: any) => String(p.id ?? '')) };
+    const parts = Array.isArray(v.partitions) ? (v.partitions as Rec[]) : [];
+    return { publicKey: Buffer.from(pk).toString('hex'), activeOn: parts.filter((p) => p?.active === true).map((p) => String(p.id ?? '')) };
   });
 }

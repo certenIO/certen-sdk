@@ -13,7 +13,7 @@
  * `uvarint(length) || fields`, an empty struct being the single byte 0x80; strings and bytes are length-prefixed; bool is one
  * byte; ints are uvarints; a duration is uvarint seconds then uvarint nanoseconds; fields ascend.
  */
-import { encodeObject, networkDefinition, networkGlobals } from './accumulate.js';
+import { encodeObject, networkDefinition, networkGlobals, type Rendered } from './accumulate.js';
 import { equal, fail, toHex } from './bytes.js';
 
 const EMPTY_OBJECT = 0x80;
@@ -179,9 +179,9 @@ function readStruct(r: Reader, s: Schema, depth = 0): Record<string, unknown> {
   return out;
 }
 
-function decode(bytes: Uint8Array, schema: Schema, build: (args: unknown) => any, label: string): any {
+function decode(bytes: Uint8Array, schema: Schema, build: (args: unknown) => Rendered, label: string): Rendered {
   const args = readStruct(new Reader(bytes, label), schema);
-  let obj: any;
+  let obj: Rendered;
   try {
     obj = build(args);
   } catch (e) {
@@ -195,12 +195,12 @@ function decode(bytes: Uint8Array, schema: Schema, build: (args: unknown) => any
 }
 
 /** protocol.NetworkDefinition from the single entry of a write to acc://dn.acme/network. */
-export function decodeNetworkDefinition(bytes: Uint8Array): any {
+export function decodeNetworkDefinition(bytes: Uint8Array): Rendered {
   return decode(bytes, DEFINITION, networkDefinition, 'network definition');
 }
 
 /** protocol.NetworkGlobals from the single entry of a write to acc://dn.acme/globals. */
-export function decodeNetworkGlobals(bytes: Uint8Array): any {
+export function decodeNetworkGlobals(bytes: Uint8Array): Rendered {
   return decode(bytes, GLOBALS, networkGlobals, 'network globals');
 }
 

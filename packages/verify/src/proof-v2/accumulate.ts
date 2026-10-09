@@ -9,6 +9,26 @@ import { encode } from 'accumulate-sdk-opendlt/encoding';
 import { keccak256 as sdkKeccak256 } from 'accumulate-sdk-opendlt/common';
 import { equal, fail, hexBytes, MerkleState, sha256, uvarint } from './bytes.js';
 
+/**
+ * The parts of accumulate-sdk-opendlt's objects this verifier uses, stated once. The SDK's classes are not exported with
+ * types that cover every record, so each is reached through this narrow surface instead of `any`; what the verifier reads
+ * back from them is the SDK's own rendering (`asObject`) or its own hash, never the document's JSON.
+ */
+export interface Rendered {
+  asObject(): Record<string, unknown>;
+}
+export interface Hashable {
+  hash(): Uint8Array;
+}
+interface SdkCore {
+  Transaction: new (j: unknown) => Hashable & Rendered;
+  NetworkDefinition: new (j: unknown) => Rendered;
+  NetworkGlobals: new (j: unknown) => Rendered;
+  Account: { fromObject(j: unknown): { url?: unknown } };
+  Signature: { fromObject(j: unknown): object };
+}
+const sdk = core as unknown as SdkCore;
+
 export function keccak256(data: Uint8Array): Uint8Array {
   return new Uint8Array(sdkKeccak256(data));
 }
@@ -27,26 +47,25 @@ export function encodeObject(o: unknown): Uint8Array {
  * A SequencedMessage from JSON. accumulate-sdk-opendlt >= 2.5.0 registers the message classes, so the nested message is
  * built as its real class by Message.fromObject (test/upstream-encoder.test.ts pins its bytes against Go's).
  */
-export function sequencedMessage(j: unknown, label: string): any {
+export function sequencedMessage(j: unknown, label: string): { message: { transaction: Hashable } } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const n = j as Record<string, unknown>;
   if (n.type !== 'sequenced') fail(`${label}: is ${String(n.type)}, not a sequenced message`);
-  return messaging.Message.fromObject(n as any) as any;
+  return messaging.Message.fromObject(n as Parameters<typeof messaging.Message.fromObject>[0]) as unknown as { message: { transaction: Hashable } };
 }
 
 /** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). */
-export function messageHash(msg: any): Uint8Array {
+export function messageHash(msg: unknown): Uint8Array {
   return sha256(encodeObject(msg));
 }
 
 /** protocol.Transaction.GetHash, through the SDK's own TransactionBase.hash. */
-export function transactionHash(tx: any): Uint8Array {
+export function transactionHash(tx: Hashable): Uint8Array {
   return new Uint8Array(tx.hash());
 }
 
-export function transaction(j: unknown, label: string): any {
-  if (!j || typeof j !== 'object') fail(`${label}: missing`);
-  return new (core as any).Transaction(j);
+export function transaction(j: unknown, label: string): Hashable & Rendered {
+  return build(label, j, (x) => new sdk.Transaction(x));
 }
 
 /**
@@ -54,26 +73,36 @@ export function transaction(j: unknown, label: string): any {
  * the wire (protocol.AllowedTransactionBit): accumulate-sdk-opendlt >= 2.5.0 packs it. A name the SDK does not know is
  * refused here by name, as a VerifyError, rather than escaping as a generic error.
  */
-export function account(j: unknown, label: string): any {
+export function account(j: unknown, label: string): { url?: unknown } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   try {
-    return (core as any).Account.fromObject(j);
+    return sdk.Account.fromObject(j);
   } catch (e) {
     return fail(`${label}: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
 
-export function networkDefinition(j: unknown): any {
-  return new (core as any).NetworkDefinition(j);
+/** An SDK object from untrusted JSON: missing input, or anything the SDK's constructor rejects, is a named VerifyError. */
+function build<T>(label: string, j: unknown, make: (j: unknown) => T): T {
+  if (!j || typeof j !== 'object') fail(`${label}: missing`);
+  try {
+    return make(j);
+  } catch (e) {
+    return fail(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
-export function networkGlobals(j: unknown): any {
-  return new (core as any).NetworkGlobals(j);
+export function networkDefinition(j: unknown): Rendered {
+  return build('network definition', j, (x) => new sdk.NetworkDefinition(x));
+}
+
+export function networkGlobals(j: unknown): Rendered {
+  return build('network globals', j, (x) => new sdk.NetworkGlobals(x));
 }
 
 /** URL equality as Go's url.URL.Equal: case-insensitive. */
 export function sameUrl(a: unknown, b: string): boolean {
-  return typeof a === 'string' || (a && typeof (a as any).toString === 'function')
+  return typeof a === 'string' || (a && typeof (a as { toString?: unknown }).toString === 'function')
     ? String(a).toLowerCase() === b.toLowerCase()
     : false;
 }
@@ -119,7 +148,7 @@ export function verifySignature(sigJson: unknown, msgHash: Uint8Array, label: st
   const md: Record<string, unknown> = { ...s };
   delete md.signature;
   delete md.transactionHash;
-  const mdHash = sha256(encodeObject((core as any).Signature.fromObject(md)));
+  const mdHash = sha256(encodeObject(sdk.Signature.fromObject(md)));
   if (ed25519(pub, combine(mdHash), sig)) return true;
 
   const signerVersion = Number(s.signerVersion ?? 0);

@@ -6,6 +6,7 @@
  */
 import { account, encodeObject, keccak256 } from './accumulate.js';
 import { equal, fail, merkleHashList, sha256, toHex } from './bytes.js';
+import { rec, type Rec } from './shapes.js';
 import type { Report } from './verify.js';
 
 /** The 32-byte, zero-padded domain of govRoot v3. */
@@ -141,10 +142,12 @@ export function computeGovRootV3(slots: GovRootV3Slots): string {
  * GovRootV3FromPortable: govRoot v3 from a report verifyPortable returned for doc, with the governance hashes, key
  * page, key book and operation id read from doc's govRootV3Inputs block.
  */
-export function govRootV3FromPortable(report: Report, doc: any): GovRootV3 {
-  const p = doc?.govRootV3Inputs;
+export function govRootV3FromPortable(report: Report, doc: unknown): GovRootV3 {
+  const d = doc && typeof doc === 'object' ? (doc as Rec) : {};
+  const p = d.govRootV3Inputs;
   if (!p || typeof p !== 'object') fail('govRoot v3: the portable proof carries no govRootV3Inputs');
-  return govRootV3(report, doc?.evidence?.pages, p);
+  const evidence = d.evidence && typeof d.evidence === 'object' ? (d.evidence as Rec) : {};
+  return govRootV3(report, evidence.pages, p as GovRootV3Inputs);
 }
 
 /**
@@ -206,19 +209,20 @@ export function pagesRootV3(report: Report, evidencePages: unknown): Uint8Array 
   if (chains.length !== pages.length || evidencePages.length !== pages.length) {
     fail(`govRoot v3: the report proves ${pages.length} pages with ${chains.length} chain results, the evidence carries ${evidencePages.length}`);
   }
-  const recs = pages.map((acct: any, i) => {
+  const recs = pages.map((proved, i) => {
+    const acct = proved as { url?: unknown } | undefined;
     if (!acct || !acct.url) fail(`govRoot v3: page ${i} of the report has no account`);
     const u = canonicalAccSpelling(String(acct.url));
-    const ep = evidencePages[i] as any;
-    if (canonicalAccSpelling(String(chains[i].url)) !== u || canonicalAccSpelling(String(ep?.url ?? '')) !== u) {
-      fail(`govRoot v3: page ${i} is ${u} in the report, but its chains are ${chains[i].url} and its evidence ${ep?.url}`);
+    const ep = rec(evidencePages[i], `govRoot v3: evidence page ${i}`);
+    if (canonicalAccSpelling(String(chains[i].url)) !== u || canonicalAccSpelling(String(ep.url ?? '')) !== u) {
+      fail(`govRoot v3: page ${i} is ${u} in the report, but its chains are ${chains[i].url} and its evidence ${String(ep.url)}`);
     }
     const state = encodeObject(account(ep.account, `govRoot v3: ${u}: state`));
     if (!equal(state, encodeObject(acct))) fail(`govRoot v3: ${u}: the evidence's state is not the account the report proved`);
     const bound = chains[i].bound ? 1 : 0;
     const height = chains[i].bound ? chains[i].mainHeight : 0;
-    const rec = Buffer.concat([sha256(Buffer.from(u, 'utf8')), sha256(state), new Uint8Array([bound]), u64be(height)]);
-    return { url: u, key: Buffer.from(u, 'utf8'), leaf: sha256(rec) };
+    const entry = Buffer.concat([sha256(Buffer.from(u, 'utf8')), sha256(state), new Uint8Array([bound]), u64be(height)]);
+    return { url: u, key: Buffer.from(u, 'utf8'), leaf: sha256(entry) };
   });
   recs.sort((a, b) => Buffer.compare(a.key, b.key));
   // Two pages under one canonical URL would make the order, and so the root, depend on capture order.
