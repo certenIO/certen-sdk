@@ -165,8 +165,11 @@ describe('CertenClient.retry', () => {
       // gaps between attempts should grow (modulo jitter)
       const gaps = timestamps.slice(1).map((t, i) => t - timestamps[i]);
       expect(gaps.length).toBe(3);
-      // last gap should be >= first gap (allowing jitter slack)
-      expect(gaps[gaps.length - 1]).toBeGreaterThanOrEqual(gaps[0] - 5);
+      // Each wait is `base + jitter` with jitter in [0, base), so a gap can only be longer than its base delay (20, 40, 80 ms),
+      // never shorter. Asserting the floor per attempt pins the exponential curve and cannot be broken by a stall that
+      // lengthens an earlier gap, which the previous "last gap >= first gap" comparison could (it failed on Node 24 under load).
+      const floors = [20, 40, 80];
+      gaps.forEach((gap, i) => expect(gap).toBeGreaterThanOrEqual(floors[i] - 5));
     } finally {
       await srv.close();
     }
