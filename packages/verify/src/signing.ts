@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto';
 import { core } from 'accumulate-sdk-opendlt';
 import { encodeObject, keccak256, sameUrl, transaction, transactionHash } from './proof-v2/accumulate.js';
 import { VerifyError, hexBytes, toHex } from './proof-v2/bytes.js';
+import { AbiUnsupported } from './abi.js';
 import { list, optList, rec, str, uint, type Rec } from './proof-v2/shapes.js';
 
 export const SIGNING_DATA_MISMATCH = 'SIGNING_DATA_MISMATCH';
@@ -99,8 +100,12 @@ export interface Expectation {
   expiresAt?: Date | string;
   /** The additional authorities the caller asked for. The header must carry exactly these (none, when none were asked for). */
   additionalAuthorities?: string[];
+  /** The transaction hash the caller named (a co-signature is for one existing transaction). */
+  transactionHash?: string;
   /** The key that will sign: the signature metadata must name it. */
   signerPublicKey?: string;
+  /** The vote the caller asked for (the gateway's names: approve, reject, abstain). The metadata carries Accumulate's: accept, reject, abstain. */
+  vote?: 'approve' | 'reject' | 'abstain';
   /** The key page that will sign, when the caller named it. */
   signerKeyPage?: string;
 }
@@ -162,7 +167,7 @@ function signatureMetadata(raw: unknown): { json: Rec; publicKey: string; signer
   const timestamp = typeof ts === 'string' ? ts : String(uint(ts, 'signature_metadata.timestamp_us'));
   if (!/^\d+$/.test(timestamp) || BigInt(timestamp) === 0n) throw new SigningDataMismatch('signature_metadata.timestamp_us', 'a positive integer', ts);
   const vote = m.vote === undefined || m.vote === null || m.vote === '' ? undefined : str(m.vote, 'signature_metadata.vote');
-  if (vote !== undefined && !['approve', 'reject', 'abstain'].includes(vote)) throw new SigningDataMismatch('signature_metadata.vote', 'approve | reject | abstain', vote);
+  if (vote !== undefined && !['accept', 'reject', 'abstain'].includes(vote)) throw new SigningDataMismatch('signature_metadata.vote', 'accept | reject | abstain (the names Accumulate uses)', vote);
   // The signature as Accumulate hashes it: everything but the signature bytes and the transaction hash.
   const json: Rec = { type: 'ed25519', publicKey, signer, signerVersion, timestamp: Number(timestamp), ...(vote ? { vote } : {}) };
   if (!Number.isSafeInteger(json.timestamp)) throw new SigningDataMismatch('signature_metadata.timestamp_us', 'a timestamp below 2^53', ts, 'not representable');
@@ -176,17 +181,22 @@ export interface Reconstruction {
 }
 
 /** Recompute the three hashes from the unsigned transaction and the signature metadata. Throws on malformed input only. */
-export function reconstructSigning(transactionJson: unknown, metadataJson: unknown): Reconstruction & { initiator: string } {
+export function reconstructSigning(transactionJson: unknown, metadataJson: unknown, existing = false): Reconstruction & { initiator: string } {
   const md = signatureMetadata(metadataJson);
   const sig = (core as unknown as { Signature: SdkSignature }).Signature.fromObject(md.json);
   const sigMdHash = sha256(encodeObject(sig));
   const tx = rec(transactionJson, 'transaction');
   const header = { ...rec(tx.header, 'transaction.header') };
   const presented = header.initiator;
-  if (presented !== undefined && presented !== null && norm(presented) !== toHex(sigMdHash)) {
-    throw new SigningDataMismatch('transaction.header.initiator', toHex(sigMdHash), norm(presented), 'the header does not name the signature metadata that was returned');
+  if (existing) {
+    // Co-signing a transaction that already exists: its initiator is the FIRST signer's, and stays. The transaction is hashed as it is.
+    if (presented === undefined || presented === null) throw new SigningDataMismatch('transaction.header.initiator', 'the initiator of the existing transaction', undefined, 'an existing transaction has one');
+  } else {
+    if (presented !== undefined && presented !== null && norm(presented) !== toHex(sigMdHash)) {
+      throw new SigningDataMismatch('transaction.header.initiator', toHex(sigMdHash), norm(presented), 'the header does not name the signature metadata that was returned');
+    }
+    header.initiator = toHex(sigMdHash);
   }
-  header.initiator = toHex(sigMdHash);
   const t = transaction({ header, body: tx.body }, 'transaction');
   const txHash = transactionHash(t);
   return { transactionHash: toHex(txHash), signatureMetadataHash: toHex(sigMdHash), hashToSign: toHex(sha256(sigMdHash, txHash)), initiator: toHex(sigMdHash) };
@@ -202,7 +212,7 @@ function mustEqual(field: string, expected: unknown, actual: unknown): void {
  * Rebuild, recompute, compare, decode, and match against what was asked for. Returns the summary of what the signature will
  * authorise; throws SigningDataAbsent or SigningDataMismatch (nothing may be signed) otherwise.
  */
-export function verifySigningData(signingData: unknown, expect: Expectation = {}): SigningSummary {
+export function verifySigningData(signingData: unknown, expect: Expectation = {}, opts: { existing?: boolean } = {}): SigningSummary {
   const sd = rec(signingData, 'signing_data') as SigningData & Rec;
   if (sd.transaction === undefined || sd.transaction === null) throw new SigningDataAbsent('signing_data.transaction');
   if (sd.signature_metadata === undefined || sd.signature_metadata === null) throw new SigningDataAbsent('signing_data.signature_metadata');
@@ -212,7 +222,7 @@ export function verifySigningData(signingData: unknown, expect: Expectation = {}
   const md = signatureMetadata(sd.signature_metadata);
   let rebuilt: ReturnType<typeof reconstructSigning>;
   try {
-    rebuilt = reconstructSigning(sd.transaction, sd.signature_metadata);
+    rebuilt = reconstructSigning(sd.transaction, sd.signature_metadata, opts.existing === true);
   } catch (e) {
     if (e instanceof SigningDataMismatch) throw e;
     throw new SigningDataMismatch('transaction', 'a transaction the SDK can rebuild', 'unusable', e instanceof Error ? e.message : String(e));
@@ -229,8 +239,11 @@ export function verifySigningData(signingData: unknown, expect: Expectation = {}
   const body = rec(tx.body, 'transaction.body');
   const principal = str(header.principal, 'transaction.header.principal');
 
+  if (expect.transactionHash !== undefined) mustEqual('transaction_hash', norm(expect.transactionHash), rebuilt.transactionHash);
+
   // The signer: the key that will sign, and the page it signs for.
   if (expect.signerPublicKey !== undefined) mustEqual('signature_metadata.public_key', norm(expect.signerPublicKey), md.publicKey);
+  if (expect.vote !== undefined) mustEqual('signature_metadata.vote', expect.vote === 'approve' ? 'accept' : expect.vote, md.vote ?? 'accept');
   if (expect.signerKeyPage !== undefined && !sameUrl(md.signer, expect.signerKeyPage)) throw new SigningDataMismatch('signature_metadata.signer', expect.signerKeyPage, md.signer);
 
   // The header.
@@ -364,6 +377,7 @@ function accumulateOperation(op: ExpectedOperation): { body: string; key: string
     case 'add_authority': return { body: 'updateAccountAuth', key: 'operations', value: { type: 'addAuthority', authority: op.authority_url } };
     case 'remove_authority': return { body: 'updateAccountAuth', key: 'operations', value: { type: 'removeAuthority', authority: op.authority_url } };
     case 'create_key_page': return { body: 'createKeyPage', key: 'keys', value: { keyHash: norm(op.public_key_hash) } };
+    default: throw new AbiUnsupported(`signing: the governance operation ${JSON.stringify((op as { type?: unknown }).type)} has no verifier, so what it changes cannot be checked`);
   }
 }
 

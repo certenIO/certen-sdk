@@ -1,4 +1,5 @@
 import { AxiosInstance } from 'axios';
+import { checkIntentSigning, checkCosigning, CertenSigningDataError, type SigningSummary } from '../signing-check.js';
 import { uuid } from '../random.js';
 import { omitUndefined, apiPath } from '../internal.js';
 import { CertenError, CertenIntentFailedError, CertenProofNotAvailableError, CertenWaitTimeoutError } from '../errors.js';
@@ -63,6 +64,11 @@ export interface ProofGatedCallParams extends HeaderFields {
    * forever with nothing reporting why. Set this when you are deliberately exercising that path.
    */
   skipFundingCheck?: boolean;
+  /**
+   * Called with what the signature will authorise, after the transaction the gateway returned was rebuilt and matched the request and
+   * before anything is signed. Throw, or return `false`, to decline: nothing is signed.
+   */
+  beforeSign?: BeforeSign;
 }
 
 export interface TransferParams extends HeaderFields {
@@ -111,6 +117,8 @@ export interface TransferParams extends HeaderFields {
   idempotencyKey?: string;
   /** Submit even if the abstract account is known to hold no gas. See ProofGatedCallParams. */
   skipFundingCheck?: boolean;
+  /** See ProofGatedCallParams. */
+  beforeSign?: BeforeSign;
 }
 
 /**
@@ -140,8 +148,13 @@ export function assertTransferParams(p: TransferParams): void {
   }
 }
 
+/** See `ProofGatedCallParams.beforeSign`. */
+export type BeforeSign = (summary: SigningSummary) => boolean | void | Promise<boolean | void>;
+
 export interface OpenedIntent {
   intentId: string;
+  /** What the signature authorised, as rebuilt from the transaction the gateway returned (see signing-check.ts). */
+  signing?: SigningSummary;
   accumTxHash?: string;
   signingMode?: string;
 }
@@ -228,7 +241,7 @@ export class ExecuteResource {
       proof_class: p.proofClass,
       signer_key_page: p.signerKeyPage,
       ...header,
-    }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);
+    }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey, p.beforeSign);
   }
 
   /** Authorize a native transfer, gated on proof. Same flow, simpler intent. */
@@ -272,7 +285,7 @@ export class ExecuteResource {
       proof_class: p.proofClass,
       signer_key_page: p.signerKeyPage,
       ...header,
-    }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey);
+    }, p.sign, p.signerPublicKey ?? p.publicKey, p.idempotencyKey, p.beforeSign);
   }
 
   /**
@@ -289,6 +302,7 @@ export class ExecuteResource {
     publicKey: string;
     sign: SignFn;
     vote?: 'approve' | 'reject' | 'abstain';
+    beforeSign?: BeforeSign;
   }): Promise<Record<string, unknown>> {
     const prep = await new SignResource(this.http).create({
       type: 'pending_tx',
@@ -304,12 +318,16 @@ export class ExecuteResource {
     // the typed resource makes the second name a compile error, and it never arrives here.
     const toSign = prep?.signing_data?.data_for_signature;
     if (!toSign) throw new Error(`certen: no signing data returned for ${p.accumTxHash}`);
-
     // A spent sign_request_id 404s rather than replaying, so never retry by resubmitting — request fresh
     // signing data instead.
     const url = prep.submit_url ?? apiPath`/v1/sign/${prep.sign_request_id}/signature`;
     // The gateway names where the signature goes; it must be the gateway. Checked before anything is signed, not only before it is sent.
     assertOwnOrigin(url, this.http.defaults.baseURL, 'submit_url');
+    // What is about to be signed is rebuilt from the transaction the gateway returned and checked against THIS request: the existing
+    // transaction's own hash, the vote, the key and the page. A mismatch, or no transaction to rebuild, throws before any signature.
+    const summary = await checkCosigning(prep.signing_data, { transactionHash: p.accumTxHash, signerPublicKey: p.publicKey, signerKeyPage: p.signerUrl, vote: p.vote ?? 'approve' });
+    await confirm(p.beforeSign, summary);
+
     const signature = await p.sign(toSign);
     const { data } = await this.http.post(url, { signature, public_key: p.publicKey });
     return data;
@@ -448,6 +466,7 @@ export class ExecuteResource {
     sign: SignFn,
     publicKey: string,
     idempotencyKey?: string,
+    beforeSign?: BeforeSign,
   ): Promise<OpenedIntent> {
     // An Idempotency-Key is not optional. A network error here is indistinguishable from success, and a
     // retry without one opens a SECOND intent — which on a value transfer means paying twice.
@@ -473,14 +492,37 @@ export class ExecuteResource {
       ?? apiPath`/v1/transaction/${(prep as { intent_id?: string }).intent_id}/signature`;
     assertOwnOrigin(submitUrl, this.http.defaults.baseURL, 'submit_url');
 
+    // Rebuild the transaction the gateway returned, recompute every hash, and compare what it would authorise with what was asked for.
+    // Any disagreement throws here, before a signature exists. There is no way to sign without this.
+    const intent = (body.intent ?? {}) as Record<string, unknown>;
+    const summary = await checkIntentSigning((prep as { signing_data: unknown }).signing_data, {
+      intentId: (prep as { intent_id?: string }).intent_id,
+      adiUrl: String(intent.adiUrl ?? ''),
+      intent,
+      signerPublicKey: publicKey,
+      signerKeyPage: body.signer_key_page as string | undefined,
+      additionalAuthorities: body.additional_authorities as string[] | undefined,
+      expiresAt: body.expires_at as string | undefined,
+    });
+    await confirm(beforeSign, summary);
+
     const signature = await sign(sd.hash_to_sign);
     await this.http.post(submitUrl, { signature, public_key: publicKey });
 
     return {
+      signing: summary,
       intentId: (prep as { intent_id: string }).intent_id,
       accumTxHash: sd.transaction_hash,
       signingMode: (prep as { signing_mode?: string }).signing_mode,
     };
+  }
+}
+
+/** The caller's last word: it sees what the signature authorises, and may decline. */
+async function confirm(beforeSign: BeforeSign | undefined, summary: SigningSummary): Promise<void> {
+  if (!beforeSign) return;
+  if ((await beforeSign(summary)) === false) {
+    throw new CertenSigningDataError('certen: signing declined by the caller after reading what it would authorise. Nothing was signed.', 'SIGNING_DECLINED');
   }
 }
 

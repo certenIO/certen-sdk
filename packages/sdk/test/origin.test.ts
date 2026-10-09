@@ -3,6 +3,7 @@ import http from 'node:http';
 import { CertenClient } from '../src/client.js';
 import { CertenError, CertenForeignOriginError } from '../src/errors.js';
 import { checkOwnOrigin, assertOwnOrigin, redirectStaysOnOrigin } from '../src/origin.js';
+import { honestIntent } from './helpers/honest-gateway.js';
 
 /**
  * The API key goes only to the client's own gateway.
@@ -120,10 +121,10 @@ describe('a response cannot send the key, or a signature, to another host', () =
   it('still posts the signature to a relative submit_url and to an absolute one on its own origin', async () => {
     for (const make of [() => '/v1/transaction/i1/signature', (own: string) => `${own}/v1/transaction/i1/signature`]) {
       let own = '';
-      const home = await listen((q, res) => {
-        if (q.url === '/v1/transaction') return json(res, 201, {
-          intent_id: 'i1', signing_mode: 'external', signing_data: { hash_to_sign: 'cd'.repeat(32), transaction_hash: 'ee'.repeat(32) }, submit_url: make(own),
-        });
+      // the transaction an honest gateway returns for exactly the call callParams makes
+      const mine = (url: string) => honestIntent({ intent: { adiUrl: 'acc://x.acme', legs: [{ chain: 'ethereum-sepolia', chainId: 11155111, toAddress: `0x${'22'.repeat(20)}`, amount: '0', contractCall: { target: `0x${'22'.repeat(20)}` } }] } }, { intentId: 'i1', publicKey: 'ab'.repeat(32), submitUrl: url });
+      const home = await listen(async (q, res) => {
+        if (q.url === '/v1/transaction') { const r = await mine(make(own)); return json(res, r.status, r.body); }
         return json(res, 200, { ok: true });
       });
       own = home.url;

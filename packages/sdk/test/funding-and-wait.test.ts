@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { CertenClient, CertenUnfundedAccountError, CertenFundingUnverifiableError } from '../src/index.js';
+import { honestIntent } from './helpers/honest-gateway.js';
 
 /**
  * Two protections the CLI had first, moved into the SDK so an SDK caller gets them too.
@@ -30,7 +31,7 @@ async function gateway(handler: (e: Req, n: number) => { status?: number; body?:
       body: raw ? JSON.parse(raw) : undefined,
     };
     seen.push(entry);
-    const out = handler(entry, seen.length);
+    const out = await handler(entry, seen.length);
     res.writeHead(out.status ?? 200, { 'content-type': 'application/json' })
       .end(JSON.stringify(out.body ?? {}));
   });
@@ -46,16 +47,6 @@ const client = (url: string) => new CertenClient({ apiKey: 'ck_live_test', baseU
 
 const HASH = 'ab'.repeat(32);
 const PUBKEY = '11'.repeat(32);
-const OPENED = {
-  status: 201,
-  body: {
-    intent_id: 'intent-1',
-    signing_mode: 'external',
-    signing_data: { hash_to_sign: HASH },
-    submit_url: '/v1/transaction/intent-1/signature',
-  },
-};
-
 /** A portfolio where the identity's account on `chainId` holds `balance`. */
 function portfolio(chainId: string, balance: string): unknown {
   return {
@@ -76,14 +67,14 @@ const TRANSFER = {
   fromChain: 'accumulate',
   toChain: 'ethereum-sepolia',
   fromAddress: 'acc://org.acme',
-  toAddress: '0xBe00',
+  toAddress: `0x${'be'.repeat(20)}`,
   amount: '4000',
   publicKey: PUBKEY,
   sign: (h: string) => `signed:${h}`,
 };
 
 function opened(over: (e: Req) => { status?: number; body?: unknown } | null) {
-  return (e: Req) => over(e) ?? (e.path === '/v1/transaction' && e.method === 'POST' ? OPENED : { body: { ok: true } });
+  return async (e: Req) => over(e) ?? (e.path === '/v1/transaction' && e.method === 'POST' ? honestIntent(e.body, { publicKey: e.body.signer_public_key }) : { body: { ok: true } });
 }
 
 describe('the funding guard refuses before anything is submitted', () => {
@@ -165,7 +156,7 @@ describe('the funding guard refuses before anything is submitted', () => {
         adiUrl: 'acc://org.acme',
         fromAddress: '0xAbs',
         chain: 'ethereum-sepolia',
-        contractCall: { target: '0xE', functionSignature: 'confirm(bytes32)', args: ['0x00'] },
+        contractCall: { target: `0x${'e1'.repeat(20)}`, functionSignature: 'confirm(bytes32)', args: [`0x${'00'.repeat(32)}`] },
         publicKey: PUBKEY,
         sign: (h) => `signed:${h}`,
       });

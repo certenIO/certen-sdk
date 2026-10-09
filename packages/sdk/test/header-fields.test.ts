@@ -29,6 +29,7 @@ import {
   parseDuration,
   REASON_CODE_DESCRIPTIONS,
 } from '../src/index.js';
+import { honestIntent } from './helpers/honest-gateway.js';
 
 const HASH = 'ab'.repeat(32);
 const PUBKEY = '11'.repeat(32);
@@ -44,7 +45,7 @@ async function gateway(handler: (e: Req) => { status?: number; body?: unknown })
     for await (const c of req) raw += c;
     const entry: Req = { method: req.method ?? 'GET', path: (req.url ?? '').split('?')[0], body: raw ? JSON.parse(raw) : undefined };
     seen.push(entry);
-    const out = handler(entry);
+    const out = await handler(entry);
     res.writeHead(out.status ?? 200, { 'content-type': 'application/json' }).end(JSON.stringify(out.body ?? {}));
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -52,16 +53,7 @@ async function gateway(handler: (e: Req) => { status?: number; body?: unknown })
   return { seen, url: `http://127.0.0.1:${port}`, close: () => server.close() };
 }
 
-const opened = {
-  status: 201,
-  body: {
-    intent_id: 'intent-1',
-    signing_mode: 'external',
-    signing_data: { hash_to_sign: HASH, transaction_hash: 'cd'.repeat(32) },
-    submit_url: '/v1/transaction/intent-1/signature',
-  },
-};
-const okFlow = (e: Req) => (e.path === '/v1/transaction' && e.method === 'POST' ? opened : { body: { ok: true } });
+const okFlow = async (e: Req) => (e.path === '/v1/transaction' && e.method === 'POST' ? honestIntent(e.body, { publicKey: e.body.signer_public_key }) : { body: { ok: true } });
 const clientFor = (url: string) => new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
 const openBody = (g: { seen: Req[] }) => g.seen.find((e) => e.path === '/v1/transaction' && e.method === 'POST')?.body;
 
@@ -124,7 +116,8 @@ describe('request body mapping', () => {
   });
 
   it('transaction.create maps both fields', async () => {
-    const g = await gateway(okFlow);
+    // create() opens an intent without signing it, so any reply will do
+    const g = await gateway(() => ({ status: 201, body: { intent_id: 'intent-1' } }));
     try {
       await clientFor(g.url).transaction.create({
         identityId: 'id-1', intent: { adiUrl: 'acc://x.acme' },

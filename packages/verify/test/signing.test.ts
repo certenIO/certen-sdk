@@ -237,7 +237,7 @@ describe('what used to be signed, and is refused now (fail-before: a hash for an
 
   it('signature metadata that is not an ed25519 signature with a valid version, timestamp and vote', () => {
     const sd = gatewaySigningData(v);
-    for (const bad of [{ type: 'btc' }, { signer_version: 0 }, { timestamp_us: 0 }, { vote: 'maybe' }]) {
+    for (const bad of [{ type: 'btc' }, { signer_version: 0 }, { timestamp_us: 0 }, { vote: 'approve' }]) {
       expect(() => verifySigningData({ ...sd, signature_metadata: { ...metadataOf(v), ...bad } })).toThrow(SigningDataMismatch);
     }
   });
@@ -309,5 +309,25 @@ describe('governance changes: what was asked for is what the transaction does', 
   it('extra operations smuggled alongside the one asked for are refused', () => {
     const sd = sdFor(page, { type: 'updateKeyPage', operation: [{ type: 'add', entry: { keyHash: KEY } }, { type: 'add', entry: { keyHash: 'cc'.repeat(32) } }] });
     expect(mismatch(() => verifySigningData(sd, { governance: [{ type: 'add_key', public_key_hash: KEY }] }))).toBe('transaction.body.operation');
+  });
+});
+
+describe('co-signing an existing transaction keeps its original initiator', () => {
+  const v = by('four-leg');
+  const meta = { ...metadataOf(v), signer: 'acc://rb7-adiri-10061842.acme/book/2', signer_version: 1, vote: 'accept' };
+  const r = reconstructSigning(v.transaction, meta, true);
+
+  it('hashes the transaction as it is, and signs sha256(new metadata hash || its hash)', () => {
+    expect(r.transactionHash).toBe(v.txid.match(/[0-9a-f]{64}/)![0]);
+    expect(r.signatureMetadataHash).not.toBe(v.transaction.header.initiator);
+    const sd = { data_for_signature: r.hashToSign, transaction_hash: r.transactionHash, transaction: v.transaction, signature_metadata: meta };
+    expect(() => verifySigningData(sd, { transactionHash: r.transactionHash, signerKeyPage: meta.signer, vote: 'approve' }, { existing: true })).not.toThrow();
+    expect(() => verifySigningData(sd, { vote: 'reject' }, { existing: true })).toThrow(SigningDataMismatch);
+  });
+
+  it('is refused as a NEW transaction, and for the wrong transaction hash', () => {
+    const sd = { data_for_signature: r.hashToSign, transaction: v.transaction, signature_metadata: meta };
+    expect(() => verifySigningData(sd)).toThrow(SigningDataMismatch);
+    expect(() => verifySigningData(sd, { transactionHash: 'ab'.repeat(32) }, { existing: true })).toThrow(SigningDataMismatch);
   });
 });

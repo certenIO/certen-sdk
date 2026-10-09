@@ -100,7 +100,7 @@ describe('the SDK catalogue against what the gateway actually raises', () => {
    * Codes the SDK raises that the gateway never does, because they happen before or instead of an
    * HTTP response. Anything else appearing here is drift.
    */
-  const SDK_ONLY = new Set(['NETWORK_ERROR', 'INTENT_FAILED', 'WAIT_TIMEOUT', 'PROOF_NOT_ASSIGNED', 'FOREIGN_ORIGIN_URL', 'INVALID_PATH_PARAMETER']);
+  const SDK_ONLY = new Set(['NETWORK_ERROR', 'INTENT_FAILED', 'WAIT_TIMEOUT', 'PROOF_NOT_ASSIGNED', 'FOREIGN_ORIGIN_URL', 'INVALID_PATH_PARAMETER', 'PROOF_V2_EVIDENCE_NOT_SERVED', 'SIGNING_DATA_MISMATCH', 'SIGNING_DATA_ABSENT', 'SIGNING_VERIFIER_UNAVAILABLE', 'SIGNING_EXPECTATION_UNAVAILABLE', 'SIGNING_DECLINED']);
 
   it('vendors a catalogue worth checking against', () => {
     expect(GATEWAY.errors.length).toBeGreaterThanOrEqual(30);

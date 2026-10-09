@@ -1,4 +1,5 @@
 import { createHash, createPrivateKey, createPublicKey, sign as nodeSign, generateKeyPairSync } from 'node:crypto';
+import { checkGovernanceSigning, type ExpectedOperation } from './signing-check.js';
 import type { CertenClient } from './client.js';
 import type { SignFn, OpenedIntent } from './resources/execute.js';
 import type {
@@ -398,6 +399,13 @@ export class CertenAgent {
     });
     const hash = created.signing_data?.hash_to_sign;
     if (!hash) return created; // provider-signed, or nothing to sign
+    // Rebuilt and matched against the operation asked for before a signature exists; a mismatch throws and nothing is signed.
+    await checkGovernanceSigning(created.signing_data, {
+      adiUrl: this.state.adiUrl!,
+      operations: [operation as unknown as ExpectedOperation],
+      signerPublicKey: this.signer.publicKey,
+      signerKeyPage: opts.signerKeyPage,
+    });
     const signature = await this.signer.sign(hash);
     await this.client.governance.submitSignature(created.governance_op_id, { signature, publicKey: this.signer.publicKey });
     return created;
