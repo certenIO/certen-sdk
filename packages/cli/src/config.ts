@@ -124,10 +124,19 @@ interface Keyring {
   deletePassword(service: string, account: string): Promise<boolean>;
 }
 
+/**
+ * The OS keyring through @napi-rs/keyring, an optional dependency with prebuilt binaries for Windows, macOS and Linux
+ * (it replaced the archived keytar). A missing module, or one whose native binary does not load on this platform, is
+ * null here, and callers refuse by name (KEYRING_UNAVAILABLE) rather than falling back to a file.
+ */
 async function loadKeyring(): Promise<Keyring | null> {
   try {
-    const mod = await import('keytar');
-    return mod as unknown as Keyring;
+    const mod = await import('@napi-rs/keyring');
+    return {
+      setPassword: (service, account, value) => new mod.AsyncEntry(service, account).setPassword(value),
+      getPassword: async (service, account) => (await new mod.AsyncEntry(service, account).getPassword()) ?? null,
+      deletePassword: (service, account) => new mod.AsyncEntry(service, account).deletePassword(),
+    };
   } catch {
     return null;
   }
@@ -150,11 +159,19 @@ export async function getApiKey(): Promise<string> {
   if (cfg.storage === 'keyring') {
     const kr = await loadKeyring();
     if (kr) {
-      const v = await kr.getPassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
+      let v: string | null;
+      try {
+        v = await kr.getPassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
+      } catch (e) {
+        throw new UsageError(
+          `storage=keyring but the OS keyring could not be read (${e instanceof Error ? e.message : String(e)}); set CERTEN_API_KEY, or run "certen auth login --no-keyring".`,
+          'KEYRING_UNAVAILABLE',
+        );
+      }
       if (v) return v;
     } else {
       throw new UsageError(
-        'storage=keyring requested but `keytar` is not installed; install it or set CERTEN_API_KEY.',
+        'storage=keyring requested but the OS keyring module (`@napi-rs/keyring`) could not be loaded; reinstall the CLI with its optional dependencies or set CERTEN_API_KEY.',
         'KEYRING_UNAVAILABLE',
       );
     }
@@ -182,9 +199,15 @@ export async function setApiKey(apiKey: string, useKeyring: boolean): Promise<vo
   if (useKeyring) {
     const kr = await loadKeyring();
     if (!kr) {
-      throw new Error('keytar is not installed; install it with `npm i keytar -g` or pass --no-keyring');
+      throw new Error('the OS keyring module (`@napi-rs/keyring`) could not be loaded; reinstall the CLI with its optional dependencies or pass --no-keyring');
     }
-    await kr.setPassword(KEYRING_SERVICE, KEYRING_ACCOUNT, apiKey);
+    try {
+      await kr.setPassword(KEYRING_SERVICE, KEYRING_ACCOUNT, apiKey);
+    } catch (e) {
+      // A platform with no usable keyring (a headless Linux box with no secret service) says so here. The key is not written
+      // anywhere else: a file is a different, weaker store and the user chooses it with --no-keyring.
+      throw new Error(`the OS keyring refused the key (${e instanceof Error ? e.message : String(e)}); pass --no-keyring to store it in ~/.certen/config.json at 0600, or set CERTEN_API_KEY`);
+    }
     const cfg = readConfig();
     cfg.storage = 'keyring';
     cfg.key_prefix = prefix;

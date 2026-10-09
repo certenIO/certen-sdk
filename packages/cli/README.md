@@ -258,8 +258,10 @@ Without `--json`, output is the human table format as before. Do not parse it.
 | `CERTEN_API_URL` | Gateway base URL. Defaults to `https://gateway.kompendium.co`. |
 | `CERTEN_KEY_PASSPHRASE` | Passphrase for local signing keys. |
 
-`certen auth login` stores the API key in your OS keyring by default, or in
-`~/.certen/config.json` at `0600` with `--no-keyring`.
+`certen auth login` stores the API key in your OS keyring by default (through the optional
+`@napi-rs/keyring` dependency, which ships prebuilt binaries for Windows, macOS and Linux), or in
+`~/.certen/config.json` at `0600` with `--no-keyring`. Where there is no usable keyring (a headless Linux box with no secret
+service), the default login refuses with that reason and writes nothing; use `--no-keyring` or set `CERTEN_API_KEY`.
 
 ## Things that will bite you
 
