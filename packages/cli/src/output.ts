@@ -248,8 +248,12 @@ function resolveExitCode(e: ErrorLike): ExitCode {
   // passed, a malformed duration) also carry status 0 — they were raised before any request. They
   // are wrong input, not an unreachable gateway, and must not exit 3 inviting a retry.
   if (e.status === 0 && e.code !== undefined && HEADER_FIELD_ERROR_CODES.includes(e.code)) return EXIT.USAGE;
-  // status 0 is how the SDK reports "the request never reached the gateway".
-  if (e.code === 'NETWORK_ERROR' || e.status === 0) return EXIT.UNREACHABLE;
+  // `NETWORK_ERROR` is how the SDK reports "the request never reached the gateway", and exit 3 promises exactly that: nothing was
+  // submitted, so a retry cannot double-execute. Other SDK errors also carry status 0, but they are not that. `WAIT_TIMEOUT`,
+  // `INTENT_FAILED` and `PROOF_NOT_ASSIGNED` are raised about an intent the gateway already holds; reporting them as unreachable
+  // would tell a script it is safe to open the intent again. They are a failed operation: exit 1. (A status-0 error with no code
+  // at all is still treated as unreachable.)
+  if (e.code === 'NETWORK_ERROR' || (e.status === 0 && e.code === undefined)) return EXIT.UNREACHABLE;
 
   // Falling through to FAILED is correct for a genuine operation failure and WRONG for a plain
   // `throw new Error('you forgot a flag')`, which should be a usage error and exit 2. Several

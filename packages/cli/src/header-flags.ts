@@ -4,6 +4,7 @@ import {
   normalizeExpiresAt,
   parseDuration,
   describeReasonCode,
+  isTerminalIntentStatus,
 } from '@certen.io/sdk';
 import { UsageError } from './errors.js';
 import { hint, isJsonMode } from './output.js';
@@ -100,7 +101,7 @@ export function emitOutcomeHints(tx: Record<string, unknown>): void {
   if (typeof tx.completion_basis === 'string') {
     hint(`  Completed on: ${tx.completion_basis}`);
   }
-  if (typeof tx.expires_at === 'string' && !['completed', 'delivered', 'proven'].includes(String(tx.status))) {
+  if (typeof tx.expires_at === 'string' && !isTerminalIntentStatus(tx.status)) {
     hint(`  Expires at: ${tx.expires_at}`);
   }
 }

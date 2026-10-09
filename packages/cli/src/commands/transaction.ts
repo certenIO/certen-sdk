@@ -1,6 +1,6 @@
 import { Command, Option } from 'commander';
 import { readFileSync } from 'node:fs';
-import { CertenClient } from '@certen.io/sdk';
+import { CertenClient, intentOutcome } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { resolveSigner } from '../signer.js';
@@ -51,12 +51,12 @@ function intentIdOf(result: unknown): string | undefined {
  */
 function emitTerminalHints(result: Record<string, unknown>, intentId: string): void {
   if (isJsonMode()) return;
-  const status = String(result.status ?? '');
+  const o = intentOutcome(result as { status?: unknown; reason_code?: unknown });
   const proofId = result.proof_id as string | undefined;
 
-  if (['completed', 'delivered', 'proven'].includes(status)) {
+  if (o.outcome === 'completed') {
     human('');
-    human(`  Intent ${intentId} is ${status}.`);
+    human(`  Intent ${intentId} is ${o.status}.`);
     hint('');
     hint(proofId
       ? `Next: certen proof get ${proofId}`
@@ -64,9 +64,23 @@ function emitTerminalHints(result: Record<string, unknown>, intentId: string): v
     return;
   }
 
-  if (status && status !== 'failed' && status !== 'error') {
+  if (o.outcome === 'completed_unproven') {
+    human('');
+    human(`  Intent ${intentId} executed, but its proof can never be produced (${o.reason}). Billed gas only, fee waived.`);
     hint('');
-    hint(`Still ${status}. Follow it with: certen tx status ${intentId} --wait`);
+    hint('There is no proof to fetch or verify for this intent.');
+    return;
+  }
+
+  if (o.outcome === 'executed') {
+    hint('');
+    hint(`Executed on its chain; the proof bundle is still being produced. Follow it with: certen tx status ${intentId} --wait`);
+    return;
+  }
+
+  if (o.outcome !== 'failed') {
+    hint('');
+    hint(`Still ${o.status || 'unknown'}. Follow it with: certen tx status ${intentId} --wait`);
   }
 }
 
