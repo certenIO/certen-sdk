@@ -11,6 +11,7 @@ import {
 } from './protocol.js';
 import { features, finishModern, resolveEra, type Era, type EraState, type LegacyVersion } from './era.js';
 import { activeTools, annotationsFor, writesAllowed, type ToolDef } from './tools.js';
+import { outputSchemaFor } from './output-schemas.js';
 import { availableResources, readResource } from './resources.js';
 
 export const SERVER_NAME = '@certen.io/mcp';
@@ -117,10 +118,13 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
         inputSchema: t.inputSchema,
         // Tool annotations exist from 2025-03-26; a 2024-11-05 client is not sent a field it does not know.
         ...(features(era).annotations ? { annotations: annotationsFor(t) } : {}),
+        // Structured output exists from 2025-06-18. A tool that declares a schema MUST return a result that conforms to it
+        // (structured-output.test.ts runs every tool and checks).
+        ...(features(era).structuredOutput && outputSchemaFor(t.name) ? { outputSchema: outputSchemaFor(t.name) } : {}),
       })),
     }),
 
-    'tools/call': async (params) => {
+    'tools/call': async (params, era) => {
       const name = typeof params.name === 'string' ? params.name : '';
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const tool = byName.get(name);
@@ -142,6 +146,8 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
       // does nothing — so the first call can never be the destructive one. Keyed on `mutates`, not
       // on the tier: the admin read tools are gated for visibility but have nothing to confirm.
       if (tool.mutates && args.confirm !== true) {
+        // Not the tool's result, so not shaped like it: flagged isError so a client does not validate it against the tool's
+        // outputSchema, and a model reads it as "the action was not taken". The text names the next step.
         return textResult(
           JSON.stringify(
             {
@@ -155,12 +161,13 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
             null,
             2,
           ),
+          true,
         );
       }
 
       try {
         const result = await tool.run(getClient(), args);
-        return textResult(JSON.stringify(result ?? null, null, 2));
+        return toolResult(tool, result, era);
       } catch (err) {
         if (err instanceof RpcError) throw err;
         // Tool errors come back as isError content rather than a JSON-RPC error, so the model can
@@ -217,6 +224,28 @@ const WRITE_NAMES = new Set(
     .filter((t: ToolDef) => t.tier === 'write')
     .map((t) => t.name),
 );
+
+/**
+ * A tool's result as MCP content: the JSON as text (every client reads it) and, from 2025-06-18, the same value as `structuredContent`.
+ *
+ * Every tool declares an object `outputSchema`, so a value that is not an object is not a result this tool can produce: it is reported
+ * as an error by name rather than being wrapped or coerced into something that merely validates.
+ */
+function toolResult(tool: ToolDef, result: unknown, era: Era) {
+  const isObject = typeof result === 'object' && result !== null && !Array.isArray(result);
+  if (features(era).structuredOutput && outputSchemaFor(tool.name) && !isObject) {
+    return textResult(JSON.stringify({
+      error: {
+        code: 'UNEXPECTED_RESULT',
+        message: `${tool.name} produced ${result === null || result === undefined ? 'no value' : Array.isArray(result) ? 'an array' : typeof result}, not the object its outputSchema describes. Nothing was altered to make it fit.`,
+      },
+    }, null, 2), true);
+  }
+  const text = JSON.stringify(result ?? null, null, 2);
+  return features(era).structuredOutput && isObject
+    ? { content: [{ type: 'text', text }], structuredContent: result }
+    : textResult(text);
+}
 
 function textResult(text: string, isError = false) {
   return { content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) };

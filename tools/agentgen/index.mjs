@@ -17,6 +17,7 @@ import { sdkMap } from './lib/sdk-map.mjs';
 import { sameText } from './lib/text.mjs';
 import { emitLlms } from './emit/llms.mjs';
 import { emitLlmsFull } from './emit/llms-full.mjs';
+import { emitMcpOutputSchemas } from './emit/mcp-output-schemas.mjs';
 import { buildContract, contractFixturePath } from '../../packages/sdk/scripts/build-contract-fixture.mjs';
 
 const check = process.argv.includes('--check');
@@ -55,6 +56,10 @@ if (unknown.length > 0) {
 const artifacts = [
   { path: join(REPO_ROOT, 'llms.txt'), content: emitLlms({ ops, map, sdkVersion }) },
   { path: join(REPO_ROOT, 'llms-full.txt'), content: emitLlmsFull({ spec, ops, map, sdkVersion }) },
+  {
+    path: join(REPO_ROOT, 'packages', 'mcp', 'src', 'output-schemas.generated.ts'),
+    content: emitMcpOutputSchemas({ spec, toolsSource: readFileSync(join(REPO_ROOT, 'packages', 'mcp', 'src', 'tools.ts'), 'utf8') }),
+  },
   {
     path: contractFixturePath(),
     content: `${JSON.stringify(buildContract(spec), null, 2)}\n`,
