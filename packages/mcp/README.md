@@ -12,6 +12,8 @@ Accumulate.
 npm install -g @certen.io/mcp
 ```
 
+Requires **Node 22 or 24** (`engines.node >=22`).
+
 Claude Desktop / any MCP client (`claude_desktop_config.json`):
 
 ```json

@@ -1,7 +1,7 @@
 ---
 name: certen
 description: Give this agent a CERTEN identity and let it execute proof-gated actions on any chain it is linked to. It never spends without the owner's explicit consent.
-version: 0.1.0
+version: 0.2.0
 metadata:
   openclaw:
     requires:
@@ -131,6 +131,14 @@ certen proof share <proof_id> --hours 72 --json     # a link that resolves with 
 The artifact anchors 60 to 120 seconds after the leg completes. If `proof get` says there is none
 yet, wait and retry; do not send the counterparty a bare transaction hash instead. They open the
 link with `certen proof open <link>` and verify it against CERTEN, not against you.
+
+`certen proof verify <intent_id> --json` checks the proof here, layer by layer, and exits `0` only when every layer
+the proof carries checked; `4` means a named layer is not established, `5` that no proof document is served yet.
+Never report a proof as verified because a bundle says `verified`; report the verdict this command prints.
+
+Every command that signs with `--sign-with` rebuilds the transaction the gateway returned and shows what the
+signature authorises first. If it refuses (`SIGNING_DATA_MISMATCH`, `SIGNING_DATA_ABSENT`), do not sign by another
+route and do not retry with a bare hash: tell the owner. The consent rules above are unchanged.
 
 ## Being regulated
 

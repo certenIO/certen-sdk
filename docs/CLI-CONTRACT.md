@@ -169,7 +169,7 @@ the request. It prints the result on stderr before signing (`You are about to si
 | `SIGNING_DATA_MISMATCH` | 1 | The transaction is not what was asked for, or does not hash to what the gateway sent. `error.details` has `field`, `expected`, `actual`. Nothing was signed. |
 | `SIGNING_DATA_ABSENT` | 1 | The gateway returned no transaction or signature metadata to check. Nothing was signed. |
 | `SIGNING_EXPECTATION_UNAVAILABLE` | 1 | The request is one the CLI cannot state the meaning of (a token transfer, a tuple argument, a chain outside the catalogue). Nothing was signed. |
-| `BLIND_SIGNING_REFUSED` | 2 | `--sign-with` with `--hash` on `tx sign`, `pending submit` or `governance sign`. A bare hash is never signed; there is no override. Use the one-step command above, or `tx inspect` / `governance inspect`, then `--signature` + `--public-key`. |
+| `BLIND_SIGNING_REFUSED` | 2 | `--sign-with` with `--hash` on `tx sign`, `pending submit` or `governance sign`, or `--hash` on `keys sign` (use `keys sign --signing-data`, which rebuilds and shows it first). A bare hash is never signed; there is no override. Use the one-step command above, or `tx inspect` / `governance inspect`, then `--signature` + `--public-key`. |
 
 `certen tx inspect <id>` and `certen governance inspect <id>` recompute and show what is awaiting a signature, signing nothing; `tx inspect --intent` also matches it to your request.
 
