@@ -2,13 +2,16 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CertenClient, CertenError } from '@certen.io/sdk';
 import {
-  LATEST_PROTOCOL_VERSION,
+  LATEST_LEGACY_PROTOCOL_VERSION,
+  LEGACY_VERSIONS,
   PROTOCOL_VERSIONS,
   RPC,
   RpcError,
   type Handler,
 } from './protocol.js';
-import { activeTools, writesAllowed, type ToolDef } from './tools.js';
+import { features, finishModern, resolveEra, type Era, type EraState, type LegacyVersion } from './era.js';
+import { activeTools, annotationsFor, writesAllowed, type ToolDef } from './tools.js';
+import { outputSchemaFor } from './output-schemas.js';
 import { availableResources, readResource } from './resources.js';
 
 export const SERVER_NAME = '@certen.io/mcp';
@@ -67,20 +70,12 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
     return client;
   };
 
-  return {
-    initialize: (params) => {
-      // Echo the client's protocol version when we support it; otherwise answer with ours and let
-      // the client decide whether it can proceed.
-      const asked = typeof params.protocolVersion === 'string' ? params.protocolVersion : '';
-      const version = (PROTOCOL_VERSIONS as readonly string[]).includes(asked)
-        ? asked
-        : LATEST_PROTOCOL_VERSION;
+  const serverInfo = { name: SERVER_NAME, version: SERVER_VERSION };
+  /** The one thing a legacy `initialize` leaves behind. Modern requests never touch it. */
+  const eraState: EraState = { legacyVersion: undefined };
 
-      return {
-        protocolVersion: version,
-        capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-        instructions:
+  /** What this server tells a model about itself: `initialize.instructions` (legacy) and `server/discover.instructions` (modern). */
+  const instructions =
           'CERTEN gateway access. Proof-gated cross-chain execution on Accumulate.\n\n'
           + 'THIS SERVER HOLDS NO SIGNING KEY AND CANNOT SIGN. To authorize anything: open an intent '
           + '(certen_transaction_open), sign the returned hash_to_sign wherever your key actually '
@@ -90,24 +85,46 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
             : 'Write tools are DISABLED. This server is read-only; set CERTEN_MCP_ALLOW_WRITES=1 to '
               + 'enable them. Do not tell the user to set it without saying what it permits.')
           + '\n\nRead certen://docs/llms.txt before writing code against this API — a proof cycle '
-          + 'legitimately takes 60-110 seconds, and most integration mistakes come from not knowing that.',
-      };
+          + 'legitimately takes 60-110 seconds, and most integration mistakes come from not knowing that.';
+
+  const capabilities = { tools: {}, resources: {} };
+
+  /** Each method sees the era it was asked under. The wrapper below resolves it, refuses what the era does not allow, and shapes the result. */
+  const methods: Record<string, (params: Record<string, unknown>, era: Era) => unknown> = {
+    initialize: (params) => {
+      // Echo the client's protocol version when it is a LEGACY one we support; otherwise answer with our newest legacy version and let
+      // the client decide whether it can proceed. A handshake cannot select a modern version: modern clients send no `initialize`.
+      const asked = typeof params.protocolVersion === 'string' ? params.protocolVersion : '';
+      const version: LegacyVersion = (LEGACY_VERSIONS as readonly string[]).includes(asked)
+        ? (asked as LegacyVersion)
+        : LATEST_LEGACY_PROTOCOL_VERSION;
+      eraState.legacyVersion = version;
+      return { protocolVersion: version, capabilities, serverInfo, instructions };
     },
+
+    // Modern clients may probe before anything else, to learn versions, capabilities and identity in one request. Mandatory in 2026-07-28.
+    'server/discover': () => ({ supportedVersions: [...PROTOCOL_VERSIONS], capabilities, instructions }),
 
     // Notifications: acknowledged by returning nothing. dispatch() suppresses responses for these.
     'notifications/initialized': () => ({}),
     'notifications/cancelled': () => ({}),
+    // Removed in 2026-07-28; the wrapper refuses it for a modern request.
     ping: () => ({}),
 
-    'tools/list': () => ({
+    'tools/list': (_params, era) => ({
       tools: tools.map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
+        // Tool annotations exist from 2025-03-26; a 2024-11-05 client is not sent a field it does not know.
+        ...(features(era).annotations ? { annotations: annotationsFor(t) } : {}),
+        // Structured output exists from 2025-06-18. A tool that declares a schema MUST return a result that conforms to it
+        // (structured-output.test.ts runs every tool and checks).
+        ...(features(era).structuredOutput && outputSchemaFor(t.name) ? { outputSchema: outputSchemaFor(t.name) } : {}),
       })),
     }),
 
-    'tools/call': async (params) => {
+    'tools/call': async (params, era) => {
       const name = typeof params.name === 'string' ? params.name : '';
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const tool = byName.get(name);
@@ -129,6 +146,8 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
       // does nothing — so the first call can never be the destructive one. Keyed on `mutates`, not
       // on the tier: the admin read tools are gated for visibility but have nothing to confirm.
       if (tool.mutates && args.confirm !== true) {
+        // Not the tool's result, so not shaped like it: flagged isError so a client does not validate it against the tool's
+        // outputSchema, and a model reads it as "the action was not taken". The text names the next step.
         return textResult(
           JSON.stringify(
             {
@@ -142,12 +161,13 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
             null,
             2,
           ),
+          true,
         );
       }
 
       try {
         const result = await tool.run(getClient(), args);
-        return textResult(JSON.stringify(result ?? null, null, 2));
+        return toolResult(tool, result, era);
       } catch (err) {
         if (err instanceof RpcError) throw err;
         // Tool errors come back as isError content rather than a JSON-RPC error, so the model can
@@ -165,16 +185,38 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
       })),
     }),
 
-    'resources/read': (params) => {
+    'resources/read': (params, era) => {
       const uri = typeof params.uri === 'string' ? params.uri : '';
       try {
         const { text, mimeType } = readResource(uri);
         return { contents: [{ uri, mimeType, text }] };
       } catch (err) {
-        throw new RpcError(RPC.INVALID_PARAMS, err instanceof Error ? err.message : String(err));
+        // A resource that does not exist is -32602 from 2026-07-28 on and was -32002 before it.
+        throw new RpcError(era.modern ? RPC.INVALID_PARAMS : RPC.LEGACY_RESOURCE_NOT_FOUND, err instanceof Error ? err.message : String(err), { uri });
       }
     },
   };
+
+  const MODERN_ONLY = new Set(['server/discover']);
+  const LEGACY_ONLY = new Set(['initialize', 'ping']);
+  const table: Record<string, Handler> = {};
+  for (const [method, inner] of Object.entries(methods)) {
+    table[method] = async (params) => {
+      const era = resolveEra(method, params, eraState);
+      if (era.modern && LEGACY_ONLY.has(method) && method !== 'initialize') {
+        throw new RpcError(RPC.METHOD_NOT_FOUND, `${method} was removed in protocol ${era.version}`);
+      }
+      if (!era.modern && MODERN_ONLY.has(method)) {
+        throw new RpcError(
+          RPC.INVALID_PARAMS,
+          `${method} needs _meta["io.modelcontextprotocol/protocolVersion"] and _meta["io.modelcontextprotocol/clientCapabilities"]`,
+        );
+      }
+      const result = await inner(params, era);
+      return era.modern ? finishModern(method, result, serverInfo) : result;
+    };
+  }
+  return table;
 }
 
 const WRITE_NAMES = new Set(
@@ -182,6 +224,28 @@ const WRITE_NAMES = new Set(
     .filter((t: ToolDef) => t.tier === 'write')
     .map((t) => t.name),
 );
+
+/**
+ * A tool's result as MCP content: the JSON as text (every client reads it) and, from 2025-06-18, the same value as `structuredContent`.
+ *
+ * Every tool declares an object `outputSchema`, so a value that is not an object is not a result this tool can produce: it is reported
+ * as an error by name rather than being wrapped or coerced into something that merely validates.
+ */
+function toolResult(tool: ToolDef, result: unknown, era: Era) {
+  const isObject = typeof result === 'object' && result !== null && !Array.isArray(result);
+  if (features(era).structuredOutput && outputSchemaFor(tool.name) && !isObject) {
+    return textResult(JSON.stringify({
+      error: {
+        code: 'UNEXPECTED_RESULT',
+        message: `${tool.name} produced ${result === null || result === undefined ? 'no value' : Array.isArray(result) ? 'an array' : typeof result}, not the object its outputSchema describes. Nothing was altered to make it fit.`,
+      },
+    }, null, 2), true);
+  }
+  const text = JSON.stringify(result ?? null, null, 2);
+  return features(era).structuredOutput && isObject
+    ? { content: [{ type: 'text', text }], structuredContent: result }
+    : textResult(text);
+}
 
 function textResult(text: string, isError = false) {
   return { content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) };

@@ -71,10 +71,13 @@ export class WebhooksResource {
     return data;
   }
 
-  /** Stop delivering to an endpoint. Requires `webhook:write`. */
-  async remove(id: string): Promise<{ deleted?: boolean; [k: string]: unknown }> {
-    const { data } = await this.http.delete(apiPath`/v1/webhooks/endpoints/${id}`);
-    return data;
+  /**
+   * Stop delivering to an endpoint. Requires `webhook:write`. The gateway answers 204 with no body, so this resolves
+   * `{ deleted: true }` (a failure throws); it used to return the empty body, an empty string, under a type that promised an object.
+   */
+  async remove(id: string): Promise<{ deleted: true }> {
+    await this.http.delete(apiPath`/v1/webhooks/endpoints/${id}`);
+    return { deleted: true };
   }
 
   /**

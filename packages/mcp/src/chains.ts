@@ -23,6 +23,18 @@ const CODE = 'UNSUPPORTED_CHAIN';
 
 type Env = Record<string, string | undefined>;
 
+/**
+ * The gateway's list of chains. A reply with no `chains` array is a gateway that did not answer the question, which is reported by
+ * name; it is not read as "serves nothing" (that would refuse every chain) or "serves everything" (that would accept a typo).
+ */
+async function servedChains(client: CertenClient): Promise<Array<{ id: string; chainId?: number | null; enabled?: boolean }>> {
+  const reply = (await client.chains.list()) as { chains?: unknown };
+  if (!Array.isArray(reply?.chains)) {
+    throw new CertenError('the gateway\'s chain list (GET /v1/chains) came back without a "chains" array, so which chains it serves is not known', 0, 'GATEWAY_RESPONSE_UNEXPECTED');
+  }
+  return reply.chains as Array<{ id: string; chainId?: number | null; enabled?: boolean }>;
+}
+
 /** The configured set. A setting naming an unknown or retired chain is refused by name, never skipped. */
 export function configuredChains(env: Env = process.env): string[] {
   try {
@@ -61,7 +73,7 @@ export async function assertChainUsable(client: CertenClient, value: string, env
   if (info.enabledByDefault) return info.slug;
 
   // An opt-in chain (Telcoin Adiri): enabled by configuration, but only usable if the gateway says it serves it.
-  const { chains } = await client.chains.list();
+  const chains = await servedChains(client);
   const live = chainAvailability(info.slug, configured, chains);
   if (live.state === 'enabled') return info.slug;
   const label = `${info.slug} (${info.displayName}, chain ${info.chainId})`;
@@ -90,7 +102,7 @@ export async function assertIntentChains(client: CertenClient, intent: unknown, 
 /** What `certen_chains_enabled` returns: the chains this server will accept, and why the others are not offered. */
 export async function enabledChainReport(client: CertenClient, env: Env = process.env): Promise<Record<string, unknown>> {
   const configured = configuredChains(env);
-  const { chains } = await client.chains.list();
+  const chains = await servedChains(client);
   const usable = resolveEnabledChains(configured, chains);
   return {
     enabled: usable.map((c) => ({

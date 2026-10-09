@@ -77,9 +77,13 @@ export class AdminResource {
     return data;
   }
 
-  async revokeApiKey(id: string): Promise<{ success: boolean; message: string }> {
-    const { data } = await this.http.delete(apiPath`/v1/admin/api-keys/${id}`);
-    return data;
+  /**
+   * Revoke an API key. The gateway answers 204 with NO body, so there is nothing to return from it; this resolves `{ success: true }`
+   * (a failure throws). It used to be typed `{ success, message }` and returned the empty body, which was an empty string.
+   */
+  async revokeApiKey(id: string): Promise<{ success: true }> {
+    await this.http.delete(apiPath`/v1/admin/api-keys/${id}`);
+    return { success: true };
   }
 
   /**

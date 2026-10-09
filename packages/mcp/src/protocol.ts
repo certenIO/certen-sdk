@@ -14,8 +14,19 @@
 
 import { CertenPaymentRequiredError } from '@certen.io/sdk';
 
-export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'] as const;
-export const LATEST_PROTOCOL_VERSION = PROTOCOL_VERSIONS[0];
+/**
+ * Protocol revisions this server speaks.
+ *
+ * MODERN (2026-07-28 and later) is stateless: no `initialize`, each request carries its protocol version and the client's capabilities in
+ * `_meta`, every result carries `resultType`, and `server/discover` is mandatory. LEGACY (2025-11-25 and earlier) opens with
+ * `initialize`. The server serves both ("dual-era"); see era.ts. Newest first.
+ */
+export const MODERN_VERSIONS = ['2026-07-28'] as const;
+export const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'] as const;
+export const PROTOCOL_VERSIONS = [...MODERN_VERSIONS, ...LEGACY_VERSIONS] as const;
+export const LATEST_PROTOCOL_VERSION = MODERN_VERSIONS[0];
+/** What `initialize` answers with when the client asks for a version this server does not know. A handshake cannot select a modern version. */
+export const LATEST_LEGACY_PROTOCOL_VERSION = LEGACY_VERSIONS[0];
 
 /** JSON-RPC 2.0 reserved codes, plus the ones MCP servers actually return. */
 export const RPC = {
@@ -24,6 +35,11 @@ export const RPC = {
   METHOD_NOT_FOUND: -32601,
   INVALID_PARAMS: -32602,
   INTERNAL_ERROR: -32603,
+  /** MCP-defined codes live in -32020..-32099 (2026-07-28, "Error Codes"). */
+  MISSING_REQUIRED_CLIENT_CAPABILITY: -32021,
+  UNSUPPORTED_PROTOCOL_VERSION: -32022,
+  /** The code 2025-11-25 and earlier used for a resource that does not exist; 2026-07-28 uses INVALID_PARAMS instead. */
+  LEGACY_RESOURCE_NOT_FOUND: -32002,
 } as const;
 
 export interface JsonRpcRequest {

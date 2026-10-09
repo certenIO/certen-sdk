@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PassThrough } from 'node:stream';
 import { readFileSync } from 'node:fs';
-import { dispatch, serve, RpcError, RPC, LATEST_PROTOCOL_VERSION } from '../src/protocol.js';
+import { dispatch, serve, RpcError, RPC, LATEST_LEGACY_PROTOCOL_VERSION } from '../src/protocol.js';
 import { createHandlers, SERVER_VERSION } from '../src/server.js';
 
 /**
@@ -101,12 +101,21 @@ describe('initialize', () => {
     expect((res?.result as { protocolVersion: string }).protocolVersion).toBe('2024-11-05');
   });
 
-  it('falls back to its own version for an unknown one', async () => {
+  it('falls back to its newest legacy version for an unknown one (a handshake cannot select a modern version)', async () => {
     const res = await dispatch(
       req('initialize', { protocolVersion: '1999-01-01' }),
       createHandlers({ env: READ_ONLY }),
     );
-    expect((res?.result as { protocolVersion: string }).protocolVersion).toBe(LATEST_PROTOCOL_VERSION);
+    expect((res?.result as { protocolVersion: string }).protocolVersion).toBe(LATEST_LEGACY_PROTOCOL_VERSION);
+    const modern = await dispatch(req('initialize', { protocolVersion: '2026-07-28' }), createHandlers({ env: READ_ONLY }));
+    expect((modern?.result as { protocolVersion: string }).protocolVersion).toBe(LATEST_LEGACY_PROTOCOL_VERSION);
+  });
+
+  it('echoes each legacy version it supports, including 2025-11-25', async () => {
+    for (const v of ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05']) {
+      const res = await dispatch(req('initialize', { protocolVersion: v }), createHandlers({ env: READ_ONLY }));
+      expect((res?.result as { protocolVersion: string }).protocolVersion).toBe(v);
+    }
   });
 
   it('says in its instructions that it cannot sign', async () => {
@@ -355,12 +364,12 @@ describe('resources', () => {
     expect(contents[0].text).toMatch(/CERTEN/);
   });
 
-  it('rejects an unknown resource uri', async () => {
+  it('rejects an unknown resource uri with the legacy "resource not found" code (-32002); modern requests get -32602', async () => {
     const res = await dispatch(
       req('resources/read', { uri: 'certen://docs/nope' }),
       createHandlers({ env: READ_ONLY }),
     );
-    expect(res?.error?.code).toBe(RPC.INVALID_PARAMS);
+    expect(res?.error?.code).toBe(RPC.LEGACY_RESOURCE_NOT_FOUND);
   });
 });
 
