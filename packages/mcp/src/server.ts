@@ -9,8 +9,8 @@ import {
   RpcError,
   type Handler,
 } from './protocol.js';
-import { finishModern, resolveEra, type Era, type EraState, type LegacyVersion } from './era.js';
-import { activeTools, writesAllowed, type ToolDef } from './tools.js';
+import { features, finishModern, resolveEra, type Era, type EraState, type LegacyVersion } from './era.js';
+import { activeTools, annotationsFor, writesAllowed, type ToolDef } from './tools.js';
 import { availableResources, readResource } from './resources.js';
 
 export const SERVER_NAME = '@certen.io/mcp';
@@ -110,11 +110,13 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
     // Removed in 2026-07-28; the wrapper refuses it for a modern request.
     ping: () => ({}),
 
-    'tools/list': () => ({
+    'tools/list': (_params, era) => ({
       tools: tools.map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,
+        // Tool annotations exist from 2025-03-26; a 2024-11-05 client is not sent a field it does not know.
+        ...(features(era).annotations ? { annotations: annotationsFor(t) } : {}),
       })),
     }),
 

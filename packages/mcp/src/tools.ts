@@ -42,6 +42,18 @@ export interface ToolDef {
    * reflexively, which is exactly the habit the gate exists to prevent.
    */
   mutates: boolean;
+  /**
+   * For a mutating tool: may it destroy or overwrite something that cannot be got back? (MCP `destructiveHint`.)
+   * True for anything that revokes, retires, rotates, overwrites, or sends a signature that executes on chain. False for a tool that only
+   * adds (opens an intent, registers an address, redelivers a webhook). Ignored for a tool that does not mutate.
+   */
+  destructive?: boolean;
+  /**
+   * For a mutating tool: does calling it again with the same arguments leave the world as the first call did? (MCP `idempotentHint`.)
+   * Claimed only where the gateway makes it so (a second revoke finds the key already gone); never for a call that would open a second
+   * intent, deliver again, or whose spent id is refused rather than replayed. Ignored for a tool that does not mutate.
+   */
+  idempotent?: boolean;
   description: string;
   /** The gateway operation this reaches, as `METHOD /path` — checked against the vendored spec. */
   endpoint: string;
@@ -753,6 +765,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_webhook_redeliver',
     tier: 'write',
     mutates: true,
+    destructive: false,
+    idempotent: false,
     endpoint: 'POST /v1/webhooks/deliveries/{id}/redeliver',
     description:
       'Send a failed delivery again. Genuinely NOT idempotent — each call delivers again, which is '
@@ -774,6 +788,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_billing_register_payer',
     tier: 'write',
     mutates: true,
+    destructive: false,
+    idempotent: true,
     endpoint: 'POST /v1/billing/deposit-addresses',
     description:
       'Register a wallet this organization pays from, so every future deposit sent from it is '
@@ -804,6 +820,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_identity_create',
     tier: 'write',
     mutates: true,
+    destructive: false,
+    idempotent: false,
     endpoint: 'POST /v1/identity',
     description:
       'Provision a new identity. Consumes organization identity quota. '
@@ -865,6 +883,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_identity_update',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: true,
     endpoint: 'PATCH /v1/identity/{id}',
     description: 'Link or unlink chains on an identity, or set its webhook URL.',
     inputSchema: {
@@ -890,6 +910,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_identity_retire',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: true,
     endpoint: 'DELETE /v1/identity/{id}',
     description: 'Retire an identity, freeing its quota slot. Not reversible.',
     inputSchema: {
@@ -904,6 +926,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_transaction_open',
     tier: 'write',
     mutates: true,
+    destructive: false,
+    idempotent: false,
     endpoint: 'POST /v1/transaction',
     description:
       'Open a transaction intent and return its `signing_data.hash_to_sign`. '
@@ -985,6 +1009,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_transaction_submit_signature',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: false,
     endpoint: 'POST /v1/transaction/{id}/signature',
     description:
       'Submit a signature you produced elsewhere, authorizing the intent to execute. '
@@ -1011,6 +1037,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_sign_create',
     tier: 'write',
     mutates: true,
+    destructive: false,
+    idempotent: false,
     endpoint: 'POST /v1/sign',
     description:
       'Open a sign request — a vote on a multi-signature transaction. Returns signing data to be '
@@ -1082,6 +1110,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_sign_submit_signature',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: false,
     endpoint: 'POST /v1/sign/{id}/signature',
     description:
       'Submit the signature for a sign request, casting the vote. A spent sign request 404s rather '
@@ -1107,6 +1137,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_governance_submit_signature',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: false,
     endpoint: 'POST /v1/governance/{id}/signature',
     description:
       'Submit a signature for a governance operation — changing delegates, thresholds or key pages. '
@@ -1185,6 +1217,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_admin_rotate_api_key',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: false,
     endpoint: 'POST /v1/admin/api-keys/{id}/rotate',
     description:
       'Rotate an API key: mints a replacement and revokes the old one. Anything still using the old '
@@ -1201,6 +1235,8 @@ const WRITE_TOOLS: ToolDef[] = [
     name: 'certen_admin_revoke_api_key',
     tier: 'write',
     mutates: true,
+    destructive: true,
+    idempotent: true,
     endpoint: 'DELETE /v1/admin/api-keys/{id}',
     description: 'Revoke an API key. Immediate and not reversible.',
     inputSchema: {
@@ -1218,6 +1254,22 @@ export const ALL_TOOLS: ToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS];
 /** Writes are opt-in through the environment, never through a prompt. */
 export function writesAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.CERTEN_MCP_ALLOW_WRITES === '1';
+}
+
+/**
+ * The MCP tool annotations for a tool, derived from the metadata the server already enforces with; nothing here is a second opinion.
+ *
+ *   readOnlyHint     = !mutates                   (the admin read tools sit in the write TIER but change nothing)
+ *   destructiveHint  = mutates && destructive     (only meaningful when not read-only)
+ *   idempotentHint   = mutates && idempotent      (only meaningful when not read-only)
+ *   openWorldHint    = true                       (every tool reaches the CERTEN gateway, an external system)
+ *
+ * Clients must treat annotations as untrusted hints unless the server is trusted, so they describe behaviour and enforce nothing;
+ * the confirm:true gate and the write-tier switch are what enforce it.
+ */
+export function annotationsFor(tool: ToolDef): { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint: boolean } {
+  if (!tool.mutates) return { readOnlyHint: true, openWorldHint: true };
+  return { readOnlyHint: false, destructiveHint: tool.destructive === true, idempotentHint: tool.idempotent === true, openWorldHint: true };
 }
 
 export function activeTools(env: NodeJS.ProcessEnv = process.env): ToolDef[] {
