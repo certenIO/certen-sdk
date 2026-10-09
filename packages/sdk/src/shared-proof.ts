@@ -2,6 +2,7 @@ import { gunzipSync } from 'node:zlib';
 import axios, { AxiosError } from 'axios';
 import { DEFAULT_BASE_URL } from './client.js';
 import { CertenError } from './errors.js';
+import { apiPath } from './internal.js';
 import type { SharedProof } from './types.js';
 
 /**
@@ -35,7 +36,7 @@ export async function fetchSharedProof(
 
   try {
     const { data } = await axios.get(
-      `${baseUrl.replace(/\/+$/, '')}/v1/proof/shared/${encodeURIComponent(token)}`,
+      `${baseUrl.replace(/\/+$/, '')}${apiPath`/v1/proof/shared/${token}`}`,
       {
         timeout: options.timeoutMs ?? 30_000,
         headers: { 'Content-Type': 'application/json' },

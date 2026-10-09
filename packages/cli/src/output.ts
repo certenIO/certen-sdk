@@ -248,6 +248,8 @@ function resolveExitCode(e: ErrorLike): ExitCode {
   // passed, a malformed duration) also carry status 0 — they were raised before any request. They
   // are wrong input, not an unreachable gateway, and must not exit 3 inviting a retry.
   if (e.status === 0 && e.code !== undefined && HEADER_FIELD_ERROR_CODES.includes(e.code)) return EXIT.USAGE;
+  // An empty or dot-only id is the same kind of mistake: wrong input, raised before any request.
+  if (e.status === 0 && e.code === 'INVALID_PATH_PARAMETER') return EXIT.USAGE;
   // `NETWORK_ERROR` is how the SDK reports "the request never reached the gateway", and exit 3 promises exactly that: nothing was
   // submitted, so a retry cannot double-execute. Other SDK errors also carry status 0, but they are not that. `WAIT_TIMEOUT`,
   // `INTENT_FAILED` and `PROOF_NOT_ASSIGNED` are raised about an intent the gateway already holds; reporting them as unreachable

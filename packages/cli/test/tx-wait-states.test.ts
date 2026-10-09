@@ -174,6 +174,10 @@ describe('exit 3 means the gateway was not reached, and nothing else', () => {
     }
   });
 
+  it('exits 2, a usage error, for an empty or dot-only id', () => {
+    expect(exitFor(new CertenError('x', 0, 'INVALID_PATH_PARAMETER'))).toBe(EXIT.USAGE);
+  });
+
   it('still treats a status-0 error with no code at all as unreachable', () => {
     expect(exitFor({ message: 'socket hang up', status: 0 })).toBe(EXIT.UNREACHABLE);
   });

@@ -67,7 +67,8 @@ function stripComments(src) {
 
 const METHODS = 'get|post|put|patch|delete';
 // The leading dot is OPTIONAL, which is the fix for the indirection blind spot described above.
-const HTTP_CALL = new RegExp(`\\b\\.?(${METHODS})\\s*(?:<[^>]*>)?\\s*\\(\\s*([\`'"])([^\`'"]*?)\\2`, 'g');
+// A path may be tagged with `apiPath` (the SDK's one path builder, which encodes each interpolated id as a single segment).
+const HTTP_CALL = new RegExp(`\\b\\.?(${METHODS})\\s*(?:<[^>]*>)?\\s*\\(\\s*(?:apiPath)?([\`'"])([^\`'"]*?)\\2`, 'g');
 // MCP tool declarations: `endpoint: 'GET /v1/x'` and the entries inside `alsoReaches: [...]`.
 const DECLARED = /['"`](GET|POST|PUT|PATCH|DELETE)\s+(\/v1\/[^'"`]*)['"`]/g;
 

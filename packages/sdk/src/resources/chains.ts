@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import type { ChainsListResponse, ChainDetailResponse } from '../types.js';
 import { resolveEnabledChains, defaultEnabledChains, type ChainCatalogueEntry } from '../chains.js';
+import { apiPath } from '../internal.js';
 
 /**
  * The contract registry: which chains CERTEN is deployed on, and at what addresses.
@@ -42,7 +43,7 @@ export class ChainsResource {
    * handed them, and making them translate is a step that buys nothing.
    */
   async get(idOrChainId: string | number): Promise<ChainDetailResponse> {
-    const { data } = await this.http.get(`/v1/chains/${idOrChainId}`);
+    const { data } = await this.http.get(apiPath`/v1/chains/${idOrChainId}`);
     return data;
   }
 

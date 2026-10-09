@@ -111,6 +111,13 @@ export const ERROR_CODES = [
     fix: 'Do not follow it. A gateway response that names another host is misconfigured or has been tampered with; nothing was signed or sent and no credential left the process. Check the base url and the gateway before retrying.',
   },
   {
+    code: 'INVALID_PATH_PARAMETER',
+    status: 0,
+    retryable: false,
+    meaning: 'An id, hash or token passed to a call was empty, not text or a number, or made only of dots, so it cannot name one resource. Raised before any request is sent.',
+    fix: 'Pass the real id. The SDK encodes every id as a single path segment; it refuses an empty one rather than requesting a different route (identity.get("") would have listed identities).',
+  },
+  {
     code: 'PAYMENT_REQUIRED',
     status: 402,
     retryable: false,

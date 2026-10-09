@@ -1,5 +1,5 @@
 import { AxiosInstance } from 'axios';
-import { omitUndefined } from '../internal.js';
+import { omitUndefined, apiPath } from '../internal.js';
 import type {
   CreateIdentityParams,
   Identity,
@@ -85,7 +85,7 @@ export class IdentityResource {
       include?: Array<'governance' | 'balances' | 'pending'>;
     } = {},
   ): Promise<IdentityResponse> {
-    const { data } = await this.http.get(`/v1/identity/${id}`, {
+    const { data } = await this.http.get(apiPath`/v1/identity/${id}`, {
       // Only sent when asked for: omitting the param keeps the gateway's default, while sending
       // `include=` is the explicit "none" that a poll loop wants. The two are different requests
       // and conflating them would silently strip enrichments from every ordinary read.
@@ -226,7 +226,7 @@ export class IdentityResource {
 
   /** Link or unlink chains, set a webhook, or supply a `publicKey` to repair an identity created without one. */
   async update(id: string, params: UpdateIdentityParams): Promise<IdentityResponse> {
-    const { data } = await this.http.patch(`/v1/identity/${id}`, omitUndefined({
+    const { data } = await this.http.patch(apiPath`/v1/identity/${id}`, omitUndefined({
       link_chains: params.linkChains,
       unlink_chains: params.unlinkChains,
       webhook_url: params.webhookUrl,
@@ -238,7 +238,7 @@ export class IdentityResource {
   /** Retire an identity, freeing the slot it occupies against the org quota. Soft delete inside Certen only:
    *  the on-chain ADI, key book, and key page are untouched and keep existing on Accumulate. */
   async retire(id: string): Promise<{ success: boolean }> {
-    const { data } = await this.http.delete(`/v1/identity/${id}`);
+    const { data } = await this.http.delete(apiPath`/v1/identity/${id}`);
     return data;
   }
 
@@ -275,7 +275,7 @@ export class IdentityResource {
   ): Promise<{ mnemonic: string; warning?: string }> {
     const { id, token: tok } = parseMnemonicTarget(idOrUrl, token);
     const { data } = await this.http.get(
-      `/v1/identity/${encodeURIComponent(id)}/mnemonic/${encodeURIComponent(tok)}`,
+      apiPath`/v1/identity/${id}/mnemonic/${tok}`,
     );
     return data;
   }

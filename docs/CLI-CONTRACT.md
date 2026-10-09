@@ -158,6 +158,9 @@ intent again would be wrong. (Before, any status-0 error exited `3`.)
 `FOREIGN_ORIGIN_URL` also exits `1`: the SDK refused to send to a url outside the gateway's origin (a `submit_url` in a response, or a redirect to
 another host) before signing or sending anything, so no credential left the process. Not retryable; `error.details` has `url`, `baseUrl` and `source`.
 
+`INVALID_PATH_PARAMETER` exits `2` (a usage error): an id argument was empty or only dots. Every id is encoded as one path segment, so an id
+containing `/`, `?` or `#` reaches the gateway as that literal text and cannot change which endpoint is called.
+
 ### 4. `retryable` matches the SDK exactly
 
 `error.retryable` is taken from the SDK's own `CertenError.isRetryable`. A script that switches

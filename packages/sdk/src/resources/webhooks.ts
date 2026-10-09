@@ -1,6 +1,7 @@
 import { AxiosInstance } from 'axios';
 import { paginate } from '../client.js';
 import type { WebhookEndpoint, WebhookDelivery, Pagination } from '../types.js';
+import { apiPath } from '../internal.js';
 
 /**
  * Webhook endpoints, and what happened to each delivery.
@@ -61,7 +62,7 @@ export class WebhooksResource {
     description?: string;
     isActive?: boolean;
   }): Promise<WebhookEndpoint> {
-    const { data } = await this.http.patch(`/v1/webhooks/endpoints/${encodeURIComponent(id)}`, {
+    const { data } = await this.http.patch(apiPath`/v1/webhooks/endpoints/${id}`, {
       ...(params.url ? { url: params.url } : {}),
       ...(params.eventTypes ? { event_types: params.eventTypes } : {}),
       ...(params.description !== undefined ? { description: params.description } : {}),
@@ -72,7 +73,7 @@ export class WebhooksResource {
 
   /** Stop delivering to an endpoint. Requires `webhook:write`. */
   async remove(id: string): Promise<{ deleted?: boolean; [k: string]: unknown }> {
-    const { data } = await this.http.delete(`/v1/webhooks/endpoints/${encodeURIComponent(id)}`);
+    const { data } = await this.http.delete(apiPath`/v1/webhooks/endpoints/${id}`);
     return data;
   }
 
@@ -84,7 +85,7 @@ export class WebhooksResource {
    */
   async rotateSecret(id: string): Promise<{ secret: string; [k: string]: unknown }> {
     const { data } = await this.http.post(
-      `/v1/webhooks/endpoints/${encodeURIComponent(id)}/rotate-secret`,
+      apiPath`/v1/webhooks/endpoints/${id}/rotate-secret`,
     );
     return data;
   }
@@ -92,7 +93,7 @@ export class WebhooksResource {
   /** Re-run the verification ping against an endpoint. Requires `webhook:write`. */
   async verify(id: string): Promise<WebhookEndpoint> {
     const { data } = await this.http.post(
-      `/v1/webhooks/endpoints/${encodeURIComponent(id)}/verify`,
+      apiPath`/v1/webhooks/endpoints/${id}/verify`,
     );
     return data;
   }
@@ -125,7 +126,7 @@ export class WebhooksResource {
 
   /** One delivery, including the response body the endpoint returned. Requires `webhook:read`. */
   async delivery(id: string): Promise<WebhookDelivery> {
-    const { data } = await this.http.get(`/v1/webhooks/deliveries/${encodeURIComponent(id)}`);
+    const { data } = await this.http.get(apiPath`/v1/webhooks/deliveries/${id}`);
     return data;
   }
 
@@ -137,7 +138,7 @@ export class WebhooksResource {
    */
   async redeliver(id: string): Promise<{ [k: string]: unknown }> {
     const { data } = await this.http.post(
-      `/v1/webhooks/deliveries/${encodeURIComponent(id)}/redeliver`,
+      apiPath`/v1/webhooks/deliveries/${id}/redeliver`,
     );
     return data;
   }

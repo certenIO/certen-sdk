@@ -1,6 +1,6 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
-import { omitUndefined } from '../internal.js';
+import { omitUndefined, apiPath } from '../internal.js';
 import { CertenError, CertenIntentFailedError, CertenProofNotAvailableError, CertenWaitTimeoutError } from '../errors.js';
 import { classifyIntentStatus, intentOutcome, type IntentStatusClass } from '../intent-states.js';
 import { assertOwnOrigin } from '../origin.js';
@@ -307,7 +307,7 @@ export class ExecuteResource {
 
     // A spent sign_request_id 404s rather than replaying, so never retry by resubmitting — request fresh
     // signing data instead.
-    const url = prep.submit_url ?? `/v1/sign/${prep.sign_request_id}/signature`;
+    const url = prep.submit_url ?? apiPath`/v1/sign/${prep.sign_request_id}/signature`;
     // The gateway names where the signature goes; it must be the gateway. Checked before anything is signed, not only before it is sent.
     assertOwnOrigin(url, this.http.defaults.baseURL, 'submit_url');
     const signature = await p.sign(toSign);
@@ -357,7 +357,7 @@ export class ExecuteResource {
       // caller set rather than throwing away a wait that may be minutes in — a slow gateway answer
       // used to abort a proof-gated call that then completed on chain anyway.
       let data: unknown;
-      try { ({ data } = await this.http.get(`/v1/transaction/${intentId}`)); }
+      try { ({ data } = await this.http.get(apiPath`/v1/transaction/${intentId}`)); }
       catch (err) {
         if (err instanceof CertenError && err.isRetryable && Date.now() + intervalMs < deadline) { await sleep(intervalMs); continue; }
         throw err;
@@ -417,10 +417,10 @@ export class ExecuteResource {
     | { kind: 'certen-proof'; proofId: string; proof: unknown; intent: TransactionResponse }
     | { kind: 'accumulate-receipt'; txHash: string; receipt: unknown; intent: TransactionResponse }
   > {
-    const { data: intent } = await this.http.get(`/v1/transaction/${intentId}`);
+    const { data: intent } = await this.http.get(apiPath`/v1/transaction/${intentId}`);
     const proofId = (intent as { proof_id?: string }).proof_id;
     if (proofId) {
-      const { data: proof } = await this.http.get(`/v1/proof/${proofId}`, { timeout: timeoutMs });
+      const { data: proof } = await this.http.get(apiPath`/v1/proof/${proofId}`, { timeout: timeoutMs });
       return { kind: 'certen-proof', proofId, proof, intent };
     }
     const hash = String((intent as { accum_tx_hash?: string }).accum_tx_hash ?? '').match(/([a-f0-9]{64})/)?.[1];
@@ -437,7 +437,7 @@ export class ExecuteResource {
         intentId, reason, intent,
       );
     }
-    const { data: receipt } = await this.http.get(`/v1/proof/tx/${hash}/receipt`, { timeout: timeoutMs });
+    const { data: receipt } = await this.http.get(apiPath`/v1/proof/tx/${hash}/receipt`, { timeout: timeoutMs });
     return { kind: 'accumulate-receipt', txHash: hash, receipt, intent };
   }
 
@@ -470,7 +470,7 @@ export class ExecuteResource {
     // Where the signature goes is named by the response, so it is checked BEFORE anything is signed: a foreign url means the response
     // cannot be trusted, and a signature produced for it would be one more thing to leak.
     const submitUrl = (prep as { submit_url?: string }).submit_url
-      ?? `/v1/transaction/${(prep as { intent_id?: string }).intent_id}/signature`;
+      ?? apiPath`/v1/transaction/${(prep as { intent_id?: string }).intent_id}/signature`;
     assertOwnOrigin(submitUrl, this.http.defaults.baseURL, 'submit_url');
 
     const signature = await sign(sd.hash_to_sign);

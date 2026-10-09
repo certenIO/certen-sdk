@@ -1,5 +1,6 @@
 import { AxiosInstance } from 'axios';
 import type { OAuthClient, OAuthClientCredentials } from '../types.js';
+import { apiPath } from '../internal.js';
 
 /**
  * The OAuth2 clients your organization owns.
@@ -60,7 +61,7 @@ export class OAuthClientsResource {
    * Idempotent: deactivation is a state, so a retry is safe. Requires `oauth:write`.
    */
   async remove(id: string): Promise<void> {
-    await this.http.delete(`/v1/oauth-clients/${encodeURIComponent(id)}`);
+    await this.http.delete(apiPath`/v1/oauth-clients/${id}`);
   }
 
   /**
@@ -78,7 +79,7 @@ export class OAuthClientsResource {
     OAuthClientCredentials & { grace_seconds?: number; previous_secret_expires_at?: string | null }
   > {
     const { data } = await this.http.post(
-      `/v1/oauth-clients/${encodeURIComponent(id)}/rotate-secret`,
+      apiPath`/v1/oauth-clients/${id}/rotate-secret`,
       params.graceSeconds === undefined ? {} : { grace_seconds: params.graceSeconds },
     );
     return data;
