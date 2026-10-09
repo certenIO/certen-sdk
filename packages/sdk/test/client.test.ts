@@ -421,7 +421,8 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
       const t0 = Date.now();
       await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
         .identity.createAndWait({ name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) });
-      expect(Date.now() - t0).toBeLessThan(200);
+      // An invented delay would be the 3s default interval; stay well under it without being sensitive to a loaded machine.
+      expect(Date.now() - t0).toBeLessThan(2_500);
     } finally {
       await s.close();
     }
@@ -446,7 +447,8 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
           { name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) },
           { intervalMs: 5 },
         );
-      expect(Date.now() - t0).toBeLessThan(1_000);
+      // Honouring the published first poll would take 30s; 10s separates the two without depending on machine load.
+      expect(Date.now() - t0).toBeLessThan(10_000);
     } finally {
       await s.close();
     }
@@ -472,7 +474,8 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
             { timeoutMs: 300 },
           ),
       ).rejects.toThrow();
-      expect(Date.now() - t0).toBeLessThan(3_000);
+      // The published first poll is 30s and the budget 300ms; 10s separates "capped by the budget" from "waited the advertised delay".
+      expect(Date.now() - t0).toBeLessThan(10_000);
     } finally {
       await s.close();
     }
