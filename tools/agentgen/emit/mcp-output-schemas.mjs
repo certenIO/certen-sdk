@@ -44,8 +44,21 @@ export const INTENT_OUTCOME_SCHEMA = {
 };
 
 /** Tools that return a gateway response PLUS fields the tool adds. */
+// What a tool adds to the gateway's own response. `signing` is the rebuilt summary of what a signature would authorise; `signing_check` is present
+// instead when the gateway's transaction could not be checked, and then the hash must not be signed.
+const SIGNING_ADDITIONS = {
+  signing: { type: 'object', additionalProperties: true },
+  signing_check: {
+    type: 'object',
+    properties: { ok: { type: 'boolean', enum: [false] }, code: { type: 'string' }, message: { type: 'string' }, details: { type: 'object', additionalProperties: true } },
+    required: ['ok', 'code', 'message'],
+    additionalProperties: false,
+  },
+};
 export const EXTENDED_TOOLS = {
   certen_execute_wait: { add: { outcome: INTENT_OUTCOME_SCHEMA }, required: ['outcome'] },
+  certen_transaction_open: { add: SIGNING_ADDITIONS, required: [] },
+  certen_sign_create: { add: SIGNING_ADDITIONS, required: [] },
 };
 
 /** `name -> METHOD /path` for every tool in tools.ts, read from the source so the generator and the server cannot disagree. */

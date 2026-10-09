@@ -74,6 +74,12 @@ backoff — a second retry loop wrapped around it is wrong.
 | `PROOF_NOT_ASSIGNED` | — | no | Raised by `execute.proof()` when the intent has no proof id or transaction hash; `reason` is `proof_pending`, `execution_proof_unavailable` or `not_assigned` |
 | `FOREIGN_ORIGIN_URL` | — | no | The client refused a url outside its gateway's origin (a `submit_url`, a request url, or a redirect) before sending anything; `details` has `url`, `baseUrl`, `source` |
 | `INVALID_PATH_PARAMETER` | — | no | An id, hash or token argument was empty, not text/number, or only dots, so it cannot name one resource; raised before any request |
+| `PROOF_V2_EVIDENCE_NOT_SERVED` | — | no | `proof.portable()`: the gateway serves no proof v2 document for this proof (a 404 or 501 on `GET /v1/proof/{id}/v2`); the Accumulate side cannot be checked locally. `PROOF_SERVICE_UNAVAILABLE` (a 5xx) is reported separately by `loadProofEvidence` |
+| `SIGNING_DATA_MISMATCH` | — | no | Refused to sign: the transaction the gateway returned does not hash to what it sent, or is not what was asked for. `details` has `field`, `expected`, `actual`; nothing was signed |
+| `SIGNING_DATA_ABSENT` | — | no | Refused to sign: the gateway returned no unsigned `transaction` or `signature_metadata` to check. There is no option to sign without them |
+| `SIGNING_VERIFIER_UNAVAILABLE` | — | no | Refused to sign: `@certen.io/proof-verify` (an optional peer dependency) is not installed or cannot load, so the signing data cannot be checked |
+| `SIGNING_EXPECTATION_UNAVAILABLE` | — | no | Refused to sign: the SDK cannot state what the request must produce (a token transfer, a tuple argument, a chain outside the catalogue, a governance operation without a verifier) |
+| `SIGNING_DECLINED` | — | no | The `beforeSign` callback returned `false` after reading what the signature would authorise; nothing was signed |
 
 `NETWORK_ERROR` is safe to retry **only** because every POST carries an `Idempotency-Key`. Without
 one, a retried network error can open a second intent — on a value transfer, that means paying twice.

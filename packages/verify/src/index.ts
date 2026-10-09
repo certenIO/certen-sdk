@@ -18,3 +18,6 @@ export {
 export type { GovRootV3, GovRootV3Inputs, GovRootV3Slots } from './proof-v2/govroot-v3.js';
 export { verifyProofDocument, noEvidence, COVERED_STATEMENTS, NOT_COVERED_STATEMENTS } from './layers.js';
 export type { Layer, LayerVerdict, Overall, Verification, VerifyOptions } from './layers.js';
+export { verifySigningData, reconstructSigning, SigningDataMismatch, SigningDataAbsent, SIGNING_DATA_MISMATCH, SIGNING_DATA_ABSENT } from './signing.js';
+export type { SigningData, SigningSummary, SummaryLeg, Expectation, ExpectedLeg, ExpectedEvent, ExpectedOperation, Reconstruction } from './signing.js';
+export { encodeCall, parseSignature, AbiUnsupported } from './abi.js';

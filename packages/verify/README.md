@@ -11,6 +11,25 @@ const report = verifyPortable(JSON.parse(portableProofJson)); // throws VerifyEr
 // report.certifiedBlock, report.anchorBlock, report.pages, report.setVerdict, ...
 ```
 
+## Sign what you see
+
+```ts
+import { verifySigningData, SigningDataMismatch } from '@certen.io/proof-verify';
+
+const summary = verifySigningData(gatewayResponse.signing_data, {
+  adiUrl: 'acc://org.acme',
+  legs: [{ chainId: 84532, target: '0x…', value: '0', callData: '0x…' }],
+  signerPublicKey: myKeyHex,
+});
+summary.text; // what the signature will authorise, for a person to read
+```
+
+A gateway's `hash_to_sign` says nothing about what a signature on it authorises. `verifySigningData` rebuilds the unsigned transaction the gateway returned (`signing_data.transaction`,
+`signing_data.signature_metadata`), recomputes the transaction hash, the signature-metadata hash and `sha256(sigMdHash || txHash)`, requires each to equal what the gateway sent, decodes what the
+transaction authorises and requires that to match the expectation. A disagreement throws `SigningDataMismatch` naming the field; missing data throws `SigningDataAbsent`. There is no switch that skips
+the check. The recipe is proved on seven transactions CERTEN put on the Kermit testnet (`test/fixtures/signing-vectors.json`): each rebuilt transaction hash is its id on chain and the signature each carries verifies over
+the recomputed signing hash.
+
 ## One verdict per layer
 
 ```ts

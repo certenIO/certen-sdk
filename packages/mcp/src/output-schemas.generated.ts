@@ -1548,8 +1548,40 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
       "submit_url": {
         "type": "string"
       },
-      "expires_at": {}
-    }
+      "expires_at": {},
+      "signing": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "signing_check": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "ok",
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "required": []
   },
   "certen_sign_submit_signature": {
     "description": "Signature accepted and the vote was relayed to Accumulate.",
@@ -2098,8 +2130,40 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
       },
       "idempotent": {
         "type": "boolean"
+      },
+      "signing": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "signing_check": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "ok",
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
       }
-    }
+    },
+    "required": []
   },
   "certen_transaction_submit_signature": {
     "description": "Signature accepted and the signed transaction was submitted to Accumulate.",

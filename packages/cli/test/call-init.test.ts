@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
+import { honestIntent } from '../../sdk/test/helpers/honest-gateway.js';
 import { AddressInfo } from 'node:net';
 
 /**
@@ -45,7 +46,7 @@ async function stubGateway(handler: Handler): Promise<Stub> {
     req.on('end', () => {
       if (req.method === 'POST') posts += 1;
       paths.push(`${req.method} ${(req.url ?? '').split('?')[0]}`);
-      try { handler(req, res, body); } catch { res.statusCode = 500; res.end('{}'); }
+      Promise.resolve().then(() => handler(req, res, body)).catch(() => { res.statusCode = 500; res.end('{}'); });
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
@@ -145,7 +146,7 @@ const FUNDED_PORTFOLIO = {
 };
 
 function gateway(over: Record<string, unknown> = {}): Handler {
-  return (req, res) => {
+  return async (req, res, reqBody) => {
     const url = (req.url ?? '').split('?')[0];
     if (url in over) return json(res, 200, over[url]);
     if (url === `/v1/identity/${ID}`) return json(res, 200, identityBody());
@@ -160,10 +161,8 @@ function gateway(over: Record<string, unknown> = {}): Handler {
       return json(res, 200, { pending_intents: 0, remaining_usd: '5.000000', uncovered_usd: '0.000000' });
     }
     if (url === '/v1/transaction' && req.method === 'POST') {
-      return json(res, 201, {
-        intent_id: 'intent-1',
-        signing_data: { hash_to_sign: 'ab'.repeat(32) },
-      });
+      const h = await honestIntent(JSON.parse(reqBody));
+      return json(res, h.status, h.body);
     }
     if (url === '/v1/transaction/intent-1/signature') return json(res, 200, { ok: true });
     if (url === '/v1/transaction/intent-1') return json(res, 200, { intent_id: 'intent-1', status: 'completed' });

@@ -10,6 +10,7 @@ import { AddressInfo } from 'node:net';
 import { collect, parseAuthorityFlags, parseExpiresIn, withOutcomeFields } from '../src/header-flags.js';
 import { UsageError, EXIT } from '../src/errors.js';
 import { emitFailure, resetOutput, setJsonMode } from '../src/output.js';
+import { honestIntent } from '../../sdk/test/helpers/honest-gateway.js';
 import { CertenError } from '@certen.io/sdk';
 
 /**
@@ -46,7 +47,7 @@ async function stubGateway(over: Over = {}, opts: { identityDelayMs?: number; id
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
-    req.on('end', () => {
+    req.on('end', async () => {
       const path = (req.url ?? '').split('?')[0];
       seen.push({ method: req.method ?? 'GET', path, body: raw ? JSON.parse(raw) : undefined });
       const key = `${req.method} ${path}`;
@@ -60,7 +61,8 @@ async function stubGateway(over: Over = {}, opts: { identityDelayMs?: number; id
         return void setTimeout(() => { opts.identityAnsweredAt?.push(Date.now()); json(res, 200, body); }, opts.identityDelayMs ?? 0);
       }
       if (key === 'POST /v1/transaction') {
-        return json(res, 201, { intent_id: 'intent-1', signing_data: { hash_to_sign: 'ab'.repeat(32) } });
+        const honest = await honestIntent(JSON.parse(raw));
+        return json(res, honest.status, honest.body);
       }
       if (key === 'POST /v1/transaction/intent-1/signature') return json(res, 200, { intent_id: 'intent-1', status: 'submitted' });
       return json(res, 404, { code: 'NOT_FOUND', error: 'not stubbed' });

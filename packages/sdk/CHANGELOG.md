@@ -1,5 +1,19 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — every external-mode signature is checked first (RB7b Phase F)
+
+### Changed (breaking)
+- `execute.contractCall`, `execute.transfer`, `execute.cosign` and `CertenAgent`'s governance operations rebuild the transaction the gateway returned, recompute every hash and
+  match it to the request before they sign, and refuse with `SIGNING_DATA_MISMATCH` (field named), `SIGNING_DATA_ABSENT`, `SIGNING_EXPECTATION_UNAVAILABLE` or
+  `SIGNING_VERIFIER_UNAVAILABLE`. There is no option to sign without the check. **This needs a gateway that returns `signing_data.transaction` and
+  `signing_data.signature_metadata`; against a gateway that does not, every external-mode signature is refused.** Release only after that gateway change is deployed.
+- Signing needs the optional peer `@certen.io/proof-verify` (loaded on first use, so the API client keeps its one runtime dependency). In a browser, signing through the SDK is refused
+  (`SIGNING_VERIFIER_UNAVAILABLE`) until the verifier runs there.
+
+### Added
+- `beforeSign(summary)` on `contractCall` / `transfer` / `cosign`: what the signature will authorise, after the check and before the signature; return `false` to decline (`SIGNING_DECLINED`).
+  `OpenedIntent.signing` carries the same summary.
+- `checkIntentSigning`, `checkCosigning`, `checkGovernanceSigning`, `inspectSigningData`, `legsFromIntent`, `CertenSigningDataError`.
 ## Unreleased — verify a proof instead of trusting it (RB7b Phase E)
 
 ### Added

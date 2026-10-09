@@ -46,14 +46,16 @@ export async function resolveSignature(opts: {
     if (opts.signature) {
       throw new UsageError('Pass either --sign-with or --signature, not both.', 'CONFLICTING_SIGNING_FLAGS');
     }
-    if (!opts.hash) {
-      throw new UsageError(
-        '--sign-with needs the hash to sign; this command did not supply one. Pass --hash <hex>.',
-        'MISSING_HASH',
-      );
-    }
-    const signer = await resolveSigner(opts.signWith);
-    return { signature: signer.sign(opts.hash), publicKey: signer.publicKey };
+    // A hash on its own says nothing about what a signature on it would authorise, so this command will not sign one. The commands that
+    // open the thing being signed (`tx create --sign-with`, `call`, `governance ... --sign-with`, `pending sign --sign-with`) rebuild the
+    // transaction, check it against the request and show it before signing. To sign elsewhere, `inspect` it first and pass --signature.
+    throw new UsageError(
+      'Refusing to sign a bare hash: it says nothing about what the signature would authorise. Sign where the transaction is opened '
+      + '(tx create --sign-with, call, governance <op> --sign-with, pending sign --sign-with), which rebuild it, check it against your '
+      + 'request and show it first. To sign somewhere else, run the matching "inspect" command, then pass --signature and --public-key. '
+      + 'There is no option to sign a hash blind.',
+      'BLIND_SIGNING_REFUSED',
+    );
   }
 
   if (!opts.signature || !opts.publicKey) {

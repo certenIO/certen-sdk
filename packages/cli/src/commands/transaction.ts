@@ -1,4 +1,5 @@
 import { Command, Option } from 'commander';
+import { checkIntentSigning, inspectSigningData } from '@certen.io/sdk';
 import { readFileSync } from 'node:fs';
 import { CertenClient, intentOutcome } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
@@ -219,6 +220,7 @@ export function registerTransactionCommands(program: Command): void {
 
       const hash = hashToSign(result);
       const intentId = intentIdOf(result);
+      const signingData = (result as unknown as { signing_data?: unknown }).signing_data;
       if (!hash || !intentId) {
         // Provider mode (the gateway holds a key) returns no signing data. Printing the intent and
         // stopping is honest; pretending we signed something we never saw is not.
@@ -233,6 +235,20 @@ export function registerTransactionCommands(program: Command): void {
           EXIT.FAILED,
         );
       }
+
+      // Rebuild the transaction the gateway returned, recompute every hash and match it to THIS request before a signature exists.
+      // A mismatch, or no transaction to rebuild, ends the command here with nothing signed.
+      const adiUrl = typeof intent.adiUrl === 'string' && intent.adiUrl ? intent.adiUrl : (await client.identity.get(opts.identity)).adi_url;
+      const summary = await checkIntentSigning(signingData, {
+        intentId,
+        adiUrl,
+        intent,
+        signerPublicKey: signer.publicKey,
+        signerKeyPage: opts.signerKeyPage,
+        additionalAuthorities,
+        expiresAt: parseExpiresIn(opts.expiresIn),
+      });
+      hint(summary.text.join('\n'));
 
       const signed = await client.transaction.submitSignature(intentId, {
         signature: signer.sign(hash),
@@ -254,9 +270,9 @@ export function registerTransactionCommands(program: Command): void {
   tx
     .command('sign <id>')
     .description('Submit a signature for a transaction')
-    .option('--sign-with <key>', 'Local key to sign with (needs --hash)')
-    .option('--hash <hex>', 'Hash to sign, from the intent\'s signing_data.hash_to_sign')
-    .option('--signature <sig>', 'Signature (hex) — for an HSM or air-gapped signer')
+    .option('--sign-with <key>', 'Refused: a bare hash is never signed (use tx create --sign-with)')
+    .option('--hash <hex>', 'Refused: a bare hash is never signed')
+    .option('--signature <sig>', 'Signature (hex) — for an HSM or air-gapped signer, made after `tx inspect`')
     .option('--public-key <key>', 'Public key (hex), required with --signature')
     .action(async (id: string, opts) => {
       // --signature/--public-key were required options, so there was no way to sign from the CLI
@@ -265,20 +281,17 @@ export function registerTransactionCommands(program: Command): void {
       let signature: string;
       let publicKey: string;
 
-      if (opts.signWith) {
-        if (opts.signature) {
-          throw new UsageError('Pass either --sign-with or --signature, not both.', 'CONFLICTING_SIGNING_FLAGS');
-        }
-        if (!opts.hash) {
-          throw new UsageError(
-            '--sign-with needs --hash <hex> (the signing_data.hash_to_sign from `tx create`). '
-            + 'Or use `tx create --sign-with` to do both in one step.',
-            'MISSING_HASH',
-          );
-        }
-        const signer = await resolveSigner(opts.signWith);
-        signature = signer.sign(opts.hash);
-        publicKey = signer.publicKey;
+      if (opts.signWith && opts.signature) {
+        throw new UsageError('Pass either --sign-with or --signature, not both.', 'CONFLICTING_SIGNING_FLAGS');
+      }
+      if (opts.signWith || opts.hash) {
+        // Signing a hash someone typed in cannot be checked against anything. `tx create --sign-with` opens the intent and signs it in
+        // one step, after rebuilding and matching it; `tx inspect` shows what a hash_to_sign would authorise before you sign it elsewhere.
+        throw new UsageError(
+          'Refusing to sign a bare hash. Use `tx create --sign-with <key>`, which rebuilds the transaction, checks it against your request and '
+          + 'shows it before signing; or run `tx inspect <id>`, then pass --signature and --public-key. There is no option to sign blind.',
+          'BLIND_SIGNING_REFUSED',
+        );
       } else {
         if (!opts.signature || !opts.publicKey) {
           throw new UsageError(
@@ -293,6 +306,40 @@ export function registerTransactionCommands(program: Command): void {
       const client = await getClient();
       const result = await client.transaction.submitSignature(id, { signature, publicKey });
       printOutput(result as unknown as Record<string, unknown>);
+    });
+
+  tx
+    .command('inspect <id>')
+    .description('Rebuild what an open intent asks to be signed, check every hash, and show what a signature would authorise. Signs nothing.')
+    .option('--intent <json|@file>', 'The intent as you sent it: with it, the transaction is also matched to your request')
+    .option('--identity <id>', 'The identity the intent belongs to (with --intent, to learn its ADI)')
+    .option('--signer-public-key <hex>', 'The key that will sign: the signature metadata must name it')
+    .action(async (id: string, opts) => {
+      const client = await getClient();
+      const intent = await client.transaction.get(id);
+      const sd = (intent as unknown as { signing_data?: unknown }).signing_data;
+      if (!sd) {
+        throw new CliError(
+          `Intent ${id} carries no signing data (status ${String((intent as { status?: unknown }).status)}): there is nothing to sign.`,
+          'NO_SIGNING_DATA',
+          EXIT.FAILED,
+        );
+      }
+      let summary;
+      if (opts.intent) {
+        const raw = opts.intent.startsWith('@') ? readFileSync(opts.intent.slice(1), 'utf8') : opts.intent;
+        let asked: Record<string, unknown>;
+        try { asked = JSON.parse(raw); } catch (err) {
+          throw new UsageError(`--intent is not valid JSON: ${err instanceof Error ? err.message : String(err)}`, 'INVALID_INTENT_JSON');
+        }
+        const adiUrl = typeof asked.adiUrl === 'string' && asked.adiUrl ? asked.adiUrl : opts.identity ? (await client.identity.get(opts.identity)).adi_url : '';
+        summary = await checkIntentSigning(sd, { intentId: id, adiUrl, intent: asked, ...(opts.signerPublicKey ? { signerPublicKey: opts.signerPublicKey } : {}) });
+      } else {
+        summary = await inspectSigningData(sd, { signerPublicKey: opts.signerPublicKey });
+      }
+      printOutput({ intent_id: id, matched_to_request: Boolean(opts.intent), signing: summary } as unknown as Record<string, unknown>);
+      hint(summary.text.join('\n'));
+      if (!opts.intent) hint('Every hash was recomputed and agrees. Without --intent this cannot say whether it is what you meant: read the lines above.');
     });
 
   tx

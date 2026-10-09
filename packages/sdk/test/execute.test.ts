@@ -9,6 +9,8 @@ import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { CertenClient } from '../src/index.js';
+import { honestIntent, honestCosign } from './helpers/honest-gateway.js';
+import { readFileSync } from 'node:fs';
 
 const HASH = 'ab'.repeat(32);
 const PUBKEY = '11'.repeat(32);
@@ -26,7 +28,7 @@ async function gateway(handler: (e: Req, n: number) => { status?: number; body?:
       body: raw ? JSON.parse(raw) : undefined,
     };
     seen.push(entry);
-    const out = handler(entry, seen.length);
+    const out = await handler(entry, seen.length);
     res.writeHead(out.status ?? 200, { 'content-type': 'application/json' }).end(JSON.stringify(out.body ?? {}));
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -35,16 +37,7 @@ async function gateway(handler: (e: Req, n: number) => { status?: number; body?:
 }
 interface Req { method: string; path: string; headers: Record<string, string>; body?: any }
 
-const opened = {
-  status: 201,
-  body: {
-    intent_id: 'intent-1',
-    signing_mode: 'external',
-    signing_data: { hash_to_sign: HASH, transaction_hash: 'cd'.repeat(32) },
-    submit_url: '/v1/transaction/intent-1/signature',
-  },
-};
-const okFlow = (e: Req) => (e.path === '/v1/transaction' && e.method === 'POST' ? opened : { body: { ok: true } });
+const okFlow = async (e: Req) => (e.path === '/v1/transaction' && e.method === 'POST' ? honestIntent(e.body, { publicKey: e.body.signer_public_key }) : { body: { ok: true } });
 
 const clientFor = (url: string) => new CertenClient({ apiKey: 'ck_live_test', baseUrl: url, maxRetries: 0 });
 
@@ -62,10 +55,13 @@ const openReq = (g: { seen: Req[] }): Req =>
 const submitReq = (g: { seen: Req[] }): Req =>
   g.seen.find((e) => e.path.endsWith('/signature') && e.method === 'POST')!;
 
+const ESCROBOT = `0x${'ee'.repeat(20)}`;
+const E = `0x${'e1'.repeat(20)}`;
+const BE00 = `0x${'be'.repeat(20)}`;
 const CALL = {
   identityId: 'id-1',
   adiUrl: 'acc://seller-bot.acme',
-  fromAddress: '0xAbstract',
+  fromAddress: `0x${'ab'.repeat(20)}`,
   chain: 'ethereum-sepolia',
   chainId: 11155111,
   publicKey: PUBKEY,
@@ -78,15 +74,16 @@ describe('execute.contractCall', () => {
     try {
       const out = await clientFor(g.url).execute.contractCall({
         ...CALL,
-        contractCall: { target: '0xESCROBOT', functionSignature: 'confirm(bytes32)', args: ['0xabc'] },
+        contractCall: { target: ESCROBOT, functionSignature: 'confirm(bytes32)', args: ['0x' + 'ab'.repeat(32)] },
       });
       expect(out.intentId).toBe('intent-1');
-      expect(out.accumTxHash).toBe('cd'.repeat(32));
+      expect(out.accumTxHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(out.signing?.legs[0]).toMatchObject({ chainId: 11155111, valueWei: '0' });
 
       const [open, submit] = g.seen;
       expect(open.body.intent.legs[0].contractCall.functionSignature).toBe('confirm(bytes32)');
       expect(submit.path).toBe('/v1/transaction/intent-1/signature');
-      expect(submit.body.signature).toBe(`signed:${HASH}`);
+      expect(submit.body.signature).toBe(`signed:${out.signing!.hashes.toSign}`);
       expect(submit.body.public_key).toBe(PUBKEY);
     } finally { g.close(); }
   });
@@ -97,7 +94,7 @@ describe('execute.contractCall', () => {
     try {
       await clientFor(g.url).execute.contractCall({
         ...CALL,
-        contractCall: { target: '0xE', functionSignature: 'buy(bytes32)', args: ['0xa'], value: '1500000000000000' },
+        contractCall: { target: E, functionSignature: 'buy(bytes32)', args: ['0x' + 'aa'.repeat(32)], value: '1500000000000000' },
       });
       const leg = openReq(g).body.intent.legs[0];
       expect(leg.amount).toBe('1500000000000000');
@@ -109,7 +106,7 @@ describe('execute.contractCall', () => {
     const g = await gateway(okFlow);
     try {
       await clientFor(g.url).execute.contractCall({
-        ...CALL, contractCall: { target: '0xE', functionSignature: 'x()' },
+        ...CALL, contractCall: { target: E, functionSignature: 'x()' },
       });
       expect(openReq(g).headers['idempotency-key']).toMatch(/.+/);
     } finally { g.close(); }
@@ -119,7 +116,7 @@ describe('execute.contractCall', () => {
     const g = await gateway(okFlow);
     try {
       await clientFor(g.url).execute.contractCall({
-        ...CALL, idempotencyKey: 'mine-1', contractCall: { target: '0xE', functionSignature: 'x()' },
+        ...CALL, idempotencyKey: 'mine-1', contractCall: { target: E, functionSignature: 'x()' },
       });
       expect(openReq(g).headers['idempotency-key']).toBe('mine-1');
     } finally { g.close(); }
@@ -132,7 +129,7 @@ describe('execute.contractCall', () => {
         ...CALL,
         signerPublicKey: '22'.repeat(32),
         signerKeyPage: 'acc://panel.acme/book/2',
-        contractCall: { target: '0xE', functionSignature: 'x()' },
+        contractCall: { target: E, functionSignature: 'x()' },
       });
       expect(openReq(g).body.signer_public_key).toBe('22'.repeat(32));
       expect(openReq(g).body.signer_key_page).toBe('acc://panel.acme/book/2');
@@ -150,7 +147,7 @@ describe('execute.contractCall', () => {
     const g = await gateway(() => ({ status: 201, body: { intent_id: 'i-2', signing_mode: 'provider', tx_hash: '0xdead' } }));
     try {
       await expect(clientFor(g.url).execute.contractCall({
-        ...CALL, contractCall: { target: '0xE', functionSignature: 'x()' },
+        ...CALL, contractCall: { target: E, functionSignature: 'x()' },
       })).rejects.toThrow(/requires external mode/);
     } finally { g.close(); }
   });
@@ -162,11 +159,11 @@ describe('execute.transfer', () => {
     try {
       await clientFor(g.url).execute.transfer({
         identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'ethereum-sepolia',
-        fromAddress: 'acc://org.acme', toAddress: '0xBe00', amount: '4000', tokenSymbol: 'ETH',
+        fromAddress: 'acc://org.acme', toAddress: BE00, amount: '4000', tokenSymbol: 'ETH',
         publicKey: PUBKEY, sign: (h) => `signed:${h}`,
       });
-      expect(openReq(g).body.intent).toMatchObject({ toAddress: '0xBe00', amount: '4000' });
-      expect(submitReq(g).body.signature).toBe(`signed:${HASH}`);
+      expect(openReq(g).body.intent).toMatchObject({ toAddress: BE00, amount: '4000' });
+      expect(submitReq(g).body.signature).toMatch(/^signed:[0-9a-f]{64}$/);
     } finally { g.close(); }
   });
 
@@ -175,7 +172,7 @@ describe('execute.transfer', () => {
     try {
       const precise = '0.900719925474099133';
       await clientFor(g.url).execute.transfer({
-        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'ethereum-sepolia', fromAddress: 'a', toAddress: 'b',
+        identityId: 'id-1', adiUrl: 'acc://org.acme', fromChain: 'accumulate', toChain: 'ethereum-sepolia', fromAddress: 'a', toAddress: BE00,
         amount: precise, publicKey: PUBKEY, sign: () => 'sig',
       });
       expect(openReq(g).body.intent.amount).toBe(precise);
@@ -226,7 +223,7 @@ describe('execute.transfer', () => {
     try {
       await clientFor(g.url).execute.transfer({
         identityId: 'id-1', adiUrl: 'acc://seller.acme', fromChain: 'ethereum-sepolia',
-        toChain: 'ethereum-sepolia', fromAddress: '0xA', toAddress: '0xB', amount: '1',
+        toChain: 'ethereum-sepolia', fromAddress: '0xA', toAddress: BE00, amount: '1',
         publicKey: PUBKEY, sign: () => 'sig',
       });
       expect(openReq(g).body.intent.adiUrl).toBe('acc://seller.acme');
@@ -235,20 +232,22 @@ describe('execute.transfer', () => {
 });
 
 describe('execute.cosign', () => {
+  const real = JSON.parse(readFileSync(new URL('../../verify/test/fixtures/signing-vectors.json', import.meta.url), 'utf8')).vectors.find((v: any) => v.label === 'four-leg');
+  const TXID = real.txid.match(/[0-9a-f]{64}/)![0];
   const signFlow = (e: Req) => e.path === '/v1/sign'
-    ? { status: 201, body: { sign_request_id: 'sr-1', signing_data: { data_for_signature: HASH }, submit_url: '/v1/sign/sr-1/signature' } }
+    ? honestCosign(real, { publicKey: PUBKEY, signer: e.body.signerUrl ?? e.body.signer_url, vote: e.body.vote === 'reject' ? 'reject' : 'accept' })
     : { body: { signature_count: 2, is_ready: true } };
 
   it('defaults the vote to "approve" — lowercase, not "accept", not a number', async () => {
     const g = await gateway(signFlow);
     try {
       const out = await clientFor(g.url).execute.cosign({
-        accumTxHash: 'ef'.repeat(32), identity: 'acc://panel.acme',
+        accumTxHash: TXID, identity: 'acc://panel.acme',
         signerUrl: 'acc://panel.acme/book/1', publicKey: PUBKEY, sign: (h) => `signed:${h}`,
       });
       expect(g.seen[0].body.vote).toBe('approve');
       expect(g.seen[0].body.type).toBe('pending_tx');
-      expect(submitReq(g).body.signature).toBe(`signed:${HASH}`);
+      expect(submitReq(g).body.signature).toMatch(/^signed:[0-9a-f]{64}$/);
       expect(out).toMatchObject({ is_ready: true });
     } finally { g.close(); }
   });
@@ -257,7 +256,7 @@ describe('execute.cosign', () => {
     const g = await gateway(signFlow);
     try {
       await clientFor(g.url).execute.cosign({
-        accumTxHash: 'ef'.repeat(32), identity: 'acc://p.acme', signerUrl: 'acc://p.acme/book/1',
+        accumTxHash: TXID, identity: 'acc://p.acme', signerUrl: 'acc://p.acme/book/1',
         publicKey: PUBKEY, sign: () => 'sig', vote: 'reject',
       });
       expect(g.seen[0].body.vote).toBe('reject');
@@ -366,13 +365,14 @@ describe('the key never reaches the SDK', () => {
   it('takes a signing function and nothing key-shaped', async () => {
     const g = await gateway(okFlow);
     try {
-      let sawOnlyTheHash = true;
-      await clientFor(g.url).execute.contractCall({
+      const seenByTheSigner: string[] = [];
+      const out = await clientFor(g.url).execute.contractCall({
         ...CALL,
-        sign: (h) => { if (h !== HASH) sawOnlyTheHash = false; return 'sig'; },
-        contractCall: { target: '0xE', functionSignature: 'x()' },
+        sign: (h) => { seenByTheSigner.push(h); return 'sig'; },
+        contractCall: { target: E, functionSignature: 'x()' },
       });
-      expect(sawOnlyTheHash).toBe(true);
+      // the signer is handed one 32-byte hash, the one rebuilt from the transaction, and nothing else
+      expect(seenByTheSigner).toEqual([out.signing!.hashes.toSign]);
       // Nothing resembling a private key is ever put on the wire.
       const wire = JSON.stringify(g.seen);
       expect(wire).not.toContain('secretKey');
