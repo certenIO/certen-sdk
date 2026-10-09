@@ -63,6 +63,12 @@ jobs:
       # Install-time scripts are a reviewed allow-list, and none may reach a production install.
       - name: Install scripts
         run: npm run check:scripts
+      # Production dependencies: every advisory is a named, expiring residual (scripts/audit-residuals.json), and the full tree
+      # (development tools included) has no critical advisory.
+      - name: Production audit gate
+        run: npm run check:audit
+      - name: No critical advisory anywhere
+        run: npm audit --audit-level=critical
 
   # A published package is only as good as its tarball. `files`, `exports`, and `prepack` are all easy to
   # get wrong in ways that install cleanly and fail on first import — and npm versions are immutable, so
