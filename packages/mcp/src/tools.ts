@@ -1,4 +1,4 @@
-import { CertenError, intentOutcome, resolveSignTarget } from '@certen.io/sdk';
+import { CertenError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle } from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
 
@@ -724,35 +724,66 @@ const READ_TOOLS: ToolDef[] = [
     name: 'certen_proof_verify',
     tier: 'read',
     mutates: false,
-    endpoint: 'GET /v1/proof/tx/{txHash}/receipt',
+    endpoint: 'GET /v1/proof/{id}/bundle',
     description:
-      'Check a proof and report EXACTLY what was and was not verified. Returns three separate '
-      + 'judgements — inclusion, authorization, outcome — of which this can establish only the '
-      + 'first, and only as something the gateway asserted. Use this instead of concluding '
-      + '"verified" from a successful proof fetch: a valid proof of the WRONG call is still a valid '
-      + 'proof, and asking the gateway is not independent verification. The result carries '
-      + 'independent:false to make that explicit.',
+      'Verify a proof LOCALLY, layer by layer, and report exactly which layers were checked and which were not. The Accumulate side '
+      + '(genesis pin, validator quorum from genesis, transaction receipt to a certified Directory root, partition anchor, governing '
+      + 'pages, validator set, govRoot v3) is checked here from the proof v2 document, not taken from the gateway; the execution '
+      + 'outcome is checked from the execution receipt in the bundle itself. A flag in the bundle saying "verified" is NEVER used: it is '
+      + 'returned as bundleStatements, the statement the validators make about themselves. overall is verified only when every layer the '
+      + 'document carries was checked here; partial names the layers that were not established; failed names the layer that does '
+      + 'not hold; no_evidence (PROOF_V2_EVIDENCE_NOT_SERVED) means the gateway serves no proof v2 document for this proof, so '
+      + 'nothing about the Accumulate side could be checked. independent is true only for verified. A valid proof of the WRONG call '
+      + 'is still a valid proof: authorization (does the operation match what was agreed) is never established by this tool, and '
+      + 'asking the gateway is not independent verification. To close the outcome layer, fetch the block header of the execution chain '
+      + 'yourself and pass it as header.',
     inputSchema: {
       type: 'object',
-      properties: { txHash: str('Accumulate transaction hash (64 hex)') },
-      required: ['txHash'],
+      properties: {
+        target: str('An intent id, a proof id, an Accumulate transaction hash (64 hex), or a proof share link'),
+        header: {
+          type: 'object',
+          description: 'The execution chain block header you fetched from your own node: { number (hex), hash, receiptsRoot }. Without it the receipts root is only what the validators say it is.',
+          properties: { number: { type: 'string' }, hash: { type: 'string' }, receiptsRoot: { type: 'string' } },
+          additionalProperties: false,
+        },
+        expect: {
+          type: 'object',
+          description: 'An event the execution receipt must contain',
+          properties: { address: { type: 'string' }, topic0: { type: 'string' }, topic1: { type: 'string' } },
+          additionalProperties: false,
+        },
+        govRoot: str('A govRoot v3 (hex) to compare the one computed here with'),
+      },
+      required: ['target'],
       additionalProperties: false,
     },
     run: async (c, a) => {
-      const receipt = await c.proof.receipt(s(a, 'txHash'));
-      const inclusion = Boolean(receipt.anchored && receipt.receipt?.anchor);
+      // Loaded on first use: the verifier brings the Accumulate encoder with it, which the other 47 tools never need.
+      const { verifyBundle, loadProofEvidence, bundleInputOf } = await import('@certen.io/sdk/verify');
+      const target = s(a, 'target');
+      let evidence;
+      if (/^https?:\/\//i.test(target) || /^cps_/.test(target)) {
+        const shared = await fetchSharedProof(target);
+        evidence = { bundle: decodeSharedBundle(shared.bundle), bundleError: null as string | null, portable: null as unknown, notServed: null as { code: string; reason: string } | null, gateway: null };
+        if (!evidence.bundle) throw new CertenError('The shared bundle is not JSON this tool can read.', 0, 'UNREADABLE_BUNDLE');
+      } else {
+        evidence = await loadProofEvidence(c, target);
+      }
+      const opt = (k: string) => (a[k] && typeof a[k] === 'object' ? (a[k] as Record<string, string | undefined>) : undefined);
+      const v = verifyBundle(bundleInputOf(evidence), {
+        header: opt('header'),
+        expect: opt('expect'),
+        expectGovRoot: typeof a.govRoot === 'string' ? a.govRoot : undefined,
+      });
+      const { report: _report, ...rest } = v;
+      void _report;
       return {
-        checked: {
-          inclusion: inclusion ? 'asserted by the gateway' : 'NOT ESTABLISHED — not anchored, or no anchor in the receipt',
-          authorization: 'NOT CHECKED — compare the operation against your own record of what was agreed',
-          outcome: 'NOT CHECKED — read the destination chain for the execution and its events',
-        },
-        anchored: receipt.anchored,
-        anchor: receipt.receipt?.anchor ?? null,
-        tx_hash: receipt.tx_hash,
-        independent: false,
-        note: 'To verify without trusting CERTEN: query an Accumulate node directly and check this '
-          + 'receipt against roots you fetch yourself, and read the execution on the destination chain.',
+        ...rest,
+        evidence: { found: v.evidenceFound, ...(evidence.notServed ? { code: evidence.notServed.code, reason: evidence.notServed.reason } : {}), ...(evidence.bundleError ? { bundleError: evidence.bundleError } : {}) },
+        gateway: evidence.gateway
+          ? { anchored: evidence.gateway.anchored, tx_hash: evidence.gateway.tx_hash, anchor: evidence.gateway.receipt?.anchor ?? null, note: 'asked of the gateway; not used in the verdict' }
+          : null,
       };
     },
   },

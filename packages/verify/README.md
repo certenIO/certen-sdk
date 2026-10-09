@@ -11,6 +11,22 @@ const report = verifyPortable(JSON.parse(portableProofJson)); // throws VerifyEr
 // report.certifiedBlock, report.anchorBlock, report.pages, report.setVerdict, ...
 ```
 
+## One verdict per layer
+
+```ts
+import { verifyProofDocument } from '@certen.io/proof-verify';
+
+const v = verifyProofDocument(doc, { expectGovRoot });  // never throws for a document that does not check
+v.overall;   // 'verified' | 'partial' | 'failed' | 'no_evidence'
+v.layers;    // [{ id, statement, title, verdict, evidence, reason? }, ...]
+v.failure;   // { layer, message } for the first layer that failed
+```
+
+Layers: `trust_base`, `L4` (the spine), `L1`, `L2`, `L3`, `G0`, `G1`, `G1_chains`, `L4_set`, `govRootV3`. A tamper fails at the layer it is in and every later layer is
+`not_checked` ("not reached"). `G1b`, `G2`, `L5` and `outcome` are `not_in_document`: the portable document does not carry them (the SDK's
+`verifyBundle` checks `outcome` from the bundle's execution receipt). `overall` is `verified` only when every layer in the document's scope is verified, and
+`covers` / `notCovered` say which statements of docs/proof/PROOF_V2.md §3 that does and does not establish. A `verified` field in a document is never read.
+
 ## What it checks
 
 1. **The trust base.** The genesis network definition and globals are bound to the pinned incarnation identity:

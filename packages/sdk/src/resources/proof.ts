@@ -5,6 +5,7 @@ import type {
   SharedProof,
 } from '../types.js';
 import { apiPath } from '../internal.js';
+import { CertenError } from '../errors.js';
 
 /**
  * Reading and sharing proofs.
@@ -66,6 +67,29 @@ export class ProofResource {
       data: typeof Buffer !== 'undefined' ? Buffer.from(response.data as ArrayBuffer) : new Uint8Array(response.data as ArrayBuffer),
       contentType: String(response.headers['content-type'] ?? 'application/octet-stream'),
     };
+  }
+
+  /**
+   * The proof v2 portable document for a proof (`certen-proof-v2-accumulate-portable/1`): everything
+   * `@certen.io/sdk/verify` needs to check the Accumulate side offline.
+   *
+   * A gateway that does not serve it (no such route yet, or no document for this proof) answers 404; that is reported as
+   * `PROOF_V2_EVIDENCE_NOT_SERVED`, never as a missing proof and never as a reason to fall back to a flag in the bundle.
+   */
+  async portable(proofId: string): Promise<unknown> {
+    try {
+      const { data } = await this.http.get(apiPath`/v1/proof/${proofId}/v2`);
+      return data;
+    } catch (err) {
+      if (err instanceof CertenError && (err.status === 404 || err.status === 501)) {
+        throw new CertenError(
+          `The gateway serves no proof v2 document for ${proofId} (GET /v1/proof/{id}/v2 answered ${err.status}); the Accumulate side of this proof cannot be checked locally.`,
+          err.status,
+          'PROOF_V2_EVIDENCE_NOT_SERVED',
+        );
+      }
+      throw err;
+    }
   }
 
   /** The custody chain for a proof. */

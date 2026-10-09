@@ -37,7 +37,7 @@ export function emitLlms({ ops, map, sdkVersion }) {
   }
 
   const covered = new Set();
-  for (const r of map) for (const m of r.methods) for (const c of m.calls) covered.add(c.id);
+  for (const r of map) for (const m of r.methods) for (const c of m.calls) if (byId.has(c.id)) covered.add(c.id);
   L.push(
     `The gateway exposes ${ops.length} operations; the SDK wraps ${covered.size} of them. Anything not listed`,
   );

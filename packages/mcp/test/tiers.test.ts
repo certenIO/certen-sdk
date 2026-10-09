@@ -186,6 +186,7 @@ describe('tool invariants', () => {
     // An agent that reads "proof fetched" as "proof verified" is the failure mode this tool exists
     // to prevent, so the description has to say what it cannot establish, not just what it can.
     const verify = ALL_TOOLS.find((t) => t.name === 'certen_proof_verify')!;
+    expect(verify.description).toMatch(/NEVER used/);
     expect(verify.description).toMatch(/not independent verification/i);
     expect(verify.description).toMatch(/WRONG call/);
   });

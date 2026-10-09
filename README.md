@@ -78,7 +78,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->1136 tests in 80 files (sdk 500, cli 394, mcp 197, verify 45), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->1292 tests in 86 files (sdk 511, cli 401, mcp 197, verify 183), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 
@@ -254,7 +254,7 @@ unreachable gateway warns instead of blocking — "no answer" is not the same as
 `CERTEN_SKIP_GATEWAY_CHECK=1` to override, deliberately.
 
 Publish the released packages (`@certen.io/sdk`, `@certen.io/cli`, `@certen.io/mcp`) **together**. They are separately versioned and mutually dependent; an
-SDK calling `/v1/webhooks/*` paired with an older CLI is a combination nobody tested. `@certen.io/proof-verify` is a fourth workspace that is private until it is published deliberately; `npm run check:pins` fails CI if any package's range for another stops accepting the workspace version.
+SDK calling `/v1/webhooks/*` paired with an older CLI is a combination nobody tested. `@certen.io/proof-verify` is a fourth workspace; the SDK's `./verify` entry, the CLI and the MCP server depend on it, so it is released first; `npm run check:pins` fails CI if any package's range for another stops accepting the workspace version.
 
 ```bash
 cd packages/sdk && npm version minor

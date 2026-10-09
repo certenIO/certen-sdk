@@ -1,0 +1,10 @@
+{
+  "//": "Routes the SDK calls that the deployed gateway does not serve yet, so they are not in the vendored spec. Each is named, tied to the finding that asks for it, and checked both ways by agentgen: it fails if an entry is no longer called by the SDK, and it fails when the vendored spec has the route (delete the entry then). Nothing else may call a route that is not in the spec.",
+  "routes": [
+    {
+      "id": "get:/v1/proof/{}/v2",
+      "finding": "RB7b-F30",
+      "reason": "Serves the proof v2 portable document (certen-proof-v2-accumulate-portable/1). Specified in runbooks/2026-09-proof-integrity/evidence/rb7b/gateway/E_proof_v2_route.md; until it is deployed the SDK reports PROOF_V2_EVIDENCE_NOT_SERVED on a 404."
+    }
+  ]
+}

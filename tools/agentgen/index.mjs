@@ -38,13 +38,21 @@ const sdkVersion = JSON.parse(
 // route the gateway removed, or the vendored spec is stale — both are drift, and both are worth a
 // hard failure rather than a silently thin doc.
 const known = new Set(ops.map((o) => o.id));
+const pending = JSON.parse(readFileSync(join(REPO_ROOT, 'tools', 'agentgen', 'pending-routes.json'), 'utf8')).routes;
+const pendingIds = new Set(pending.map((p) => p.id));
+const called = new Set();
 const unknown = [];
 for (const r of map) {
   for (const m of r.methods) {
     for (const c of m.calls) {
-      if (!known.has(c.id)) unknown.push(`certen.${r.resource}.${m.name}() -> ${c.method} ${c.path}`);
+      called.add(c.id);
+      if (!known.has(c.id) && !pendingIds.has(c.id)) unknown.push(`certen.${r.resource}.${m.name}() -> ${c.method} ${c.path}`);
     }
   }
+}
+for (const p of pending) {
+  if (known.has(p.id)) unknown.push(`pending-routes.json lists ${p.id} (${p.finding}), but the vendored spec has it now: delete the entry`);
+  else if (!called.has(p.id)) unknown.push(`pending-routes.json lists ${p.id} (${p.finding}), but no SDK method calls it: delete the entry`);
 }
 if (unknown.length > 0) {
   console.error('agentgen: SDK calls endpoints that are not in the vendored spec:');

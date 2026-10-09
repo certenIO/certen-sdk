@@ -45,7 +45,7 @@ function argsFor(tool: ToolDef): Record<string, unknown> {
     else if (name === 'chain') out[name] = 'base-sepolia';
     else if (name === 'intent') out[name] = { legs: [{ chain: 'base-sepolia', toAddress: `0x${'22'.repeat(20)}`, amount: '0' }] };
     else if (name === 'link') out[name] = `${baseUrl}/v1/proof/shared/token123`;
-    else if (name === 'targetId') out[name] = UUID;
+    else if (name === 'targetId' || name === 'target') out[name] = UUID;
     else if (name === 'address') out[name] = `0x${'11'.repeat(20)}`;
     else if (name === 'signature') out[name] = 'cd'.repeat(64);
     else if (/hash|publicKey/i.test(name)) out[name] = HEX64;

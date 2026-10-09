@@ -1,5 +1,18 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — `proof verify` checks the proof (RB7b Phase E)
+
+### Changed (breaking)
+- `certen proof verify` verifies a proof layer by layer, locally, with `@certen.io/proof-verify`. It no longer reports inclusion from the gateway's receipt or from a
+  `verified` flag in the bundle. `--json` output changes shape (`overall`, `independent`, `layers`, `covers`, `notCovered`, `failure`, `execution`, `bundleStatements`,
+  `evidence`, `gateway`); see docs/CLI-CONTRACT.md.
+- New exit codes for `proof verify`: `4` partial (a layer is not established) and `5` no evidence (`PROOF_V2_EVIDENCE_NOT_SERVED`). `3` still means only that the gateway
+  was unreachable. A live proof the gateway serves no proof v2 document for exits `5` until the route is deployed.
+- `--govroot <hex>` compares the govRoot v3 computed here with an expected one.
+
+### Fixed
+- The entrypoint overwrote the exit code a command set through `process.exitCode`, so a failed check could exit `0` (`proof verify`'s outcome check, `keys verify`).
+  It now honours it.
 ## Unreleased — `--expires-in`, `--authority`, and why an intent failed
 
 ### Added

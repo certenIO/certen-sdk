@@ -1,4 +1,6 @@
-# Publish @certen.io/sdk, @certen.io/cli and @certen.io/mcp to npm (each from its own tag).
+# Publish @certen.io/sdk, @certen.io/cli, @certen.io/mcp and @certen.io/proof-verify to npm (each from its own tag).
+#
+# Release order matters: @certen.io/proof-verify first (the SDK's ./verify entry, the CLI and the MCP server depend on it), then sdk, then cli and mcp.
 #
 # Triggered by a package-scoped tag so the SDK versions independently of the gateway service — they ship on
 # different clocks, and tying an SDK release to a server deploy means either stale clients or pointless
@@ -15,13 +17,13 @@ name: release-sdk
 
 on:
   push:
-    tags: ["sdk-v*.*.*", "cli-v*.*.*", "mcp-v*.*.*"]
+    tags: ["sdk-v*.*.*", "cli-v*.*.*", "mcp-v*.*.*", "verify-v*.*.*"]
   workflow_dispatch:
     inputs:
       package:
         description: "Which package to release"
         type: choice
-        options: [sdk, cli, mcp]
+        options: [sdk, cli, mcp, verify]
         default: sdk
       dry_run:
         description: "Build and verify without publishing"
@@ -115,6 +117,10 @@ jobs:
                 if (!d.data.commands.some(c => c.name === 'identity')) throw new Error('commands missing');
                 console.log('packed CLI runs and serves its command tree');
               "
+              ;;
+            verify)
+              # The verifier must run from the tarball: verify the recorded conformance document, offline, and refuse a tampered copy.
+              node "$GITHUB_WORKSPACE/scripts/verify-serves-conformance.mjs" .
               ;;
             mcp)
               # Must serve its documentation resources; without the prepack bundling step it serves none.

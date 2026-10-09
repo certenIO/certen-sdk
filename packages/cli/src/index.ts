@@ -150,7 +150,10 @@ export async function run(argv: string[]): Promise<ExitCode> {
   try {
     await program.parseAsync(cleanArgv);
     flushSuccess();
-    return EXIT.OK;
+    // A command that finished and printed its result may still have a verdict that is not success (`proof verify`, `keys verify`):
+    // it says so with process.exitCode. The entrypoint used to assign EXIT.OK over it, so those commands exited 0 on a failed check.
+    const requested = Number(process.exitCode ?? EXIT.OK);
+    return ((Object.values(EXIT) as number[]).includes(requested) ? requested : EXIT.FAILED) as ExitCode;
   } catch (err) {
     return handleError(err);
   }

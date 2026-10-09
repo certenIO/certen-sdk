@@ -100,6 +100,8 @@ export function commandTree(program: Command, version: string): string {
         1: 'operation failed',
         2: 'usage error',
         3: 'gateway unreachable',
+        4: 'proof verify: partial (a layer is not established)',
+        5: 'proof verify: no evidence to check',
       },
     },
   });

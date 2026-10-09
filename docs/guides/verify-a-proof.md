@@ -57,6 +57,14 @@ separate things, and it is worth being explicit because checking only the first 
 Steps 1 and 3 are separate attestations by design — one before execution, one after — so that an attestation
 about an outcome cannot be replayed as an authorization.
 
+## Verify it yourself: `certen proof verify`
+
+`certen proof verify <intent id | share link | @bundle.json>` (and the MCP tool `certen_proof_verify`, and `@certen.io/sdk/verify`) checks the proof here,
+from its own bytes, and prints one verdict per layer with the evidence each was checked against. It never counts a `verified` flag in the bundle or the
+gateway's own receipt; both are printed as what they are. Exit `0` means every layer the proof carries checked; `4` means a named layer is not established;
+`1` names the layer a tamper is in; `5` means the gateway serves no proof v2 document for this proof. Add `--rpc` with your own node to compare the
+execution receipt with a block header you fetched. See [CLI-CONTRACT](../CLI-CONTRACT.md) for the output.
+
 ## Independent verification, without this API
 
 A verifier who does not trust the gateway should not be asking the gateway. Two routes:

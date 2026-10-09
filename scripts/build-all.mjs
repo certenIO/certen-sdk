@@ -33,8 +33,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-// sdk first: the other two compile against its declarations.
-const PACKAGES = ['sdk', 'cli', 'mcp', 'verify'];
+// verify first (it depends on nothing here), then sdk (its ./verify entry compiles against verify's declarations), then the
+// two that compile against sdk's.
+const PACKAGES = ['verify', 'sdk', 'cli', 'mcp'];
 
 const tsc = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
 if (!existsSync(tsc)) {

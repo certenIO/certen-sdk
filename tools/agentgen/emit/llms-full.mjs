@@ -137,7 +137,7 @@ export function emitLlmsFull({ spec, ops, map, sdkVersion }) {
   }
 
   const covered = new Set();
-  for (const r of map) for (const m of r.methods) for (const c of m.calls) covered.add(c.id);
+  for (const r of map) for (const m of r.methods) for (const c of m.calls) if (byId.has(c.id)) covered.add(c.id);
   const uncovered = ops.filter((o) => !covered.has(o.id));
 
   L.push('## Gateway endpoints with no SDK method');
