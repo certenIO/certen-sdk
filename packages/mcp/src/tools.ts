@@ -1,4 +1,4 @@
-import { CertenError, resolveSignTarget } from '@certen.io/sdk';
+import { CertenError, intentOutcome, resolveSignTarget } from '@certen.io/sdk';
 import * as sdkModule from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 
@@ -598,17 +598,37 @@ const READ_TOOLS: ToolDef[] = [
       'Poll an intent until it reaches a terminal state. THIS TAKES 60-110 SECONDS in the normal '
       + 'case — that is real validator work, not a tunable delay. Do not treat a slow response as a '
       + 'hang, and do not retry it: a second call just starts a second poll against the same intent. '
-      + 'Default budget is 360s. Prefer certen_transaction_get if you only want the current state.',
+      + 'Default budget is 360s. Prefer certen_transaction_get if you only want the current state. '
+      + 'The result carries `outcome`, the named state: `completed` (executed and proven); '
+      + '`completed_unproven` (the action EXECUTED but its proof can never be produced - gas only, fee waived, '
+      + 'nothing to verify; this is not a failure and not "completed"); `executed` (only with until:"executed": the '
+      + 'action ran on its chain and the proof bundle is still being produced). A failed or expired intent comes back '
+      + 'as an INTENT_FAILED error with its reason_code. If time runs out the error is WAIT_TIMEOUT with the last '
+      + 'status seen: the intent may still complete, so check it again rather than opening a second one.',
     inputSchema: {
       type: 'object',
       properties: {
         intentId: str('Intent id'),
         timeoutMs: num('Give up after this many ms (default 360000)'),
+        until: {
+          type: 'string',
+          enum: ['terminal', 'executed'],
+          description:
+            'terminal (default): wait for a final state. executed: return as soon as the action has executed on '
+            + 'its chain, without waiting for its proof bundle.',
+        },
       },
       required: ['intentId'],
       additionalProperties: false,
     },
-    run: (c, a) => c.execute.wait(s(a, 'intentId'), { timeoutMs: optN(a, 'timeoutMs') ?? 360_000 }),
+    run: async (c, a) => {
+      const until = optS(a, 'until');
+      if (until !== undefined && until !== 'terminal' && until !== 'executed') {
+        throw new Error(`until must be "terminal" or "executed", got ${JSON.stringify(until)}`);
+      }
+      const tx = await c.execute.wait(s(a, 'intentId'), { timeoutMs: optN(a, 'timeoutMs') ?? 360_000, until });
+      return { ...tx, outcome: intentOutcome(tx) };
+    },
   },
   {
     name: 'certen_chains_list',
