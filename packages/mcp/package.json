@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/mcp",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Model Context Protocol server for the CERTEN Gateway — read-only by default, and it never holds a signing key",
   "license": "MIT",
   "type": "module",
@@ -43,7 +43,7 @@
   },
   "//dependencies": "The SDK is the only runtime dependency. MCP's stdio transport is newline-delimited JSON-RPC 2.0 — a small, stable surface implemented directly in src/protocol.ts. For a server that can authorize value-bearing operations, every avoided transitive dependency is avoided supply-chain risk.",
   "dependencies": {
-    "@certen.io/sdk": "^0.9.0",
+    "@certen.io/sdk": "^0.10.0",
     "@certen.io/proof-verify": "^0.1.0"
   },
   "publishConfig": {

@@ -261,8 +261,10 @@ cd packages/sdk && npm version minor
 git tag sdk-v0.2.0 && git push --follow-tags
 ```
 
-See [.github/workflows/release.yml](.github/workflows/release.yml). Publishing needs `NPM_TOKEN` as a
-repository secret; never put a token in a local `.npmrc`.
+Order: `verify-v0.1.0`, then `sdk-v0.10.0`, then `cli-v0.10.0` and `mcp-v0.5.0` (the tag prefix is the package directory). See
+[.github/workflows/release.yml](.github/workflows/release.yml). Publishing uses npm trusted publishing (OIDC): the owner
+configures each package on npmjs.com to accept this workflow, and there is no `NPM_TOKEN` secret and no token fallback. Run the workflow
+first with `dry_run: true` for each package. Never put a token in a local `.npmrc`.
 
 ## License
 
