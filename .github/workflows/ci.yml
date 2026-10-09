@@ -54,6 +54,8 @@ jobs:
       # One Node policy, and no internal package resolved from the registry instead of the workspace.
       - name: Node policy
         run: npm run check:node
+      - name: Workspace pins
+        run: npm run check:pins
 
   # A published package is only as good as its tarball. `files`, `exports`, and `prepack` are all easy to
   # get wrong in ways that install cleanly and fail on first import — and npm versions are immutable, so

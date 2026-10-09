@@ -28,7 +28,8 @@
     "agentgen": "node tools/agentgen/index.mjs",
     "agentgen:check": "node tools/agentgen/index.mjs --check",
     "check:gateway": "node scripts/check-gateway-serves.mjs",
-    "check:node": "node scripts/check-node-policy.mjs"
+    "check:node": "node scripts/check-node-policy.mjs",
+    "check:pins": "node scripts/check-workspace-pins.mjs"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
