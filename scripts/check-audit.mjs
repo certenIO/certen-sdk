@@ -55,7 +55,12 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   let raw;
   if (fileArg > 0) raw = readFileSync(process.argv[fileArg + 1], 'utf8');
   else {
-    const res = spawnSync('npm', ['audit', '--omit=dev', '--json'], { encoding: 'utf8', shell: process.platform === 'win32', maxBuffer: 64 * 1024 * 1024 });
+    // Run npm's own CLI script with this node when npm started us (no shell, no escaping question); otherwise one fixed command string.
+    const npmCli = process.env.npm_execpath;
+    const opts = { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 };
+    const res = npmCli && /\.c?js$/.test(npmCli)
+      ? spawnSync(process.execPath, [npmCli, 'audit', '--omit=dev', '--json'], opts)
+      : spawnSync('npm audit --omit=dev --json', { ...opts, shell: true });
     raw = res.stdout;
   }
   let audit;
