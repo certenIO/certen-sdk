@@ -1,7 +1,8 @@
 import { AxiosInstance } from 'axios';
 import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
-import { CertenError, CertenIntentFailedError } from '../errors.js';
+import { CertenError, CertenIntentFailedError, CertenProofNotAvailableError, CertenWaitTimeoutError } from '../errors.js';
+import { classifyIntentStatus, intentOutcome, type IntentStatusClass } from '../intent-states.js';
 import { headerFieldsBody } from '../header-fields.js';
 import { assertFundedForValue } from '../funding.js';
 import { SignResource } from './sign.js';
@@ -144,9 +145,22 @@ export interface OpenedIntent {
   signingMode?: string;
 }
 
-/** Terminal states. `wait()` stops on these rather than polling forever. */
-const DONE = ['completed', 'delivered', 'proven'];
-const FAILED = ['failed', 'error'];
+/**
+ * What `wait()` stops at. `terminal` (the default) is any final state: `completed`, `completed_unproven` or a failure.
+ * `executed` also returns as soon as the action has executed on its chain, without waiting for its proof bundle.
+ */
+export type WaitUntil = 'terminal' | 'executed';
+
+/** One change of status seen by `wait()`, delivered to `onState`. */
+export interface IntentStateEvent {
+  intentId: string;
+  /** The gateway's status, verbatim. */
+  status: string;
+  /** What the status means for a waiting caller; see `intent-states.ts`. `executed` is not terminal and not a failure. */
+  class: IntentStatusClass;
+  /** The response that carried it. */
+  transaction: TransactionResponse;
+}
 
 /**
  * Proof fetches get a longer budget than the client's 30s default.
@@ -303,17 +317,37 @@ export class ExecuteResource {
    *
    * A real proof cycle is 60–110 seconds of validator work, so the default budget is generous. This is not
    * a delay that can be tuned away, and a 30-second timeout around it will simply always fire.
+   *
+   * What each status does (one table, `intent-states.ts`):
+   * - `completed` / `proven`: resolves. Executed and proven.
+   * - `completed_unproven`: RESOLVES, with that status. The action executed but its proof can never be produced, so this is not a
+   *   failure and not "completed"; read it with `intentOutcome(tx)` (`outcome: 'completed_unproven'`,
+   *   `reason: 'execution_proof_unavailable'`).
+   * - `executed`: not terminal. The action ran and the proof bundle is pending, so `wait()` keeps polling; it is reported through
+   *   `onState`, and `until: 'executed'` returns at it instead.
+   * - `failed` / `expired`: throws `CertenIntentFailedError`.
+   * - anything else: keeps polling. If time runs out, throws `CertenWaitTimeoutError` carrying the last status (an unrecognised
+   *   one is reported as `unknown`, never assumed terminal).
    */
   async wait(
     intentId: string,
-    { timeoutMs = 360_000, intervalMs = 8_000, onPoll }: {
+    { timeoutMs = 360_000, intervalMs = 8_000, onPoll, onState, until = 'terminal' }: {
       timeoutMs?: number;
       intervalMs?: number;
+      /** Called with every poll's response. */
       onPoll?: (tx: TransactionResponse) => void;
+      /** Called once per change of status (including the first), with its class. */
+      onState?: (event: IntentStateEvent) => void;
+      /** Return at `executed` (the action ran; proof pending) instead of waiting for a final state. */
+      until?: WaitUntil;
     } = {},
   ): Promise<TransactionResponse> {
+    if (until !== 'terminal' && until !== 'executed') {
+      throw new Error(`certen: wait \`until\` must be 'terminal' or 'executed', got ${JSON.stringify(until)}`);
+    }
     const deadline = Date.now() + timeoutMs;
     let last: TransactionResponse | undefined;
+    let lastStatus: string | undefined;
     while (Date.now() < deadline) {
       // One poll that times out or meets a 5xx is not the end of the intent. The client already
       // retries such a request a few times; if it still fails, keep waiting for the deadline the
@@ -327,23 +361,43 @@ export class ExecuteResource {
       }
       last = data as TransactionResponse;
       onPoll?.(last);
-      const status = String((last as unknown as { status?: string }).status ?? '');
-      if (DONE.includes(status)) return last;
-      if (FAILED.includes(status)) {
-        const msg = (last as unknown as { error_message?: string }).error_message ?? '';
-        // The reason travels with the error: `expired`, `expectation_unmet` and `target_reverted`
-        // want three different responses, and a caller should not have to re-fetch to tell them apart.
-        const reason = last.reason_code ?? null;
-        throw new CertenIntentFailedError(
-          `certen: intent ${intentId} ${status}${reason ? ` (${reason})` : ''}${msg ? `: ${msg}` : ''}`,
-          intentId, reason, last,
-        );
+      const outcome = intentOutcome(last);
+      if (outcome.status !== lastStatus) {
+        lastStatus = outcome.status;
+        onState?.({ intentId, status: outcome.status, class: outcome.class, transaction: last });
       }
-      await sleep(intervalMs);
+      switch (outcome.class) {
+        case 'terminal_success':
+        case 'terminal_gas_only':
+          return last;
+        case 'executed':
+          if (until === 'executed') return last;
+          break;
+        case 'terminal_failure': {
+          const msg = (last as unknown as { error_message?: string }).error_message ?? '';
+          // The reason travels with the error: `expired`, `expectation_unmet` and `target_reverted`
+          // want three different responses, and a caller should not have to re-fetch to tell them apart.
+          const reason = last.reason_code ?? null;
+          throw new CertenIntentFailedError(
+            `certen: intent ${intentId} ${outcome.status}${reason ? ` (${reason})` : ''}${msg ? `: ${msg}` : ''}`,
+            intentId, reason, last,
+          );
+        }
+        default:
+          break; // in_flight, or a status this client does not know: not terminal, keep waiting
+      }
+      // Never sleep past the caller's deadline: a 100ms budget with the default 8s interval used to take 8s to give up.
+      await sleep(Math.max(0, Math.min(intervalMs, deadline - Date.now())));
     }
     // Deliberately neither success nor failure — the intent may still complete. Say which it is.
-    const status = String((last as unknown as { status?: string } | undefined)?.status ?? 'unknown');
-    throw new Error(`certen: intent ${intentId} still ${status} after ${timeoutMs}ms`);
+    const seen = lastStatus ?? null;
+    const cls = seen === null ? null : classifyIntentStatus(seen);
+    throw new CertenWaitTimeoutError(
+      `certen: intent ${intentId} still ${seen ?? 'unknown'} after ${timeoutMs}ms`
+      + (cls === 'unknown' ? ' (a status this client does not recognise)' : '')
+      + (cls === 'executed' ? ' (the action executed; its proof is still being produced)' : ''),
+      intentId, timeoutMs, seen, cls, last,
+    );
   }
 
   /**
@@ -368,7 +422,17 @@ export class ExecuteResource {
     }
     const hash = String((intent as { accum_tx_hash?: string }).accum_tx_hash ?? '').match(/([a-f0-9]{64})/)?.[1];
     if (!hash) {
-      throw new Error(`certen: intent ${intentId} has neither a proof_id nor an Accumulate transaction hash`);
+      // Which kind of "nothing" it is decides what the caller does next, so say it rather than collapsing them.
+      const o = intentOutcome(intent as { status?: unknown; reason_code?: unknown });
+      const reason = o.outcome === 'executed' ? 'proof_pending'
+        : o.outcome === 'completed_unproven' ? 'execution_proof_unavailable'
+        : 'not_assigned';
+      throw new CertenProofNotAvailableError(
+        `certen: intent ${intentId} has neither a proof_id nor an Accumulate transaction hash`
+        + (reason === 'proof_pending' ? ' (the action executed; its proof is still being produced)' : '')
+        + (reason === 'execution_proof_unavailable' ? ' (the action executed and its proof can never be produced)' : ''),
+        intentId, reason, intent,
+      );
     }
     const { data: receipt } = await this.http.get(`/v1/proof/tx/${hash}/receipt`, { timeout: timeoutMs });
     return { kind: 'accumulate-receipt', txHash: hash, receipt, intent };

@@ -1,6 +1,6 @@
 export { CertenClient, paginate, paginateWithTotal, DEFAULT_BASE_URL } from './client.js';
 export * from './types.js';
-export type { SignFn, ProofGatedCallParams, TransferParams, OpenedIntent } from './resources/execute.js';
+export type { SignFn, ProofGatedCallParams, TransferParams, OpenedIntent, WaitUntil, IntentStateEvent } from './resources/execute.js';
 export {
   CertenError,
   CertenAuthError,
@@ -10,6 +10,8 @@ export {
   CertenPaymentRequiredError,
   CertenHeaderAuthorityNotExecutableError,
   CertenIntentFailedError,
+  CertenWaitTimeoutError,
+  CertenProofNotAvailableError,
   HEADER_AUTHORITY_NOT_EXECUTABLE,
 } from './errors.js';
 // Transaction-header fields (additional authorities, deadline): the validators the SDK runs before
@@ -18,6 +20,11 @@ export {
   normalizeAdditionalAuthorities, normalizeExpiresAt, parseDuration, expiresIn, MAX_ADDITIONAL_AUTHORITIES,
   MAX_AUTHORITY_URL_LENGTH, GATEWAY_EXPIRY_MIN_S, GATEWAY_EXPIRY_MAX_S, LOCAL_EXPIRY_MIN_S, HEADER_FIELD_ERROR_CODES,
 } from './header-fields.js';
+// Where an intent can be and what each status means: the one table wait(), the CLI and the MCP server share. See intent-states.ts.
+export {
+  INTENT_STATUS_CLASS, classifyIntentStatus, isTerminalIntentStatus, intentOutcome, EXECUTION_PROOF_UNAVAILABLE,
+} from './intent-states.js';
+export type { IntentStatusClass, KnownIntentStatus, IntentOutcome, IntentOutcomeName } from './intent-states.js';
 export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS } from './reason-codes.js';
 export type { PaymentResolution } from './errors.js';
 export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';

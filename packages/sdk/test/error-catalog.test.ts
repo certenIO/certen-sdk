@@ -100,7 +100,7 @@ describe('the SDK catalogue against what the gateway actually raises', () => {
    * Codes the SDK raises that the gateway never does, because they happen before or instead of an
    * HTTP response. Anything else appearing here is drift.
    */
-  const SDK_ONLY = new Set(['NETWORK_ERROR']);
+  const SDK_ONLY = new Set(['NETWORK_ERROR', 'INTENT_FAILED', 'WAIT_TIMEOUT', 'PROOF_NOT_ASSIGNED']);
 
   it('vendors a catalogue worth checking against', () => {
     expect(GATEWAY.errors.length).toBeGreaterThanOrEqual(30);
