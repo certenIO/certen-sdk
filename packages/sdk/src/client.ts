@@ -1,5 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
-import { randomBytes } from 'crypto';
+import { randomHex } from './random.js';
+import { DEFAULT_BASE_URL } from './defaults.js';
+import { SDK_VERSION } from './version.js';
 import { CertenError, CertenForeignOriginError } from './errors.js';
 import { assertOwnOrigin, redirectStaysOnOrigin } from './origin.js';
 import { IdentityResource } from './resources/identity.js';
@@ -38,7 +40,7 @@ import type { CertenClientOptions,
  * retargeted (staging, a self-hosted gateway, a future `api.certen.io` once it fronts the gateway) without
  * a code change or an SDK release.
  */
-export const DEFAULT_BASE_URL = 'https://gateway.kompendium.co';
+export { DEFAULT_BASE_URL };
 
 /** Read an env var without assuming `process` exists — this SDK also runs in browsers, where touching a
  *  bare `process` is a ReferenceError rather than `undefined`. */
@@ -48,6 +50,10 @@ function envBaseUrl(): string | undefined {
   } catch {
     return undefined;
   }
+}
+/** Node, as opposed to a browser or a worker. Reads nothing that throws when `process` is absent. */
+function isNode(): boolean {
+  return typeof process !== 'undefined' && typeof process.versions === 'object' && !!process.versions?.node;
 }
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_BACKOFF_MS = 250;
@@ -281,7 +287,9 @@ export class CertenClient {
         // The credential header is set per-request by the interceptor below, because a minted token
         // changes over the client's life and a header baked in here never would.
         'Content-Type': 'application/json',
-        'User-Agent': `certen-sdk-node/${process.env.npm_package_version ?? 'dev'}`,
+        // A browser forbids scripts setting User-Agent (the request would be refused or the header silently dropped), so only a Node
+        // process names itself. It names the SDK's own version, not whatever package happens to be running it.
+        ...(isNode() ? { 'User-Agent': `certen-sdk-node/${SDK_VERSION}` } : {}),
       },
       timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       validateStatus: (status) => status >= 200 && status < 300,
@@ -498,7 +506,7 @@ function sleep(ms: number): Promise<void> {
 
 function generateIdempotencyKey(): string {
   // Stable across retries within a process; unique across calls.
-  return `sdk_${Date.now().toString(36)}_${randomBytes(8).toString('hex')}`;
+  return `sdk_${Date.now().toString(36)}_${randomHex(8)}`;
 }
 
 /**

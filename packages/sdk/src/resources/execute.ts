@@ -1,5 +1,5 @@
 import { AxiosInstance } from 'axios';
-import { randomUUID } from 'crypto';
+import { uuid } from '../random.js';
 import { omitUndefined, apiPath } from '../internal.js';
 import { CertenError, CertenIntentFailedError, CertenProofNotAvailableError, CertenWaitTimeoutError } from '../errors.js';
 import { classifyIntentStatus, intentOutcome, type IntentStatusClass } from '../intent-states.js';
@@ -258,7 +258,7 @@ export class ExecuteResource {
         // does not, so the SDK supplies them. Once the upstream defaults them too, these become
         // harmless no-ops rather than load-bearing.
         adiUrl: p.adiUrl,
-        id: randomUUID(),
+        id: uuid(),
         initiatedBy: p.adiUrl,
         timestamp: Date.now(),
         fromChain: p.fromChain,

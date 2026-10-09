@@ -1,4 +1,6 @@
-import { createHash, verify as edVerify, createPublicKey } from 'crypto';
+import { bytesToHex, concatBytes, hexToBytes, utf8 } from './bytes.js';
+import { sha256 } from './sha256.js';
+import { maybeWebCrypto } from './random.js';
 import type { CertenClient } from './client.js';
 import type { Receipt, ReceiptProof, ReceiptVerification, ReceiptCheck } from './types.js';
 
@@ -37,17 +39,34 @@ export function canonicalJson(value: unknown): string {
     .join(',')}}`;
 }
 
-/** ed25519 SPKI prefix, so a raw 32-byte key can be handed to node's verifier. */
-const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
+/** This runtime's Web Crypto cannot verify ed25519. Not a bad signature: the check could not be made. */
+class Ed25519Unavailable extends Error {}
 
-function verifyEd25519(publicKeyHex: string, message: Buffer, signatureHex: string): boolean {
+/**
+ * Verify an ed25519 signature with Web Crypto (Node >= 22 and current browsers), so the same code runs in both.
+ * Resolves false for a signature or key that is malformed or does not verify; throws `Ed25519Unavailable` when the runtime cannot
+ * verify ed25519 at all, so that case is reported as "could not check" and never as ok.
+ */
+async function verifyEd25519(publicKeyHex: string, message: Uint8Array, signatureHex: string): Promise<boolean> {
+  const subtle = maybeWebCrypto()?.subtle;
+  if (!subtle) throw new Ed25519Unavailable('no Web Crypto (crypto.subtle) in this runtime');
+  let pub: Uint8Array;
+  let sig: Uint8Array;
   try {
-    const key = createPublicKey({
-      key: Buffer.concat([ED25519_SPKI_PREFIX, Buffer.from(publicKeyHex, 'hex')]),
-      format: 'der',
-      type: 'spki',
-    });
-    return edVerify(null, message, key, Buffer.from(signatureHex, 'hex'));
+    pub = hexToBytes(publicKeyHex);
+    sig = hexToBytes(signatureHex);
+  } catch {
+    return false;
+  }
+  let key: unknown;
+  try {
+    key = await subtle.importKey('raw', pub, { name: 'Ed25519' }, false, ['verify']);
+  } catch (err) {
+    if ((err as { name?: string }).name === 'NotSupportedError') throw new Ed25519Unavailable('this runtime does not support ed25519 in Web Crypto');
+    return false; // a key that is not a valid ed25519 public key
+  }
+  try {
+    return await subtle.verify({ name: 'Ed25519' }, key, sig, message);
   } catch {
     return false;
   }
@@ -55,21 +74,22 @@ function verifyEd25519(publicKeyHex: string, message: Buffer, signatureHex: stri
 
 /** Fold an RFC 6962 section 2.1.1 audit path from a leaf to the root it implies. */
 export function foldAuditPath(leafHashHex: string, leafIndex: number, treeSize: number, path: string[]): string {
-  let hash = Buffer.from(leafHashHex, 'hex');
+  let hash = hexToBytes(leafHashHex);
   let index = leafIndex;
   let size = treeSize;
+  const NODE = new Uint8Array([0x01]);
   for (const siblingHex of path) {
-    const sibling = Buffer.from(siblingHex, 'hex');
+    const sibling = hexToBytes(siblingHex);
     // The right-hand branch when this node is a right child, OR when it is the last node at this
     // level — the case that makes an unbalanced tree fold correctly and the one most often dropped.
     const pair = index % 2 === 1 || index + 1 === size
-      ? Buffer.concat([Buffer.from([0x01]), sibling, hash])
-      : Buffer.concat([Buffer.from([0x01]), hash, sibling]);
-    hash = createHash('sha256').update(pair).digest();
+      ? concatBytes(NODE, sibling, hash)
+      : concatBytes(NODE, hash, sibling);
+    hash = sha256(pair);
     index = Math.floor(index / 2);
     size = Math.floor((size + 1) / 2);
   }
-  return hash.toString('hex');
+  return bytesToHex(hash);
 }
 
 export async function verifyReceipt(
@@ -86,7 +106,7 @@ export async function verifyReceipt(
   if (receipt.body === undefined || receipt.body === null) {
     add('digest', 'skipped', 'The receipt carries no body to hash.');
   } else {
-    const computed = createHash('sha256').update(canonicalJson(receipt.body)).digest('hex');
+    const computed = bytesToHex(sha256(utf8(canonicalJson(receipt.body))));
     add('digest', computed === receipt.digest ? 'ok' : 'failed',
       computed === receipt.digest
         ? 'sha256(canonical_json(body)) matches the stated digest.'
@@ -112,10 +132,17 @@ export async function verifyReceipt(
         add('signature', 'failed',
           `Signed with key ${receipt.key_id}, which is not in the published key set.`);
       } else {
-        const ok = verifyEd25519(key.public_key, Buffer.from(receipt.digest, 'hex'), receipt.signature);
-        add('signature', ok ? 'ok' : 'failed',
-          ok ? `ed25519 signature verifies against published key ${key.key_id}.`
-            : `ed25519 signature does NOT verify against published key ${key.key_id}.`);
+        let digestBytes: Uint8Array | null = null;
+        try { digestBytes = hexToBytes(receipt.digest); } catch { /* reported below */ }
+        try {
+          const ok = digestBytes !== null && await verifyEd25519(key.public_key, digestBytes, receipt.signature);
+          add('signature', ok ? 'ok' : 'failed',
+            ok ? `ed25519 signature verifies against published key ${key.key_id}.`
+              : `ed25519 signature does NOT verify against published key ${key.key_id}.`);
+        } catch (err) {
+          // The runtime cannot verify ed25519: "I could not check", which is never the same as "it checks out".
+          add('signature', 'skipped', `Could not verify the ed25519 signature: ${(err as Error).message}.`);
+        }
       }
     }
   }
@@ -131,19 +158,22 @@ export async function verifyReceipt(
   }
 
   if (proof) {
-    const leaf = createHash('sha256')
-      .update(Buffer.concat([
-        Buffer.from([0x00]),
-        Buffer.from(proof.leaf_salt, 'hex'),
-        Buffer.from(canonicalJson(receipt.body), 'utf8'),
-      ]))
-      .digest('hex');
+    let leaf: string;
+    let folded: string;
+    try {
+      leaf = bytesToHex(sha256(concatBytes(new Uint8Array([0x00]), hexToBytes(proof.leaf_salt), utf8(canonicalJson(receipt.body)))));
+      folded = foldAuditPath(proof.leaf_hash, proof.leaf_index, proof.tree_size, proof.audit_path ?? []);
+    } catch (err) {
+      // A proof with malformed hex is a failed check with a reason, not an exception out of a verifier that reports rather than throws.
+      add('inclusion', 'failed', `The inclusion proof is malformed: ${(err as Error).message}.`);
+      add('root', 'skipped', 'No well-formed inclusion proof to check a root against.');
+      return { receipt_id: receiptId, verified: false, complete: false, checks };
+    }
     add('inclusion', leaf === proof.leaf_hash ? 'ok' : 'failed',
       leaf === proof.leaf_hash
         ? `This receipt is leaf ${proof.leaf_index} of ${proof.tree_size}.`
         : `Recomputed leaf ${leaf}, proof states ${proof.leaf_hash}.`);
 
-    const folded = foldAuditPath(proof.leaf_hash, proof.leaf_index, proof.tree_size, proof.audit_path ?? []);
 
     // The independent fetch. Checking `folded` against `proof.root_hash` would compare the proof
     // with itself; the point is to compare it with a separately served, separately signed head.

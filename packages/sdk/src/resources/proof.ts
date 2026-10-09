@@ -1,5 +1,5 @@
 import { AxiosInstance } from 'axios';
-import { parseShareTarget } from '../shared-proof.js';
+import { parseShareTarget } from '../share-target.js';
 import type {
   ProofArtifact, ProofCustody, ChainReceipt, ProofShare, ProofSharesResponse,
   SharedProof,
@@ -53,16 +53,17 @@ export class ProofResource {
   /**
    * The full bundle.
    *
-   * Returned as a Buffer because the gateway streams `application/octet-stream` when the
+   * Returned as a Uint8Array (a Buffer under Node) because the gateway streams `application/octet-stream` when the
    * downstream produces binary and JSON otherwise. Deciding between them here would mean
    * guessing; the caller writes it to a file, and `contentType` says which it got.
    */
-  async bundle(proofId: string): Promise<{ data: Buffer; contentType: string }> {
+  async bundle(proofId: string): Promise<{ data: Uint8Array; contentType: string }> {
     const response = await this.http.get(apiPath`/v1/proof/${proofId}/bundle`, {
       responseType: 'arraybuffer',
     });
     return {
-      data: Buffer.from(response.data as ArrayBuffer),
+      // A Buffer where there is one (Node), so existing callers keep its methods; a plain Uint8Array elsewhere.
+      data: typeof Buffer !== 'undefined' ? Buffer.from(response.data as ArrayBuffer) : new Uint8Array(response.data as ArrayBuffer),
       contentType: String(response.headers['content-type'] ?? 'application/octet-stream'),
     };
   }
