@@ -1,25 +1,43 @@
 import { describe, it, expect } from 'vitest';
-import * as sdk from '@certen.io/sdk';
-import { ALL_TOOLS, assertHeaderFieldsSupported } from '../src/tools.js';
+import http from 'node:http';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CertenClient } from '@certen.io/sdk';
+import { ALL_TOOLS } from '../src/tools.js';
 
 /**
  * `additionalAuthorities` / `expiresAt` on `certen_transaction_open`.
  *
- * Optional and backwards compatible: omitting both sends exactly what the tool sent before. When a
- * caller does ask for them, they must either reach the SDK or be refused — this package depends on
- * the PUBLISHED SDK, and an older release drops unknown keys from the request body, which would open
- * an intent without the deadline the caller asked for.
+ * Optional and backwards compatible: omitting both sends exactly what the tool sent before. When a caller asks for them they reach
+ * the gateway through the SDK's own validation, which is the same code the CLI and a direct SDK caller run. This package used to
+ * build against a registry copy of the SDK three minors old and had to REFUSE these fields (`HEADER_FIELDS_UNSUPPORTED`) because that
+ * copy would have dropped them silently; it now builds against the workspace SDK, so the workaround is gone, and this test runs the real
+ * SDK against a stub gateway.
  */
 
 const open = ALL_TOOLS.find((t) => t.name === 'certen_transaction_open')!;
 const FIRM = 'acc://fictional-firm.acme/book';
 const SOON = new Date(Math.floor(Date.now() / 1000) * 1000 + 3_600_000).toISOString();
 
-function fakeClient() {
-  const calls: Array<Record<string, unknown>> = [];
+async function gateway(): Promise<{ client: CertenClient; bodies: Array<Record<string, unknown>>; close: () => Promise<void> }> {
+  const bodies: Array<Record<string, unknown>> = [];
+  const srv = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/v1/transaction') bodies.push(JSON.parse(raw));
+      res.setHeader('content-type', 'application/json');
+      res.statusCode = 201;
+      res.end(JSON.stringify({ intent_id: 'i1', status: 'signing_required' }));
+    });
+  });
+  await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(srv.address() as { port: number }).port}`;
   return {
-    calls,
-    client: { transaction: { create: async (p: Record<string, unknown>) => { calls.push(p); return { intent_id: 'i' }; } } },
+    client: new CertenClient({ apiKey: 'k', baseUrl: url, maxRetries: 0 }),
+    bodies,
+    close: () => new Promise<void>((r) => { srv.closeAllConnections?.(); srv.close(() => r()); }),
   };
 }
 
@@ -33,29 +51,40 @@ describe('certen_transaction_open header fields', () => {
     expect(open.inputSchema.required).not.toContain('expiresAt');
   });
 
-  it('without the fields, calls the SDK exactly as before', async () => {
-    const f = fakeClient();
-    await open.run(f.client as never, { identityId: 'id', intent: {}, confirm: true });
-    expect(f.calls[0].additionalAuthorities).toBeUndefined();
-    expect(f.calls[0].expiresAt).toBeUndefined();
+  it('without the fields, sends neither', async () => {
+    const g = await gateway();
+    try {
+      await open.run(g.client, { identityId: 'id', intent: {}, confirm: true });
+      expect(g.bodies).toHaveLength(1);
+      expect(g.bodies[0]).not.toHaveProperty('additional_authorities');
+      expect(g.bodies[0]).not.toHaveProperty('expires_at');
+    } finally { await g.close(); }
   });
 
-  it('refuses the fields when the SDK cannot send them, and allows them when it can', () => {
-    const args = { additionalAuthorities: [FIRM], expiresAt: SOON };
-    expect(() => assertHeaderFieldsSupported(args, {})).toThrow(/nothing was sent/);
-    expect(() => assertHeaderFieldsSupported(args, { normalizeExpiresAt: () => '' })).not.toThrow();
-    expect(() => assertHeaderFieldsSupported({}, {})).not.toThrow();
+  it('with the fields, the gateway receives them - the SDK sends them, nothing drops them', async () => {
+    const g = await gateway();
+    try {
+      await open.run(g.client, { identityId: 'id', intent: {}, additionalAuthorities: [FIRM.toUpperCase(), FIRM], expiresAt: SOON, confirm: true });
+      // normalised by the shared SDK validation: lower-cased and de-duplicated, the deadline in RFC 3339
+      expect(g.bodies[0]).toMatchObject({ additional_authorities: [FIRM], expires_at: SOON });
+    } finally { await g.close(); }
   });
 
-  it('with the fields, passes them through or refuses — never drops them', async () => {
-    const f = fakeClient();
-    const args = { identityId: 'id', intent: {}, additionalAuthorities: [FIRM], expiresAt: SOON, confirm: true };
-    if (typeof (sdk as Record<string, unknown>).normalizeExpiresAt === 'function') {
-      await open.run(f.client as never, args);
-      expect(f.calls[0]).toMatchObject({ additionalAuthorities: [FIRM], expiresAt: SOON });
-    } else {
-      await expect(open.run(f.client as never, args)).rejects.toMatchObject({ code: 'HEADER_FIELDS_UNSUPPORTED' });
-      expect(f.calls).toHaveLength(0);
-    }
+  it('refuses a bad value through the shared SDK validation before anything is sent', async () => {
+    const g = await gateway();
+    try {
+      await expect(open.run(g.client, { identityId: 'id', intent: {}, additionalAuthorities: ['https://fictional-firm.example'], confirm: true }))
+        .rejects.toMatchObject({ code: 'INVALID_ADDITIONAL_AUTHORITIES' });
+      await expect(open.run(g.client, { identityId: 'id', intent: {}, expiresAt: 'soon', confirm: true }))
+        .rejects.toMatchObject({ code: 'INVALID_EXPIRES_AT' });
+      expect(g.bodies).toEqual([]);
+    } finally { await g.close(); }
+  });
+
+  it('no longer carries the version-sniffing workaround', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'tools.ts'), 'utf8');
+    expect(src).not.toContain('HEADER_FIELDS_UNSUPPORTED');
+    expect(src).not.toContain('assertHeaderFieldsSupported');
+    expect(src).not.toMatch(/import \* as \w+ from '@certen\.io\/sdk'/);
   });
 });

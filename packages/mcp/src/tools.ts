@@ -1,6 +1,6 @@
 import { CertenError, intentOutcome, resolveSignTarget } from '@certen.io/sdk';
-import * as sdkModule from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
+import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
 
 /**
  * Tool definitions, split into two tiers.
@@ -86,30 +86,6 @@ function optS(args: Record<string, unknown>, key: string): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
-/**
- * Refuse header fields the installed SDK would silently drop.
- *
- * `transaction.create` builds its body from a fixed list of keys, so an SDK release that predates
- * `additionalAuthorities` / `expiresAt` would open the intent WITHOUT the deadline or authorities
- * the caller asked for — an intent with no expiry when one was requested is worse than no intent.
- * The SDK that knows these fields also exports `normalizeExpiresAt`; its absence is the signal.
- */
-export function assertHeaderFieldsSupported(
-  args: Record<string, unknown>,
-  sdk: Record<string, unknown> = sdkModule as unknown as Record<string, unknown>,
-): void {
-  const asked = (Array.isArray(args.additionalAuthorities) && args.additionalAuthorities.length > 0)
-    || (typeof args.expiresAt === 'string' && args.expiresAt.length > 0);
-  if (asked && typeof sdk.normalizeExpiresAt !== 'function') {
-    throw new CertenError(
-      'additionalAuthorities / expiresAt need a newer @certen.io/sdk than this MCP server is running; it would '
-      + 'drop them silently, so nothing was sent. Upgrade @certen.io/mcp, or omit these fields.',
-      0,
-      'HEADER_FIELDS_UNSUPPORTED',
-    );
-  }
-}
-
 function optN(args: Record<string, unknown>, key: string): number | undefined {
   const v = args[key];
   return typeof v === 'number' ? v : undefined;
@@ -186,8 +162,8 @@ const READ_TOOLS: ToolDef[] = [
       required: ['chain'],
       additionalProperties: false,
     },
-    run: (c, a) => c.billing.quote({
-      chain: s(a, 'chain'),
+    run: async (c, a) => c.billing.quote({
+      chain: await assertChainUsable(c, s(a, 'chain')),
       sku: optS(a, 'sku'),
       proofClass: optS(a, 'proofClass') as 'on_demand' | 'on_cadence' | undefined,
       legCount: optN(a, 'legCount'),
@@ -660,6 +636,19 @@ const READ_TOOLS: ToolDef[] = [
     }),
   },
   {
+    name: 'certen_chains_enabled',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/chains',
+    description:
+      'The chains this server will accept in a tool call right now: the configured set (CERTEN_ENABLED_CHAINS, or the three live '
+      + 'testnets by default) narrowed to those the gateway lists as served. Use it, not certen_chains_list, to decide which chain '
+      + 'to name. Telcoin Adiri (chain 2017) is OFF by default: it appears in "enabled" only when the server was started with it '
+      + 'enabled AND the gateway serves it, and "optIn" says how to enable it. A chain not in "enabled" is refused before anything is sent.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    run: (c) => enabledChainReport(c),
+  },
+  {
     name: 'certen_doctor',
     tier: 'read',
     mutates: false,
@@ -805,8 +794,8 @@ const WRITE_TOOLS: ToolDef[] = [
       required: ['chain', 'address', 'confirm'],
       additionalProperties: false,
     },
-    run: (c, a) => c.billing.registerPayerAddress({
-      chain: s(a, 'chain'),
+    run: async (c, a) => c.billing.registerPayerAddress({
+      chain: await assertChainUsable(c, s(a, 'chain')),
       address: s(a, 'address'),
       label: optS(a, 'label'),
     }),
@@ -857,12 +846,14 @@ const WRITE_TOOLS: ToolDef[] = [
     //
     // `createAndWait` already encodes that correctly, including distinguishing a timeout (provisioning
     // may yet finish) from a genuine failure. One call, and the agent gets an identity it can use.
-    run: (c, a) => {
+    run: async (c, a) => {
       const params = {
         name: s(a, 'name'),
         publicKeyHash: s(a, 'publicKeyHash'),
         publicKey: optS(a, 'publicKey'),
-        chains: Array.isArray(a.chains) ? (a.chains as string[]) : undefined,
+        chains: Array.isArray(a.chains)
+          ? await Promise.all((a.chains as unknown[]).map((x) => assertChainUsable(c, String(x))))
+          : undefined,
         credits: optN(a, 'credits'),
       };
       return a.wait === false
@@ -972,7 +963,7 @@ const WRITE_TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     run: async (c, a) => {
-      assertHeaderFieldsSupported(a);
+      await assertIntentChains(c, a.intent);
       return c.transaction.create({
         identityId: s(a, 'identityId'),
         intent: a.intent as never,
