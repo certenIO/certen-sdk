@@ -86,6 +86,7 @@ jobs:
           npm pack
           TGZ=$(ls *.tgz | head -1)
           tar -tzf "$TGZ" | grep -qx "package/dist/index.js" || { echo "dist/index.js missing"; exit 1; }
+          tar -tzf "$TGZ" | grep -qx "package/dist/browser.js" || { echo "dist/browser.js missing"; exit 1; }
           tar -tzf "$TGZ" | grep -qx "package/README.md"     || { echo "README.md missing"; exit 1; }
           tar -tzf "$TGZ" | grep -qx "package/LICENSE"       || { echo "LICENSE missing"; exit 1; }
           if tar -tzf "$TGZ" | grep -q "package/src/"; then echo "src/ leaked into the tarball"; exit 1; fi
@@ -100,6 +101,17 @@ jobs:
               if (typeof c[r] !== 'object') throw new Error('missing resource: ' + r);
             if (typeof c.execute.contractCall !== 'function') throw new Error('missing execute.contractCall');
             console.log('packed artifact imports and exposes its resources');
+          "
+          # The browser entry resolves through the package map, and leaves out the two Node-only pieces.
+          node --input-type=module -e "
+            const b = await import('@certen.io/sdk/browser');
+            const full = await import('@certen.io/sdk');
+            for (const n of ['CertenClient','intentOutcome','CertenForeignOriginError']) if (typeof b[n] === 'undefined') throw new Error('browser entry missing ' + n);
+            for (const n of ['CertenAgent','ed25519Signer','fetchSharedProof','decodeSharedBundle']) {
+              if (typeof b[n] !== 'undefined') throw new Error('browser entry must not export ' + n);
+              if (typeof full[n] === 'undefined') throw new Error('default entry lost ' + n);
+            }
+            console.log('packed artifact: browser entry ok');
           "
       # The MCP package serves llms.txt and docs/ as MCP resources, but those live OUTSIDE its package
       # root and npm's `files` cannot reach outside one. Without the prepack bundling step the tarball
