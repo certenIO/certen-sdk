@@ -94,7 +94,7 @@ moves only as a deliberate bump with the conformance suite re-run, never through
   record is decoded (`src/proof-v2/netrecord.ts`), the set and thresholds the spine tracks change, a definition whose version is
   not above the current one is a counted no-op, and the next anchor is held to the new set (an anchor in the update's own block
   may be signed by the set before it). The binary decoder is checked against vectors Go produced
-  (`test/fixtures/netrecords.json`, from certen-validator `cmd/netrecordvectors`) and proves every decode by re-encoding it with
+  (`test/fixtures/netrecords.json`, from certen-validator `cmd/netrecordvectors`, which also records Go's verdict on each key signature type in `test/fixtures/keysignatures.json`) and proves every decode by re-encoding it with
   the SDK's encoder: a record that does not encode back to the written bytes is refused (`network_update_undecodable`).
 
 ## Conformance

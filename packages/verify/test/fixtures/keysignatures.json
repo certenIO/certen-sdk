@@ -1,0 +1,347 @@
+{
+ "generator": "certen-validator cmd/netrecordvectors",
+ "vectors": [
+  {
+   "name": "ed25519-valid",
+   "type": "ed25519",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "ed25519",
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "06eb1d4bc3dbde63103ee8c6ab4414754fd5d97f09245d8289917de0b5ba8df29b57fdd58daf5d79b7c5a70b8f20ab5fd8411c53529c9411a6b248300cc02f03",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "timestamp": 1700000000000,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": true
+  },
+  {
+   "name": "ed25519-flipped-signature",
+   "type": "ed25519",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "ed25519",
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "07eb1d4bc3dbde63103ee8c6ab4414754fd5d97f09245d8289917de0b5ba8df29b57fdd58daf5d79b7c5a70b8f20ab5fd8411c53529c9411a6b248300cc02f03",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "timestamp": 1700000000000,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": false
+  },
+  {
+   "name": "ed25519-metadata-changed-after-signing",
+   "type": "ed25519",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "ed25519",
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "06eb1d4bc3dbde63103ee8c6ab4414754fd5d97f09245d8289917de0b5ba8df29b57fdd58daf5d79b7c5a70b8f20ab5fd8411c53529c9411a6b248300cc02f03",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "timestamp": 1700000000001,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": false
+  },
+  {
+   "name": "rcd1-valid",
+   "type": "rcd1",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "rcd1",
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "e2067d36245f2787952dab80db8c3fe9e1d187c3d74b70b4fd29f73d81fecbbbc7852d9152c2a0558ae79e075e52aa3824c07bfe8e7aef8f8801a51fc54c7708",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "timestamp": 1700000000000,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": true
+  },
+  {
+   "name": "rcd1-flipped-signature",
+   "type": "rcd1",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "rcd1",
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "e3067d36245f2787952dab80db8c3fe9e1d187c3d74b70b4fd29f73d81fecbbbc7852d9152c2a0558ae79e075e52aa3824c07bfe8e7aef8f8801a51fc54c7708",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "timestamp": 1700000000000,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": false
+  },
+  {
+   "name": "rcd1-metadata-changed-after-signing",
+   "type": "rcd1",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "rcd1",
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "e2067d36245f2787952dab80db8c3fe9e1d187c3d74b70b4fd29f73d81fecbbbc7852d9152c2a0558ae79e075e52aa3824c07bfe8e7aef8f8801a51fc54c7708",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "timestamp": 1700000000001,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": false
+  },
+  {
+   "name": "legacyED25519-valid",
+   "type": "legacyED25519",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "legacyED25519",
+    "timestamp": 1700000000000,
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "9103032f287ceeb909f09414f33a441e6b52a509a249a91f6001db8b0650c251c91b35050481f69991a2ea5a28f40ad13a5ee46aa23a6875cc46dee04406a508",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": true
+  },
+  {
+   "name": "legacyED25519-flipped-signature",
+   "type": "legacyED25519",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "legacyED25519",
+    "timestamp": 1700000000000,
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "9003032f287ceeb909f09414f33a441e6b52a509a249a91f6001db8b0650c251c91b35050481f69991a2ea5a28f40ad13a5ee46aa23a6875cc46dee04406a508",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": false
+  },
+  {
+   "name": "legacyED25519-metadata-changed-after-signing",
+   "type": "legacyED25519",
+   "message": {
+    "type": "sequenced",
+    "message": {
+     "type": "transaction",
+     "transaction": {
+      "header": {
+       "principal": "acc://dn.acme/anchors"
+      },
+      "body": {
+       "type": "directoryAnchor",
+       "source": "acc://dn.acme",
+       "minorBlockIndex": 10,
+       "rootChainIndex": 10,
+       "rootChainAnchor": "0102030a00000000000000000000000000000000000000000000000000000000",
+       "stateTreeAnchor": "0908070a00000000000000000000000000000000000000000000000000000000",
+       "makeMajorBlockTime": "0001-01-01T00:00:00Z"
+      }
+     }
+    },
+    "source": "acc://dn.acme",
+    "destination": "acc://dn.acme",
+    "number": 10
+   },
+   "messageHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370",
+   "signature": {
+    "type": "legacyED25519",
+    "timestamp": 1700000000001,
+    "publicKey": "caf538c1a666da74cd49d0a3dbe45f7f886ca256f82ba8e8e56f71a5f905043d",
+    "signature": "9103032f287ceeb909f09414f33a441e6b52a509a249a91f6001db8b0650c251c91b35050481f69991a2ea5a28f40ad13a5ee46aa23a6875cc46dee04406a508",
+    "signer": "acc://dn.acme/network",
+    "signerVersion": 1,
+    "transactionHash": "8f5c0f4354fad45a59eb2bdace882b7eb3df2f07b861563d052ecb77bc8bf370"
+   },
+   "valid": false
+  }
+ ]
+}
