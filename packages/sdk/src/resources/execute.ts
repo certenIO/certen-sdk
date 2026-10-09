@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { omitUndefined } from '../internal.js';
 import { CertenError, CertenIntentFailedError, CertenProofNotAvailableError, CertenWaitTimeoutError } from '../errors.js';
 import { classifyIntentStatus, intentOutcome, type IntentStatusClass } from '../intent-states.js';
+import { assertOwnOrigin } from '../origin.js';
 import { headerFieldsBody } from '../header-fields.js';
 import { assertFundedForValue } from '../funding.js';
 import { SignResource } from './sign.js';
@@ -304,10 +305,12 @@ export class ExecuteResource {
     const toSign = prep?.signing_data?.data_for_signature;
     if (!toSign) throw new Error(`certen: no signing data returned for ${p.accumTxHash}`);
 
-    const signature = await p.sign(toSign);
     // A spent sign_request_id 404s rather than replaying, so never retry by resubmitting — request fresh
     // signing data instead.
     const url = prep.submit_url ?? `/v1/sign/${prep.sign_request_id}/signature`;
+    // The gateway names where the signature goes; it must be the gateway. Checked before anything is signed, not only before it is sent.
+    assertOwnOrigin(url, this.http.defaults.baseURL, 'submit_url');
+    const signature = await p.sign(toSign);
     const { data } = await this.http.post(url, { signature, public_key: p.publicKey });
     return data;
   }
@@ -464,9 +467,13 @@ export class ExecuteResource {
       );
     }
 
-    const signature = await sign(sd.hash_to_sign);
+    // Where the signature goes is named by the response, so it is checked BEFORE anything is signed: a foreign url means the response
+    // cannot be trusted, and a signature produced for it would be one more thing to leak.
     const submitUrl = (prep as { submit_url?: string }).submit_url
       ?? `/v1/transaction/${(prep as { intent_id?: string }).intent_id}/signature`;
+    assertOwnOrigin(submitUrl, this.http.defaults.baseURL, 'submit_url');
+
+    const signature = await sign(sd.hash_to_sign);
     await this.http.post(submitUrl, { signature, public_key: publicKey });
 
     return {

@@ -12,6 +12,7 @@ export {
   CertenIntentFailedError,
   CertenWaitTimeoutError,
   CertenProofNotAvailableError,
+  CertenForeignOriginError,
   HEADER_AUTHORITY_NOT_EXECUTABLE,
 } from './errors.js';
 // Transaction-header fields (additional authorities, deadline): the validators the SDK runs before

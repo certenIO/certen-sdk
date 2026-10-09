@@ -104,6 +104,13 @@ export const ERROR_CODES = [
     fix: '`proof_pending`: ask again later. `execution_proof_unavailable`: there is nothing to wait for. `not_assigned`: the intent has not reached a state that has a proof yet.',
   },
   {
+    code: 'FOREIGN_ORIGIN_URL',
+    status: 0,
+    retryable: false,
+    meaning: 'The client refused to send a request to a url outside its own gateway\'s origin, before anything was sent: a `submit_url` in a response, a request url, or a redirect that named another host. `details` carries `url`, `baseUrl` and `source`.',
+    fix: 'Do not follow it. A gateway response that names another host is misconfigured or has been tampered with; nothing was signed or sent and no credential left the process. Check the base url and the gateway before retrying.',
+  },
+  {
     code: 'PAYMENT_REQUIRED',
     status: 402,
     retryable: false,

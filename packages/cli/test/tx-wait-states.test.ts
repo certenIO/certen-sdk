@@ -169,7 +169,7 @@ describe('exit 3 means the gateway was not reached, and nothing else', () => {
   });
 
   it('does the same for any other coded status-0 error, which is a refusal and not an outage', () => {
-    for (const code of ['NO_PROOF_ARTIFACT', 'NO_IDENTITY_ID', 'WAIT_TIMEOUT']) {
+    for (const code of ['NO_PROOF_ARTIFACT', 'NO_IDENTITY_ID', 'WAIT_TIMEOUT', 'FOREIGN_ORIGIN_URL']) {
       expect(exitFor(new CertenError('x', 0, code)), code).toBe(EXIT.FAILED);
     }
   });

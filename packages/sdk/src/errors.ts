@@ -181,6 +181,26 @@ export class CertenProofNotAvailableError extends CertenError {
   }
 }
 
+/**
+ * The client refused to send a request to a url outside its own gateway's origin, before anything was sent.
+ *
+ * Raised for a url a response told the client to follow (`submit_url`), for any request url that resolves to another origin or
+ * carries credentials, and for a redirect to another host. `details.url` is the url that was refused, `details.baseUrl` the
+ * origin the client is bound to and `details.source` where the url came from. Status 0, not retryable: repeating it would send
+ * the same url, and the safe answer is to distrust whatever produced it.
+ */
+export class CertenForeignOriginError extends CertenError {
+  constructor(
+    message: string,
+    public readonly url: string,
+    public readonly baseUrl: string,
+    public readonly source: string,
+  ) {
+    super(message, 0, 'FOREIGN_ORIGIN_URL', { details: { url, baseUrl, source } });
+    this.name = 'CertenForeignOriginError';
+  }
+}
+
 /** A live way to settle a 402, minted by the gateway with the refusal. */
 export interface PaymentResolution {
   /** Reference the deposit is matched by. */

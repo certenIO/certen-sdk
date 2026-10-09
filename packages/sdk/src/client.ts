@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 import { randomBytes } from 'crypto';
-import { CertenError } from './errors.js';
+import { CertenError, CertenForeignOriginError } from './errors.js';
+import { assertOwnOrigin, redirectStaysOnOrigin } from './origin.js';
 import { IdentityResource } from './resources/identity.js';
 import { TransactionResource } from './resources/transaction.js';
 import { GovernanceResource } from './resources/governance.js';
@@ -273,8 +274,9 @@ export class CertenClient {
           scope: options.scope,
         };
 
+    const baseURL = options.baseUrl ?? envBaseUrl() ?? DEFAULT_BASE_URL;
     this.http = axios.create({
-      baseURL: options.baseUrl ?? envBaseUrl() ?? DEFAULT_BASE_URL,
+      baseURL,
       headers: {
         // The credential header is set per-request by the interceptor below, because a minted token
         // changes over the client's life and a header baked in here never would.
@@ -283,6 +285,19 @@ export class CertenClient {
       },
       timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       validateStatus: (status) => status >= 200 && status < 300,
+      // The key travels on every request, so a redirect off the gateway's own origin must not carry it. Refused by name, not
+      // followed without the key: a gateway that redirects elsewhere is misconfigured or compromised, and either way the caller
+      // should hear it. (An http -> https upgrade of the same host is allowed.) Node's http adapter only; browsers follow redirects
+      // themselves.
+      beforeRedirect: (redirect: Record<string, unknown>) => {
+        const to = String(redirect.href ?? `${String(redirect.protocol)}//${String(redirect.host ?? redirect.hostname)}${String(redirect.path ?? '')}`);
+        if (!redirectStaysOnOrigin(baseURL, to)) {
+          throw new CertenForeignOriginError(
+            `certen: the gateway redirected to ${JSON.stringify(to)}, which is not its own origin. The redirect was not followed and no credential was sent there.`,
+            to, baseURL, 'redirect',
+          );
+        }
+      },
     });
 
     const autoIdem = options.autoIdempotencyKey !== false;
@@ -300,6 +315,8 @@ export class CertenClient {
 
     // Auto-stamp Idempotency-Key on every POST that didn't already supply one.
     this.http.interceptors.request.use(async (req) => {
+      // First, before the credential is attached or anything is sent: the key goes only to this client's own origin.
+      assertOwnOrigin(req.url, req.baseURL ?? baseURL, 'request');
       const reqPath = req.url ?? '';
 
       // Attach the credential here, not at construction: a minted token is refreshed over this
@@ -355,6 +372,14 @@ export class CertenClient {
         return response;
       },
       async (error: AxiosError<{ error?: string; code?: string }> & { config?: RetryConfig }) => {
+        // An error this client raised itself (the origin guard, a failed token mint) is already typed. It is not a transport
+        // failure, and wrapping it as NETWORK_ERROR would make it retryable.
+        if (error instanceof CertenError) throw error;
+        // follow-redirects wraps what a beforeRedirect hook throws, one or two levels down.
+        for (let cause: unknown = (error as { cause?: unknown }).cause, depth = 0; cause && depth < 5; depth++) {
+          if (cause instanceof CertenForeignOriginError) throw cause;
+          cause = (cause as { cause?: unknown }).cause;
+        }
         const cfg = error.config;
         const status = error.response?.status ?? 0;
         // A non-JSON error body (an edge 502, an HTML error page) leaves `data` as a string, so
