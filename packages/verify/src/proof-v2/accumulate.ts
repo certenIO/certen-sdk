@@ -53,29 +53,17 @@ export function transaction(j: unknown, label: string): any {
 }
 
 /**
- * protocol.AllowedTransactionBit (enums.yml): a key page's transaction blacklist is a uint64 bitmask of these, the OR
- * of 1 << bit, marshalled to JSON as the list of names and written as an enum varint. The SDK models the field as a
- * list of transaction types and cannot encode it, so the mask is computed here. An unknown name is refused.
+ * An account from its JSON. A key page's transactionBlacklist arrives as a list of bit names and is a uint64 bitmask on
+ * the wire (protocol.AllowedTransactionBit): accumulate-sdk-opendlt >= 2.5.0 packs it. A name the SDK does not know is
+ * refused here by name, as a VerifyError, rather than escaping as a generic error.
  */
-const ALLOWED_TRANSACTION_BITS: Record<string, number> = { updateKeyPage: 1, updateAccountAuth: 2 };
-
-function blacklistMask(names: unknown, label: string): number {
-  if (!Array.isArray(names)) fail(`${label}: transactionBlacklist is not a list`);
-  let mask = 0;
-  for (const n of names) {
-    const bit = ALLOWED_TRANSACTION_BITS[String(n)];
-    if (bit === undefined) fail(`${label}: unknown transaction blacklist bit ${String(n)}`);
-    mask |= 1 << bit;
-  }
-  return mask;
-}
-
 export function account(j: unknown, label: string): any {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
-  const n = j as Record<string, unknown>;
-  const a = (core as any).Account.fromObject(n);
-  if (n.type === 'keyPage' && n.transactionBlacklist !== undefined) a.transactionBlacklist = blacklistMask(n.transactionBlacklist, label);
-  return a;
+  try {
+    return (core as any).Account.fromObject(j);
+  } catch (e) {
+    return fail(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 export function networkDefinition(j: unknown): any {
