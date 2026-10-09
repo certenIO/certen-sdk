@@ -28,7 +28,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "accumulate-sdk-opendlt": "2.4.0"
+    "accumulate-sdk-opendlt": "2.5.2"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

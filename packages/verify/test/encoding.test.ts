@@ -14,8 +14,8 @@ describe('Go-faithful encoding', () => {
     const go =
       '010b022b6163633a2f2f63657274656e2d70726f746f636f6c2e61636d652f62696c6c696e672d7265636569707473030180';
     expect(toHex(encodeObject(account(json, 'test')))).toBe(go);
-    // The SDK's own encoder writes the empty field as length 0, which hashes differently.
-    expect(toHex(sdkEncode(account(json, 'test')))).not.toBe(go);
+    // accumulate-sdk-opendlt >= 2.5.0 writes it the same way (test/upstream-encoder.test.ts pins that).
+    expect(toHex(sdkEncode(account(json, 'test')))).toBe(go);
   });
 
   it("encodes a key page's transaction blacklist as Go's bitmask", () => {
@@ -34,6 +34,6 @@ describe('Go-faithful encoding', () => {
     // updateKeyPage is bit 1 and updateAccountAuth bit 2 (protocol/enums.yml): the mask is 0b110.
     expect(page(['updateKeyPage', 'updateAccountAuth']).transactionBlacklist).toBe(6);
     expect(page(['updateKeyPage']).transactionBlacklist).toBe(2);
-    expect(() => page(['transferTokens'])).toThrow(/unknown transaction blacklist bit/);
+    expect(() => page(['transferTokens'])).toThrow(/nknown (transaction blacklist bit|AllowedTransactionBit)/);
   });
 });
