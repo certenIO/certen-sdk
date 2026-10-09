@@ -9,6 +9,8 @@ proof-gated cross-chain execution on Accumulate.
 npm install -g @certen.io/cli
 ```
 
+Requires **Node 22 or 24** (`engines.node >=22`).
+
 ## From nothing to a proof
 
 ```bash
@@ -57,7 +59,7 @@ certen keys generate --name ci --no-passphrase   # unencrypted; file permissions
 certen keys list                         # metadata only — never decrypts
 certen keys show dev
 certen keys verify dev                   # proves the key decrypts and signs correctly
-certen keys sign --name dev --hash <hex> # print a signature, send nothing
+certen keys sign --name dev --signing-data @sd.json   # rebuild, show, then print a signature; sends nothing
 certen keys delete dev --yes
 certen keys path
 ```
@@ -66,8 +68,10 @@ Set `CERTEN_KEY_PASSPHRASE` to skip the prompt in CI. When it is set and there i
 uses it; when neither is available it fails with an explanation rather than hanging on a prompt
 nobody can see.
 
-**`certen keys sign` sends nothing anywhere.** It is the air-gapped path: generate on one machine,
-carry the hash to it, carry the signature back.
+**`certen keys sign` sends nothing anywhere.** It is the air-gapped path: generate on one machine, carry the gateway's
+`signing_data` to it, carry the signature back. It rebuilds the transaction from that data offline, recomputes every hash,
+requires the signature metadata to name this key, prints what the signature would authorise, and signs the recomputed hash.
+A bare `--hash` is refused (`BLIND_SIGNING_REFUSED`): there is no way to sign a hash blind.
 
 ## Proof-gated contract calls
 
@@ -150,7 +154,8 @@ policy engine:
 
 ```bash
 certen tx create --identity <uuid> ...          # returns signing_data.hash_to_sign
-certen keys sign --name dev --hash <hash>       # or your HSM
+certen tx inspect <intent-id>                   # rebuild it, check every hash, show what a signature authorises
+certen keys sign --name dev --signing-data @sd.json   # or your HSM, after reading the same summary
 certen tx sign <intent-id> --signature <sig> --public-key <pub>
 ```
 
@@ -175,6 +180,14 @@ means the gateway serves no proof v2 document for this proof. Pass `--rpc` with 
 execution receipt is compared with a block header you fetched. A valid proof of the WRONG call is still a
 valid proof: compare the operation with your own record of what was agreed.
 
+## What the CLI verifies here, and what it reports from the validators
+
+**Checked here, from the proof's own bytes (`certen proof verify`):** the trust base (`trust_base`), the Directory anchors' validator quorum tracked from genesis (`L4`), the transaction receipt (`L1`), the partition anchor (`L2`), the certified root (`L3`), the governing pages (`G1`, `G1_chains`), the validator set in force (`L4_set`) and govRoot v3 (`govRootV3`). Exit `0` means every layer the document carries checked.
+
+**Reported, never counted as a check:** the bundle's own `verified` flag and the gateway's receipt are printed as the validators' statements. The CLI cannot establish `G1b`, `G2` or `L5` from a portable document, and says so (`not_in_document`); the execution `outcome` is checked only when you pass a block header you fetched (`--rpc`).
+
+Separately, `certen tx inspect` and the signing commands rebuild the transaction the gateway returned before you sign it; that is a check of the request, not of a proof.
+
 `proof get` falls back to the Accumulate merkle receipt when the proof-service is unavailable or
 when an intent has no `proof_id` — the normal case for governance and authorization transactions.
 A 5xx from the proof-service means that service is down, **not** that your proof is missing.
@@ -184,7 +197,7 @@ A 5xx from the proof-service means that service is down, **not** that your proof
 ```bash
 certen pending list
 certen pending sign <id> --identity <adi> --vote approve
-certen pending submit <request-id> --sign-with dev --hash <hash>
+certen pending sign <id> --identity <adi> --vote approve --sign-with dev   # rebuilds and shows the transaction first
 ```
 
 `--vote` takes `approve`, `reject`, or `abstain` — lowercase strings. Not `accept`, and not a

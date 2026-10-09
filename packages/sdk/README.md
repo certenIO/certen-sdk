@@ -9,6 +9,8 @@ cross-chain execution on Accumulate.
 npm install @certen.io/sdk
 ```
 
+Requires **Node 22 or 24** (`engines.node >=22`). To sign through the SDK, also install the optional peer `@certen.io/proof-verify` (see *Every signature is checked first*).
+
 ```ts
 import { CertenClient } from '@certen.io/sdk';
 

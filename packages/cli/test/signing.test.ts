@@ -263,3 +263,43 @@ describe('pending sign --sign-with', () => {
     } finally { await g.close(); }
   }, 120000);
 });
+
+describe('keys sign', () => {
+  it('refuses a bare hash by name, exit 2', async () => {
+    const { home } = await homeWithKey();
+    const r = await certen(['--json', 'keys', 'sign', '--name', 'dev', '--hash', 'ab'.repeat(32)], 'http://127.0.0.1:1', home);
+    expect(r.code).toBe(2);
+    expect(errorOf(r)?.code).toBe('BLIND_SIGNING_REFUSED');
+  }, 120000);
+
+  it('needs signing data when given nothing', async () => {
+    const { home } = await homeWithKey();
+    const r = await certen(['--json', 'keys', 'sign', '--name', 'dev'], 'http://127.0.0.1:1', home);
+    expect(r.code).toBe(2);
+    expect(errorOf(r)?.code).toBe('MISSING_SIGNING_DATA');
+  }, 120000);
+
+  it('rebuilds the signing data offline, shows what it authorises, and signs exactly the recomputed hash', async () => {
+    const { home, publicKey } = await homeWithKey();
+    const open = await honestIntent({ intent: { adiUrl: ADI, legs: [{ chainId: 11155111, toAddress: TO, amount: '0', contractCall: { target: TO } }] } }, { publicKey });
+    const sd = (open.body as any).signing_data;
+    const file = join(home, 'sd.json');
+    writeFileSync(file, JSON.stringify(sd));
+    const r = await certen(['--json', 'keys', 'sign', '--name', 'dev', '--signing-data', `@${file}`], 'http://127.0.0.1:1', home);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    const data = JSON.parse(r.stdout.trim()).data;
+    expect(data.hash_signed).toBe(sd.hash_to_sign);
+    expect(r.stderr).toMatch(/You are about to sign/);
+  }, 120000);
+
+  it('signs nothing when the hash the gateway sent is not the one the transaction hashes to', async () => {
+    const { home, publicKey } = await homeWithKey();
+    const open = await honestIntent({ intent: { adiUrl: ADI, legs: [{ chainId: 11155111, toAddress: TO, amount: '0', contractCall: { target: TO } }] } }, { publicKey });
+    const sd = { ...(open.body as any).signing_data, hash_to_sign: 'cd'.repeat(32) };
+    const file = join(home, 'sd.json');
+    writeFileSync(file, JSON.stringify(sd));
+    const r = await certen(['--json', 'keys', 'sign', '--name', 'dev', '--signing-data', `@${file}`], 'http://127.0.0.1:1', home);
+    expect(r.code).toBe(1);
+    expect(errorOf(r)?.code).toBe('SIGNING_DATA_MISMATCH');
+  }, 120000);
+});

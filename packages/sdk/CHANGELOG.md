@@ -1,5 +1,32 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — 0.10.0: what changes for you (RB7b)
+
+Every item below is also described in the sections that follow, or in the 0.9.x entries it refines. **Breaking** changes are marked; the minor carries them (0.x).
+
+### Breaking
+- **Node 22 or 24.** `engines.node` is `>=22`; Node 18 and 20 are end of life and are no longer tested.
+- **Every external-mode signature is checked before it is made** (`SIGNING_DATA_MISMATCH`, `SIGNING_DATA_ABSENT`, `SIGNING_EXPECTATION_UNAVAILABLE`, `SIGNING_VERIFIER_UNAVAILABLE`). There is no way to sign without the check, and it needs
+  the optional peer `@certen.io/proof-verify` and a gateway that returns `signing_data.transaction` and `signing_data.signature_metadata`. Token transfers are refused rather than signed unchecked.
+- **`ChainAvailability` state `not-served` is replaced by `unlisted` (`unknown_chain`) and `disabled` (`chain_not_enabled`).** A chain the gateway does not list and a chain it lists as switched off are different answers.
+- **`proof.bundle()` is typed `Uint8Array`** (a `Buffer` under Node, so runtime behaviour is unchanged).
+- **`execute.wait()`** knows `executed` (non-terminal, reported through `onState`; `until: 'executed'` is supported), `completed_unproven` (resolves, reason `execution_proof_unavailable`) and `expired` (a failure; it used to poll to the timeout).
+  A timeout is `WAIT_TIMEOUT` and a missing proof assignment is `PROOF_NOT_ASSIGNED`; both are typed errors with the last status they saw.
+- **A request, a `submit_url` or a redirect that leaves the gateway's origin is refused** (`FOREIGN_ORIGIN_URL`) before anything is signed or any credential is attached.
+- **An empty, null or dot-only id in a path is refused** (`INVALID_PATH_PARAMETER`); every id, hash and token is encoded as one path segment.
+- `admin.revokeApiKey`, `webhooks.remove` and the third 204 DELETE resolve `{ success: true }` / `{ deleted: true }` instead of `""`.
+- Requires `axios >=1.20.0`.
+
+### Added
+- `@certen.io/sdk/browser`: a browser-safe entry (Web Crypto, portable byte helpers, a pure `sha256`), selected by the `browser` export condition. `CertenAgent`, `ed25519Signer`, `fetchSharedProof` and `decodeSharedBundle` stay Node-only.
+- `@certen.io/sdk/verify`, `proof.portable()`, `beforeSign` and the signing checks (below).
+- The chain catalogue, including Telcoin Adiri (a testnet; it needs `CERTEN_ENABLED_CHAINS` and the gateway listing it): `unknown_chain` and `chain_not_enabled`, checked before a request is sent.
+- The SDK's own version in the `User-Agent` (none from a browser). `verifyReceipt` reports a runtime without ed25519 as `skipped`, never `ok`.
+
+### Fixed
+- A foreign `submit_url` or a plain 307 redirect used to receive the API key; ids such as `proof.get("a/../admin")` used to call another endpoint.
+- Four load-sensitive tests (retry backoff, wait timeouts) no longer depend on machine load.
+
 ## Unreleased — every external-mode signature is checked first (RB7b Phase F)
 
 ### Changed (breaking)

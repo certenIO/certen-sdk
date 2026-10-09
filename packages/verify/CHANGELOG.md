@@ -1,5 +1,14 @@
 # Changelog — @certen.io/proof-verify
 
+## Unreleased — 0.1.0: first public release (RB7b)
+
+The offline verifier for Certen proofs: a proof v2 portable document (`certen-proof-v2-accumulate-portable/1`) or a proof bundle, checked layer by layer with no network and no gateway, and the signing check a client runs before it signs.
+Node 22 or 24, and browsers (Web Crypto). It verifies the 22 cross-language conformance cases the Go verifier produced, with the same verdicts and the same govRoot v3 (`0477ea2c…`).
+
+- Per-layer verdicts (`verified`, `failed`, `not_checked`, `not_in_document`); the overall result is `verified` only when every layer the document carries was checked here. `G1b`, `G2` and `L5` are `not_in_document`, and the execution outcome needs the target chain's block header from the caller.
+- Applies a proven write to the network or globals account in the spine as Go does, and accepts the `rcd1` and legacy ed25519 key signatures Go accepts.
+- Encodes with `accumulate-sdk-opendlt` 2.5.2 exactly; none of the four earlier workarounds remain.
+
 ## Unreleased — sign what you see (RB7b Phase F)
 
 ### Added

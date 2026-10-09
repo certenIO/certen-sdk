@@ -1,5 +1,22 @@
 # Changelog — @certen.io/mcp
 
+## Unreleased — 0.5.0: what changes for you (RB7b)
+
+**Breaking** changes are marked; the minor carries them (0.x).
+
+### Breaking
+- **Node 22 or 24** (`engines.node >=22`).
+- **`certen_proof_verify` takes `target` and verifies locally** (see below); the result is per-layer, and `independent` is true only when every layer the proof carries was checked.
+- **A confirmation stop is `isError: true`** (it was a success result), so a client that treated any non-error as done no longer mistakes a stop for completion.
+- **`certen_execute_wait`** returns the named `outcome` (`pending`, `executed`, `completed`, `completed_unproven`, `failed`, `unknown`) and accepts `until: 'executed'`; tool errors carry `timeout` and failure details.
+- A chain the catalogue does not know, or Adiri without `CERTEN_ENABLED_CHAINS`, is refused before anything is sent.
+
+### Added
+- MCP revisions **2026-07-28** (stateless: per-request version in `_meta`, `server/discover`, `resultType`, cache hints, `-32022`) alongside 2025-11-25, 2025-06-18, 2025-03-26 and 2024-11-05, proved against the official client of each.
+- Annotations (read-only, destructive, idempotent, open-world) and an `outputSchema` with `structuredContent` on all 48 tools; the hints are withheld from a client that predates them. They are hints: `confirm: true` and `CERTEN_MCP_ALLOW_WRITES` still enforce.
+- `certen_chains_enabled` (read), the signing summary, and an `exports` map.
+- Builds on the workspace SDK, so header fields go through the SDK's validation; the `HEADER_FIELDS_UNSUPPORTED` workaround is gone.
+
 ## Unreleased — the signing summary (RB7b Phase F)
 
 ### Added

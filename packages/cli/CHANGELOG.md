@@ -1,5 +1,23 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — 0.10.0: what changes for you (RB7b)
+
+**Breaking** changes are marked; the minor carries them (0.x).
+
+### Breaking
+- **Node 22 or 24** (`engines.node >=22`).
+- **`certen proof verify` verifies locally, layer by layer**, and exits `4` (partial) or `5` (no evidence) as well as `0`/`1`; its `--json` output changes shape. It never reports inclusion from a `verified` flag.
+- **Exit `3` means only that the gateway was not reached and nothing was submitted** (`NETWORK_ERROR`). It used to be returned for every error with status 0, which told a script an existing intent was safe to resubmit. `INTENT_FAILED`, `WAIT_TIMEOUT`,
+  `PROOF_NOT_ASSIGNED` and the proof errors now have their own codes.
+- **A bare hash is never signed** (`BLIND_SIGNING_REFUSED`, exit 2); `tx create`, `call`, `governance` and `pending sign` check what they sign first (see below).
+- `certen tx status --wait` announces `executed` as progress and `completed_unproven` as what it is (exit 0, `data.status` unchanged).
+- `certen keys sign --hash` is refused (`BLIND_SIGNING_REFUSED`). `certen keys sign --name <key> --signing-data <@file|->` rebuilds the gateway's signing data offline, requires the signature metadata to name that key, prints what it authorises, and signs the recomputed hash: the air-gap and HSM path no longer signs blind.
+- The OS keyring is reached through `@napi-rs/keyring` (an optional dependency; the archived `keytar` is gone). Where no keyring is usable (headless Linux) the command refuses by name (`KEYRING_UNAVAILABLE`) and writes nothing.
+
+### Fixed
+- `certen auth login` worked on no stock install (the undeclared `keytar`); it now works. `certen auth logout` no longer clears the config when it could not remove the key from the keyring.
+- Moved to commander 14.
+
 ## Unreleased — sign what you see (RB7b Phase F)
 
 ### Changed (breaking)

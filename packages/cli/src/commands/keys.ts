@@ -1,5 +1,8 @@
 import { Command } from 'commander';
-import { printOutput, human } from '../output.js';
+import { readFileSync } from 'node:fs';
+import { inspectSigningData } from '@certen.io/sdk';
+import { printOutput, human, hint } from '../output.js';
+import { UsageError } from '../errors.js';
 import { resolvePassphrase, resolveNewPassphrase, PASSPHRASE_ENV_VAR } from '../passphrase.js';
 import {
   generateKey, listKeys, getKeyInfo, deleteKey, signHash, selfTest, keyPath, KEYS_DIR,
@@ -82,14 +85,37 @@ export function registerKeysCommands(program: Command): void {
 
   keys
     .command('sign')
-    .description('Sign a hash with a local key — prints the signature, sends nothing')
+    .description('Sign the signing data a gateway returned, after rebuilding it and showing what it authorises — prints the signature, sends nothing')
     .requiredOption('--name <name>', 'Key to sign with')
-    .requiredOption('--hash <hex>', 'Hash to sign (hex, as returned by the gateway)')
-    .action(async (opts: { name: string; hash: string }) => {
+    .option('--signing-data <@file|->', "The gateway's signing_data JSON (as 'tx inspect --json' or the open response shows it); '-' reads stdin")
+    .option('--existing', 'The transaction already exists on the network (a co-signature)')
+    .option('--hash <hex>', 'REFUSED: a bare hash says nothing about what a signature on it authorises')
+    .action(async (opts: { name: string; signingData?: string; existing?: boolean; hash?: string }) => {
+      if (opts.hash) {
+        throw new UsageError(
+          'Refusing to sign a bare hash: it says nothing about what the signature would authorise. Pass --signing-data (the signing_data the gateway returned): '
+          + 'the transaction is rebuilt, every hash is recomputed, and what it authorises is shown before the signature is made. There is no option to sign a hash blind.',
+          'BLIND_SIGNING_REFUSED',
+        );
+      }
+      if (!opts.signingData) {
+        throw new UsageError('Provide --signing-data <@file|->: the signing_data the gateway returned, which is rebuilt and shown before anything is signed.', 'MISSING_SIGNING_DATA');
+      }
+      const raw = opts.signingData === '-' ? readFileSync(0, 'utf8') : readFileSync(opts.signingData.startsWith('@') ? opts.signingData.slice(1) : opts.signingData, 'utf8');
+      let parsed: unknown;
+      try { parsed = JSON.parse(raw); } catch (err) {
+        throw new UsageError(`--signing-data is not valid JSON: ${err instanceof Error ? err.message : String(err)}`, 'INVALID_SIGNING_DATA_JSON');
+      }
+      // Accept the signing_data itself, or an intent / inspect output that carries it.
+      const sd = (parsed as { signing_data?: unknown })?.signing_data ?? parsed;
       const info = getKeyInfo(opts.name);
+      // Offline and with nothing to compare it with: every hash is recomputed and must agree, the signature metadata must name THIS key, and the
+      // summary says what the signature would authorise. Whether that is what you meant is for the person reading it.
+      const summary = await inspectSigningData(sd, { signerPublicKey: info.publicKey, ...(opts.existing ? { existing: true } : {}) });
+      hint(summary.text.join(String.fromCharCode(10)));
       const passphrase = await resolvePassphrase(info.encrypted, opts.name);
-      const signature = signHash(opts.name, passphrase, opts.hash);
-      printOutput({ signature, public_key: info.publicKey });
+      const signature = signHash(opts.name, passphrase, summary.hashes.toSign);
+      printOutput({ signature, public_key: info.publicKey, hash_signed: summary.hashes.toSign, signing: summary } as unknown as Record<string, unknown>);
     });
 
   keys

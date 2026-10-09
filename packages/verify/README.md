@@ -4,6 +4,8 @@ An independent verifier for CERTEN proof v2 (the Accumulate side): it checks a p
 database and no CERTEN code in the trust path. It is the second implementation the proof v2 design requires
 (certen-validator `docs/proof/PROOF_V2.md` §9); the first is the Go verifier in certen-validator `pkg/proof/v2`.
 
+Install with `npm install @certen.io/proof-verify`. Requires **Node 22 or 24** (`engines.node >=22`). It also runs in browsers (Web Crypto).
+
 ```ts
 import { verifyPortable } from '@certen.io/proof-verify';
 
