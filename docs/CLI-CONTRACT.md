@@ -146,6 +146,8 @@ parsing prose:
 | `1` | The gateway answered, and the operation did not succeed | Read `error.code`. Do not retry unless `retryable` is true. |
 | `2` | Usage error — bad invocation, unknown command, missing flag, no API key configured | Fix the invocation. Never retry. |
 | `3` | The gateway could not be reached | **Nothing was submitted.** Safe to retry. |
+| `4` | `proof verify` only: **partial** — the layers the proof carries were checked and one is not established | Read `data.layers`: every layer with `verdict: not_checked` names why. This is not a verified proof. |
+| `5` | `proof verify` only: **no evidence** — nothing the Accumulate side can be checked from (`data.evidence.code`: `PROOF_V2_EVIDENCE_NOT_SERVED`, or `PROOF_SERVICE_UNAVAILABLE`) | The gateway serves no proof v2 document for this proof (yet). Do not treat the gateway's own receipt as verification. |
 
 The distinction between `2` and `3` is the one that matters most: `3` guarantees no request was
 accepted, so a retry cannot double-execute.
@@ -154,6 +156,30 @@ Exit `3` is exactly the SDK's `NETWORK_ERROR`. Other SDK errors also carry `stat
 raised locally, and they are **not** "unreachable": `WAIT_TIMEOUT`, `INTENT_FAILED` and `PROOF_NOT_ASSIGNED`
 are about an intent the gateway already holds, so they exit `1`; retrying the command by opening the
 intent again would be wrong. (Before, any status-0 error exited `3`.)
+
+### `certen proof verify`
+
+`proof verify <intent id | proof id | tx hash | share link | @bundle.json>` verifies the proof locally, layer by layer. The verdict is computed here from the
+proof v2 portable document (`@certen.io/proof-verify`) and the bundle's own execution receipt. **No flag in a bundle is ever read as a verdict**: the bundle's
+`verified` is printed as the validators' statement and nothing more, and the gateway's own receipt is printed as "asked of the gateway, not used".
+
+`--json` returns `data`:
+
+| Field | Meaning |
+|---|---|
+| `overall` | `verified` (every layer the document carries was checked here) · `partial` · `failed` · `no_evidence` |
+| `independent` | `true` only for `verified`: the statements in `covers` were derived here with CERTEN not trusted |
+| `layers[]` | `{ id, statement, title, verdict, evidence, reason? }` for `trust_base`, `L4`, `L1`, `L2`, `L3`, `G0`, `G1`, `G1_chains`, `L4_set`, `govRootV3`, `outcome`, `G1b`, `G2`, `L5`. `verdict` is `verified`, `failed`, `not_checked` (inside the document's scope, not established: `reason` says why) or `not_in_document` (a layer this document type does not carry) |
+| `covers` / `notCovered` | The statements (PROOF_V2 §3: S1…S9) a `verified` result establishes, and those it cannot speak to |
+| `failure` | `{ layer, message }` for the first layer that failed |
+| `execution`, `headerCheck` | The execution receipt walked to the bundle's receipts root, and the comparison with a header from `--rpc` |
+| `bundleStatements` | What the bundle says about itself. Reported, never used |
+| `evidence` | `{ found, code?, reason?, bundleError? }`: whether a portable document was found, and why not |
+| `gateway` | The gateway's own receipt, for information only |
+
+Exit `0` verified, `1` failed (or an unreadable input that is not a usage error), `2` usage error, `3` gateway unreachable, `4` partial, `5` no evidence. Before this
+release `proof verify` exited `0` whenever the gateway reported an anchored receipt and, because the entrypoint overwrote `process.exitCode`, also after a failed
+outcome check; the entrypoint now honours the exit code a command sets, and the verdict is the layer verdict above.
 
 `FOREIGN_ORIGIN_URL` also exits `1`: the SDK refused to send to a url outside the gateway's origin (a `submit_url` in a response, or a redirect to
 another host) before signing or sending anything, so no credential left the process. Not retryable; `error.details` has `url`, `baseUrl` and `source`.
@@ -183,7 +209,7 @@ certen --help --json
 ```json
 { "ok": true, "data": {
   "name": "certen", "version": "0.3.1",
-  "exitCodes": { "0": "ok", "1": "operation failed", "2": "usage error", "3": "gateway unreachable" },
+  "exitCodes": { "0": "ok", "1": "operation failed", "2": "usage error", "3": "gateway unreachable", "4": "proof verify: partial (a layer is not established)", "5": "proof verify: no evidence to check" },
   "commands": [ { "name": "identity", "path": "certen identity", "commands": [ … ] } ]
 } }
 ```

@@ -81,6 +81,26 @@ table, the chain catalogue and the pure helpers; it uses Web Crypto and no Node 
 `User-Agent` (it forbids scripts setting one). `verifyReceipt` uses Web Crypto's ed25519; a runtime without it reports the signature
 check as `skipped`, never as `ok`. CI bundles the browser entry and runs it with `process`, `Buffer` and `require` removed.
 
+## Verify a proof: `@certen.io/sdk/verify`
+
+A separate entry point, so the API client stays light: it needs the optional peer `@certen.io/proof-verify` (and, under it, the Accumulate encoder).
+
+```ts
+import { CertenClient } from '@certen.io/sdk';
+import { loadProofEvidence, verifyBundle, bundleInputOf } from '@certen.io/sdk/verify';
+
+const client = new CertenClient({ apiKey });
+const evidence = await loadProofEvidence(client, intentId);          // bundle + proof v2 document (or why there is none)
+const v = verifyBundle(bundleInputOf(evidence), { header });         // header: the execution chain's block header, from your own node
+v.overall;  // 'verified' | 'partial' | 'failed' | 'no_evidence'
+v.layers;   // one verdict per layer, with the evidence it was checked against
+```
+
+The Accumulate side is checked from the proof v2 portable document, the execution outcome from the bundle's own receipt. A `verified` field in a
+bundle is never read as a verdict (it comes back as `bundleStatements`), and neither is the gateway's own receipt. When the gateway serves no
+proof v2 document for a proof, `proof.portable()` throws `PROOF_V2_EVIDENCE_NOT_SERVED` and `loadProofEvidence` reports it as `notServed`: the result is
+`no_evidence`, never a pass.
+
 ## What it does for you
 
 **Automatic idempotency on POSTs.** Every POST gets a generated `Idempotency-Key` so a retried network error

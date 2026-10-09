@@ -1106,6 +1106,10 @@ Retrieve the proof bundle for a proof ID, proxied from the proof-service. When t
 Path parameters:
   - `id`: string
 
+#### certen.proof.portable()
+
+The proof v2 portable document for a proof (`certen-proof-v2-accumulate-portable/1`): everything `@certen.io/sdk/verify` needs to check the Accumulate side offline.
+
 #### certen.proof.custody()
 
 The custody chain for a proof.

@@ -10,7 +10,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -40,7 +43,8 @@
   },
   "//dependencies": "The SDK is the only runtime dependency. MCP's stdio transport is newline-delimited JSON-RPC 2.0 — a small, stable surface implemented directly in src/protocol.ts. For a server that can authorize value-bearing operations, every avoided transitive dependency is avoided supply-chain risk.",
   "dependencies": {
-    "@certen.io/sdk": "^0.9.0"
+    "@certen.io/sdk": "^0.9.0",
+    "@certen.io/proof-verify": "^0.1.0"
   },
   "publishConfig": {
     "access": "public"

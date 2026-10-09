@@ -1,5 +1,12 @@
 # Changelog — @certen.io/mcp
 
+## Unreleased — `certen_proof_verify` verifies (RB7b Phase E)
+
+### Changed (breaking)
+- `certen_proof_verify` takes `target` (an intent id, a proof id, a transaction hash or a share link) instead of `txHash`, verifies locally, and returns the per-layer
+  result described in docs/CLI-CONTRACT.md (`overall`, `independent`, `layers`, `covers`, `notCovered`, `failure`, `execution`, `bundleStatements`, `evidence`, `gateway`). `independent` is true
+  only when every layer the proof carries was checked here. The server stays read-only and never fetches a URL the caller names: the execution chain's block header is
+  passed in as `header`, not fetched.
 ## Unreleased — header fields on `certen_transaction_open`
 
 ### Added

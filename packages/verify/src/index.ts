@@ -16,3 +16,5 @@ export {
   G1_HISTORICAL_UNAVAILABLE,
 } from './proof-v2/govroot-v3.js';
 export type { GovRootV3, GovRootV3Inputs, GovRootV3Slots } from './proof-v2/govroot-v3.js';
+export { verifyProofDocument, noEvidence, COVERED_STATEMENTS, NOT_COVERED_STATEMENTS } from './layers.js';
+export type { Layer, LayerVerdict, Overall, Verification, VerifyOptions } from './layers.js';

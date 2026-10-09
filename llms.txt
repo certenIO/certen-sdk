@@ -100,7 +100,7 @@ certen doctor                   # names the one thing blocking you
 
 ## Methods
 
-81 methods across 17 resources. Signatures and field-level detail: `llms-full.txt`.
+82 methods across 17 resources. Signatures and field-level detail: `llms-full.txt`.
 
 **certen.admin**
   - `certen.admin.scopes()` — Every permission a key can be granted, and what each one covers.
@@ -177,6 +177,7 @@ certen doctor                   # names the one thing blocking you
   - `certen.proof.byTxHash()` — The proof artifact for a transaction hash, where the proof-service indexed one.
   - `certen.proof.receipt()` — The Accumulate merkle inclusion receipt for a transaction, read from the network.
   - `certen.proof.bundle()` — The full bundle.
+  - `certen.proof.portable()` — The proof v2 portable document for a proof (`certen-proof-v2-accumulate-portable/1`): everything `@certen.io/sdk/verify` needs to check the Accumulate side offline.
   - `certen.proof.custody()` — The custody chain for a proof.
   - `certen.proof.shared()` — Read a proof someone shared with you.
   - `certen.proof.share()` — Create a shareable link for a proof — a URL a counterparty verifies with no CERTEN account.

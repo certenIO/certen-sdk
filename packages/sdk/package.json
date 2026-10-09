@@ -39,7 +39,11 @@
       "types": "./dist/browser.d.ts",
       "default": "./dist/browser.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    }
   },
   "//files": "Only the build output and docs. src/ and test/ stay in the repo — declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
   "files": [
@@ -70,5 +74,13 @@
     "typescript": "^5.5.0",
     "vitest": "^5.0.3"
   },
-  "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself."
+  "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself.",
+  "peerDependencies": {
+    "@certen.io/proof-verify": "^0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@certen.io/proof-verify": {
+      "optional": true
+    }
+  }
 }

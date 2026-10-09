@@ -1,0 +1,209 @@
+{
+ "generator": "certen-validator cmd/netrecordvectors",
+ "vectors": [
+  {
+   "name": "definition-minimal",
+   "kind": "definition",
+   "hex": "01064465764e65740201",
+   "json": {
+    "networkName": "DevNet",
+    "version": 1
+   }
+  },
+  {
+   "name": "definition-genesis-shape",
+   "kind": "definition",
+   "hex": "01064b65726d69740201030d01094469726563746f727902010308010442564e3102020308010442564e320202045c01200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200201060f141d222b30393e474c555a636871767f848d929ba0a9aeb7bcc5cad3d8040d01094469726563746f727902010408010442564e310201045c012028292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464702282f263d340b021910176e657c734a41585f56ada4bbb28980879e95ece3faf1040d01094469726563746f727902010408010442564e320200",
+   "json": {
+    "networkName": "Kermit",
+    "version": 1,
+    "partitions": [
+     {
+      "id": "Directory",
+      "type": "directory"
+     },
+     {
+      "id": "BVN1",
+      "type": "blockValidator"
+     },
+     {
+      "id": "BVN2",
+      "type": "blockValidator"
+     }
+    ],
+    "validators": [
+     {
+      "publicKey": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "publicKeyHash": "01060f141d222b30393e474c555a636871767f848d929ba0a9aeb7bcc5cad3d8",
+      "partitions": [
+       {
+        "id": "Directory",
+        "active": true
+       },
+       {
+        "id": "BVN1",
+        "active": true
+       }
+      ]
+     },
+     {
+      "publicKey": "28292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f4041424344454647",
+      "publicKeyHash": "282f263d340b021910176e657c734a41585f56ada4bbb28980879e95ece3faf1",
+      "partitions": [
+       {
+        "id": "Directory",
+        "active": true
+       },
+       {
+        "id": "BVN2",
+        "active": false
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "definition-update-v2",
+   "kind": "definition",
+   "hex": "01064b65726d69740202030d01094469726563746f727902010308010442564e3102020308010442564e33020303080104426f6f740204046c01200102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f200201060f141d222b30393e474c555a636871767f848d929ba0a9aeb7bcc5cad3d8030e6163633a2f2f6f70312e61636d65040d01094469726563746f727902010408010442564e310201045201205a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576777879025a5d544f4679706b62651c170e0138332a2d24dfd6c9c0fbf2f5ece79e918883040d01094469726563746f727902000464012078797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969702787f766d645b524940473e352c231a11080f06fdf4ebe2d9d0d7cec5bcb3aaa103156163633a2f2f6f70332e61636d652f626f6f6b2f310408010442564e310201",
+   "json": {
+    "networkName": "Kermit",
+    "version": 2,
+    "partitions": [
+     {
+      "id": "Directory",
+      "type": "directory"
+     },
+     {
+      "id": "BVN1",
+      "type": "blockValidator"
+     },
+     {
+      "id": "BVN3",
+      "type": "blockSummary"
+     },
+     {
+      "id": "Boot",
+      "type": "bootstrap"
+     }
+    ],
+    "validators": [
+     {
+      "publicKey": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "publicKeyHash": "01060f141d222b30393e474c555a636871767f848d929ba0a9aeb7bcc5cad3d8",
+      "operator": "acc://op1.acme",
+      "partitions": [
+       {
+        "id": "Directory",
+        "active": true
+       },
+       {
+        "id": "BVN1",
+        "active": true
+       }
+      ]
+     },
+     {
+      "publicKey": "5a5b5c5d5e5f606162636465666768696a6b6c6d6e6f70717273747576777879",
+      "publicKeyHash": "5a5d544f4679706b62651c170e0138332a2d24dfd6c9c0fbf2f5ece79e918883",
+      "partitions": [
+       {
+        "id": "Directory",
+        "active": false
+       }
+      ]
+     },
+     {
+      "publicKey": "78797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f9091929394959697",
+      "publicKeyHash": "787f766d645b524940473e352c231a11080f06fdf4ebe2d9d0d7cec5bcb3aaa1",
+      "operator": "acc://op3.acme/book/1",
+      "partitions": [
+       {
+        "id": "BVN1",
+        "active": true
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "globals-empty",
+   "kind": "globals",
+   "hex": "80",
+   "json": {
+    "operatorAcceptThreshold": {},
+    "validatorAcceptThreshold": {}
+   }
+  },
+  {
+   "name": "globals-genesis-shape",
+   "kind": "globals",
+   "hex": "010401020203020401020203030c30202a2f3132202a202a202a050701a0c21e02904e060b016402140314046405e807",
+   "json": {
+    "operatorAcceptThreshold": {
+     "numerator": 2,
+     "denominator": 3
+    },
+    "validatorAcceptThreshold": {
+     "numerator": 2,
+     "denominator": 3
+    },
+    "majorBlockSchedule": "0 */12 * * *",
+    "feeSchedule": {
+     "createIdentitySliding": [
+      500000
+     ],
+     "createSubIdentity": 10000
+    },
+    "limits": {
+     "dataEntryParts": 100,
+     "accountAuthorities": 20,
+     "bookPages": 20,
+     "pageEntries": 100,
+     "identityAccounts": 1000
+    }
+   }
+  },
+  {
+   "name": "globals-every-field",
+   "kind": "globals",
+   "hex": "0104010302040204010502070309302030202a202a202a0401051201a0c21e0190a10f01c8d00702904e03c4130614016402140314046405e807061e07808080808020070180cab5ee01",
+   "json": {
+    "operatorAcceptThreshold": {
+     "numerator": 3,
+     "denominator": 4
+    },
+    "validatorAcceptThreshold": {
+     "numerator": 5,
+     "denominator": 7
+    },
+    "majorBlockSchedule": "0 0 * * *",
+    "anchorEmptyBlocks": true,
+    "feeSchedule": {
+     "createIdentitySliding": [
+      500000,
+      250000,
+      125000
+     ],
+     "createSubIdentity": 10000,
+     "bareIdentityDiscount": 2500
+    },
+    "limits": {
+     "dataEntryParts": 100,
+     "accountAuthorities": 20,
+     "bookPages": 20,
+     "pageEntries": 100,
+     "identityAccounts": 1000,
+     "pendingMajorBlocks": 30,
+     "eventsPerBlock": 1099511627776
+    },
+    "blockInterval": {
+     "seconds": 1,
+     "nanoseconds": 500000000
+    }
+   }
+  }
+ ]
+}

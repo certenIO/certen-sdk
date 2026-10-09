@@ -162,13 +162,18 @@ certen tx sign <intent-id> --signature <sig> --public-key <pub>
 certen proof get <intent-id>        # also accepts a proof id or a transaction hash
 certen proof bundle <proof-id>      # the artifact to hand over
 certen proof share <proof-id>       # a link a counterparty opens without a key of yours
-certen proof verify <intent-id>     # what was, and was NOT, verified
+certen proof verify <intent-id>     # verified layer by layer, locally; exit 0 only if every layer checks
 ```
 
-`proof verify` reports three separate judgements — inclusion, authorization, outcome — and it can
-establish only the first, and only as something the gateway asserted. It says so. Asking the
-gateway is not independent verification; to verify without trusting CERTEN, query an Accumulate
-node for the receipt and read the execution on the destination chain.
+`proof verify` checks the proof itself, here, and prints one verdict per layer with the evidence it was
+checked against (trust base, the validator quorum from genesis, the receipt to a certified Directory root,
+the partition anchor, the governing pages, the validator set, govRoot v3, and the execution receipt). It
+never reads a `verified` flag from a bundle and never counts the gateway's say-so: both are printed as what
+they are. A layer it cannot establish is named, and the verdict is then `partial` (exit 4), not verified.
+`failed` (exit 1) names the layer a tamper is in; `no_evidence` (exit 5, `PROOF_V2_EVIDENCE_NOT_SERVED`)
+means the gateway serves no proof v2 document for this proof. Pass `--rpc` with your own node so the
+execution receipt is compared with a block header you fetched. A valid proof of the WRONG call is still a
+valid proof: compare the operation with your own record of what was agreed.
 
 `proof get` falls back to the Accumulate merkle receipt when the proof-service is unavailable or
 when an intent has no `proof_id` — the normal case for governance and authorization transactions.

@@ -1,5 +1,15 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — verify a proof instead of trusting it (RB7b Phase E)
+
+### Added
+- `@certen.io/sdk/verify`: `verifyBundle` (one verdict per layer from a bundle or a proof v2 document), `loadProofEvidence`, `bundleInputOf`,
+  `portableDocumentOf`, and everything `@certen.io/proof-verify` exports. An optional peer dependency, so the API client does not pull in the verifier.
+- `proof.portable(proofId)` (`GET /v1/proof/{id}/v2`): the proof v2 portable document. A 404/501 is `PROOF_V2_EVIDENCE_NOT_SERVED`; the route is specified in
+  the RB7b gateway notes and is not deployed yet, so it is listed in `tools/agentgen/pending-routes.json`.
+
+### Changed
+- Nothing in the default entry changes; a bundle's own `verified` flag is still returned as data and is not a verdict anywhere in the SDK.
 ## Unreleased — transaction deadlines, header authorities, failure reasons
 
 ### Added

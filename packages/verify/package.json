@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "Independent verifier for CERTEN proof v2: checks a proof offline against Accumulate's own encodings, with no CERTEN code in the trust path",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -15,17 +14,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist/",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "scripts": {
     "build": "node ../../scripts/build-package.mjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "accumulate-sdk-opendlt": "2.5.2"
@@ -34,5 +37,24 @@
     "typescript": "^5.5.0",
     "vitest": "^5.0.3",
     "@types/node": "^22.0.0"
+  },
+  "keywords": [
+    "certen",
+    "accumulate",
+    "proof",
+    "verification",
+    "merkle"
+  ],
+  "homepage": "https://github.com/certenIO/certen-sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/certenIO/certen-sdk.git",
+    "directory": "packages/verify"
+  },
+  "bugs": {
+    "url": "https://github.com/certenIO/certen-sdk/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

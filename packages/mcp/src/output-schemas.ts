@@ -132,23 +132,41 @@ export const CUSTOM_OUTPUT_SCHEMAS: Readonly<Record<string, Schema>> = {
     ],
   },
 
-  // What certen_proof_verify reports today: it asserts nothing the gateway did not assert, and says so (`independent: false`).
+  // The per-layer verification (verifyBundle in @certen.io/sdk/verify): one verdict per layer, the statements covered, and the
+  // evidence found. Closed, so a field added to the SDK result that the schema does not know fails the structured-output test.
   certen_proof_verify: {
     type: 'object',
     properties: {
-      checked: {
-        type: 'object',
-        properties: { inclusion: str, authorization: str, outcome: str },
-        required: ['inclusion', 'authorization', 'outcome'],
-        additionalProperties: false,
+      overall: { type: 'string', enum: ['verified', 'partial', 'failed', 'no_evidence'] },
+      independent: bool,
+      layers: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: str,
+            statement: str,
+            title: str,
+            verdict: { type: 'string', enum: ['verified', 'failed', 'not_checked', 'not_in_document'] },
+            evidence: { type: 'object', additionalProperties: true },
+            reason: str,
+          },
+          required: ['id', 'statement', 'title', 'verdict', 'evidence'],
+          additionalProperties: false,
+        },
       },
-      anchored: {},
-      anchor: {},
-      tx_hash: {},
-      independent: { type: 'boolean', enum: [false] },
-      note: str,
+      covers: { type: 'array', items: str },
+      notCovered: { type: 'array', items: str },
+      failure: { type: 'object', properties: { layer: str, message: str }, required: ['layer', 'message'], additionalProperties: false },
+      govRootV3: str,
+      execution: { type: ['object', 'null'], additionalProperties: true },
+      headerCheck: { type: ['object', 'null'], additionalProperties: true },
+      bundleStatements: { type: 'object', additionalProperties: true },
+      evidenceFound: bool,
+      evidence: { type: 'object', properties: { found: bool, code: str, reason: str, bundleError: str }, required: ['found'], additionalProperties: false },
+      gateway: { type: ['object', 'null'], additionalProperties: true },
     },
-    required: ['checked', 'independent', 'note'],
+    required: ['overall', 'independent', 'layers', 'covers', 'notCovered', 'execution', 'headerCheck', 'bundleStatements', 'evidenceFound', 'evidence', 'gateway'],
     additionalProperties: false,
   },
 

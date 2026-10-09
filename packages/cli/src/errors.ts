@@ -17,6 +17,10 @@ export const EXIT = {
   USAGE: 2,
   /** The gateway could not be reached at all. Nothing was submitted. */
   UNREACHABLE: 3,
+  /** `proof verify` only: the layers the proof carries were checked and a layer is not established (named in the output). */
+  PARTIAL: 4,
+  /** `proof verify` only: there is no evidence the Accumulate side can be checked from. */
+  NO_EVIDENCE: 5,
 } as const;
 
 export type ExitCode = (typeof EXIT)[keyof typeof EXIT];
