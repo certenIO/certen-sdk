@@ -24,17 +24,14 @@ export function encodeObject(o: unknown): Uint8Array {
 }
 
 /**
- * A SequencedMessage from JSON. The SDK's generated message types resolve a nested message through a loader that is
- * never installed (messaging/types_gen.ts getMessageClass falls back to returning the plain object), so the nested
- * message is built here through the union factory, which is wired.
+ * A SequencedMessage from JSON. accumulate-sdk-opendlt >= 2.5.0 registers the message classes, so the nested message is
+ * built as its real class by Message.fromObject (test/upstream-encoder.test.ts pins its bytes against Go's).
  */
 export function sequencedMessage(j: unknown, label: string): any {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const n = j as Record<string, unknown>;
   if (n.type !== 'sequenced') fail(`${label}: is ${String(n.type)}, not a sequenced message`);
-  const msg = messaging.Message.fromObject(n as any) as any;
-  if (n.message !== undefined) msg.message = messaging.Message.fromObject(n.message as any);
-  return msg;
+  return messaging.Message.fromObject(n as any) as any;
 }
 
 /** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). */

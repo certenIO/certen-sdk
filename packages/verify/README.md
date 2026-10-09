@@ -61,16 +61,14 @@ no pages at all (`g1_historical_unavailable`).
 The proof travels as Accumulate's own JSON. This verifier rebuilds each object with
 [`accumulate-sdk-opendlt`](https://www.npmjs.com/package/accumulate-sdk-opendlt) and re-encodes it with its own encoder,
 so every hash and signature is computed over bytes produced here; a decoding handed in is never trusted, only
-reproduced. Where the SDK's encoding departs from the network's, this package applies the network's rule and a test
-pins it to bytes the Go implementation produced:
+reproduced.
 
-- an empty struct is written as `0x80` (Go `encoding.EmptyObject`);
-- a key page's transaction blacklist is Go's bitmask, not a list;
-- a zero time in Go's JSON is omitted, as Go omits it from the binary;
-- a message nested in a `SequencedMessage` is built through the message union factory.
-
-The first three would make the SDK's encoding hash differently from the network's. They are SDK defects worth fixing
-upstream.
+The SDK is pinned to exactly **2.5.2**. Its encoder matches the network's in the four places where 2.4.0 did not
+(fixed upstream in 2.5.0): an empty struct is written as `0x80` (Go `encoding.EmptyObject`), a key page's transaction
+blacklist is Go's bitmask, a zero time is omitted as Go omits it, and a message nested in a `SequencedMessage` is built as its
+real class. `test/upstream-encoder.test.ts` asserts each against bytes the Go implementation produced and fails on 2.4.0,
+and the conformance suite and the govRoot v3 goldens pin every hash. An encoder change is consensus-critical, so the pin
+moves only as a deliberate bump with the conformance suite re-run, never through a range.
 
 ## Scope and refusals
 
