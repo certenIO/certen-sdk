@@ -1,6 +1,6 @@
 # Changelog — @certen.io/proof-verify
 
-## Unreleased — 0.1.0: first public release (RB7b)
+## 0.1.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 The offline verifier for Certen proofs: a proof v2 portable document (`certen-proof-v2-accumulate-portable/1`) or a proof bundle, checked layer by layer with no network and no gateway, and the signing check a client runs before it signs.
 Node 22 or 24, and browsers (Web Crypto). It verifies the 22 cross-language conformance cases the Go verifier produced, with the same verdicts and the same govRoot v3 (`0477ea2c…`).
@@ -10,7 +10,7 @@ Node 22 or 24, and browsers (Web Crypto). It verifies the 22 cross-language conf
 - A validator set that changed after genesis is reported as not established (`L4_set` and `govRootV3` are `not_checked`, the overall result `partial`), never `failed`: govRoot v3 commits a set proven from genesis and fails closed on anything weaker, as Go does, but that is a limit of the evidence, not a tamper. Shown on a synthetic whole document with a network update in its spine (conformance `network-update`, with 17 tampered twins), which Go and this verifier both run.
 - Encodes with `accumulate-sdk-opendlt` 2.5.2 exactly; none of the four earlier workarounds remain.
 
-## Unreleased — sign what you see (RB7b Phase F)
+### Included — sign what you see (RB7b Phase F)
 
 ### Added
 - `verifySigningData(signing_data, expectation)`: rebuilds the unsigned transaction a gateway asks to be signed, recomputes the transaction hash, the signature

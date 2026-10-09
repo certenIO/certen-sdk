@@ -1,6 +1,6 @@
 # Changelog — @certen.io/sdk
 
-## Unreleased — 0.10.0: what changes for you (RB7b)
+## 0.10.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 Every item below is also described in the sections that follow, or in the 0.9.x entries it refines. **Breaking** changes are marked; the minor carries them (0.x).
 
@@ -27,7 +27,7 @@ Every item below is also described in the sections that follow, or in the 0.9.x 
 - A foreign `submit_url` or a plain 307 redirect used to receive the API key; ids such as `proof.get("a/../admin")` used to call another endpoint.
 - Four load-sensitive tests (retry backoff, wait timeouts) no longer depend on machine load.
 
-## Unreleased — every external-mode signature is checked first (RB7b Phase F)
+### Included — every external-mode signature is checked first (RB7b Phase F)
 
 ### Changed (breaking)
 - `execute.contractCall`, `execute.transfer`, `execute.cosign` and `CertenAgent`'s governance operations rebuild the transaction the gateway returned, recompute every hash and
@@ -41,7 +41,7 @@ Every item below is also described in the sections that follow, or in the 0.9.x 
 - `beforeSign(summary)` on `contractCall` / `transfer` / `cosign`: what the signature will authorise, after the check and before the signature; return `false` to decline (`SIGNING_DECLINED`).
   `OpenedIntent.signing` carries the same summary.
 - `checkIntentSigning`, `checkCosigning`, `checkGovernanceSigning`, `inspectSigningData`, `legsFromIntent`, `CertenSigningDataError`.
-## Unreleased — verify a proof instead of trusting it (RB7b Phase E)
+### Included — verify a proof instead of trusting it (RB7b Phase E)
 
 ### Added
 - `@certen.io/sdk/verify`: `verifyBundle` (one verdict per layer from a bundle or a proof v2 document), `loadProofEvidence`, `bundleInputOf`,
@@ -51,7 +51,7 @@ Every item below is also described in the sections that follow, or in the 0.9.x 
 
 ### Changed
 - Nothing in the default entry changes; a bundle's own `verified` flag is still returned as data and is not a verdict anywhere in the SDK.
-## Unreleased — transaction deadlines, header authorities, failure reasons
+### Included — transaction deadlines, header authorities, failure reasons
 
 ### Added
 - `expiresAt` (Date | RFC 3339 string) and `additionalAuthorities` (acc:// key books, max 8) on

@@ -1,6 +1,6 @@
 # Changelog — @certen.io/cli
 
-## Unreleased — 0.10.0: what changes for you (RB7b)
+## 0.10.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 **Breaking** changes are marked; the minor carries them (0.x).
 
@@ -18,7 +18,7 @@
 - `certen auth login` worked on no stock install (the undeclared `keytar`); it now works. `certen auth logout` no longer clears the config when it could not remove the key from the keyring.
 - Moved to commander 14.
 
-## Unreleased — sign what you see (RB7b Phase F)
+### Included — sign what you see (RB7b Phase F)
 
 ### Changed (breaking)
 - `tx create --sign-with`, `call`, `governance <operation> --sign-with` and `pending sign --sign-with` rebuild the transaction the gateway returned, check it against the request and print what the signature
@@ -29,7 +29,7 @@
 
 ### Added
 - `certen tx inspect <id>` and `certen governance inspect <id>`: recompute every hash of what is awaiting a signature and show what it would authorise; `tx inspect --intent` also matches it to your request. They sign nothing.
-## Unreleased — `proof verify` checks the proof (RB7b Phase E)
+### Included — `proof verify` checks the proof (RB7b Phase E)
 
 ### Changed (breaking)
 - `certen proof verify` verifies a proof layer by layer, locally, with `@certen.io/proof-verify`. It no longer reports inclusion from the gateway's receipt or from a
@@ -42,7 +42,7 @@
 ### Fixed
 - The entrypoint overwrote the exit code a command set through `process.exitCode`, so a failed check could exit `0` (`proof verify`'s outcome check, `keys verify`).
   It now honours it.
-## Unreleased — `--expires-in`, `--authority`, and why an intent failed
+### Included — `--expires-in`, `--authority`, and why an intent failed
 
 ### Added
 - `certen call` and `certen tx create`: `--expires-in <duration>` (s/m/h/d → `expires_at`) and

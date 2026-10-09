@@ -1,6 +1,6 @@
 # Changelog — @certen.io/mcp
 
-## Unreleased — 0.5.0: what changes for you (RB7b)
+## 0.5.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 **Breaking** changes are marked; the minor carries them (0.x).
 
@@ -17,19 +17,19 @@
 - `certen_chains_enabled` (read), the signing summary, and an `exports` map.
 - Builds on the workspace SDK, so header fields go through the SDK's validation; the `HEADER_FIELDS_UNSUPPORTED` workaround is gone.
 
-## Unreleased — the signing summary (RB7b Phase F)
+### Included — the signing summary (RB7b Phase F)
 
 ### Added
 - `certen_transaction_open` and `certen_sign_create` return `signing`, the rebuilt summary of what a signature on the returned hash would authorise (matched to the request, or to the transaction named), or `signing_check`
   (`ok:false`, `code`, `message`) when the gateway's transaction could not be checked, in which case the hash must not be signed. The intent or request is returned either way. The server still signs nothing and holds no key.
-## Unreleased — `certen_proof_verify` verifies (RB7b Phase E)
+### Included — `certen_proof_verify` verifies (RB7b Phase E)
 
 ### Changed (breaking)
 - `certen_proof_verify` takes `target` (an intent id, a proof id, a transaction hash or a share link) instead of `txHash`, verifies locally, and returns the per-layer
   result described in docs/CLI-CONTRACT.md (`overall`, `independent`, `layers`, `covers`, `notCovered`, `failure`, `execution`, `bundleStatements`, `evidence`, `gateway`). `independent` is true
   only when every layer the proof carries was checked here. The server stays read-only and never fetches a URL the caller names: the execution chain's block header is
   passed in as `header`, not fetched.
-## Unreleased — header fields on `certen_transaction_open`
+### Included — header fields on `certen_transaction_open`
 
 ### Added
 - Optional `additionalAuthorities` and `expiresAt` on `certen_transaction_open`. Refused with

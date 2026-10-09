@@ -145,6 +145,7 @@ jobs:
       - name: Publish
         if: ${{ !inputs.dry_run }}
         working-directory: packages/${{ steps.target.outputs.dir }}
+        # Trusted publishing (OIDC): npmjs.com is configured, per package, to accept this workflow from this repository, and npm
+        # (11.5.1 or newer, which the Node on .nvmrc ships) exchanges the run's id-token for a short-lived publish credential. There is no
+        # long-lived token in this repository's secrets to leak, and no fallback to one: a publish that cannot be attested fails.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
