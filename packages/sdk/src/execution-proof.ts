@@ -18,6 +18,8 @@
  * `crypto` has SHA-3 but not the keccak padding Ethereum uses.
  */
 
+import { base64ToBytes } from './bytes.js';
+
 // ---- keccak-256 ----------------------------------------------------------------------------------
 
 const RC: bigint[] = [
@@ -93,7 +95,7 @@ export function bytesFrom(v: unknown): Uint8Array {
   if (typeof v === 'string') {
     if (/^0x[0-9a-fA-F]*$/.test(v)) return fromHex(v);
     if (/^[0-9a-fA-F]{64}$/.test(v)) return fromHex(v);
-    return Uint8Array.from(Buffer.from(v, 'base64'));
+    return base64ToBytes(v);
   }
   if (v && typeof v === 'object' && 'data' in (v as Record<string, unknown>)) return bytesFrom((v as { data: unknown }).data);
   throw new Error('unrecognised byte encoding');

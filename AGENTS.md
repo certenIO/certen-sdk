@@ -29,7 +29,7 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->907 tests in 62 files (sdk 420, cli 383, mcp 59, verify 45), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->1015 tests in 74 files (sdk 496, cli 394, mcp 80, verify 45), 0 skipped<!-- test-counts:end --> | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
 | `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |

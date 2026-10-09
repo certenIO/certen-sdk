@@ -12,6 +12,7 @@ import type {
   ScopeInfo,
   ErrorCodeInfo,
 } from '../types.js';
+import { apiPath } from '../internal.js';
 
 export class AdminResource {
   constructor(private http: AxiosInstance) {}
@@ -77,7 +78,7 @@ export class AdminResource {
   }
 
   async revokeApiKey(id: string): Promise<{ success: boolean; message: string }> {
-    const { data } = await this.http.delete(`/v1/admin/api-keys/${id}`);
+    const { data } = await this.http.delete(apiPath`/v1/admin/api-keys/${id}`);
     return data;
   }
 
@@ -87,7 +88,7 @@ export class AdminResource {
    * ONCE — clients must persist it now.
    */
   async rotateApiKey(id: string): Promise<ApiKeyResponse> {
-    const { data } = await this.http.post(`/v1/admin/api-keys/${id}/rotate`);
+    const { data } = await this.http.post(apiPath`/v1/admin/api-keys/${id}/rotate`);
     return data;
   }
 

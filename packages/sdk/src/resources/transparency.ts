@@ -6,6 +6,7 @@ import type {
   PublishedPriceBook,
   FxObservation,
 } from '../types.js';
+import { apiPath } from '../internal.js';
 
 /**
  * The public transparency log.
@@ -50,7 +51,7 @@ export class TransparencyResource {
    * the signature on it, that makes the check mean something.
    */
   async head(treeSize: number): Promise<TransparencyHead> {
-    const { data } = await this.http.get(`/v1/transparency/heads/${treeSize}`);
+    const { data } = await this.http.get(apiPath`/v1/transparency/heads/${treeSize}`);
     return data;
   }
 
@@ -88,7 +89,7 @@ export class TransparencyResource {
    * taken on trust.
    */
   async fx(id: string): Promise<FxObservation> {
-    const { data } = await this.http.get(`/v1/transparency/fx/${encodeURIComponent(id)}`);
+    const { data } = await this.http.get(apiPath`/v1/transparency/fx/${id}`);
     return data;
   }
 }

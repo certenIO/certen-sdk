@@ -196,11 +196,16 @@ function redact(args: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
+/** Codes whose `details` are the point of the error: what the last poll saw, or why there is no proof. */
+const DETAIL_CODES = new Set(['WAIT_TIMEOUT', 'PROOF_NOT_ASSIGNED', 'INTENT_FAILED']);
+
 function extraErrorFields(err: unknown): Record<string, unknown> {
-  const e = err as { guidance?: unknown; reasonCode?: unknown };
+  const e = err as { guidance?: unknown; reasonCode?: unknown; code?: unknown; details?: unknown };
   return {
     ...(typeof e.guidance === 'string' ? { guidance: e.guidance } : {}),
     ...(e.reasonCode !== undefined ? { reason_code: e.reasonCode } : {}),
+    // Read by shape, like the fields above: this package may run against an SDK that predates these errors.
+    ...(typeof e.code === 'string' && DETAIL_CODES.has(e.code) && e.details && typeof e.details === 'object' ? { details: e.details } : {}),
   };
 }
 

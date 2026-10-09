@@ -1,5 +1,5 @@
 import { AxiosInstance } from 'axios';
-import { omitUndefined } from '../internal.js';
+import { omitUndefined, apiPath } from '../internal.js';
 import { paginate } from '../client.js';
 import { headerFieldsBody } from '../header-fields.js';
 import type {
@@ -47,7 +47,7 @@ export class TransactionResource {
   }
 
   async submitSignature(id: string, params: SubmitSignatureParams): Promise<SubmitSignatureResponse> {
-    const { data } = await this.http.post(`/v1/transaction/${id}/signature`, {
+    const { data } = await this.http.post(apiPath`/v1/transaction/${id}/signature`, {
       signature: params.signature,
       public_key: params.publicKey,
     });
@@ -55,7 +55,7 @@ export class TransactionResource {
   }
 
   async get(id: string): Promise<TransactionResponse> {
-    const { data } = await this.http.get(`/v1/transaction/${id}`);
+    const { data } = await this.http.get(apiPath`/v1/transaction/${id}`);
     return data;
   }
 

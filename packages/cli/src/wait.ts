@@ -1,5 +1,5 @@
 import type { CertenClient, Identity } from '@certen.io/sdk';
-import { CertenIntentFailedError, describeReasonCode } from '@certen.io/sdk';
+import { CertenIntentFailedError, CertenWaitTimeoutError, describeReasonCode, intentOutcome } from '@certen.io/sdk';
 import { CliError, UsageError, EXIT } from './errors.js';
 import { human, isJsonMode } from './output.js';
 
@@ -178,10 +178,14 @@ export async function waitForIdentity(
 /**
  * Poll a transaction intent to a terminal state.
  *
- * Delegates to the SDK's `execute.wait()` rather than re-implementing the loop, so the CLI and an
- * SDK caller agree on which statuses are terminal. The SDK signals both failure and timeout by
- * throwing a plain `Error`; those are translated here into typed CLI errors so the exit code and
- * the `--json` envelope carry a code a caller can branch on.
+ * Delegates to the SDK's `execute.wait()` rather than re-implementing the loop, so the CLI, the MCP server and an SDK caller agree
+ * on which statuses are terminal (one table, `intent-states.ts`). The SDK signals a failed intent with `CertenIntentFailedError`
+ * and a wait that ran out with `CertenWaitTimeoutError`; both are translated here into typed CLI errors so the exit code and the
+ * `--json` envelope carry a code a caller can branch on.
+ *
+ * `executed` is reported as progress and does not end the wait: the action ran on its chain and the proof bundle is still being
+ * produced. `completed_unproven` ends it successfully (exit 0) but is announced as what it is, and the JSON keeps the status
+ * `completed_unproven`: the action executed, and its proof can never be produced.
  */
 export async function waitForTransaction(
   client: CertenClient,
@@ -195,17 +199,22 @@ export async function waitForTransaction(
     const result = await client.execute.wait(intentId, {
       timeoutMs: budget.timeoutMs,
       intervalMs: budget.intervalMs,
-      onPoll: (tx) => {
-        const status = (tx as unknown as { status?: string }).status;
-        if (status) say(`Status: ${status}.`);
+      onState: (event) => {
+        if (event.class === 'executed') {
+          say('Status: executed. The action ran on its chain; its proof is still being produced.');
+        } else if (event.class === 'unknown') {
+          say(`Status: ${event.status} (not a status this CLI recognises; still waiting).`);
+        } else {
+          say(`Status: ${event.status}.`);
+        }
       },
     });
+    if (intentOutcome(result).outcome === 'completed_unproven') {
+      say('The action executed, but its proof can never be produced (billed gas only, fee waived). There is nothing to verify.');
+    }
     return result as unknown as Record<string, unknown>;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // "still <status> after <n>ms" is the SDK's timeout wording. A timeout is not a failed intent
-    // — it may still complete — and conflating the two would tell a user their work was lost.
-    const timedOut = /still .* after \d+ms/.test(message);
     if (err instanceof CertenIntentFailedError) {
       // The reason is the part a caller acts on — `expired` wants a new intent, `expectation_unmet`
       // wants the target investigated, `target_reverted` wants neither a retry nor a support ticket.
@@ -219,12 +228,16 @@ export async function waitForTransaction(
         { intent_id: intentId, reason_code: err.reasonCode, reason: reason ?? null },
       );
     }
-    throw new CliError(
-      timedOut
-        ? `${message.replace(/^certen: /, '')}. It may yet complete. Check with: certen tx status ${intentId}`
-        : message.replace(/^certen: /, ''),
-      timedOut ? 'TX_WAIT_TIMEOUT' : 'TX_FAILED',
-      EXIT.FAILED,
-    );
+    // A timeout is not a failed intent — it may still complete — and conflating the two would tell a user their work was lost.
+    if (err instanceof CertenWaitTimeoutError) {
+      throw new CliError(
+        `${message.replace(/^certen: /, '')}. It may yet complete. Check with: certen tx status ${intentId}`,
+        'TX_WAIT_TIMEOUT',
+        EXIT.FAILED,
+        false,
+        { intent_id: intentId, last_status: err.lastStatus, last_class: err.lastClass, timeout_ms: err.timeoutMs },
+      );
+    }
+    throw new CliError(message.replace(/^certen: /, ''), 'TX_FAILED', EXIT.FAILED);
   }
 }

@@ -1,5 +1,6 @@
 import { AxiosInstance } from 'axios';
 import type { RegistrationToken, MintedRegistrationToken } from '../types.js';
+import { apiPath } from '../internal.js';
 
 /**
  * Registration tokens — letting an organization be created without a browser.
@@ -60,7 +61,7 @@ export class RegistrationTokensResource {
    * organization's API keys instead.
    */
   async revoke(id: string): Promise<RegistrationToken> {
-    const { data } = await this.http.delete(`/v1/registration-tokens/${encodeURIComponent(id)}`);
+    const { data } = await this.http.delete(apiPath`/v1/registration-tokens/${id}`);
     return data;
   }
 }

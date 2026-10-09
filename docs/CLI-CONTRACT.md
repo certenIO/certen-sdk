@@ -80,7 +80,27 @@ So the failure envelope may carry an additive `details` object:
 
 `TX_FAILED` (from `tx create --wait`, `tx status --wait` and `call --wait`) carries
 `details: { intent_id, reason_code, reason }`, where `reason_code` is the gateway's value (`expired`,
-`expectation_unmet`, `target_reverted`, …, or null) and `reason` is one readable sentence.
+`expectation_unmet`, `target_reverted`, …, or null) and `reason` is one readable sentence. An intent that
+`expired` is a `TX_FAILED` too, with `reason_code: "expired"`.
+
+`TX_WAIT_TIMEOUT` (the same commands, when `--timeout` ran out first) is neither success nor failure: the
+intent may still complete. It exits `1`, is not retryable, and carries
+`details: { intent_id, last_status, last_class, timeout_ms }`. `last_class` is what the last status means:
+`in_flight`, `executed`, or `unknown` (a status this CLI does not recognise, which is never treated as done).
+Check the intent again; do not open a second one.
+
+#### Intent states a wait can end in
+
+`--wait` follows one table (the SDK's `intent-states.ts`), so the CLI, the SDK and the MCP server agree:
+
+| `data.status` | Wait ends? | Exit | Meaning |
+|---|:--:|:--:|---|
+| `completed` (also `proven`) | yes | `0` | Executed and proven. `proof get` has something to fetch. |
+| `completed_unproven` | yes | `0` | The action **executed**, and its proof can never be produced (billed gas only, fee waived). Branch on `data.status`: there is nothing to verify, so do not treat exit `0` as "a proof exists". |
+| `executed` | **no** | — | The action ran on its chain; the proof bundle is still being produced. The wait keeps going and prints it as progress. |
+| `failed`, `expired` | yes | `1` | `TX_FAILED`; will not execute. |
+
+`completed_unproven` is never reported as `completed`, and `executed` is never reported as a failure.
 
 #### Refused header authorities carry guidance
 
@@ -129,6 +149,17 @@ parsing prose:
 
 The distinction between `2` and `3` is the one that matters most: `3` guarantees no request was
 accepted, so a retry cannot double-execute.
+
+Exit `3` is exactly the SDK's `NETWORK_ERROR`. Other SDK errors also carry `status: 0` because they were
+raised locally, and they are **not** "unreachable": `WAIT_TIMEOUT`, `INTENT_FAILED` and `PROOF_NOT_ASSIGNED`
+are about an intent the gateway already holds, so they exit `1`; retrying the command by opening the
+intent again would be wrong. (Before, any status-0 error exited `3`.)
+
+`FOREIGN_ORIGIN_URL` also exits `1`: the SDK refused to send to a url outside the gateway's origin (a `submit_url` in a response, or a redirect to
+another host) before signing or sending anything, so no credential left the process. Not retryable; `error.details` has `url`, `baseUrl` and `source`.
+
+`INVALID_PATH_PARAMETER` exits `2` (a usage error): an id argument was empty or only dots. Every id is encoded as one path segment, so an id
+containing `/`, `?` or `#` reaches the gateway as that literal text and cannot change which endpoint is called.
 
 ### 4. `retryable` matches the SDK exactly
 

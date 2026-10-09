@@ -273,9 +273,16 @@ export function assertChain(value: string, flag = '--chain'): string {
         'UNSUPPORTED_CHAIN',
       );
     }
-    if (availability.state === 'not-served') {
+    if (availability.state === 'disabled') {
       throw new UsageError(
-        `${flag}: ${label} is enabled here, but the gateway does not serve it (per ${chainCacheFile()}). `
+        `${flag}: ${label} is enabled here, but the gateway has it switched off (chain_not_enabled, per ${chainCacheFile()}). `
+        + 'Refresh with: certen chains --refresh',
+        'UNSUPPORTED_CHAIN',
+      );
+    }
+    if (availability.state === 'unlisted') {
+      throw new UsageError(
+        `${flag}: ${label} is enabled here, but the gateway does not list it at all (unknown_chain, per ${chainCacheFile()}). `
         + 'Refresh with: certen chains --refresh',
         'UNSUPPORTED_CHAIN',
       );

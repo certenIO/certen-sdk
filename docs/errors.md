@@ -69,6 +69,11 @@ backoff — a second retry loop wrapped around it is wrong.
 | `INTERNAL_ERROR` | 500 | yes | An unexpected server error occurred |
 | `BAD_GATEWAY` | 502 | yes | A downstream service (api-bridge, proofs service) returned an error |
 | `NETWORK_ERROR` | — | yes | Synthesized by the SDK when the request never reached the gateway |
+| `INTENT_FAILED` | — | no | Raised by `execute.wait()` when the intent reached `failed` or `expired`; `reasonCode` says why |
+| `WAIT_TIMEOUT` | — | no | Raised by `execute.wait()` when time ran out; the intent may still complete; `lastStatus` / `lastClass` say what was last seen |
+| `PROOF_NOT_ASSIGNED` | — | no | Raised by `execute.proof()` when the intent has no proof id or transaction hash; `reason` is `proof_pending`, `execution_proof_unavailable` or `not_assigned` |
+| `FOREIGN_ORIGIN_URL` | — | no | The client refused a url outside its gateway's origin (a `submit_url`, a request url, or a redirect) before sending anything; `details` has `url`, `baseUrl`, `source` |
+| `INVALID_PATH_PARAMETER` | — | no | An id, hash or token argument was empty, not text/number, or only dots, so it cannot name one resource; raised before any request |
 
 `NETWORK_ERROR` is safe to retry **only** because every POST carries an `Idempotency-Key`. Without
 one, a retried network error can open a second intent — on a value transfer, that means paying twice.

@@ -67,6 +67,20 @@ new CertenClient({
 **Base URL precedence:** `options.baseUrl` → `$CERTEN_API_URL` → `https://gateway.kompendium.co`. The env var
 is there so a deployment can be retargeted at staging or a self-hosted gateway without a code change.
 
+**The client only talks to its own gateway.** Every request URL, every `submit_url` a response names, and every redirect must stay
+on the base URL's origin; anything else is refused with `FOREIGN_ORIGIN_URL` before a credential is attached or anything is signed.
+Every id, hash or token you pass is encoded as exactly one path segment; an empty one, or one made only of dots, is refused
+with `INVALID_PATH_PARAMETER` instead of reaching a different route.
+
+## Browsers
+
+`@certen.io/sdk` runs in a browser through the **`browser` export condition** (webpack, Vite, esbuild and rollup select it
+automatically), or explicitly as `@certen.io/sdk/browser`. That entry is the client, its resources, the typed errors, the status
+table, the chain catalogue and the pure helpers; it uses Web Crypto and no Node module. Two things need Node and are only in the default entry:
+`CertenAgent` / `ed25519Signer` (a local signing key) and `fetchSharedProof` / `decodeSharedBundle` (gunzip). A browser sends no
+`User-Agent` (it forbids scripts setting one). `verifyReceipt` uses Web Crypto's ed25519; a runtime without it reports the signature
+check as `skipped`, never as `ok`. CI bundles the browser entry and runs it with `process`, `Buffer` and `require` removed.
+
 ## What it does for you
 
 **Automatic idempotency on POSTs.** Every POST gets a generated `Idempotency-Key` so a retried network error

@@ -48,8 +48,8 @@ registered cannot be called by a confused model, a prompt injection, or a bug. A
 with "please don't call this" in its description can be called by all three.
 
 ```bash
-certen-mcp                              # 32 read tools
-CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 47 tools
+certen-mcp                              # 33 read tools
+CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 48 tools
 ```
 
 Every tool that changes something additionally requires `confirm: true`. Called without it, the tool
@@ -63,6 +63,13 @@ destructive one.
 | `CERTEN_API_KEY` | Required for gateway calls. Documentation resources work without it. |
 | `CERTEN_API_URL` | Gateway base URL. Defaults to `https://gateway.kompendium.co`. |
 | `CERTEN_MCP_ALLOW_WRITES` | Exactly `1` enables write tools. `true`, `yes` and `0` do not. |
+| `CERTEN_ENABLED_CHAINS` | Comma-separated chains this server accepts in tool calls. Unset means the three live testnets (`ethereum-sepolia`, `base-sepolia`, `arbitrum-sepolia`). Telcoin Adiri (`telcoin-adiri`, chain 2017) is **off by default**: add it here, and it is used only while the gateway also lists it as served. |
+| `CERTEN_ALLOW_ANY_CHAIN` | Exactly `1` skips chain-name checking, for a chain the gateway serves that this catalogue does not list. |
+
+A chain name is checked against the SDK's catalogue before anything is sent (`certen_quote`, `certen_billing_register_payer`,
+`certen_identity_create`, and every chain named in an intent opened with `certen_transaction_open`). A typo or an unlisted chain
+comes back as `UNSUPPORTED_CHAIN` naming the alternatives; `certen_chains_enabled` lists what is usable now. The gateway's own
+answer for an opt-in chain is told apart: not listed at all is `unknown_chain`, listed but switched off is `chain_not_enabled`.
 
 ## Tools
 

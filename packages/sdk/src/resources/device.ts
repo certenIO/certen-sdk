@@ -1,5 +1,6 @@
 import { AxiosInstance } from 'axios';
 import type { DeviceAuthorization, DeviceAuthorizationStatus } from '../types.js';
+import { apiPath } from '../internal.js';
 
 /**
  * The device authorization grant (RFC 8628), so a terminal can obtain its own API key.
@@ -44,7 +45,7 @@ export class DeviceResource {
    * process never collected means someone else did — worth surfacing loudly rather than retrying.
    */
   async poll(deviceCode: string): Promise<DeviceAuthorizationStatus> {
-    const { data } = await this.http.get(`/v1/portal/device/${encodeURIComponent(deviceCode)}`);
+    const { data } = await this.http.get(apiPath`/v1/portal/device/${deviceCode}`);
     return data;
   }
 }

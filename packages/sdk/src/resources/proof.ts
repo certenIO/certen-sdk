@@ -1,9 +1,10 @@
 import { AxiosInstance } from 'axios';
-import { parseShareTarget } from '../shared-proof.js';
+import { parseShareTarget } from '../share-target.js';
 import type {
   ProofArtifact, ProofCustody, ChainReceipt, ProofShare, ProofSharesResponse,
   SharedProof,
 } from '../types.js';
+import { apiPath } from '../internal.js';
 
 /**
  * Reading and sharing proofs.
@@ -27,13 +28,13 @@ export class ProofResource {
 
   /** The proof artifact for a proof id. Shape is defined by the proof-service, not by this SDK. */
   async get(proofId: string): Promise<ProofArtifact> {
-    const { data } = await this.http.get(`/v1/proof/${proofId}`);
+    const { data } = await this.http.get(apiPath`/v1/proof/${proofId}`);
     return data;
   }
 
   /** The proof artifact for a transaction hash, where the proof-service indexed one. */
   async byTxHash(txHash: string): Promise<ProofArtifact> {
-    const { data } = await this.http.get(`/v1/proof/tx/${txHash}`);
+    const { data } = await this.http.get(apiPath`/v1/proof/tx/${txHash}`);
     return data;
   }
 
@@ -45,30 +46,31 @@ export class ProofResource {
    * lookup comes back empty for something you know executed, this is what you want.
    */
   async receipt(txHash: string): Promise<ChainReceipt> {
-    const { data } = await this.http.get(`/v1/proof/tx/${txHash}/receipt`);
+    const { data } = await this.http.get(apiPath`/v1/proof/tx/${txHash}/receipt`);
     return data;
   }
 
   /**
    * The full bundle.
    *
-   * Returned as a Buffer because the gateway streams `application/octet-stream` when the
+   * Returned as a Uint8Array (a Buffer under Node) because the gateway streams `application/octet-stream` when the
    * downstream produces binary and JSON otherwise. Deciding between them here would mean
    * guessing; the caller writes it to a file, and `contentType` says which it got.
    */
-  async bundle(proofId: string): Promise<{ data: Buffer; contentType: string }> {
-    const response = await this.http.get(`/v1/proof/${proofId}/bundle`, {
+  async bundle(proofId: string): Promise<{ data: Uint8Array; contentType: string }> {
+    const response = await this.http.get(apiPath`/v1/proof/${proofId}/bundle`, {
       responseType: 'arraybuffer',
     });
     return {
-      data: Buffer.from(response.data as ArrayBuffer),
+      // A Buffer where there is one (Node), so existing callers keep its methods; a plain Uint8Array elsewhere.
+      data: typeof Buffer !== 'undefined' ? Buffer.from(response.data as ArrayBuffer) : new Uint8Array(response.data as ArrayBuffer),
       contentType: String(response.headers['content-type'] ?? 'application/octet-stream'),
     };
   }
 
   /** The custody chain for a proof. */
   async custody(proofId: string): Promise<ProofCustody> {
-    const { data } = await this.http.get(`/v1/proof/${proofId}/custody`);
+    const { data } = await this.http.get(apiPath`/v1/proof/${proofId}/custody`);
     return data;
   }
 
@@ -88,7 +90,7 @@ export class ProofResource {
    */
   async shared(tokenOrUrl: string): Promise<SharedProof> {
     const { token } = parseShareTarget(tokenOrUrl, 'http://placeholder');
-    const { data } = await this.http.get(`/v1/proof/shared/${encodeURIComponent(token)}`);
+    const { data } = await this.http.get(apiPath`/v1/proof/shared/${token}`);
     return data;
   }
 
@@ -106,7 +108,7 @@ export class ProofResource {
     // The wire field is `expires_in_hours`. This sent `expires_in`, which the gateway does not
     // read, so every requested TTL was silently discarded and every link got the 168h default —
     // a share meant to expire in an hour outlived its purpose by a week.
-    const { data } = await this.http.post(`/v1/proof/${proofId}/share`, {
+    const { data } = await this.http.post(apiPath`/v1/proof/${proofId}/share`, {
       label: params.label,
       expires_in_hours: params.expiresInHours ?? params.expiresIn,
       max_views: params.maxViews,
@@ -122,7 +124,7 @@ export class ProofResource {
 
   /** Revoke a share link. The token stops resolving; the proof itself is untouched. */
   async revokeShare(shareId: string): Promise<{ revoked?: boolean; [key: string]: unknown }> {
-    const { data } = await this.http.delete(`/v1/proof/shares/${shareId}`);
+    const { data } = await this.http.delete(apiPath`/v1/proof/shares/${shareId}`);
     return data;
   }
 }

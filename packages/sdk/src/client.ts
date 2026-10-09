@@ -1,6 +1,9 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
-import { randomBytes } from 'crypto';
-import { CertenError } from './errors.js';
+import { randomHex } from './random.js';
+import { DEFAULT_BASE_URL } from './defaults.js';
+import { SDK_VERSION } from './version.js';
+import { CertenError, CertenForeignOriginError } from './errors.js';
+import { assertOwnOrigin, redirectStaysOnOrigin } from './origin.js';
 import { IdentityResource } from './resources/identity.js';
 import { TransactionResource } from './resources/transaction.js';
 import { GovernanceResource } from './resources/governance.js';
@@ -37,7 +40,7 @@ import type { CertenClientOptions,
  * retargeted (staging, a self-hosted gateway, a future `api.certen.io` once it fronts the gateway) without
  * a code change or an SDK release.
  */
-export const DEFAULT_BASE_URL = 'https://gateway.kompendium.co';
+export { DEFAULT_BASE_URL };
 
 /** Read an env var without assuming `process` exists — this SDK also runs in browsers, where touching a
  *  bare `process` is a ReferenceError rather than `undefined`. */
@@ -47,6 +50,10 @@ function envBaseUrl(): string | undefined {
   } catch {
     return undefined;
   }
+}
+/** Node, as opposed to a browser or a worker. Reads nothing that throws when `process` is absent. */
+function isNode(): boolean {
+  return typeof process !== 'undefined' && typeof process.versions === 'object' && !!process.versions?.node;
 }
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BASE_BACKOFF_MS = 250;
@@ -273,16 +280,32 @@ export class CertenClient {
           scope: options.scope,
         };
 
+    const baseURL = options.baseUrl ?? envBaseUrl() ?? DEFAULT_BASE_URL;
     this.http = axios.create({
-      baseURL: options.baseUrl ?? envBaseUrl() ?? DEFAULT_BASE_URL,
+      baseURL,
       headers: {
         // The credential header is set per-request by the interceptor below, because a minted token
         // changes over the client's life and a header baked in here never would.
         'Content-Type': 'application/json',
-        'User-Agent': `certen-sdk-node/${process.env.npm_package_version ?? 'dev'}`,
+        // A browser forbids scripts setting User-Agent (the request would be refused or the header silently dropped), so only a Node
+        // process names itself. It names the SDK's own version, not whatever package happens to be running it.
+        ...(isNode() ? { 'User-Agent': `certen-sdk-node/${SDK_VERSION}` } : {}),
       },
       timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       validateStatus: (status) => status >= 200 && status < 300,
+      // The key travels on every request, so a redirect off the gateway's own origin must not carry it. Refused by name, not
+      // followed without the key: a gateway that redirects elsewhere is misconfigured or compromised, and either way the caller
+      // should hear it. (An http -> https upgrade of the same host is allowed.) Node's http adapter only; browsers follow redirects
+      // themselves.
+      beforeRedirect: (redirect: Record<string, unknown>) => {
+        const to = String(redirect.href ?? `${String(redirect.protocol)}//${String(redirect.host ?? redirect.hostname)}${String(redirect.path ?? '')}`);
+        if (!redirectStaysOnOrigin(baseURL, to)) {
+          throw new CertenForeignOriginError(
+            `certen: the gateway redirected to ${JSON.stringify(to)}, which is not its own origin. The redirect was not followed and no credential was sent there.`,
+            to, baseURL, 'redirect',
+          );
+        }
+      },
     });
 
     const autoIdem = options.autoIdempotencyKey !== false;
@@ -300,6 +323,8 @@ export class CertenClient {
 
     // Auto-stamp Idempotency-Key on every POST that didn't already supply one.
     this.http.interceptors.request.use(async (req) => {
+      // First, before the credential is attached or anything is sent: the key goes only to this client's own origin.
+      assertOwnOrigin(req.url, req.baseURL ?? baseURL, 'request');
       const reqPath = req.url ?? '';
 
       // Attach the credential here, not at construction: a minted token is refreshed over this
@@ -355,6 +380,14 @@ export class CertenClient {
         return response;
       },
       async (error: AxiosError<{ error?: string; code?: string }> & { config?: RetryConfig }) => {
+        // An error this client raised itself (the origin guard, a failed token mint) is already typed. It is not a transport
+        // failure, and wrapping it as NETWORK_ERROR would make it retryable.
+        if (error instanceof CertenError) throw error;
+        // follow-redirects wraps what a beforeRedirect hook throws, one or two levels down.
+        for (let cause: unknown = (error as { cause?: unknown }).cause, depth = 0; cause && depth < 5; depth++) {
+          if (cause instanceof CertenForeignOriginError) throw cause;
+          cause = (cause as { cause?: unknown }).cause;
+        }
         const cfg = error.config;
         const status = error.response?.status ?? 0;
         // A non-JSON error body (an edge 502, an HTML error page) leaves `data` as a string, so
@@ -473,7 +506,7 @@ function sleep(ms: number): Promise<void> {
 
 function generateIdempotencyKey(): string {
   // Stable across retries within a process; unique across calls.
-  return `sdk_${Date.now().toString(36)}_${randomBytes(8).toString('hex')}`;
+  return `sdk_${Date.now().toString(36)}_${randomHex(8)}`;
 }
 
 /**

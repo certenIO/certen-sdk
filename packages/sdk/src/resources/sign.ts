@@ -1,5 +1,5 @@
 import { AxiosInstance } from 'axios';
-import { omitUndefined } from '../internal.js';
+import { omitUndefined, apiPath } from '../internal.js';
 import type {
   SignRequestParams,
   SignResponse,
@@ -28,7 +28,7 @@ export class SignResource {
   }
 
   async submitSignature(id: string, params: SubmitSignSignatureParams): Promise<SubmitSignSignatureResponse> {
-    const { data } = await this.http.post(`/v1/sign/${id}/signature`, {
+    const { data } = await this.http.post(apiPath`/v1/sign/${id}/signature`, {
       signature: params.signature,
       public_key: params.publicKey,
     });

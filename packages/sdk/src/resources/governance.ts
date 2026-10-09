@@ -1,5 +1,5 @@
 import { AxiosInstance } from 'axios';
-import { omitUndefined } from '../internal.js';
+import { omitUndefined, apiPath } from '../internal.js';
 import type {
   GovernanceParams,
   CreateGovernanceResponse,
@@ -29,7 +29,7 @@ export class GovernanceResource {
   }
 
   async submitSignature(id: string, params: SubmitGovernanceSignatureParams): Promise<SubmitGovernanceSignatureResponse> {
-    const { data } = await this.http.post(`/v1/governance/${id}/signature`, {
+    const { data } = await this.http.post(apiPath`/v1/governance/${id}/signature`, {
       signature: params.signature,
       public_key: params.publicKey,
     });
@@ -37,7 +37,7 @@ export class GovernanceResource {
   }
 
   async get(id: string): Promise<GovernanceResponse> {
-    const { data } = await this.http.get(`/v1/governance/${id}`);
+    const { data } = await this.http.get(apiPath`/v1/governance/${id}`);
     return data;
   }
 }

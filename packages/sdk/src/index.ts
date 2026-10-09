@@ -1,64 +1,14 @@
-export { CertenClient, paginate, paginateWithTotal, DEFAULT_BASE_URL } from './client.js';
-export * from './types.js';
-export type { SignFn, ProofGatedCallParams, TransferParams, OpenedIntent } from './resources/execute.js';
-export {
-  CertenError,
-  CertenAuthError,
-  CertenRateLimitError,
-  CertenBadRequestError,
-  CertenServerError,
-  CertenPaymentRequiredError,
-  CertenHeaderAuthorityNotExecutableError,
-  CertenIntentFailedError,
-  HEADER_AUTHORITY_NOT_EXECUTABLE,
-} from './errors.js';
-// Transaction-header fields (additional authorities, deadline): the validators the SDK runs before
-// sending, exported so the CLI and MCP apply the identical rules. See header-fields.ts.
-export {
-  normalizeAdditionalAuthorities, normalizeExpiresAt, parseDuration, expiresIn, MAX_ADDITIONAL_AUTHORITIES,
-  MAX_AUTHORITY_URL_LENGTH, GATEWAY_EXPIRY_MIN_S, GATEWAY_EXPIRY_MAX_S, LOCAL_EXPIRY_MIN_S, HEADER_FIELD_ERROR_CODES,
-} from './header-fields.js';
-export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS } from './reason-codes.js';
-export type { PaymentResolution } from './errors.js';
-export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';
-// Standalone on purpose: redeeming a share link needs no API key and therefore no client. See
-// shared-proof.ts.
-export { fetchSharedProof, parseShareTarget, decodeSharedBundle } from './shared-proof.js';
-// execution-proof.ts: verify a bundle's component 5 (the receipt and its trie proof) with no
-// dependencies and no gateway — what a counterparty runs.
-export {
-  verifyExecutionProof, checkAgainstHeader, executionComponentOf, decodeReceipt, verifyTrieProof,
-  keccak256, rlpDecode, rlpEncodeUint, bytesFrom,
-} from './execution-proof.js';
-export type { ExecutionProofComponent, ExecutionVerification, DecodedReceipt, DecodedLog } from './execution-proof.js';
-// Standalone for the same reason: these carry their credential in the body and need no API key,
-// so a caller using OAuth is not made to hold one. See oauth.ts.
-export { fetchOAuthToken, refreshOAuthToken, revokeOAuthToken } from './oauth.js';
-// Exported so a caller can split `mnemonic_retrieval.url` the same way the SDK does, rather than
-// writing their own regex against a string whose parts they cannot afford to get wrong.
-export { parseMnemonicTarget } from './resources/identity.js';
-// Standalone for the same reason as the OAuth helpers: the caller has no credential yet, and
-// obtaining its first one is the entire purpose. See registration.ts.
-export { redeemRegistrationToken } from './registration.js';
-// Keypair-proof self-service signup — no browser, no email, nobody at CERTEN. Standalone for the
-// same reason: the caller holds nothing yet. See self-signup.ts.
-export { selfSignup, requestSignupChallenge, completeSignup } from './self-signup.js';
-export { CertenUnfundedAccountError, CertenFundingUnverifiableError, movesValue, normalizeChainId } from './funding.js';
-export type { FundingUnverifiableReason } from './funding.js';
-// The chain catalogue: the single source the CLI and MCP derive every chain table from. See chains.ts.
-export {
-  CHAIN_CATALOGUE, chainInfo, chainSlug, nativeSymbolFor, faucetForChain, defaultEnabledChains, enablableChains,
-  parseEnabledChains, ChainConfigurationError, gatewayServes, chainAvailability, resolveEnabledChains,
-  readNativeBalance, describeUnverifiable,
-} from './chains.js';
-export type {
-  ChainCatalogueEntry, ChainSupport, ServedChain, ChainAvailability, BalanceRow, NativeBalanceReading,
-} from './chains.js';
-// One resolver, shared by the CLI and MCP. Two copies of this would drift — see sign-target.ts.
-export { resolveSignTarget } from './sign-target.js';
+/**
+ * The SDK's default entry (Node): everything in the browser-safe surface, plus the two parts that need Node.
+ * See browser.ts for the portable half and why the split exists.
+ */
+export * from './browser.js';
 
-// An autonomous agent's identity and every proof-gated verb it needs, composed once. See agent.ts.
+// Standalone on purpose: redeeming a share link needs no API key and therefore no client. Node-only because a shared bundle may be
+// gzipped (node:zlib). See shared-proof.ts.
+export { fetchSharedProof, decodeSharedBundle } from './shared-proof.js';
+
+// An autonomous agent's identity and every proof-gated verb it needs, composed once. Node-only: it holds and uses a local ed25519 key
+// through node:crypto. See agent.ts.
 export { CertenAgent, ed25519Signer } from './agent.js';
 export type { AgentSigner, CertenAgentState, ProvisionParams } from './agent.js';
-export type { SignTarget } from './sign-target.js';
-export type { DoctorReport, DoctorCheck, CheckStatus } from './doctor.js';

@@ -115,10 +115,23 @@ describe('the enabled set: configuration ∩ what the gateway serves', () => {
   });
 
   it('never offers 2017 when the gateway does not list it, or lists it disabled', () => {
-    expect(chainAvailability('telcoin-adiri', withAdiri, SERVED_3).state).toBe('not-served');
+    expect(chainAvailability('telcoin-adiri', withAdiri, SERVED_3).state).toBe('unlisted');
     const disabled = [...SERVED_3, { id: 'telcoin-adiri', chainId: 2017, enabled: false }];
-    expect(chainAvailability('telcoin-adiri', withAdiri, disabled).state).toBe('not-served');
+    expect(chainAvailability('telcoin-adiri', withAdiri, disabled).state).toBe('disabled');
     expect(resolveEnabledChains(withAdiri, disabled).map((c) => c.slug)).not.toContain('telcoin-adiri');
+  });
+
+  it('names the two refusals differently: absent is unknown_chain, switched off is chain_not_enabled, never one for the other', () => {
+    const absent = chainAvailability('telcoin-adiri', withAdiri, SERVED_3);
+    const off = chainAvailability('telcoin-adiri', withAdiri, [...SERVED_3, { id: 'telcoin-adiri', chainId: 2017, enabled: false }]);
+    expect(absent).toMatchObject({ state: 'unlisted', code: 'unknown_chain' });
+    expect(off).toMatchObject({ state: 'disabled', code: 'chain_not_enabled' });
+    expect(absent.state).not.toBe(off.state);
+  });
+
+  it('treats a listed entry with no enabled field as served (a gateway that predates the switch lists only what it serves)', () => {
+    expect(chainAvailability('telcoin-adiri', withAdiri, [...SERVED_3, { id: 'telcoin-adiri', chainId: 2017 }]).state).toBe('enabled');
+    expect(chainAvailability('telcoin-adiri', withAdiri, [...SERVED_3, { id: 'telcoin-adiri', chainId: 2017, enabled: true }]).state).toBe('enabled');
   });
 
   it('matches a served entry by numeric id as well as by slug', () => {

@@ -27,13 +27,19 @@
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "//exports": "Explicit map so a consumer on modern resolution gets the types; main/types stay for older toolchains.",
+  "//exports": "types first. The `browser` condition (webpack, Vite, esbuild, rollup choose it for a browser build) gets the browser-safe entry, which leaves out CertenAgent/ed25519Signer (node:crypto) and fetchSharedProof/decodeSharedBundle (node:zlib); Node gets the full entry. `./browser` names the portable entry explicitly. main/types stay for older toolchains.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "browser": "./dist/browser.js",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./package.json": "./package.json"
   },
   "//files": "Only the build output and docs. src/ and test/ stay in the repo — declarationMap + sourceMap already give consumers navigable types, so shipping sources doubles the tarball for nothing.",
   "files": [

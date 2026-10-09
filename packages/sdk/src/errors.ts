@@ -1,3 +1,5 @@
+import type { IntentStatusClass } from './intent-states.js';
+
 /**
  * Error taxonomy. `CertenError.code` mirrors the gateway's response.code
  * field; callers can switch on it for typed retries / user-visible
@@ -133,6 +135,69 @@ export class CertenIntentFailedError extends CertenError {
     public readonly transaction: unknown,
   ) {
     super(message, 0, 'INTENT_FAILED', { body: transaction });
+  }
+}
+
+/**
+ * `execute.wait()` ran out of time before the intent reached the state it was waiting for.
+ *
+ * Deliberately neither success nor failure: the intent may still complete, and nothing here says otherwise. `lastStatus` and
+ * `lastClass` are what the last poll saw (`executed` means the action ran and the proof is still being produced; `unknown` means
+ * the gateway sent a status this client does not recognise), and `transaction` is that last response. Status 0: no HTTP request
+ * failed.
+ */
+export class CertenWaitTimeoutError extends CertenError {
+  constructor(
+    message: string,
+    public readonly intentId: string,
+    public readonly timeoutMs: number,
+    /** What the last poll saw, or null when no poll completed. */
+    public readonly lastStatus: string | null,
+    public readonly lastClass: IntentStatusClass | null,
+    public readonly transaction: unknown,
+  ) {
+    super(message, 0, 'WAIT_TIMEOUT', { details: { intentId, timeoutMs, lastStatus, lastClass }, body: transaction });
+    this.name = 'CertenWaitTimeoutError';
+  }
+}
+
+/**
+ * `execute.proof()` has nothing to fetch for this intent. Status 0: the gateway answered, and the answer is that no proof exists.
+ *
+ * `reason` says which kind of nothing it is, because the remedies differ:
+ *   `proof_pending`                  the action executed and the proof bundle is still being produced - ask again later.
+ *   `execution_proof_unavailable`    the action executed and its proof can never be produced - there is nothing to wait for.
+ *   `not_assigned`                   the intent has neither a `proof_id` nor an Accumulate transaction hash (yet).
+ */
+export class CertenProofNotAvailableError extends CertenError {
+  constructor(
+    message: string,
+    public readonly intentId: string,
+    public readonly reason: 'proof_pending' | 'execution_proof_unavailable' | 'not_assigned',
+    public readonly transaction: unknown,
+  ) {
+    super(message, 0, 'PROOF_NOT_ASSIGNED', { details: { intentId, reason }, body: transaction });
+    this.name = 'CertenProofNotAvailableError';
+  }
+}
+
+/**
+ * The client refused to send a request to a url outside its own gateway's origin, before anything was sent.
+ *
+ * Raised for a url a response told the client to follow (`submit_url`), for any request url that resolves to another origin or
+ * carries credentials, and for a redirect to another host. `details.url` is the url that was refused, `details.baseUrl` the
+ * origin the client is bound to and `details.source` where the url came from. Status 0, not retryable: repeating it would send
+ * the same url, and the safe answer is to distrust whatever produced it.
+ */
+export class CertenForeignOriginError extends CertenError {
+  constructor(
+    message: string,
+    public readonly url: string,
+    public readonly baseUrl: string,
+    public readonly source: string,
+  ) {
+    super(message, 0, 'FOREIGN_ORIGIN_URL', { details: { url, baseUrl, source } });
+    this.name = 'CertenForeignOriginError';
   }
 }
 

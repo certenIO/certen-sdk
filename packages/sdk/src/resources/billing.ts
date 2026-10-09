@@ -18,6 +18,7 @@ import type {
   ReceiptVerification,
   Pagination,
 } from '../types.js';
+import { apiPath } from '../internal.js';
 
 
 /**
@@ -125,7 +126,7 @@ export class BillingResource {
    * `quote()` CREATES; this one READS. Requires `billing:read`.
    */
   async quoteById(id: string): Promise<QuoteResponse & { seconds_remaining: number | null }> {
-    const { data } = await this.http.get(`/v1/quote/${encodeURIComponent(id)}`);
+    const { data } = await this.http.get(apiPath`/v1/quote/${id}`);
     // `seconds_remaining` is computed HERE rather than left to the caller.
     //
     // The question anyone reads a quote back to answer is "can I still use this?", and answering it
@@ -218,7 +219,7 @@ export class BillingResource {
    * receipt is in a log that was anchored on Accumulate.
    */
   async receipt(id: string): Promise<Receipt> {
-    const { data } = await this.http.get(`/v1/billing/receipts/${encodeURIComponent(id)}`);
+    const { data } = await this.http.get(apiPath`/v1/billing/receipts/${id}`);
     return data;
   }
 
@@ -234,7 +235,7 @@ export class BillingResource {
    */
   async receiptProof(id: string, params: { treeSize?: number } = {}): Promise<ReceiptProof> {
     const { data } = await this.http.get(
-      `/v1/billing/receipts/${encodeURIComponent(id)}/proof`,
+      apiPath`/v1/billing/receipts/${id}/proof`,
       params.treeSize ? { params: { tree_size: params.treeSize } } : undefined,
     );
     return data;
@@ -342,7 +343,7 @@ export class BillingResource {
 
   async payment(reference: string): Promise<DepositIntentStatus> {
     const { data } = await this.http.get(
-      `/v1/billing/deposits/${encodeURIComponent(reference)}`,
+      apiPath`/v1/billing/deposits/${reference}`,
     );
     // The response IS the intent. It used to arrive under an `intent` key with nothing beside it,
     // so the wrapper carried no information — the clearest case of the inconsistency the gateway's

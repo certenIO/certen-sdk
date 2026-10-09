@@ -80,7 +80,8 @@ describe('the three live chains are unchanged', () => {
 
   it('are still refused when the gateway, per a fresh cache, positively does not serve them', () => {
     writeChainCache([SERVED_3[0], SERVED_3[2]]);
-    expect(() => assertChain('base-sepolia')).toThrowError(/the gateway does not serve it/);
+    // Not in the gateway's list at all: to the gateway it is an unknown chain, which is not the same as switched off.
+    expect(() => assertChain('base-sepolia')).toThrowError(/the gateway does not list it at all \(unknown_chain/);
   });
 });
 
@@ -104,10 +105,11 @@ describe('Telcoin Adiri (2017): off by default, on with configuration AND the ga
   it('is refused when enabled but the gateway does not serve it, or lists it disabled', () => {
     process.env.CERTEN_ENABLED_CHAINS = ENABLE_ADIRI;
     writeChainCache(SERVED_3);
-    expect(() => assertChain('telcoin-adiri')).toThrowError(/the gateway does not serve it/);
+    expect(() => assertChain('telcoin-adiri')).toThrowError(/the gateway does not list it at all \(unknown_chain/);
     writeChainCache([...SERVED_3, { ...ADIRI, enabled: false }]);
     expect(readChainCache()?.disabled).toEqual(['telcoin-adiri']);
-    expect(() => assertChain('telcoin-adiri')).toThrowError(/the gateway does not serve it/);
+    // Listed and switched off is a different fact with a different name.
+    expect(() => assertChain('telcoin-adiri')).toThrowError(/the gateway has it switched off \(chain_not_enabled/);
   });
 
   it('is refused when enabled but there is no fresh answer from the gateway', () => {
