@@ -13,7 +13,6 @@ import {
   messageHash,
   networkDefinition,
   networkGlobals,
-  normalize,
   sameUrl,
   sequencedMessage,
   transaction,
@@ -130,7 +129,7 @@ export class Spine {
 /** checkDirectorySelfAnchor. */
 function directorySelfAnchor(j: unknown, label: string): { msg: any; body: any } {
   const msg = sequencedMessage(j, `${label}.anchor`);
-  const n = normalize(j) as any;
+  const n = j as any;
   const txm = n.message;
   if (!txm || txm.type !== 'transaction' || !txm.transaction) fail(`${label}: anchor is not a transaction`);
   const body = txm.transaction.body;
@@ -166,9 +165,9 @@ function applyProvenUpdate(u: any, root: Uint8Array, label: string): Omit<Applie
   if (!equal(r.start, h)) fail(`${label}: network update receipt does not start at the transaction`);
   if (!equal(r.anchor, root)) fail(`${label}: network update receipt does not end at the anchor's root`);
   if (!receiptValid(r)) fail(`${label}: invalid network update receipt`);
-  const body = normalize(u.transaction).body ?? {};
+  const body = u.transaction.body ?? {};
   if (body.type !== 'writeData') return undefined; // other types do not affect the consensus validator set
-  const principal = String(normalize(u.transaction).header?.principal ?? '');
+  const principal = String(u.transaction.header?.principal ?? '');
   if (sameUrl(principal, 'acc://dn.acme/network') || sameUrl(principal, 'acc://dn.acme/globals')) {
     fail(`network_update_unsupported: ${label} writes ${principal}; this verifier cannot decode the written record`);
   }
@@ -181,5 +180,5 @@ export function genesisGlobals(networkJson: unknown, networkRecord: Uint8Array, 
   if (!equal(encodeObject(def), networkRecord)) fail('genesis network: the JSON does not re-encode to the record');
   const glob = networkGlobals(globalsJson);
   if (!equal(encodeObject(glob), globalsRecord)) fail('genesis globals: the JSON does not re-encode to the record');
-  return { network: normalize(networkJson), networkRecord, globals: normalize(globalsJson), globalsRecord };
+  return { network: networkJson, networkRecord, globals: globalsJson, globalsRecord };
 }

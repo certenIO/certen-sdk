@@ -9,21 +9,6 @@ import { encode } from 'accumulate-sdk-opendlt/encoding';
 import { keccak256 as sdkKeccak256 } from 'accumulate-sdk-opendlt/common';
 import { equal, fail, hexBytes, MerkleState, sha256, uvarint } from './bytes.js';
 
-/**
- * Go marshals a zero time.Time to JSON as "0001-01-01T00:00:00Z" but omits it from the binary encoding; the SDK would
- * encode the string as a real time. Dropping it reproduces Go's bytes. Nothing else is altered.
- */
-const ZERO_TIME = '0001-01-01T00:00:00Z';
-export function normalize<T>(v: T): T {
-  if (Array.isArray(v)) return v.map(normalize) as T;
-  if (v && typeof v === 'object') {
-    const o: Record<string, unknown> = {};
-    for (const [k, x] of Object.entries(v as Record<string, unknown>)) if (x !== ZERO_TIME) o[k] = normalize(x);
-    return o as T;
-  }
-  return v;
-}
-
 export function keccak256(data: Uint8Array): Uint8Array {
   return new Uint8Array(sdkKeccak256(data));
 }
@@ -45,7 +30,7 @@ export function encodeObject(o: unknown): Uint8Array {
  */
 export function sequencedMessage(j: unknown, label: string): any {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
-  const n = normalize(j) as Record<string, unknown>;
+  const n = j as Record<string, unknown>;
   if (n.type !== 'sequenced') fail(`${label}: is ${String(n.type)}, not a sequenced message`);
   const msg = messaging.Message.fromObject(n as any) as any;
   if (n.message !== undefined) msg.message = messaging.Message.fromObject(n.message as any);
@@ -64,7 +49,7 @@ export function transactionHash(tx: any): Uint8Array {
 
 export function transaction(j: unknown, label: string): any {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
-  return new (core as any).Transaction(normalize(j));
+  return new (core as any).Transaction(j);
 }
 
 /**
@@ -87,18 +72,18 @@ function blacklistMask(names: unknown, label: string): number {
 
 export function account(j: unknown, label: string): any {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
-  const n = normalize(j) as Record<string, unknown>;
+  const n = j as Record<string, unknown>;
   const a = (core as any).Account.fromObject(n);
   if (n.type === 'keyPage' && n.transactionBlacklist !== undefined) a.transactionBlacklist = blacklistMask(n.transactionBlacklist, label);
   return a;
 }
 
 export function networkDefinition(j: unknown): any {
-  return new (core as any).NetworkDefinition(normalize(j));
+  return new (core as any).NetworkDefinition(j);
 }
 
 export function networkGlobals(j: unknown): any {
-  return new (core as any).NetworkGlobals(normalize(j));
+  return new (core as any).NetworkGlobals(j);
 }
 
 /** URL equality as Go's url.URL.Equal: case-insensitive. */
@@ -130,7 +115,7 @@ function ed25519(pub: Uint8Array, msg: Uint8Array, sig: Uint8Array): boolean {
  */
 export function verifySignature(sigJson: unknown, msgHash: Uint8Array, label: string): boolean {
   if (!sigJson || typeof sigJson !== 'object') fail(`${label}: missing`);
-  const s = normalize(sigJson) as Record<string, unknown>;
+  const s = sigJson as Record<string, unknown>;
   if (s.type !== 'ed25519') fail(`${label}: signature type ${String(s.type)} is not supported by this verifier`);
   const pub = hexBytes(s.publicKey, `${label}.publicKey`);
   const sig = hexBytes(s.signature, `${label}.signature`);
