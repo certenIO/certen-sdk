@@ -60,6 +60,9 @@ jobs:
         run: npm run check:node
       - name: Workspace pins
         run: npm run check:pins
+      # Install-time scripts are a reviewed allow-list, and none may reach a production install.
+      - name: Install scripts
+        run: npm run check:scripts
 
   # A published package is only as good as its tarball. `files`, `exports`, and `prepack` are all easy to
   # get wrong in ways that install cleanly and fail on first import — and npm versions are immutable, so

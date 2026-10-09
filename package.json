@@ -31,7 +31,8 @@
     "check:node": "node scripts/check-node-policy.mjs",
     "check:pins": "node scripts/check-workspace-pins.mjs",
     "test:counts": "node scripts/test-counts.mjs",
-    "test:counts:write": "node scripts/test-counts.mjs --write"
+    "test:counts:write": "node scripts/test-counts.mjs --write",
+    "check:scripts": "node scripts/check-install-scripts.mjs"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
