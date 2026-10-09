@@ -116,6 +116,10 @@ export function verifyProofDocument(doc: unknown, opts: VerifyOptions = {}): Ver
   let govRootV3: string | undefined;
   if (!report) {
     layers.push({ ...grBase, verdict: 'not_checked', evidence: {}, reason: failedLayer ? `not reached: ${failedLayer} failed` : 'not reached' });
+  } else if (report.setVerdict !== 'verified') {
+    // govRoot v3 commits a validator set proven from genesis (it fails closed on anything weaker, as Go does). A set that changed after genesis is a
+    // capability limit of the evidence, not a tamper, so this is not_checked and the overall result is partial, never failed.
+    layers.push({ ...grBase, verdict: 'not_checked', evidence: { setVerdict: report.setVerdict }, reason: `the validator set is ${String(report.setVerdict)}, not verified from genesis, so govRoot v3 cannot be derived` });
   } else if (!(doc as { govRootV3Inputs?: unknown }).govRootV3Inputs) {
     layers.push({ ...grBase, verdict: 'not_checked', evidence: {}, reason: 'the document carries no govRootV3Inputs' });
   } else {
