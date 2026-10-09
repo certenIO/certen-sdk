@@ -34,7 +34,7 @@ function docRows(): DocRow[] {
   const rows: DocRow[] = [];
   const section = ERRORS_MD.split('## Error Codes')[1]?.split('\n## ')[0] ?? '';
   for (const line of section.split('\n')) {
-    const m = line.match(/^\|\s*`([A-Z_]+)`\s*\|\s*([0-9]+|—)\s*\|\s*(yes|no)\s*\|/);
+    const m = line.match(/^\|\s*`([A-Z0-9_]+)`\s*\|\s*([0-9]+|—)\s*\|\s*(yes|no)\s*\|/);
     if (!m) continue;
     rows.push({
       code: m[1],
