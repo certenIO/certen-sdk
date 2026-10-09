@@ -165,8 +165,11 @@ describe('CertenClient.retry', () => {
       // gaps between attempts should grow (modulo jitter)
       const gaps = timestamps.slice(1).map((t, i) => t - timestamps[i]);
       expect(gaps.length).toBe(3);
-      // last gap should be >= first gap (allowing jitter slack)
-      expect(gaps[gaps.length - 1]).toBeGreaterThanOrEqual(gaps[0] - 5);
+      // Each wait is `base + jitter` with jitter in [0, base), so a gap can only be longer than its base delay (20, 40, 80 ms),
+      // never shorter. Asserting the floor per attempt pins the exponential curve and cannot be broken by a stall that
+      // lengthens an earlier gap, which the previous "last gap >= first gap" comparison could (it failed on Node 24 under load).
+      const floors = [20, 40, 80];
+      gaps.forEach((gap, i) => expect(gap).toBeGreaterThanOrEqual(floors[i] - 5));
     } finally {
       await srv.close();
     }
@@ -418,7 +421,8 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
       const t0 = Date.now();
       await new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url })
         .identity.createAndWait({ name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) });
-      expect(Date.now() - t0).toBeLessThan(200);
+      // An invented delay would be the 3s default interval; stay well under it without being sensitive to a loaded machine.
+      expect(Date.now() - t0).toBeLessThan(2_500);
     } finally {
       await s.close();
     }
@@ -443,7 +447,8 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
           { name: 'x', publicKey: 'a'.repeat(64), publicKeyHash: 'b'.repeat(64) },
           { intervalMs: 5 },
         );
-      expect(Date.now() - t0).toBeLessThan(1_000);
+      // Honouring the published first poll would take 30s; 10s separates the two without depending on machine load.
+      expect(Date.now() - t0).toBeLessThan(10_000);
     } finally {
       await s.close();
     }
@@ -469,7 +474,8 @@ describe('createAndWait honours the cadence the gateway publishes', () => {
             { timeoutMs: 300 },
           ),
       ).rejects.toThrow();
-      expect(Date.now() - t0).toBeLessThan(3_000);
+      // The published first poll is 30s and the budget 300ms; 10s separates "capped by the budget" from "waited the advertised delay".
+      expect(Date.now() - t0).toBeLessThan(10_000);
     } finally {
       await s.close();
     }

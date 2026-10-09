@@ -57,12 +57,12 @@
     "access": "public"
   },
   "dependencies": {
-    "axios": "^1.7.0"
+    "axios": "^1.20.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.5.0",
-    "vitest": "^1.6.1",
-    "@types/node": "^22.0.0"
+    "vitest": "^5.0.3"
   },
   "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself."
 }

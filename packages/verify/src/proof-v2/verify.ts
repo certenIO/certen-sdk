@@ -4,7 +4,7 @@
  * failure throws VerifyError; there is no weaker answer for the transaction, its certification or its pages. The
  * validator-set check's verdict is reported as is.
  */
-import { account, encodeObject, keccak256, networkDefinition, networkGlobals, normalize, sameUrl, sequencedMessage, transactionHash } from './accumulate.js';
+import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sameUrl, sequencedMessage, transactionHash } from './accumulate.js';
 import { accumulateSetRoot, validatorsOf } from './accset.js';
 import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
@@ -127,7 +127,7 @@ export function verifyPortable(doc: any): Report {
 
   // The partition anchor (page.go anchorBody), proven into the same certified root.
   const msg = sequencedMessage(ev.anchor?.message, 'partition anchor');
-  const n = normalize(ev.anchor.message) as any;
+  const n = ev.anchor.message as any;
   const body = n.message?.transaction?.body;
   if (n.message?.type !== 'transaction' || !body) fail('partition anchor is not a transaction');
   if (body.type !== 'blockValidatorAnchor') fail(`partition anchor is ${body.type}, not a block validator anchor`);
@@ -154,7 +154,7 @@ export function verifyPortable(doc: any): Report {
     if (!equal(pr.start, sha256(state))) fail(`page: ${p.url}: the receipt does not start at the state's hash`);
     if (!equal(pr.anchor, stateRoot)) fail(`page: ${p.url}: the receipt ends at ${toHex(pr.anchor)}, not the block's state root ${toHex(stateRoot)}`);
     if (!receiptValid(pr)) fail(`page: ${p.url}: the receipt does not validate`);
-    const url = String((normalize(p.account) as any).url ?? '');
+    const url = String((p.account as any).url ?? '');
     if (typeof p.url !== 'string' || !sameUrl(url, p.url)) fail(`page: the proven state is ${url}, not ${p.url}`);
     pages.push(acct);
     pageChains.push(pageChain(p, pr));
@@ -223,7 +223,7 @@ function provenAccount(pa: any, label: string): Proven {
   if (!pa) fail(`set check ${label}: missing`);
   const acct = account(pa.account, `set check ${label}`);
   const state = encodeObject(acct);
-  const n = normalize(pa.account) as any;
+  const n = pa.account as any;
   if (n.type !== 'dataAccount' || !n.entry || !Array.isArray(n.entry.data) || n.entry.data.length !== 1) {
     fail(`set check ${label}: ${pa.accountUrl} is not a one-entry data account`);
   }
@@ -238,7 +238,7 @@ function provenAccount(pa: any, label: string): Proven {
 
   // 13. the chain history is bound.
   const mainHeight = chainBinding(r, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
-  return { root: r.anchor, entry, record: normalize(pa.record), mainHeight };
+  return { root: r.anchor, entry, record: pa.record, mainHeight };
 }
 
 /**

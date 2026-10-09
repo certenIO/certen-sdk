@@ -1,0 +1,230 @@
+{
+  "//": "Production advisories that remain because accumulate-sdk-opendlt 2.5.2 still declares axios ^0.27.2 and sprintf-js (RB7b F9/F11). Each is listed by id with an expiry and the upstream ask that removes it (drafts are under the runbook folder evidence/rb7b/upstream/, posted by the owner). scripts/check-audit.mjs fails CI for any other id, for an expired entry, and for an entry the audit no longer reports.",
+  "residuals": [
+    {
+      "advisory": "GHSA-3g43-6gmg-66jw",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "axios Vulnerable to Credential Theft and Response Hijacking via Prototype Pollution Gadget in Config Merge",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-3p68-rc4w-qgx5",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios has a NO_PROXY Hostname Normalization Bypass that Leads to SSRF",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-43fc-jf86-j433",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios is Vulnerable to Denial of Service via __proto__ Key in mergeConfig",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-5c9x-8gcm-mpgx",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios' HTTP adapter-streamed uploads bypass maxBodyLength when maxRedirects: 0",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-62hf-57xw-28j9",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: unbounded recursion in toFormData causes DoS via deeply nested request data",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-6chq-wfr3-2hj9",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Header Injection via Prototype Pollution",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-7q8q-rj6j-mhjq",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Nested axios option objects can consume polluted prototype values",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-898c-q2cr-xwhg",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "axios has DoS & Header Injection via Prototype Pollution Read-Side Gadgets in axios merge functions",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-9fr6-4gfg-395g",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Prototype-Pollution Gadget in the Default Instance Allows Inherited Object.prototype.method to Override HTTP Method",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-fvcv-3m26-pcqx",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios has Unrestricted Cloud Metadata Exfiltration via Header Injection Chain",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-hfxv-24rg-xrqf",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Regular Expression Denial of Service (ReDoS) via Cookie Name Injection",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-hp3w-g68c-fv3c",
+      "package": "sprintf-js",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "sprintf-js vulnerable to denial of service through unbounded precision specifiers",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/02-sprintf-js.md"
+    },
+    {
+      "advisory": "GHSA-j5f8-grm9-p9fc",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Proxy-Authorization header leaks to redirect target when proxy is re-evaluated to direct connection",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-jr5f-v2jv-69x6",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "axios Requests Vulnerable To Possible SSRF and Credential Leakage via Absolute URL",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-m7pr-hjqh-92cm",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: no_proxy bypass via IP alias allows SSRF",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-mmx7-hfxf-jppx",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Prototype pollution gadgets can alter axios request construction",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-p92q-9vqr-4j8v",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Proxy-Authorization Credential Leak to Origin Server Across HTTP-to-HTTPS Redirect in Axios Node.js HTTP Adapter",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-pf86-5x62-jrwf",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Prototype Pollution Gadgets - Response Tampering, Data Exfiltration, and Request Hijacking",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-pjwm-pj3p-43mv",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "axios's shouldBypassProxy does not recognize IPv4-mapped IPv6 addresses, allowing NO_PROXY bypass (incomplete fix for CVE-2025-62718)",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-pmwg-cvhr-8vh7",
+      "package": "axios",
+      "severity": "high",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Incomplete Fix for CVE-2025-62718 — NO_PROXY Protection Bypassed via RFC 1122 Loopback Subnet (127.0.0.0/8) in Axios 1.15.0",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-vf2m-468p-8v99",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: HTTP adapter streamed responses bypass maxContentLength",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-w9j2-pvgh-6h63",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Authentication Bypass via Prototype Pollution Gadget in `validateStatus` Merge Strategy",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-wf5p-g6vw-rhxx",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios Cross-Site Request Forgery Vulnerability",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-xhjh-pmcv-23jw",
+      "package": "axios",
+      "severity": "low",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: Null Byte Injection via Reverse-Encoding in AxiosURLSearchParams",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    },
+    {
+      "advisory": "GHSA-xx6v-rp6x-q39c",
+      "package": "axios",
+      "severity": "moderate",
+      "via": "accumulate-sdk-opendlt@2.5.2 (dependency of @certen.io/proof-verify)",
+      "title": "Axios: XSRF Token Cross-Origin Leakage via Prototype Pollution Gadget in `withXSRFToken` Boolean Coercion",
+      "expires": "2026-12-31",
+      "ask": "evidence/rb7b/upstream/01-axios-and-optional-api-clients.md"
+    }
+  ]
+}

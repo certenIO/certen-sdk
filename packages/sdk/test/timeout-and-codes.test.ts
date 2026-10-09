@@ -75,15 +75,16 @@ describe('configurable request timeout', () => {
       setTimeout(() => res.end(JSON.stringify({ receipt: true })), receiptDelay);
     });
 
-    // Client timeout is tiny, but proof() applies its own longer budget to the receipt fetch.
-    const c = new CertenClient({ apiKey: 'k', baseUrl, timeoutMs: 50, maxRetries: 0 });
-    receiptDelay = 250;
+    // The client timeout is far shorter than the receipt delay, but proof() applies its own longer budget to the receipt fetch.
+    // (300ms still has to cover the plain transaction read on a loaded machine; 900ms is three times it.)
+    const c = new CertenClient({ apiKey: 'k', baseUrl, timeoutMs: 300, maxRetries: 0 });
+    receiptDelay = 900;
     const p = await c.execute.proof('intent-1');
     expect(p.kind).toBe('accumulate-receipt');
 
     // And an explicit override still bounds it.
-    receiptDelay = 400;
-    await expect(c.execute.proof('intent-1', { timeoutMs: 60 })).rejects.toMatchObject({
+    receiptDelay = 1_500;
+    await expect(c.execute.proof('intent-1', { timeoutMs: 200 })).rejects.toMatchObject({
       code: 'NETWORK_ERROR',
     });
   });

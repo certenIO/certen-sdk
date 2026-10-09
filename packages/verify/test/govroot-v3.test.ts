@@ -255,7 +255,9 @@ describe('govRoot v3 of the live Kermit proof (pkg/intentcert)', () => {
   });
 });
 
-describe('proof v2 behaviour govRoot v3 relies on (pkg/proof/v2, cross-checked against the Go verifier)', () => {
+// Each test here runs verifyPortable over the 491-block spine one to three times (about 1-5s alone); the default 20s is too tight when the
+// whole suite shares a loaded machine, so these say how long they may take.
+describe('proof v2 behaviour govRoot v3 relies on (pkg/proof/v2, cross-checked against the Go verifier)', { timeout: 120_000 }, () => {
   it('checks the set at the certified block itself when the check has no runs of its own', () => {
     const want = verifyPortable(JSON.parse(base));
     const doc = JSON.parse(base);

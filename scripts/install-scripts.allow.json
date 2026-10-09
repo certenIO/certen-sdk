@@ -1,0 +1,9 @@
+{
+  "//": "Dependencies whose install-time scripts are allowed to run, each with the reason. scripts/check-install-scripts.mjs fails CI for anything else, and for an entry that reaches a production install.",
+  "allowed": [
+    {
+      "package": "fsevents",
+      "reason": "macOS-only optional file-watcher addon pulled in by vite for local test watching; development-only, never installed for a consumer of @certen.io/*."
+    }
+  ]
+}

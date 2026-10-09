@@ -47,12 +47,15 @@
   "//dependencies": "@certen.io/sdk MUST be a version range, not file:../sdk. A published package carrying a file: dependency installs and then fails to resolve on the consumer's machine, because that path does not exist there. Local development uses `npm link` or a workspace instead.",
   "dependencies": {
     "@certen.io/sdk": "^0.9.0",
-    "commander": "^12.0.0"
+    "commander": "^14.0.3"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.5.0",
-    "vitest": "^1.6.1",
-    "@types/node": "^22.0.0"
+    "vitest": "^5.0.3"
   },
-  "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself."
+  "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself.",
+  "optionalDependencies": {
+    "@napi-rs/keyring": "2.1.0"
+  }
 }

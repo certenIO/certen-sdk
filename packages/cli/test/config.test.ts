@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, statSync, chmodSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync, readFileSync, statSync, chmodSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -12,7 +12,7 @@ vi.mock('os', async (orig) => {
 });
 
 // Single import path; we reset the module registry between tests so
-// state (e.g. saved keytar mocks) doesn't leak.
+// state (e.g. saved keyring mocks) doesn't leak.
 async function loadConfig(): Promise<typeof import('../src/config.js')> {
   return import('../src/config.js');
 }
@@ -26,7 +26,7 @@ beforeEach(() => {
 
 afterEach(() => {
   try { rmSync(scratch, { recursive: true, force: true }); } catch { /* noop */ }
-  vi.doUnmock('keytar');
+  vi.doUnmock('@napi-rs/keyring');
 });
 
 const CONFIG_FILE = () => join(scratch, '.certen', 'config.json');
@@ -87,28 +87,36 @@ describe('CLI config: file storage', () => {
   });
 });
 
+/** An in-memory stand-in for @napi-rs/keyring's AsyncEntry, keyed by service and account like the OS store. */
+function memoryKeyring(): { AsyncEntry: new (service: string, account: string) => unknown; store: Map<string, string> } {
+  const store = new Map<string, string>();
+  class AsyncEntry {
+    private readonly k: string;
+    constructor(service: string, account: string) { this.k = `${service}/${account}`; }
+    async setPassword(v: string): Promise<void> { store.set(this.k, v); }
+    async getPassword(): Promise<string | undefined> { return store.get(this.k); }
+    async deletePassword(): Promise<boolean> { return store.delete(this.k); }
+  }
+  return { AsyncEntry, store };
+}
+
 describe('CLI config: keyring storage', () => {
-  it('round-trips via the keyring when storage=keyring', async () => {
-    vi.doMock('keytar', () => ({
-      setPassword: vi.fn().mockResolvedValue(undefined),
-      getPassword: vi.fn().mockResolvedValue('ck_live_FROM_KEYRING'),
-      deletePassword: vi.fn().mockResolvedValue(true),
-    }));
+  it('stores in, reads from and deletes from the OS keyring when storage=keyring', async () => {
+    const kr = memoryKeyring();
+    vi.doMock('@napi-rs/keyring', () => kr);
     const c = await loadConfig();
     await c.setApiKey('ck_live_setviakeyring', true);
+    expect(kr.store.get('certen/api_key')).toBe('ck_live_setviakeyring');
     const raw = JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8'));
     expect(raw.storage).toBe('keyring');
     expect(raw.api_key).toBeUndefined();
-    const v = await c.getApiKey();
-    expect(v).toBe('ck_live_FROM_KEYRING');
+    expect(await c.getApiKey()).toBe('ck_live_setviakeyring');
+    await c.clearApiKey();
+    expect(kr.store.size).toBe(0);
   });
 
   it('round-2 #43: persists key_prefix in config.json when storing in the keyring', async () => {
-    vi.doMock('keytar', () => ({
-      setPassword: vi.fn().mockResolvedValue(undefined),
-      getPassword: vi.fn().mockResolvedValue('ck_live_prefixedkey'),
-      deletePassword: vi.fn().mockResolvedValue(true),
-    }));
+    vi.doMock('@napi-rs/keyring', () => memoryKeyring());
     const c = await loadConfig();
     await c.setApiKey('ck_live_prefixedkey', true);
     const raw = JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8'));
@@ -118,16 +126,61 @@ describe('CLI config: keyring storage', () => {
   });
 
   it('clears key_prefix on logout', async () => {
-    vi.doMock('keytar', () => ({
-      setPassword: vi.fn().mockResolvedValue(undefined),
-      getPassword: vi.fn().mockResolvedValue('ck_live_x'),
-      deletePassword: vi.fn().mockResolvedValue(true),
-    }));
+    vi.doMock('@napi-rs/keyring', () => memoryKeyring());
     const c = await loadConfig();
     await c.setApiKey('ck_live_x_prefix', true);
     await c.clearApiKey();
     const raw = JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8'));
     expect(raw.key_prefix).toBeUndefined();
+  });
+
+  it('refuses by name, and never falls back to a file, when the keyring module cannot load', async () => {
+    vi.doMock('@napi-rs/keyring', () => { throw new Error('native binary missing'); });
+    const c = await loadConfig();
+    await expect(c.setApiKey('ck_live_nokeyring', true)).rejects.toThrow(/@napi-rs\/keyring.*could not be loaded.*--no-keyring/);
+    expect(existsSync(CONFIG_FILE())).toBe(false);
+
+    // A config already pointing at the keyring cannot be satisfied from a file either.
+    mkdirSync(join(scratch, '.certen'), { recursive: true });
+    writeFileSync(CONFIG_FILE(), JSON.stringify({ storage: 'keyring', api_key: 'ck_live_stale_in_file' }));
+    await expect(c.getApiKey()).rejects.toMatchObject({ code: 'KEYRING_UNAVAILABLE' });
+  });
+
+  it('names what to do, and writes nothing else, when the platform keyring itself refuses', async () => {
+    class Refusing { async setPassword(): Promise<void> { throw new Error("Couldn't access platform storage: PermissionDenied"); } async getPassword(): Promise<string | undefined> { throw new Error('no secret service'); } async deletePassword(): Promise<boolean> { return false; } }
+    vi.doMock('@napi-rs/keyring', () => ({ AsyncEntry: Refusing }));
+    const c = await loadConfig();
+    await expect(c.setApiKey('ck_live_headless', true)).rejects.toThrow(/OS keyring refused the key \(Couldn't access platform storage: PermissionDenied\).*--no-keyring.*CERTEN_API_KEY/);
+    expect(existsSync(CONFIG_FILE())).toBe(false);
+    mkdirSync(join(scratch, '.certen'), { recursive: true });
+    writeFileSync(CONFIG_FILE(), JSON.stringify({ storage: 'keyring' }));
+    await expect(c.getApiKey()).rejects.toMatchObject({ code: 'KEYRING_UNAVAILABLE', message: expect.stringMatching(/could not be read \(no secret service\)/) });
+  });
+
+  it('declares the maintained module, not the archived keytar, and loads it on this platform', async () => {
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
+    expect(pkg.optionalDependencies?.['@napi-rs/keyring']).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(JSON.stringify(pkg)).not.toMatch(/keytar/);
+    const real = await import('@napi-rs/keyring');
+    // Loading proves the prebuilt native binary matches this platform. Constructing an entry is deliberately not asserted:
+    // on a headless Linux box it touches the (absent) secret service and refuses, which the test above pins by name.
+    expect(typeof real.AsyncEntry).toBe('function');
+  });
+
+  it('logout does not claim success when the saved key cannot be removed from the keyring', async () => {
+    vi.doMock('@napi-rs/keyring', () => { throw new Error('native binary missing'); });
+    const c = await loadConfig();
+    mkdirSync(join(scratch, '.certen'), { recursive: true });
+    writeFileSync(CONFIG_FILE(), JSON.stringify({ storage: 'keyring', key_prefix: 'ck_live_pref' }));
+    await expect(c.clearApiKey()).rejects.toMatchObject({ code: 'KEYRING_UNAVAILABLE', message: expect.stringMatching(/cannot be removed from it/) });
+    expect(JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8'))).toMatchObject({ storage: 'keyring', key_prefix: 'ck_live_pref' });
+
+    vi.resetModules();
+    class Refusing { async setPassword(): Promise<void> {} async getPassword(): Promise<string | undefined> { return undefined; } async deletePassword(): Promise<boolean> { throw new Error('no secret service'); } }
+    vi.doMock('@napi-rs/keyring', () => ({ AsyncEntry: Refusing }));
+    const c2 = await loadConfig();
+    await expect(c2.clearApiKey()).rejects.toMatchObject({ code: 'KEYRING_UNAVAILABLE', message: expect.stringMatching(/could not be removed from the OS keyring \(no secret service\)/) });
+    expect(JSON.parse(readFileSync(CONFIG_FILE(), 'utf-8')).storage).toBe('keyring');
   });
 });
 

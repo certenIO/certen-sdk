@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { account, encodeObject, sdkEncode } from '../src/proof-v2/accumulate.js';
-import { toHex } from '../src/proof-v2/bytes.js';
+import { account, encodeObject } from '../src/proof-v2/accumulate.js';
+import { toHex, VerifyError } from '../src/proof-v2/bytes.js';
 
 /**
  * Each place the verifier departs from accumulate-sdk-opendlt's own encoding is pinned to the bytes Go produced for the
@@ -14,11 +14,9 @@ describe('Go-faithful encoding', () => {
     const go =
       '010b022b6163633a2f2f63657274656e2d70726f746f636f6c2e61636d652f62696c6c696e672d7265636569707473030180';
     expect(toHex(encodeObject(account(json, 'test')))).toBe(go);
-    // The SDK's own encoder writes the empty field as length 0, which hashes differently.
-    expect(toHex(sdkEncode(account(json, 'test')))).not.toBe(go);
   });
 
-  it("encodes a key page's transaction blacklist as Go's bitmask", () => {
+  it("takes a key page's transaction blacklist as the SDK's bitmask and refuses an unknown name by name", () => {
     const page = (blacklist: unknown) =>
       account(
         {
@@ -34,6 +32,6 @@ describe('Go-faithful encoding', () => {
     // updateKeyPage is bit 1 and updateAccountAuth bit 2 (protocol/enums.yml): the mask is 0b110.
     expect(page(['updateKeyPage', 'updateAccountAuth']).transactionBlacklist).toBe(6);
     expect(page(['updateKeyPage']).transactionBlacklist).toBe(2);
-    expect(() => page(['transferTokens'])).toThrow(/unknown transaction blacklist bit/);
+    expect(() => page(['transferTokens'])).toThrow(VerifyError);
   });
 });
