@@ -233,7 +233,12 @@ export function parseEnabledChains(setting: string | undefined | null): string[]
 export interface ServedChain {
   id: string;
   chainId?: number | null;
-  /** Present once the gateway publishes its enable switch; `false` means listed but not served. */
+  /**
+   * The gateway's enable switch for this chain. A gateway that follows the contract lists EVERY catalogue chain with an explicit
+   * boolean, so `false` means "exists, switched off" (`chain_not_enabled`) and a chain that is not listed at all means "the gateway
+   * does not know it" (`unknown_chain`). An entry with no `enabled` field comes from a gateway that listed only the chains it
+   * served, and is treated as enabled.
+   */
   enabled?: boolean;
 }
 
@@ -247,7 +252,13 @@ export type ChainAvailability =
   | { state: 'unknown'; chain: string }
   | { state: 'retired'; chain: ChainCatalogueEntry }
   | { state: 'not-configured'; chain: ChainCatalogueEntry }
-  | { state: 'not-served'; chain: ChainCatalogueEntry };
+  /**
+   * The gateway's list does not contain this chain. To the gateway it is an unknown chain (`unknown_chain`). This is NOT "disabled":
+   * omission and an explicit `enabled: false` are different facts and a caller acts differently on each.
+   */
+  | { state: 'unlisted'; chain: ChainCatalogueEntry; code: 'unknown_chain' }
+  /** The gateway lists this chain with `enabled: false`: it exists and is switched off (`chain_not_enabled`). */
+  | { state: 'disabled'; chain: ChainCatalogueEntry; code: 'chain_not_enabled' };
 
 /**
  * Is `chain` available to use, given the configured set and (when known) what the gateway serves?
@@ -267,7 +278,8 @@ export function chainAvailability(
   if (!configured.includes(info.slug)) return { state: 'not-configured', chain: info };
   if (served !== undefined) {
     const entry = served.find((s) => chainSlug(s.id) === info.slug || (s.chainId !== null && s.chainId === info.chainId));
-    if (!entry || !gatewayServes(entry)) return { state: 'not-served', chain: info };
+    if (!entry) return { state: 'unlisted', chain: info, code: 'unknown_chain' };
+    if (!gatewayServes(entry)) return { state: 'disabled', chain: info, code: 'chain_not_enabled' };
   }
   return { state: 'enabled', chain: info };
 }
