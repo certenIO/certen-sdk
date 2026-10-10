@@ -146,7 +146,7 @@ jobs:
       # A maintainer approves each staged version with their own two-factor proof (npmjs.com, or `npm stage approve <stage-id>`), so a
       # compromised workflow or repository cannot put a release in front of users. On npmjs.com the trusted publisher for each package
       # leaves "Allow npm publish" UNCHECKED. There is no token and no direct-publish fallback.
-      - name: Stage the package (dry run: check only)
+      - name: "Stage the package (dry run, check only)"
         if: ${{ inputs.dry_run }}
         working-directory: packages/${{ steps.target.outputs.dir }}
         run: npm stage publish --dry-run --access public
