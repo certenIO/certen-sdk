@@ -14,6 +14,7 @@
  * Nothing here reads a `verified` field of a bundle as a verdict. The bundle's own statements are returned under
  * `bundleStatements`, labelled as what the validators claimed, so a caller can show them and can see they were not used.
  */
+import { decodeSharedBundle } from './shared-proof.js';
 import {
   noEvidence,
   verifyProofDocument,
@@ -186,17 +187,12 @@ export async function loadProofEvidence(client: CertenClient, target: string): P
   if (proofId) {
     try {
       const raw = await client.proof.bundle(proofId);
-      if (/json/i.test(raw.contentType)) {
-        try {
-          const parsed: unknown = JSON.parse(Buffer.from(raw.data).toString('utf8'));
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) bundle = parsed as Record<string, unknown>;
-          else bundleError = 'the gateway served a bundle that is not a JSON object';
-        } catch {
-          bundleError = 'the gateway served a bundle with a JSON content type that does not parse';
-        }
-      } else {
-        bundleError = `the gateway served the bundle as ${raw.contentType}, which cannot be checked here`;
-      }
+      // The bytes decide, not the content type: the gateway serves a JSON bundle as application/octet-stream (it streams whatever the
+      // proof service stored), and a bundle can be gzip-compressed. Refusing on the header would drop the execution component from a bundle
+      // that has one, and report an outcome layer as unchecked for the wrong reason.
+      const parsed = decodeSharedBundle({ data: Array.from(raw.data) });
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) bundle = parsed;
+      else bundleError = `the gateway served the bundle as ${raw.contentType}, and its bytes are not a JSON proof bundle this tool can read`;
     } catch (err) {
       if (!(err instanceof CertenError) || err.status < 400) throw err; // the bundle may be unavailable; the document is asked for separately
       bundleError = `the bundle could not be fetched (${err.status})`;
