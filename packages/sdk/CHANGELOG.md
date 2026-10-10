@@ -26,6 +26,7 @@ Every item below is also described in the sections that follow, or in the 0.9.x 
 ### Fixed
 - A foreign `submit_url` or a plain 307 redirect used to receive the API key; ids such as `proof.get("a/../admin")` used to call another endpoint.
 - Four load-sensitive tests (retry backoff, wait timeouts) no longer depend on machine load.
+- `loadProofEvidence` (so `certen proof verify` and `certen_proof_verify`) refused any bundle whose content type was not JSON, but the gateway serves a JSON bundle as `application/octet-stream`; the execution component was dropped and the outcome layer reported as having no execution proof. The bytes are now decoded (JSON or gzip-compressed JSON) whatever the content type. Found by the first live proof, which now verifies end to end (exit 0) with `--rpc`.
 
 ### Included — every external-mode signature is checked first (RB7b Phase F)
 
