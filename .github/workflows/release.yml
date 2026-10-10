@@ -142,10 +142,16 @@ jobs:
           CLAIM=$(node -p "require('./package.json').license")
           head -3 LICENSE | grep -qi "$CLAIM" || { echo "package.json says $CLAIM but LICENSE disagrees"; exit 1; }
 
-      - name: Publish
+      # Staged publishing. The workflow authenticates with OIDC (trusted publishing) and STAGES the version; it cannot make it public.
+      # A maintainer approves each staged version with their own two-factor proof (npmjs.com, or `npm stage approve <stage-id>`), so a
+      # compromised workflow or repository cannot put a release in front of users. On npmjs.com the trusted publisher for each package
+      # leaves "Allow npm publish" UNCHECKED. There is no token and no direct-publish fallback.
+      - name: Stage the package (dry run: check only)
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/${{ steps.target.outputs.dir }}
+        run: npm stage publish --dry-run --access public
+
+      - name: Stage the package for approval
         if: ${{ !inputs.dry_run }}
         working-directory: packages/${{ steps.target.outputs.dir }}
-        # Trusted publishing (OIDC): npmjs.com is configured, per package, to accept this workflow from this repository, and npm
-        # (11.5.1 or newer, which the Node on .nvmrc ships) exchanges the run's id-token for a short-lived publish credential. There is no
-        # long-lived token in this repository's secrets to leak, and no fallback to one: a publish that cannot be attested fails.
-        run: npm publish --provenance --access public
+        run: npm stage publish --provenance --access public

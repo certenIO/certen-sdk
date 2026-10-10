@@ -262,9 +262,11 @@ git tag sdk-v0.2.0 && git push --follow-tags
 ```
 
 Order: `verify-v0.1.0`, then `sdk-v0.10.0`, then `cli-v0.10.0` and `mcp-v0.5.0` (the tag prefix is the package directory). See
-[.github/workflows/release.yml](.github/workflows/release.yml). Publishing uses npm trusted publishing (OIDC): the owner
-configures each package on npmjs.com to accept this workflow, and there is no `NPM_TOKEN` secret and no token fallback. Run the workflow
-first with `dry_run: true` for each package. Never put a token in a local `.npmrc`.
+[.github/workflows/release.yml](.github/workflows/release.yml). Publishing uses npm trusted publishing (OIDC) with **staged publishing**: the owner
+configures each package on npmjs.com to accept this workflow with "Allow npm publish" unchecked, the tagged run STAGES the version, and a
+maintainer approves it with their own two-factor proof (npmjs.com, or `npm stage list` then `npm stage approve <stage-id>`). Approve each
+version and see it in `npm view` before tagging the next. There is no `NPM_TOKEN` secret and no token fallback. Run the workflow first with
+`dry_run: true` for each package. Never put a token in a local `.npmrc`.
 
 ## License
 
