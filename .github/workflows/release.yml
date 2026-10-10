@@ -88,8 +88,21 @@ jobs:
           tar -tzf "$TGZ" | grep -qx "package/LICENSE"       || { echo "LICENSE missing from tarball"; exit 1; }
           if tar -tzf "$TGZ" | grep -q "package/src/"; then echo "src/ leaked into the tarball"; exit 1; fi
 
-          mkdir -p /tmp/consume && cd /tmp/consume && npm init -y >/dev/null
-          npm install "$GITHUB_WORKSPACE/packages/${{ steps.target.outputs.dir }}/$TGZ"
+          mkdir -p /tmp/siblings /tmp/consume && cd /tmp/consume && npm init -y >/dev/null
+          # The packages this one depends on are installed from their own packed tarballs, not fetched: a first release has not put them on
+          # npm yet (cli needs sdk and proof-verify), and a registry copy would test someone else's bytes. What a consumer later gets from
+          # npm for these ranges is exactly what the earlier releases in the order published.
+          case "${{ steps.target.outputs.dir }}" in
+            sdk) SIBLINGS="verify" ;;
+            cli|mcp) SIBLINGS="verify sdk" ;;
+            *) SIBLINGS="" ;;
+          esac
+          SIBTGZ=""
+          for S in $SIBLINGS; do
+            ( cd "$GITHUB_WORKSPACE/packages/$S" && npm pack --pack-destination /tmp/siblings >/dev/null )
+          done
+          if [ -n "$SIBLINGS" ]; then SIBTGZ=$(ls /tmp/siblings/*.tgz); fi
+          npm install $SIBTGZ "$GITHUB_WORKSPACE/packages/${{ steps.target.outputs.dir }}/$TGZ"
 
           # Exercise the artifact ACTUALLY being released. This block used to import @certen.io/sdk
           # whatever the target was, so a cli or mcp release "verified" the SDK that happened to be
