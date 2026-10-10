@@ -31,6 +31,18 @@ describe('the configuration that governs this run', () => {
     expect(Number(match![1].replace(/_/g, ''))).toBeGreaterThanOrEqual(15_000);
   });
 
+  it('gives every package the same timeout when it is the root, because the release workflow tests each package on its own', () => {
+    // `npm test` inside a package makes that package vitest's root, so only its own config applies. mcp had none, and a test that waits on two
+    // real polls failed on the release runner at vitest's 5 s default while passing from the repository root.
+    for (const pkg of ['sdk', 'cli', 'mcp', 'verify']) {
+      const f = join(REPO_ROOT, 'packages', pkg, 'vitest.config.ts');
+      expect(existsSync(f), `packages/${pkg}/vitest.config.ts missing`).toBe(true);
+      const m = /testTimeout:\s*([\d_]+)/.exec(readFileSync(f, 'utf8'));
+      expect(m, `packages/${pkg} declares no testTimeout`).not.toBeNull();
+      expect(Number(m![1].replace(/_/g, ''))).toBeGreaterThanOrEqual(15_000);
+    }
+  });
+
   it('leaves discovery to vitest, so no test file can vanish silently', () => {
     // Declaring `include` at the root is the one change here with a downside worse than the problem:
     // a glob subtly narrower than the default drops files with no failure anywhere. A suite that
