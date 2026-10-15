@@ -1,5 +1,5 @@
-import type { CertenClient, Identity } from '@certen.io/sdk';
-import { CertenIntentFailedError, CertenWaitTimeoutError, describeReasonCode, intentOutcome } from '@certen.io/sdk';
+import type { CertenClient, Identity, ReadinessCheck } from '@certen.io/sdk';
+import { CertenIntentFailedError, CertenWaitTimeoutError, checkGas, describeReasonCode, intentOutcome } from '@certen.io/sdk';
 import { CliError, EXIT } from './errors.js';
 import { human, isJsonMode } from './output.js';
 import { parseSpanMs } from './duration.js';
@@ -27,8 +27,28 @@ export const IDENTITY_WAIT = { timeoutMin: 5, intervalSec: 3 };
  * test faster — it is not a tunable delay.
  */
 export const TX_WAIT = { timeoutMin: 7, intervalSec: 8 };
+/**
+ * Waiting for gas to arrive in an abstract account is waiting for a person (a faucet form, then a wallet confirmation) and then a block, so
+ * it is minutes, not seconds. Half an hour is generous and still bounded: an unbounded wait is a hang to anything that is not a person.
+ */
+export const GAS_WAIT = { timeoutMin: 30, intervalSec: 6 };
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => { setTimeout(r, ms); });
+
+/**
+ * Sleep, but stop the moment the signal fires.
+ *
+ * Resolves rather than rejects on abort: the caller checks the signal itself, and a wait that unwinds through a rejection would have to be
+ * caught in every place that waits.
+ */
+export function sleepUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
+}
 
 /**
  * Should this invocation wait?
@@ -240,5 +260,75 @@ export async function waitForTransaction(
       );
     }
     throw new CliError(message.replace(/^certen: /, ''), 'TX_FAILED', EXIT.FAILED);
+  }
+}
+
+/**
+ * Is this gas reading a gap that SENDING FUNDS fixes?
+ *
+ * An empty or short account is. So is one whose balance the gateway has not reported yet (a fresh account may not be indexed for a minute): the
+ * next poll may see it. A gas row that cannot be IDENTIFIED (the wrong token, a chain this client does not know) is not fixed by sending
+ * anything, and waiting for it would be waiting for nothing. Used by `setup` and `gas` so they agree on when a wait is worth starting.
+ */
+export function gasGapIsFundable(check: ReadinessCheck): boolean {
+  if (check.status === 'fail') return check.code === 'ABSTRACT_ACCOUNT_UNFUNDED' || check.code === 'ABSTRACT_ACCOUNT_UNDERFUNDED';
+  return check.status === 'unknown' && check.data?.reading === 'no-balances';
+}
+
+/** How a wait for gas ended. A timeout is neither success nor failure: the funds may still arrive, and the caller says how to continue. */
+export type FundsWait =
+  | { result: 'arrived'; check: ReadinessCheck }
+  | { result: 'timeout'; check: ReadinessCheck; waitedMs: number }
+  | { result: 'interrupted'; check?: ReadinessCheck };
+
+/**
+ * Poll one abstract account's gas until it clears the readiness check.
+ *
+ * It asks the SDK's `checkGas`, the very judgement `status` and `readiness()` make, so this wait and those cannot disagree about when an
+ * account counts as funded. One request per poll (the identity read); the registry, the Accumulate key page and the organization's balance
+ * cannot change while someone is at a faucet, and asking for them every few seconds would be noise on the gateway and on a public node.
+ *
+ * - A check that could not be answered (`unknown`) is not an arrival and not a failure: keep asking. Unless the gateway said the credential is
+ *   rejected (401) or the identity is gone (404), which no amount of waiting fixes.
+ * - `onCheck` is called with every reading so the caller can say what it sees. It decides when to speak (only when the balance changes).
+ * - The budget is never shortened to make something feel faster; `sleep`, `now` and `signal` are injectable so a test does not have to wait.
+ */
+export async function waitForGas(
+  client: CertenClient,
+  params: { identityId: string; chain: string; amount?: string; gasReserve?: string | null },
+  budget: WaitBudget,
+  hooks: {
+    onCheck?: (check: ReadinessCheck) => void;
+    sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+    now?: () => number;
+    signal?: AbortSignal;
+  } = {},
+): Promise<FundsWait> {
+  const nap = hooks.sleep ?? sleepUnlessAborted;
+  const now = hooks.now ?? Date.now;
+  const started = now();
+  const deadline = started + budget.timeoutMs;
+  let last: ReadinessCheck | undefined;
+
+  for (;;) {
+    if (hooks.signal?.aborted) return { result: 'interrupted', check: last };
+    const check = await checkGas(client, params);
+    last = check;
+    hooks.onCheck?.(check);
+
+    if (check.status === 'ok' || check.status === 'warn') return { result: 'arrived', check };
+
+    const http = typeof check.data?.status === 'number' ? check.data.status : undefined;
+    if (check.status === 'unknown' && http === 401) {
+      throw new CliError('The gateway rejected this API key while waiting for gas. Sign in again, then run the command again.', 'CREDENTIAL_REJECTED', EXIT.FAILED);
+    }
+    if (check.status === 'unknown' && http === 404) {
+      throw new CliError(`The gateway has no identity ${params.identityId} in this organization any more. Nothing to wait for.`, 'IDENTITY_NOT_FOUND', EXIT.FAILED);
+    }
+
+    const left = deadline - now();
+    if (left <= 0) return { result: 'timeout', check, waitedMs: now() - started };
+    await nap(Math.min(budget.intervalMs, left), hooks.signal);
+    if (hooks.signal?.aborted) return { result: 'interrupted', check: last };
   }
 }

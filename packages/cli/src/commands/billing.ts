@@ -637,7 +637,7 @@ export function registerBillingCommands(program: Command): void {
   program
     .command('fund')
     .argument('<amount>', 'Amount in USD to send, e.g. 25 or 25.50')
-    .description('Get payment details for adding funds, and wait until they are credited')
+    .description("Top up the organization's gateway balance (it pays CERTEN's fees): get payment details, and wait until they are credited. Gas for an abstract account is `certen gas`")
     .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia (default: your context chain)')
     // `--wait` is accepted although waiting is already the default, because every other
     // long-running command (`identity create`, `tx create`, `call`) takes it. Someone who learned

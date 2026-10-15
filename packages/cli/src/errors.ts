@@ -21,6 +21,11 @@ export const EXIT = {
   PARTIAL: 4,
   /** `proof verify` only: there is no evidence the Accumulate side can be checked from. */
   NO_EVIDENCE: 5,
+  /**
+   * Ctrl-C while the command was WAITING (`setup` and `gas` for funds to arrive). The shell's own convention for a SIGINT, and the one the CLI UX plan
+   * uses for `watch`. Only ever a stop requested by the person; nothing was left half-done, and the command says how to continue.
+   */
+  INTERRUPTED: 130,
 } as const;
 
 export type ExitCode = (typeof EXIT)[keyof typeof EXIT];

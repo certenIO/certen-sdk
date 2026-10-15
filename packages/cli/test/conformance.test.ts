@@ -379,6 +379,70 @@ describe('CLI contract: readiness, `certen status` (docs/CLI-CONTRACT.md section
   });
 });
 
+describe('CLI contract: setup and gas (docs/CLI-CONTRACT.md section 9)', () => {
+  const OFFLINE = { CERTEN_API_KEY: 'ck_test_notreal', CERTEN_API_URL: 'http://127.0.0.1:9' };
+
+  it('2 — setup with no credential and nobody to ask which kind of account names the three ways, before any request', () => {
+    const r = certen(['--json', 'setup', '--yes'], { CERTEN_API_URL: 'http://127.0.0.1:9' });
+    expect(r.code).toBe(2);
+    const error = soleJson(r.stdout).error as { code: string; message: string };
+    expect(error.code).toBe('NO_API_KEY');
+    for (const way of ['--existing-account', '--new-account', '--token']) expect(error.message).toContain(way);
+  });
+
+  it('2 — setup options that cannot be combined, or are malformed, are usage errors before any request', () => {
+    for (const [args, code] of [
+      [['--token', 'crt_x', '--new-account'], 'CONFLICTING_OPTIONS'],
+      [['--chain', 'base-sepolia', '--chains', 'base-sepolia'], 'CONFLICTING_OPTIONS'],
+      [['--amount', '1000000000000000'], 'INVALID_AMOUNT'],
+      [['--timeout', 'soon'], 'INVALID_TIMEOUT'],
+      [['--funds-timeout', 'soon'], 'INVALID_TIMEOUT'],
+      [['--accumulate-rpc', 'ftp://node/v3'], 'INVALID_ACCUMULATE_RPC'],
+    ] as Array<[string[], string]>) {
+      const r = certen(['--json', 'setup', '--yes', ...args], OFFLINE);
+      expect(r.code, args.join(' ')).toBe(2);
+      expect((soleJson(r.stdout).error as { code: string }).code, args.join(' ')).toBe(code);
+    }
+  });
+
+  it('3 — setup against an unreachable gateway is retryable, and nothing is made on the way', () => {
+    const r = certen(['--json', 'setup', '--yes', '--existing-account'], OFFLINE);
+    expect(r.code).toBe(3);
+    expect(soleJson(r.stdout).error).toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+  });
+
+  it('2 — gas needs an identity and a chain, and says so before any request', () => {
+    const r = certen(['--json', 'gas', '--chain', 'base-sepolia'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('MISSING_IDENTITY');
+    const wei = certen(['--json', 'gas', '--identity', '11111111-1111-4111-8111-111111111111', '--chain', 'base-sepolia', '--amount', '1000000000000000'], OFFLINE);
+    expect(wei.code).toBe(2);
+    expect((soleJson(wei.stdout).error as { code: string }).code).toBe('INVALID_AMOUNT');
+  });
+
+  it('3 — gas against an unreachable gateway is retryable', () => {
+    const r = certen(['--json', 'gas', '--identity', '11111111-1111-4111-8111-111111111111', '--chain', 'base-sepolia'], OFFLINE);
+    expect(r.code).toBe(3);
+    expect(soleJson(r.stdout).error).toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+  });
+
+  it('--help --json lists setup and gas with their options, and exit code 130', () => {
+    const r = certen(['--json', '--help']);
+    const data = soleJson(r.stdout).data as { exitCodes: Record<string, string>; commands: Array<{ name: string; description: string; options?: Array<{ name: string }> }> };
+    const optionsOf = (name: string): string[] => (data.commands.find((c) => c.name === name)?.options ?? []).map((o) => o.name);
+    expect(optionsOf('setup')).toEqual(expect.arrayContaining([
+      'name', 'identity', 'key', 'chain', 'chains', 'yes', 'existingAccount', 'newAccount', 'token', 'orgName', 'passphrase', 'keyring', 'browser',
+      'payer', 'waitForFunds', 'amount', 'gasReserve', 'accumulateRpc', 'timeout', 'fundsTimeout', 'pollInterval',
+    ]));
+    expect(optionsOf('gas')).toEqual(expect.arrayContaining(['chain', 'identity', 'amount', 'gasReserve', 'wait', 'fromWallet', 'timeout', 'pollInterval']));
+    // `init` is unchanged and still there, with the flags it always had.
+    expect(optionsOf('init')).toEqual(expect.arrayContaining(['name', 'key', 'chains', 'yes', 'payer', 'timeout', 'pollInterval']));
+    expect(data.exitCodes['130']).toMatch(/Ctrl-C/);
+    // `fund` is the gateway balance and says so; `gas` is the other thing that has been called funding, and says that.
+    expect(data.commands.find((c) => c.name === 'gas')!.description).toMatch(/not `fund`/i);
+  });
+});
+
 describe('CLI contract: table mode is unchanged for humans', () => {
   it('prints a table, not JSON, when --json is absent', () => {
     const r = certen(['auth', 'status']);
