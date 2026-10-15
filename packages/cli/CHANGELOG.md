@@ -1,5 +1,33 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — context, profiles and units (CLI UX, Phase 1)
+
+Nothing that works today changes. Every command and flag keeps its meaning; required flags only became optional (with a default taken from your context, said on stderr), and every `--json` change is an added field. A maintainer versions and publishes this.
+
+### Added
+- **`certen context`** shows the identity, key, chain and gateway commands will use, and where each came from (the flag, an environment variable, the profile, or "the only one there is"). It is local: no network, no API key.
+- **`certen use identity|key|chain <value>`** chooses them once (`--unset` clears). `use identity` takes a UUID, an `acc://` ADI URL or a name, and stores the UUID; a UUID this machine has never seen is checked against the gateway when there is a credential, and saved with a "not verified" note when there is not. `use gateway <url>`, `use profile <name> [--create]` and `use allow-mainnet-default on|off` complete the set.
+- **Profiles.** A profile is a gateway, a context and a credential. `--profile <name>` (before or after the subcommand, like `--json`), `CERTEN_PROFILE`, or `certen use profile`. The `default` profile is the config you already have: its credential and gateway stay where they were, so nothing is migrated. A named profile has **its own API key** (OS keyring account `api_key:<profile>`, or inside the profile) and never falls back to the default profile's, because that key belongs to another gateway.
+- **One identity reference, everywhere**: a UUID, an `acc://` ADI URL, or the name an identity was created with (or its ADI label). `call`, `tx create`, `tx inspect`, `identity get|retire|link-chain`, all six `governance` operations, `pending list|sign` and `portfolio` accept all three, and send the gateway the form its route takes (`/v1/identity` wants a UUID, `/v1/governance` an ADI URL). Local records are consulted first; the gateway's portfolio (which carries each identity's `id`) is the fallback. Two identities answering to one name is a question that lists them, never a guess.
+- **`CERTEN_IDENTITY`, `CERTEN_KEY`, `CERTEN_CHAIN`**, between a flag and a profile.
+- **Durations with units**: `--timeout 90s|6m|1h|2d` and `--poll-interval 2s|1m` on `call`, `tx create`, `tx status`, `identity create`, `init`, `fund` and `login`/`signup`. A bare number keeps its meaning (minutes; seconds for the interval). No wait budget or default changed.
+- New error codes, all exit 2: `MISSING_IDENTITY`, `AMBIGUOUS_IDENTITY`, `MISSING_CHAIN`, `AMBIGUOUS_CHAIN`, `MAINNET_DEFAULT_REFUSED`, `UNKNOWN_KEY`, `UNKNOWN_IDENTITY_ALIAS`, `INVALID_IDENTITY_REF`, `IDENTITY_NOT_FOUND`, `IDENTITY_ID_UNRESOLVED`, `PROFILE_NOT_FOUND`, `INVALID_PROFILE_NAME`, `MISSING_PROFILE_NAME`, `DUPLICATE_PROFILE_FLAG`, `INVALID_GATEWAY_URL`, `MISSING_VALUE`, `CONFLICTING_UNSET`, `INVALID_VALUE`. See `docs/CLI-CONTRACT.md`.
+- `profile` is added to the `--json` output of `auth login`, `auth status` and `whoami`.
+
+### Changed
+- **`call`**: `--identity`, `--chain` and `--sign-with` are no longer required when the context supplies them. Leaving `--sign-with` out was always an error, so a context key (a profile's, `CERTEN_KEY`, or your only local key) cannot change what any working invocation does. Several local keys and none chosen is still `MISSING_SIGNING_KEY` (now listing them).
+- **`tx create`** derives `--from` from the identity's abstract account on `--to-chain`, as `call` does (`NO_ABSTRACT_ACCOUNT` names the fix when there is none). When it derives, one identity read serves the ADI, the account and the funding guard: **5 → 4 round trips** on the transfer path. With an explicit `--from` or an `--intent` it makes exactly the requests it made before. `--identity` and `--to-chain` come from the context when not given.
+- **`governance`** `--identity` is no longer required, and takes a UUID or a name as well as the ADI.
+- **`fund`** takes `--chain` from the context when not given (`CHAIN_REQUIRED` still says so when nothing supplies one). An identity's linked chain is not a default here: what is funded is the organization's balance.
+- `identity create` and `init` record the name an identity was created with, so `--identity <name>` finds it. The chain-registry cache records each chain's `environment`.
+- An unsupported chain that came from a default now says where it came from (`CERTEN_CHAIN: "basee" is not a supported chain…`).
+
+### Safety
+- **A default never points a value-moving command at a mainnet.** `call`, `tx create` and `fund` refuse a chain that is not a known testnet when it came from an environment variable, a profile or a single candidate (`MAINNET_DEFAULT_REFUSED`), unless the profile says `use allow-mainnet-default on`. `--chain` on the command line is always the person's own choice. A chain nobody can classify counts as not a known testnet: unknown is not ok.
+- **Every value taken from context is said on stderr** (`using identity acc://alpha.acme (the only identity recorded on this machine)`), in table and `--json` mode, before any passphrase prompt and before the summary of what a signature authorises. A value you typed is not repeated.
+- **No signing key is defaulted where leaving it out is a supported mode.** `tx create`, `governance <op>` and `pending sign` without `--sign-with` open the intent and return signing data for an external signer or HSM; signing there on a guess would start signing for people who rely on that.
+- `identity retire` never takes its identity from the context, and `pending list` / `portfolio` `--identity` stay filters (left out, you see everything).
+
 ## 0.10.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 **Breaking** changes are marked; the minor carries them (0.x).

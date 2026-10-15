@@ -84,6 +84,12 @@ certen call --identity <id> --chain base-sepolia --to 0xYourContract \
 anything is sent**. On a proof-gated call this matters more than usual: a valid proof of the *wrong*
 call is still a valid proof, so a silently mis-encoded argument is worse than an error.
 
+Once `init` has recorded your identity and you have one key and one chain, `--identity`, `--chain` and
+`--sign-with` can be left out too: `certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait`.
+Each value taken from context is echoed on stderr, `certen context` shows what the next command will use and why,
+and `certen use identity|key|chain` chooses them when there is more than one. `--identity` takes a UUID, an
+`acc://` ADI URL or the name you gave the identity.
+
 You do not supply the ADI URL, the abstract account, or the numeric chain id — all three are derived
 from the identity. (Omitting them upstream produces a bodyless `502`, which reads as "the gateway is
 down" rather than "you left out a field". You should never have to know that.)

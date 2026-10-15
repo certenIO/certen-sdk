@@ -98,6 +98,8 @@ certen call --identity <id> --chain base-sepolia --to <contract> \
   --sign-with agent --wait --json
 ```
 
+- Once the agent's identity, key and chain are chosen (`certen use identity|key|chain`, shown by `certen context`), `--identity`, `--chain` and
+  `--sign-with` can be left out; each value taken from context is echoed on stderr, and an ambiguous or mainnet default is refused, not guessed.
 - `--value <wei>` forwards native value with the call. Wei, as a string.
 - An ERC-20 move is a call on the token contract: `--to <token> --fn "transfer(address,uint256)"
   --arg <to> --arg <amount in the token's base units>`. USDC has 6 decimals.

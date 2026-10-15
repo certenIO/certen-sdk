@@ -252,10 +252,111 @@ Anything else exits `2` with `error.code` `INVALID_SIGN_TARGET` and makes no req
 An inbox id comes from `certen pending list`, and the gateway derives the identity, the signer and
 the key from the inbox row. A transaction hash has no such row behind it — it is the route for an
 identity that was never polled into anyone's inbox — so `--identity`, `--signer-url` and
-`--public-key` must all be supplied. Omitting any of them exits `2` with `error.code`
-`MISSING_SIGNER_DETAILS`, naming every flag that is missing, **before any request is made**.
+`--public-key` must all be available (`--identity` may come from your context, see section 7). Omitting any of them exits `2` with
+`error.code` `MISSING_SIGNER_DETAILS`, naming every flag that is missing, **before any request is made**.
 
 Both paths open a sign REQUEST and do not cast the vote; finish with `certen pending submit`.
+
+### 7. Context: `certen context`, `certen use`, `--profile`
+
+A command that acts as an identity, signs with a key or targets a chain takes each from, in this order:
+the flag, the environment (`CERTEN_IDENTITY`, `CERTEN_KEY`, `CERTEN_CHAIN`), the active profile, and
+finally the single candidate there is (the only recorded identity, the only local key, the identity's
+only linked chain). Several candidates and none chosen is never a guess: it exits `2` and lists them,
+**before any request is made**.
+
+**A value from context is said, not silent.** Every value that did not come from a flag is echoed on
+**stderr**, in table and `--json` mode alike, before any passphrase prompt:
+
+```
+using identity acc://alpha.acme (the only identity recorded on this machine)
+using chain base-sepolia (from profile "default")
+using key dev (from CERTEN_KEY)
+using from 0xE293…cAcB (derived: the abstract account of acc://alpha.acme on base-sepolia)
+```
+
+stdout is still exactly one envelope. These lines are not part of the contract's data; the
+`certen context` command is the machine-readable view.
+
+**A default never points a value-moving command at a mainnet.** `call`, `tx create` and `fund` refuse a
+chain that is not a known testnet when it came from the environment, a profile or a single candidate:
+exit `2`, `MAINNET_DEFAULT_REFUSED`, before any request. `--chain` on the command line is the person's own
+choice and always works; a profile may opt in with `certen use allow-mainnet-default on`. A chain that cannot
+be classified counts as "not a known testnet". A chain the CLI would refuse anyway keeps its own
+`UNSUPPORTED_CHAIN`, naming where it came from.
+
+**What is never defaulted.** A signing key is defaulted only by `call`, where leaving `--sign-with` out was
+always an error. `tx create`, `governance <operation>` and `pending sign` without `--sign-with` open the intent
+and return signing data for an external signer, and still do. `identity retire` always takes its identity
+explicitly, and `pending list` / `portfolio` `--identity` are filters: left out, they mean "all".
+
+**One identity reference.** Wherever an identity is named, it may be a UUID, an `acc://` ADI URL, or the name
+it was created with (or its ADI label). The CLI sends the gateway the form each route takes: a UUID to
+`/v1/identity`, `/v1/transaction`; the ADI URL to `/v1/governance`.
+
+**Profiles.** A profile is a gateway URL, a context and a credential. `--profile <name>` is global (before or
+after the subcommand, like `--json`); `CERTEN_PROFILE` and `certen use profile <name>` set it otherwise. The
+`default` profile is the config that has always existed. A named profile has its own API key and never reads
+another profile's.
+
+#### `certen context`
+
+Local: no network, no API key. One envelope:
+
+```json
+{ "ok": true, "data": {
+  "profile": "default",
+  "profiles": ["default", "testnet"],
+  "gateway": { "url": "https://gateway.kompendium.co", "source": "default" },
+  "credential": { "source": "file", "key_prefix": "ck_live_abcd" },
+  "identity": { "value": "11111111-…", "source": "single", "detail": "the only identity recorded on this machine",
+                "adi_url": "acc://alpha.acme", "name": "alpha" },
+  "key":      { "value": "dev", "source": "env", "detail": "CERTEN_KEY", "exists": true },
+  "chain":    { "value": "base-sepolia", "source": "profile", "detail": "profile \"default\"", "known_testnet": true },
+  "allow_mainnet_default": false,
+  "candidates": { "identity": [ { "id": "…", "adi_url": "…", "name": "alpha" } ], "key": ["dev"], "chain": ["base-sepolia"] }
+} }
+```
+
+`identity`, `key` and `chain` are `null` when nothing is chosen (the candidates say what could be).
+`source` is `flag` | `env` | `profile` | `single`; for `context` it is never `flag`. `gateway.source` is `env`,
+`profile`, `default-profile` or `default`; `credential.source` is `env`, `keyring`, `file` or `null`.
+
+#### `certen use …`
+
+Each writes to the active profile and prints one envelope, `{ "profile": "…", "<field>": <value or null> }`:
+
+| Command | Data (besides `profile`) |
+|---|---|
+| `use identity <ref>` / `--unset` | `identity` (the UUID), `adi_url`, `verified` (`true` only when the gateway confirmed it in this command) |
+| `use key <name>` / `--unset` | `key`, `public_key_hash`, `encrypted` |
+| `use chain <chain>` / `--unset` | `chain`, `known_testnet` |
+| `use gateway <url>` / `--unset` | `gateway` |
+| `use profile <name> [--create]` | `active_profile`, `profiles` |
+| `use allow-mainnet-default on\|off` | `allow_mainnet_default` |
+
+#### Errors (all exit `2`, all raised before any request unless noted)
+
+| `error.code` | When |
+|---|---|
+| `MISSING_IDENTITY` / `MISSING_CHAIN` | nothing supplies one |
+| `AMBIGUOUS_IDENTITY` / `AMBIGUOUS_CHAIN` | several candidates, none chosen (the message lists them); `AMBIGUOUS_IDENTITY` also when two identities share a name |
+| `MAINNET_DEFAULT_REFUSED` | a value-moving command, a chain that is not a known testnet, taken from a default |
+| `MISSING_SIGNING_KEY` | unchanged code; the message now lists the keys when there are several |
+| `UNKNOWN_KEY` | a key named by a profile or `use key` is not on this machine |
+| `INVALID_IDENTITY_REF` | not a UUID, an ADI URL or a name (an account or key page under an ADI is refused) |
+| `UNKNOWN_IDENTITY_ALIAS` | no recorded identity has that name; the message lists the recorded ones |
+| `IDENTITY_NOT_FOUND` | the gateway has no such identity for this organization (`use identity`, ADI lookup) |
+| `IDENTITY_ID_UNRESOLVED` | an ADI this machine has no record of, on a gateway too old to return ids in the portfolio |
+| `PROFILE_NOT_FOUND`, `INVALID_PROFILE_NAME`, `MISSING_PROFILE_NAME`, `DUPLICATE_PROFILE_FLAG` | `--profile` / `CERTEN_PROFILE` / `use profile` |
+| `INVALID_GATEWAY_URL`, `MISSING_VALUE`, `CONFLICTING_UNSET`, `INVALID_VALUE` | `use …` |
+
+#### Durations
+
+`--timeout` and `--poll-interval` take a positive whole number and a unit (`s`, `m`, `h`, `d`): `--timeout 90s`,
+`6m`, `1h`. A bare number keeps its meaning (minutes for a timeout, seconds for a poll interval). Anything else
+is `INVALID_TIMEOUT` / `INVALID_POLL_INTERVAL` (exit `2`) before any request. Waiting is never shortened by it:
+the defaults are unchanged.
 
 ## Example: a correct retry loop
 
