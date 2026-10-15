@@ -137,6 +137,73 @@ export const JOURNEYS = Object.freeze({
       },
     ],
   },
+
+  /**
+   * The published walkthrough, written the way the CLI UX plan's Phase 1 allows: the identity, key and chain come from the context
+   * that `init` already recorded (one identity, one key, one linked chain), so `identity get` and `tx create` need no identity
+   * UUID, no abstract account and no chain. Everything else is the same step for step, so the two journeys differ in exactly what
+   * Phase 1 changed. The baseline journeys above stay as the documented path is TODAY; this is what that path becomes.
+   */
+  context: {
+    source: 'PLAN.md section 1, with the Phase 1 CLI: the context supplies the identity, the chain and the abstract account',
+    summary: 'the same transaction once the context is used',
+    steps: [
+      { label: 'Install the CLI', external: true, description: 'npm i -g @certen.io/cli' },
+      { label: 'Check the install', args: ['--version'], noJson: true },
+      { label: 'Check the gateway serves the chain', args: ['chains', '--refresh'] },
+      {
+        label: 'Sign this machine in',
+        args: ['auth', 'login', '--api-key', '-', '--no-keyring'],
+        stdin: 'API_KEY',
+        substitutes: 'certen login',
+      },
+      { label: 'Check the credential', args: ['whoami'] },
+      {
+        label: 'Create the key and the identity',
+        args: ['init', '--name', 'journey-probe', '--chains', 'base-sepolia', '--key', 'dev'],
+        capture: { adi_url: 'adi_url', abstract_account: 'abstract_accounts.0.address' },
+        prompts: 1,
+      },
+      { label: 'List identities', args: ['identity', 'list'] },
+      // No UUID: the only identity recorded on this machine is the default.
+      { label: 'Find the key page', args: ['identity', 'get'], capture: { key_page_url: 'key_page_url' } },
+      { label: 'Read the portfolio', args: ['portfolio'] },
+      { label: 'Run the checks', args: ['doctor'] },
+      { label: 'Read the key hash', args: ['keys', 'show', 'dev'], capture: { key_hash: 'public_key_hash' } },
+      {
+        label: 'Check the key page really holds the key',
+        external: true,
+        description: 'a hand-written curl to the Accumulate API (raw JSON-RPC)',
+        uses: ['adi_url', 'key_page_url'],
+        compares: ['key_hash'],
+      },
+      { label: 'Check the gateway balance', args: ['balance'] },
+      { label: 'Get testnet gas from a faucet', external: true, description: 'a faucet website, into a wallet' },
+      {
+        label: 'Send the gas to the abstract account',
+        external: true,
+        description: 'a wallet transfer to the abstract account',
+        uses: ['abstract_account'],
+        effect: 'fund',
+      },
+      {
+        // No --identity, no --from, no --to-chain: the identity is the only one recorded, its account on its only chain is derived.
+        label: 'Make the transaction',
+        args: ['tx', 'create', '--to', '{recipient}', '--amount', '0.0001', '--sign-with', 'dev', '--wait', '--timeout', '6m'],
+        capture: { intent_id: 'intent_id' },
+        prompts: 1,
+      },
+      { label: 'Read the outcome', args: ['tx', 'status', '{intent_id}'] },
+      { label: 'Fetch the proof', args: ['proof', 'get', '{intent_id}'] },
+      { label: 'Verify the proof', args: ['proof', 'verify', '{intent_id}'], exit: [0, 4, 5] },
+      { label: 'Verify against your own node', args: ['proof', 'verify', '{intent_id}', '--rpc', '{rpc_url}'], exit: [0, 4, 5] },
+      {
+        label: 'Check the effect by hand',
+        external: true,
+        description: 'compare the proved recipient, amount and chain with your own notes, and read the recipient\'s balance',
+      },
+    ],
+  },
 });
 
 /** The `{name}` placeholders in a step's args, in order. */

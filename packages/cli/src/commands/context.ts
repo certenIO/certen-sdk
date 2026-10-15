@@ -239,7 +239,8 @@ async function useChain(chain: string | undefined, opts: UseOptions): Promise<vo
     reportSet('chain', profile, null);
     return;
   }
-  const slug = assertChain(value, 'chain');
+  // A positional, not a flag: the standard message, with no flag name in front of it.
+  const slug = assertChain(value);
   updateProfile(profile, { chain: slug });
   const known = isKnownTestnet(slug);
   reportSet('chain', profile, slug, { known_testnet: known });
@@ -286,8 +287,16 @@ export function registerContextCommands(program: Command): void {
       const value = valueOrUnset(url, opts, 'gateway');
       updateProfile(profile, { api_url: value });
       reportSet('gateway', profile, value, value ? { gateway: value } : {});
-      if (value && credentialSource(profile).source === null) {
-        hint(`Profile "${profile}" has no API key yet: certen auth login --profile ${profile}`);
+      if (value) {
+        const cred = credentialSource(profile);
+        if (cred.source === null) {
+          hint(`Profile "${profile}" has no API key yet: certen auth login --profile ${profile}`);
+        } else if (cred.source !== 'env') {
+          // The credential is the profile's own, so it follows the profile to its new host. If that key was not issued by this
+          // gateway it is about to be sent to one that cannot use it, and that host now holds it.
+          hint(`Profile "${profile}" already has an API key (${cred.key_prefix}...), and it will now be sent to ${value}. `
+            + `If that key was not issued by that gateway, replace it: certen auth login --profile ${profile}`);
+        }
       }
     });
 

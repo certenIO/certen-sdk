@@ -383,7 +383,7 @@ describe('certen tx create', () => {
       const e = envelope(r).error!;
       expect(e.code).toBe('INCOMPLETE_INTENT');
       // --to-chain is what is missing. --from no longer is: it is derived, and the message says so rather than asking for it.
-      expect(e.message).toMatch(/^A simple transfer needs --to-chain./);
+      expect(e.message).toMatch(/^A simple transfer needs --to-chain\. /);
       expect(gw.seen).toHaveLength(0);
     } finally { await gw.close(); }
   });

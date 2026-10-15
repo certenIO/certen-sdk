@@ -137,6 +137,16 @@ describe('profile settings', () => {
     expect(c.readProfile('default').api_url).toBe('https://old.example');
   });
 
+  it('does not write an empty default profile just because its gateway URL (which lives at the top level) changed', async () => {
+    const c = await loadConfig();
+    c.updateProfile('default', { api_url: 'https://only-the-url.example' });
+    expect(raw()).toEqual({ api_url: 'https://only-the-url.example' });
+    // A NAMED profile with nothing set is still a profile: that is how one is created.
+    c.updateProfile('fresh', {});
+    expect(raw().profiles).toEqual({ fresh: {} });
+    expect(c.profileExists('fresh')).toBe(true);
+  });
+
   it('writes nothing the old CLI cannot ignore: unknown top-level keys are additive', async () => {
     const c = await loadConfig();
     await c.setApiKey('ck_live_default', false);

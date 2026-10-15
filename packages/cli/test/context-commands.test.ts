@@ -180,7 +180,7 @@ describe('certen use chain / key', () => {
     const r = await certen(home, ['--json', 'use', 'chain', '--unset']);
     expect(r.code).toBe(0);
     expect(envelope(r).data).toMatchObject({ chain: null });
-    expect(configOf(home).profiles.default.chain).toBeUndefined();
+    expect(configOf(home).profiles?.default?.chain).toBeUndefined();
 
     const both = await certen(home, ['--json', 'use', 'chain', 'base-sepolia', '--unset']);
     expect(both.code).toBe(2);
@@ -279,7 +279,7 @@ describe('certen use identity', () => {
     await certen(home, ['use', 'identity', 'alpha']);
     const r = await certen(home, ['--json', 'use', 'identity', '--unset']);
     expect(r.code).toBe(0);
-    expect(configOf(home).profiles.default.identity).toBeUndefined();
+    expect(configOf(home).profiles?.default?.identity).toBeUndefined();
   });
 });
 
@@ -341,6 +341,20 @@ describe('profiles', () => {
     expect(envelope(await certen(home, ['--json', 'context', '--profile', 'testnet'])).data.gateway).toMatchObject({ url: 'https://testnet.example', source: 'profile' });
     expect(envelope(await certen(home, ['--json', 'auth', 'status', '--profile', 'testnet'])).data).toMatchObject({ profile: 'testnet', api_url: 'https://testnet.example' });
     expect(envelope(await certen(home, ['--json', 'auth', 'status'])).data.api_url).toMatch(/gateway\.kompendium\.co/);
+  });
+
+  it('warns when the profile already holds an API key that will now be sent to the new gateway', async () => {
+    const home = newHome();
+    const gw = await gateway((_req, res) => sendJson(res, 200, { currency: 'USD', available_usd: '1.000000', held_usd: '0', credit_limit_usd: '0', spendable_usd: '1.000000', status: 'active' }));
+    try {
+      await certen(home, ['auth', 'login', '--api-key', 'ck_live_HOLDS_A_KEY', '--no-keyring', '--api-url', gw.url]);
+      const r = await certen(home, ['--json', 'use', 'gateway', 'https://elsewhere.example']);
+      expect(r.code).toBe(0);
+      // The credential is the profile's own, so it follows the profile to the new host: say so, and name the way to replace it.
+      expect(r.stderr).toContain('already has an API key (ck_live_HOLD...)');
+      expect(r.stderr).toContain('elsewhere.example');
+      expect(r.stderr).toContain('certen auth login');
+    } finally { await gw.close(); }
   });
 
   it('refuses a gateway that is not an http(s) URL', async () => {

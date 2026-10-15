@@ -241,8 +241,12 @@ export function updateProfile(name: string, patch: ProfilePatch): void {
     }
   }
 
-  profiles[name] = current;
-  cfg.profiles = profiles;
+  // The default profile exists without an entry, and its URL and credential live at the top level, so an empty entry for it says
+  // nothing. A NAMED profile with nothing set is still a profile: an empty entry is how one is created.
+  if (name === DEFAULT_PROFILE && Object.keys(current).length === 0) delete profiles[name];
+  else profiles[name] = current;
+  if (Object.keys(profiles).length === 0) delete cfg.profiles;
+  else cfg.profiles = profiles;
   writeConfig(cfg);
 }
 
