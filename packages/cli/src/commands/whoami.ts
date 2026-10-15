@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { CertenClient, CertenError } from '@certen.io/sdk';
-import { getApiKey, getApiUrl, getPortalUrl, readConfig } from '../config.js';
+import { getApiKey, getApiUrl, getPortalUrl, credentialInfo, activeProfile } from '../config.js';
 import { printOutput, hint, human, isJsonMode, usd } from '../output.js';
 
 /**
@@ -23,14 +23,14 @@ export function registerWhoamiCommands(program: Command): void {
     .command('whoami')
     .description('Which key, which gateway, and what standing it has (contacts the gateway)')
     .action(async () => {
-      const config = readConfig();
       const apiUrl = getApiUrl();
+      const profile = activeProfile();
 
       // Resolved rather than read from config, so the env var takes the precedence it actually has.
       const apiKey = await getApiKey();
       const source = process.env.CERTEN_API_KEY
         ? 'CERTEN_API_KEY env'
-        : config.storage === 'keyring' ? 'OS keyring' : '~/.certen/config.json';
+        : credentialInfo(profile).storage === 'keyring' ? 'OS keyring' : '~/.certen/config.json';
 
       const client = new CertenClient({ apiKey, baseUrl: apiUrl });
 
@@ -55,6 +55,7 @@ export function registerWhoamiCommands(program: Command): void {
       if (isJsonMode()) {
         printOutput({
           api_url: apiUrl,
+          profile,
           portal_url: getPortalUrl(),
           key_prefix: `${apiKey.substring(0, 12)}...`,
           key_source: source,

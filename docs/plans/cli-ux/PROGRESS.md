@@ -6,8 +6,8 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 
 | Phase | Title | Status | PR |
 |---|---|---|---|
-| 0 | Sync, baseline, AGENTS.md header | in-progress (branch `ux/phase-0-baseline` pushed; PR not opened, `gh` is not installed) | not opened |
-| 1 | Context (W1) | not-started | |
+| 0 | Sync, baseline, AGENTS.md header | merged | #27 (da4aeb4) |
+| 1 | Context (W1) | in-progress (work complete, branch `ux/phase-1-context` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
 | 2 | Readiness (W3) | not-started | |
 | 3 | Setup + gas (W2, W6) | not-started | |
 | 4 | Send + receipt (W4, W5) | not-started | |
@@ -133,6 +133,112 @@ Unverified live.
 
 ---
 
+---
+
+## Phase 1: Context (W1)
+
+Branch `ux/phase-1-context`, from `main` at `da4aeb4` (Phase 0 merged as #27). Acceptance (HARNESS-PROMPT §8):
+`certen context`, `certen use identity|key|chain`, profiles; one `resolveContext()`; identity ref accepts
+uuid / `acc://` URL / alias in every command incl. governance; `tx create` derives `--from`; `--timeout`
+accepts `90s|6m|1h`; mainnet-default refusal tested; context echo tested in both modes.
+
+### Baseline for this phase (before any change, 2026-10-15, `main` = `da4aeb4`)
+
+| Gate | Result |
+|---|---|
+| `npm install` | exit 0 (same 5 advisories as Phase 0) |
+| `node scripts/build-all.mjs` | exit 0 |
+| `node scripts/typecheck-all.mjs` | exit 0 |
+| `node scripts/test-all.mjs` | exit 0, **1429 passed in 97 files**, 0 failed, 0 skipped |
+| `npm run agentgen:check` | exit 0, 4 artifacts up to date (125 operations, 82 SDK methods) |
+
+Pre-existing failures: none.
+
+### Design decisions, from reading the code (the plan is silent or wrong on these)
+
+1. **The gateway's identity routes take a UUID only** (`/v1/identity/{id}` has a UUID pattern). An ADI URL or an
+   alias is therefore resolved CLIENT-side. ADI → UUID: local record first, then `GET /v1/portfolio?identity=<adi>`.
+   The portfolio now returns each identity's `id` (gateway 2026-08), so PLAN §1 root cause 3 ("the portfolio may
+   not return UUIDs") and ask G3 are outdated; an older gateway that omits `id` gives a named usage error, never a guess.
+2. **Which form each route wants**, from the vendored spec and the gateway source: `/v1/transaction` takes a UUID,
+   `/v1/governance` an ADI URL, `/v1/portfolio` and `/v1/pending` either, `/v1/sign` `pending_tx` either. The resolver
+   returns `{ id, adi_url }` and each command passes the form its route takes.
+3. **An alias is the name an identity was created with** (stored on the local record, new field `name`) **or the
+   label of its ADI** (`acc://jason-dev.acme` → `jason-dev`), matched case-insensitively among the identities recorded on
+   this machine. Two matches is an ambiguity error listing both.
+4. **The signing key defaults only where omitting it is an error today.** `call` and `identity create` without a key fail
+   (`MISSING_SIGNING_KEY`), so a context key can fill it. `tx create`, `governance <op>` and `pending sign` without
+   `--sign-with` are a supported mode (open the intent, return signing data for an external signer or HSM); defaulting a
+   key there would start signing for people who rely on that. So no key default in those three. (`send` in Phase 4 signs with the context key.)
+5. **A profile is gateway URL + context + credential.** Sending one profile's API key to another profile's gateway
+   would leak a credential, so credentials are per profile: keyring account `api_key:<profile>` / `profiles.<name>.api_key` for
+   a named profile; the `default` profile keeps its credential at the top level exactly as before (no migration, no change
+   for existing users). A named profile never falls back to the default profile's key.
+6. **"Mainnet" means "not a known testnet".** The SDK catalogue holds testnets only; the registry cache is extended
+   (additive) with each chain's `environment`. A chain that is not a known testnet never comes from a default (env var,
+   profile or single-candidate) on a value-moving command (`call`, `tx create`, `fund`) unless the profile says
+   `allow_mainnet_default`; `--chain` on the command line always wins.
+7. **Not touched, with reasons:** `identity retire` keeps a required explicit argument (destructive: never from context);
+   `identity mnemonic <id> <token>` takes any spelling of the id (resolved before the one-time token is spent) and leaves a retrieval URL alone; `pending list` and
+   `portfolio` `--identity` are filters, so absence must keep meaning "all", not "the context identity"; `doctor`'s hardcoded
+   chain hint is Phase 2 (PLAN W3); `init` writing the context is Phase 3 (`setup`).
+8. The confirmation **card** is Phase 4. Phase 1 echoes each context-derived value on stderr (both modes), before any
+   passphrase prompt and before the signing summary; Phase 4's card renders the same `ResolvedContext` sources.
+
+### Tasks (check = the acceptance check; evidence = what was run)
+
+- [x] 1. **Profiles in config**: active profile (`--profile` > `CERTEN_PROFILE` > saved > `default`), per-profile settings, credential and gateway URL, no migration for `default`.
+  Check: `config-profiles.test.ts`. Evidence: red first, then green; the existing `config.test.ts` passes untouched.
+- [x] 2. **`--profile` as a global flag** that may appear anywhere, like `--json`.
+  Check: `global-flags.test.ts`, conformance cases. Evidence: `--help --json` lists the option.
+- [x] 3. **`src/context.ts`**: `resolveContext()`; flag > env > profile > single candidate; ambiguity is a usage error listing candidates; mainnet-default refusal; echo helper.
+  Check: `context.test.ts`.
+- [x] 4. **`src/identity-ref.ts`**: `resolveIdentityRef()` for UUID / ADI / name, local record first, then the gateway. Local records gain `name` (written by `identity create` and `init`).
+  Check: `identity-ref.test.ts` against a fake client.
+- [x] 5. **`--timeout` / `--poll-interval` accept `90s`, `6m`, `1h`**; a bare number keeps its meaning, in all seven places (`call`, `tx create`, `tx status`, `identity create`, `init`, `fund`, `login|signup`).
+  Check: `duration.test.ts`; `wait.test.ts` is unchanged and green.
+- [x] 6. **`certen context` and `certen use identity|key|chain|gateway|profile|allow-mainnet-default`.**
+  Check: `context-commands.test.ts` (human and `--json`), 11 conformance cases (18 → 29).
+- [x] 7. **Wire the resolver in**: `call` (identity, chain, key), `tx create` (identity, `--to-chain`, derived `--from`), `tx inspect`, `identity get|link-chain|retire|create|mnemonic`, the six `governance` operations, `pending list|sign`, `portfolio`, `fund`.
+  Check: `context-wiring.test.ts` and `context-identity-create.test.ts`, against a stub gateway with honest signing data.
+- [x] 8. **`tx create` derives `--from`** like `call`, with one identity read serving the ADI, the account and the funding guard (5 → 4 round trips).
+  Check: `context-wiring.test.ts` asserts exactly `GET identity, POST transaction, POST signature`; `--journey context` shows it.
+- [x] 9. **Context echo on stderr** for every non-flag value, in table and `--json` mode, before any passphrase prompt.
+  Check: `context-wiring.test.ts` (both modes, one stdout line) and the transcript in the PR body.
+- [x] 10. **Docs**: CHANGELOG, `docs/CLI-CONTRACT.md` section 7, both READMEs, the llms template (regenerated; `agentgen:check` clean), the skill, the first-proof guide, PLAN corrections.
+  Check: `git diff` lists them.
+- [x] 11. **Measurement**: a `context` journey (the same transaction on this CLI) beside the unchanged `guide` and `published` baselines.
+  Check: `measure-onboarding.test.ts` pins `context` (34 round trips, 4 values) next to `published` (35, 5).
+- [x] 12. **Gates, offline transcript, §5 self-review, push.** Outputs are quoted in the PR body.
+  **Opening the PR needs a human**: `gh` is not installed on this machine.
+
+### Phase 1 results
+
+**Measured (offline, fake gateway, `node scripts/measure-onboarding.mjs --journey <name>`):** the same transaction, before and after.
+
+| | `published` (the documented path today) | `context` (the same path on this CLI) | Change |
+|---|---|---|---|
+| `certen` commands | 16 | 16 | none: Phase 1 changes what each step costs, not how many there are |
+| HTTP round trips | 35 | **34** | `tx create`: 5 → 4 (one identity read serves the ADI, the account and the funding guard) |
+| Values copied by hand | 5 (`identity_id`, `adi_url`, `key_page_url`, `abstract_account`, `intent_id`) | **4** | the identity UUID is no longer carried between steps |
+| `tx create` flags typed | `--identity <uuid> --to-chain base-sepolia --from <0x…> --to <addr> --amount 0.0001 --sign-with dev --wait --timeout 6` | `--to <addr> --amount 0.0001 --sign-with dev --wait --timeout 6m` | `--identity`, `--to-chain`, `--from` come from the context |
+| Passphrase prompts | 2 | 2 | Phase 4's session unlock, not this phase |
+
+The remaining four copies are the work of later phases: `adi_url` and `key_page_url` exist only to feed the raw `curl` (Phase 2's independent key-page check),
+`abstract_account` only to fund it (Phase 3), `intent_id` to read the outcome (Phase 4's receipt). The pinned `guide` and `published` baselines did not move,
+which is the evidence that nothing existing changed: they drive the unchanged invocations through the changed CLI.
+
+**Tests:** 1429 → **1633** in 97 → 105 files (cli 435 → 639; conformance 18 → 29). Gates on the final tree: build ✓ typecheck ✓ `test-all` ✓ `agentgen:check` ✓ `test:counts` ✓ (quoted in the PR body).
+
+**Proven in the transcript, not only in tests:** the echo is on stderr in table and `--json` mode with exactly one line on stdout; two identities and no choice
+lists both before any request; a mainnet default is refused before any request while a typo keeps its sharper error; `tx create` with `--sign-with` makes three
+requests (identity read, open, signature) and prints the echo before the "You are about to sign" summary; a named profile does not borrow the default profile's key.
+
+**Unverified live / limits stated plainly:**
+- The per-profile keyring account (`api_key:<profile>`) is tested against an in-memory keyring, not the real Windows credential store. The `default` profile's account is unchanged (`api_key`).
+- `use identity <uuid>` against a real gateway was exercised against a stub only (a 200, a 404, an unreachable host, no credential).
+- Nothing here touched a live gateway, signed for real, or minted a credential (HARNESS §4).
+
 ## Found, not fixed
 
 - **`npm install` reports 5 vulnerabilities (2 moderate, 3 high).** Present on a clean `main`; not
@@ -150,6 +256,13 @@ Unverified live.
   reproduced across the whole suite, only shown for one command; worth a one-line fix in their shared env.
 - **`gh` is not installed on this Windows machine**, so this harness cannot run `gh pr view` / `gh pr create`.
   A human opens each phase's PR (or installs `gh` and re-runs the session).
+
+- **`init`'s closing hint and the root `--help` quickstart still print the long form** (`certen call --identity <id> --chain ... --sign-with ...`). It remains valid (a typed value wins), and Phase 5 rewrites it around `setup` / `send` / `receipt`.
+- **`doctor`'s hardcoded `base-sepolia` hint** is Phase 2 (PLAN W3): `doctor` becomes scoped to the context there.
+- **`init` does not write the context.** It records the identity (now with its name) and the context resolves single candidates, so the journey works without it. Writing the context is `setup`'s job (Phase 3).
+- **A stale local record is not self-healing for an identity retired from another machine.** `identity retire` forgets it locally, but a retire elsewhere leaves this machine's record; the next use fails with the gateway's own 404, which is clear. Not fixed.
+- **Working-tree line endings on this machine are CRLF for some pre-existing files** (git normalises to LF per `.gitattributes`, and the commits are clean). Scripts that edit those files preserve whatever they find.
+- **Shell heredocs eat backslashes in this environment.** It twice produced a subtly wrong regex or a broken string in a scripted test edit. One looser-than-intended regex slipped into a test and was caught on review and fixed; edits containing regexes now go through the Edit tool.
 
 ## Conflicts between sources of truth
 

@@ -3,9 +3,10 @@ import { spawn } from 'node:child_process';
 import { hostname, userInfo } from 'node:os';
 import { CertenClient, CertenError, redeemRegistrationToken, selfSignup, type DeviceAuthorization, type DeviceAuthorizationStatus } from '@certen.io/sdk';
 import { resolveSigner } from '../signer.js';
-import { getApiUrl, getPortalUrl, setApiKey, readConfig } from '../config.js';
+import { getApiUrl, getPortalUrl, setApiKey, credentialInfo } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { parseSpanMs } from '../duration.js';
 
 /**
  * `certen signup` / `certen login` — obtain an API key without copying a secret.
@@ -203,12 +204,13 @@ export function registerSignupCommands(program: Command): void {
       .option('--token <token>', 'Redeem a registration token instead of waiting for a human to approve a browser')
       .option('--no-browser', 'Do not try to open a browser; just print the URL')
       .option('--no-keyring', 'Store the key in ~/.certen/config.json instead of the OS keyring')
-      .option('--timeout <minutes>', 'How long to wait for approval')
+      .option('--timeout <duration>', 'How long to wait for approval: 90s, 6m, 1h (a bare number is minutes)')
       .action(async (opts: {
         withKey?: string; orgName?: string; token?: string;
         browser: boolean; keyring: boolean; timeout?: string;
       }) => {
-        const existing = readConfig();
+        // How the ACTIVE profile already stores its credential (the default profile's is the top level of the file).
+        const stored = credentialInfo();
         if (process.env.CERTEN_API_KEY) {
           // The env var wins over stored config everywhere else, so a key obtained here would be
           // written and then ignored — a confusing no-op rather than an error.
@@ -233,7 +235,7 @@ export function registerSignupCommands(program: Command): void {
             orgName: opts.orgName,
           }, { baseUrl: getApiUrl() });
 
-          await setApiKey(redeemed.api_key, opts.keyring !== false && existing.storage === 'keyring');
+          await setApiKey(redeemed.api_key, opts.keyring !== false && stored.storage === 'keyring');
 
           printOutput({
             org_id: redeemed.org.id,
@@ -267,7 +269,7 @@ export function registerSignupCommands(program: Command): void {
         // present.
         if (opts.token) {
           const redeemed = await redeemRegistrationToken(opts.token, { baseUrl: getApiUrl() });
-          await setApiKey(redeemed.api_key, opts.keyring !== false && existing.storage === 'keyring');
+          await setApiKey(redeemed.api_key, opts.keyring !== false && stored.storage === 'keyring');
 
           printOutput({
             org_id: redeemed.org.id,
@@ -292,20 +294,16 @@ export function registerSignupCommands(program: Command): void {
           return;
         }
 
-        let timeoutMs: number | undefined;
-        if (opts.timeout !== undefined) {
-          const minutes = Number(opts.timeout);
-          if (!Number.isFinite(minutes) || minutes <= 0) {
-            throw new UsageError('--timeout must be a positive number of minutes', 'INVALID_TIMEOUT');
-          }
-          timeoutMs = minutes * 60_000;
-        }
+        // `90s`, `6m`, `1h`, or a bare number of minutes as before.
+        const timeoutMs = opts.timeout === undefined
+          ? undefined
+          : parseSpanMs(opts.timeout, 'minutes', '--timeout', 'INVALID_TIMEOUT');
 
         const result = await runDeviceFlow({
           browser: opts.browser !== false,
           // Match however this machine already stores credentials, rather than silently moving
           // them between the keyring and a file.
-          keyring: opts.keyring !== false && existing.storage === 'keyring',
+          keyring: opts.keyring !== false && stored.storage === 'keyring',
           timeoutMs,
         });
 
@@ -313,7 +311,7 @@ export function registerSignupCommands(program: Command): void {
           key_prefix: `${result.prefix}...`,
           org_id: result.orgId ?? null,
           api_url: getApiUrl(),
-          storage: readConfig().storage ?? 'file',
+          storage: credentialInfo().storage ?? 'file',
         });
 
         if (isJsonMode()) return;

@@ -4,7 +4,9 @@ import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.j
 import { printOutput, human, hint, isJsonMode, usd } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import { assertChain } from '../chains.js';
+import { resolveContext, echoFromContext, sourceLabel } from '../context.js';
 import { buildPaymentUri, estimateWait, preciseDuration } from '../payment-uri.js';
+import { parseSpanMs } from '../duration.js';
 
 /**
  * Money commands.
@@ -636,7 +638,7 @@ export function registerBillingCommands(program: Command): void {
     .command('fund')
     .argument('<amount>', 'Amount in USD to send, e.g. 25 or 25.50')
     .description('Get payment details for adding funds, and wait until they are credited')
-    .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia')
+    .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia (default: your context chain)')
     // `--wait` is accepted although waiting is already the default, because every other
     // long-running command (`identity create`, `tx create`, `call`) takes it. Someone who learned
     // the flag there types it here and, without this, meets "unknown option" on a command that was
@@ -648,11 +650,11 @@ export function registerBillingCommands(program: Command): void {
     .option('--uri', 'Print an EIP-681 payment URI a wallet can open')
     .option('--wait', 'Wait for the deposit to be credited (the default)')
     .option('--no-wait', 'Print the payment details and exit instead of waiting')
-    .option('--timeout <minutes>', 'How long to wait for the deposit', '60')
+    .option('--timeout <duration>', 'How long to wait for the deposit: 90s, 6m, 1h (a bare number is minutes)', '60')
     // Scripted callers legitimately want a different cadence — a CI job funding a
     // test account should not sit on a 5-second loop, and a long unattended wait
     // should poll gently. Exposed rather than hard-coded.
-    .option('--poll-interval <seconds>', 'How often to check for the deposit', '5')
+    .option('--poll-interval <interval>', 'How often to check for the deposit: 2s, 1m (a bare number is seconds)', '5')
     .action(async (
       amount: string,
       opts: {
@@ -667,9 +669,12 @@ export function registerBillingCommands(program: Command): void {
           EXIT.USAGE,
         );
       }
-      if (!opts.chain) {
+      // This moves real money, so a chain that is not a known testnet is never taken from a default (context.ts). The organization's
+      // balance is what is funded, not an identity, so an identity's only linked chain is no reason to pick one.
+      const ctx = resolveContext({ chain: opts.chain }, { fields: ['chain'], valueMoving: true, inferChain: false });
+      if (!ctx.chain) {
         throw new CliError(
-          'Which chain will you send on? Pass --chain (e.g. --chain base-sepolia)',
+          'Which chain will you send on? Pass --chain (e.g. --chain base-sepolia), set CERTEN_CHAIN, or choose one once with: certen use chain <chain>',
           'CHAIN_REQUIRED',
           EXIT.USAGE,
         );
@@ -678,27 +683,17 @@ export function registerBillingCommands(program: Command): void {
       // a wrong chain must not be discovered after a real payment intent has been opened against
       // it. `base` and `base-sepolia` are different networks and money sent to the wrong one is
       // not recoverable by anything this CLI can do.
-      const chain = assertChain(opts.chain);
+      const chain = assertChain(ctx.chain.value, sourceLabel(ctx.chain, '--chain'));
+      echoFromContext('chain', ctx.chain);
 
       // Every option is validated BEFORE the network call. Checking after would
       // mean a typo in --timeout had already opened a real payment intent that the
       // customer then has to wait out or abandon.
-      const timeoutMin = Number(opts.timeout);
-      if (!Number.isFinite(timeoutMin) || timeoutMin <= 0) {
-        throw new CliError(
-          '--timeout must be a positive number of minutes',
-          'INVALID_TIMEOUT',
-          EXIT.USAGE,
-        );
-      }
-      const pollSec = Number(opts.pollInterval);
-      if (!Number.isFinite(pollSec) || pollSec <= 0) {
-        throw new CliError(
-          '--poll-interval must be a positive number of seconds',
-          'INVALID_POLL_INTERVAL',
-          EXIT.USAGE,
-        );
-      }
+      // `90s`, `6m`, `1h` or a bare number (minutes here, seconds for the interval, as before).
+      const timeoutMs = parseSpanMs(opts.timeout, 'minutes', '--timeout', 'INVALID_TIMEOUT');
+      const pollMs = parseSpanMs(opts.pollInterval, 'seconds', '--poll-interval', 'INVALID_POLL_INTERVAL');
+      // How the wait is described if it runs out: the unit the caller wrote, or "min" for a bare number.
+      const timeoutLabel = /^\d+(\.\d+)?$/.test(opts.timeout.trim()) ? `${opts.timeout.trim()} min` : opts.timeout.trim();
 
       // Checked with the other pre-flight validation, and for the same reason: a malformed address
       // must not be discovered after a real payment intent has been opened.
@@ -850,8 +845,8 @@ export function registerBillingCommands(program: Command): void {
 
       let lastSeen = '';
       const final: DepositIntentStatus = await client.billing.waitForPayment(intent.reference, {
-        intervalMs: pollSec * 1_000,
-        timeoutMs: timeoutMin * 60_000,
+        intervalMs: pollMs,
+        timeoutMs,
         onPoll: (s) => {
           // Only speak when something changed, so a long wait is not a wall of text.
           if (!isJsonMode() && s.status !== lastSeen) {
@@ -876,7 +871,7 @@ export function registerBillingCommands(program: Command): void {
       // Not credited. This is an ordinary outcome, not a crash — but the exit code
       // has to say so, or a script will treat an expired payment as funded.
       const why = final.status === 'open'
-        ? `still waiting after ${timeoutMin} min`
+        ? `still waiting after ${timeoutLabel}`
         : `payment ${final.status}`;
       throw new CliError(
         `Deposit not credited (${why}). Nothing was charged. `

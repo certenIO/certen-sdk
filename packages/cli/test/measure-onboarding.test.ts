@@ -63,6 +63,33 @@ const BASELINE = {
       ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
     ],
   },
+  /**
+   * The same transaction on the Phase 1 CLI. It differs from `published` in exactly what Phase 1 changed: `identity get` and
+   * `tx create` take the identity from the context, `tx create` derives `--from` and the chain, and one identity read now serves
+   * the ADI, the account and the funding guard (5 round trips become 4). The identity UUID is no longer copied by hand (5 values
+   * become 4); the abstract account is still copied once, to fund it, which is Phase 3's.
+   */
+  context: {
+    round_trips: 34,
+    per_step: [
+      ['certen --version', 0],
+      ['certen chains --refresh', 1],
+      ['certen auth login --api-key - --no-keyring', 1],
+      ['certen whoami', 2],
+      ['certen init --name journey-probe --chains base-sepolia --key dev', 4],
+      ['certen identity list', 1],
+      ['certen identity get', 1],
+      ['certen portfolio', 1],
+      ['certen doctor', 6],
+      ['certen keys show dev', 0],
+      ['certen balance', 1],
+      ['certen tx create --to {recipient} --amount 0.0001 --sign-with dev --wait --timeout 6m', 4],
+      ['certen tx status {intent_id}', 1],
+      ['certen proof get {intent_id}', 2],
+      ['certen proof verify {intent_id}', 4],
+      ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
+    ],
+  },
 } as const;
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -134,6 +161,7 @@ describe('--journey refuses what would be unsafe or unclear', () => {
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('guide');
     expect(r.stderr).toContain('published');
+    expect(r.stderr).toContain('context');
   });
 
   it('refuses a --fault it does not know, rather than running a clean journey and calling it a fault run', async () => {
@@ -185,6 +213,31 @@ describe('the baseline: the documented first-transaction journeys, as they are t
     expect(rep.totals.passphrase_prompts).toBe(2);
     expect(rep.totals.round_trips).toBe(BASELINE.published.round_trips);
     expect(certenSteps(rep).map((s) => [s.command, s.round_trips])).toEqual(BASELINE.published.per_step);
+  }, 290_000);
+
+  it('context: the same transaction on the Phase 1 CLI. The identity, chain and abstract account come from the context', async () => {
+    const r = await measureOnce('--journey', 'context', '--json');
+    expect(r.code, r.stderr).toBe(0);
+    const rep = report(r);
+
+    expect(rep.journey).toBe('context');
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    for (const s of certenSteps(rep)) expect(s.ok, `${s.label}: ${s.command}`).toBe(true);
+
+    // Same shape as the published journey: Phase 1 changes what each step costs and what has to be copied, not how many steps there are.
+    expect(rep.totals.commands).toBe(16);
+    expect(rep.totals.external).toBe(5);
+    // Before: identity_id, adi_url, key_page_url, abstract_account, intent_id. The identity UUID is gone.
+    expect(rep.totals.values_copied).toEqual(['adi_url', 'key_page_url', 'abstract_account', 'intent_id']);
+    expect(rep.totals.compared_by_eye).toEqual(['key_hash']);
+    expect(rep.totals.passphrase_prompts).toBe(2);
+    expect(rep.totals.round_trips).toBe(BASELINE.context.round_trips);
+    expect(certenSteps(rep).map((s) => [s.command, s.round_trips])).toEqual(BASELINE.context.per_step);
+
+    // It is strictly cheaper than the published journey, and by exactly the read that tx create no longer repeats.
+    const published = report(await measureOnce('--journey', 'published', '--json'));
+    expect(rep.totals.round_trips).toBe(published.totals.round_trips - 1);
+    expect(rep.totals.values_copied.length).toBe(published.totals.values_copied.length - 1);
   }, 290_000);
 
   it('the proof steps checked real fixtures: an honest PARTIAL (exit 4), not a canned verdict', async () => {

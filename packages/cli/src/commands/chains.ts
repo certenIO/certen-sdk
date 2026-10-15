@@ -118,7 +118,7 @@ export function registerChainsCommands(program: Command): void {
       // `chain_id` from the portfolio without another round trip.
       // The gateway's enable switch is cached too, so a chain it lists but does not serve is
       // never offered offline either.
-      writeChainCache(result.chains.map((c) => ({ id: c.id, chainId: c.chainId, enabled: c.enabled })));
+      writeChainCache(result.chains.map((c) => ({ id: c.id, chainId: c.chainId, enabled: c.enabled, environment: c.environment })));
 
       // Shown = configured ∩ served, judged against the list just fetched.
       const shown = opts.all ? result.chains : result.chains.filter((c) => isSupportedChain(c.id, result.chains));

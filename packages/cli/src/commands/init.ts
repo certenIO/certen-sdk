@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { CertenClient, CertenError, readNativeBalance, describeUnverifiable } from '@certen.io/sdk';
 import {
-  getApiKey, getApiUrl, getPortalUrl, setApiKey, readConfig, rememberIdentity, lastIdentity,
+  getApiKey, getApiUrl, getPortalUrl, setApiKey, credentialInfo, rememberIdentity, lastIdentity,
 } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -69,8 +69,8 @@ export function registerInitCommands(program: Command): void {
       '--payer <address>',
       'Wallet you will pay from. Deposits from it credit you automatically, with no payment intent.',
     )
-    .option('--timeout <minutes>', `How long to wait for provisioning (default ${IDENTITY_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${IDENTITY_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait for provisioning (90s, 6m, 1h; a bare number is minutes. Default ${IDENTITY_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${IDENTITY_WAIT.intervalSec}s)`)
     .action(async (opts: {
       name?: string; key: string; chains: string; yes?: boolean; payer?: string;
       timeout?: string; pollInterval?: string;
@@ -108,7 +108,7 @@ export function registerInitCommands(program: Command): void {
         // browser to copy a secret back by hand; running it here is the whole point of Phase 5.
         // Falls back to a hidden paste prompt only when the gateway cannot do device auth.
         try {
-          const granted = await runDeviceFlow({ browser: true, keyring: readConfig().storage === 'keyring' });
+          const granted = await runDeviceFlow({ browser: true, keyring: credentialInfo().storage === 'keyring' });
           apiKey = await getApiKey();
           steps.push({ step: 'api key', status: 'created', detail: `${granted.prefix}... authorized` });
           say('                  authorized.');
@@ -137,7 +137,7 @@ export function registerInitCommands(program: Command): void {
             if (probeErr instanceof CertenError && probeErr.status === 0) throw probeErr;
             // 403 and other statuses mean the credential is real; carry on.
           }
-          await setApiKey(entered, readConfig().storage === 'keyring');
+          await setApiKey(entered, credentialInfo().storage === 'keyring');
           apiKey = entered;
           steps.push({ step: 'api key', status: 'created', detail: `${entered.substring(0, 12)}... saved` });
           say('     saved.');
@@ -231,7 +231,7 @@ export function registerInitCommands(program: Command): void {
           .map((a) => ({ chain_id: a.chain_id, address: a.address }));
         // Written down immediately: this is the only moment the UUID is knowable, and without a
         // record it is unrecoverable from any endpoint.
-        rememberIdentity({ id: identityId, adi_url: adiUrl, chains });
+        rememberIdentity({ id: identityId, adi_url: adiUrl, chains, name });
         steps.push({ step: 'identity', status: 'created', detail: `${adiUrl} (${identityId})` });
         say(`                  ${adiUrl} is active and can sign`);
       }

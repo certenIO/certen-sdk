@@ -143,6 +143,11 @@ interface ChainCache {
   numeric?: Record<string, string>;
   /** Ids the gateway lists with `enabled: false`: listed, not served. */
   disabled?: string[];
+  /**
+   * Registry id → the `environment` the gateway reports (`testnet`, `mainnet`, ...). Absent in a cache written before it was kept.
+   * It is what lets {@link isKnownTestnet} classify a chain the SDK's catalogue (testnets only) has never heard of.
+   */
+  environments?: Record<string, string>;
 }
 
 export function readChainCache(): ChainCache | null {
@@ -165,11 +170,13 @@ export function chainCacheIsFresh(cache: ChainCache | null): boolean {
   return Number.isFinite(age) && age >= 0 && age < CACHE_TTL_MS;
 }
 
-export function writeChainCache(entries: Array<{ id: string; chainId: number | null; enabled?: boolean }>): void {
+export function writeChainCache(entries: Array<{ id: string; chainId: number | null; enabled?: boolean; environment?: string }>): void {
   try {
     const numeric: Record<string, string> = {};
+    const environments: Record<string, string> = {};
     for (const entry of entries) {
       if (entry.chainId !== null && entry.chainId !== undefined) numeric[String(entry.chainId)] = entry.id;
+      if (entry.environment) environments[entry.id] = entry.environment;
     }
     mkdirSync(join(homedir(), '.certen'), { recursive: true });
     writeFileSync(chainCacheFile(), JSON.stringify({
@@ -177,10 +184,26 @@ export function writeChainCache(entries: Array<{ id: string; chainId: number | n
       ids: entries.map((e) => e.id),
       numeric,
       disabled: entries.filter((e) => e.enabled === false).map((e) => e.id),
+      environments,
     }, null, 2));
   } catch {
     // Best effort. Failing to cache must never fail the command that triggered it.
   }
+}
+
+/**
+ * Is this chain POSITIVELY known to be a testnet?
+ *
+ * The SDK's catalogue holds testnets only, so a chain in it is one. A chain outside it is a testnet only if the gateway's registry,
+ * as cached by `certen chains`, says so. Anything else (a mainnet, a chain nobody can classify, a name that is merely an alias such
+ * as `ethereum`) is NOT known to be a testnet, and the callers treat that as "not safe to pick on someone's behalf": unknown is
+ * not ok. Aliases are deliberately not resolved here: `ethereum` is a real mainnet, not a nickname for `ethereum-sepolia`.
+ */
+export function isKnownTestnet(chain: string): boolean {
+  const info = chainInfo(chain);
+  if (info) return info.environment === 'testnet';
+  const slug = normalizeChain(chain);
+  return readChainCache()?.environments?.[slug] === 'testnet';
 }
 
 /** What the fresh cache says the gateway serves, or undefined when there is no fresh answer. */
@@ -298,9 +321,12 @@ export function assertChain(value: string, flag = '--chain'): string {
   // A chain the gateway really serves gets a different sentence from one that does not exist.
   // Telling someone `optimism-sepolia` "is not a chain" would be false, and would send them
   // looking for a typo they did not make.
+  // The two messages below name no flag, so a chain that came from somewhere other than `--chain` (the environment, a profile)
+  // would not say where it came from. The default flag keeps the text exactly as it always was.
+  const from = flag === '--chain' ? '' : `${flag}: `;
   if (gatewayKnows(chain)) {
     throw new UsageError(
-      `The gateway serves "${chain}", but this CLI targets ${configured.join(', ')}. `
+      `${from}The gateway serves "${chain}", but this CLI targets ${configured.join(', ')}. `
       + `Set ${OVERRIDE_ENV_VAR}=1 to use it anyway.`,
       'UNSUPPORTED_CHAIN',
     );
@@ -308,7 +334,7 @@ export function assertChain(value: string, flag = '--chain'): string {
 
   const suggestion = nearestChain(chain);
   const lines = [
-    `"${chain}" is not a supported chain.`,
+    `${from}"${chain}" is not a supported chain.`,
     suggestion ? ` Did you mean ${suggestion}?` : '',
     ` Supported: ${configured.join(', ')}.`,
     ` (Set ${OVERRIDE_ENV_VAR}=1 to use a chain outside this set.)`,

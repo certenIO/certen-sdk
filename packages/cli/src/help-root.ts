@@ -30,7 +30,7 @@ const GROUPS: Group[] = [
   {
     title: 'Get started',
     blurb: 'from nothing to a working setup',
-    commands: ['login', 'signup', 'init', 'chains', 'auth', 'keys', 'doctor', 'whoami'],
+    commands: ['login', 'signup', 'init', 'context', 'use', 'chains', 'auth', 'keys', 'doctor', 'whoami'],
   },
   {
     title: 'Build',

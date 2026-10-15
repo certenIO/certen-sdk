@@ -1,5 +1,5 @@
 import { Command, Option } from 'commander';
-import { checkIntentSigning, inspectSigningData } from '@certen.io/sdk';
+import { checkIntentSigning, inspectSigningData, type IdentityResponse } from '@certen.io/sdk';
 import { readFileSync } from 'node:fs';
 import { CertenClient, intentOutcome } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
@@ -9,6 +9,9 @@ import { assertChain } from '../chains.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
 import { assertFundedForValue } from '../funding-guard.js';
+import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
+import { resolveCommandIdentity, abstractAccountFor } from '../command-context.js';
+import { resolveIdentityRef } from '../identity-ref.js';
 import {
   AUTHORITY_HELP, EXPIRES_IN_HELP, HEADER_FIELDS_HELP, collect, parseAuthorityFlags, parseExpiresIn,
   withOutcomeFields, emitOutcomeHints,
@@ -94,11 +97,11 @@ export function registerTransactionCommands(program: Command): void {
     // The API takes an `intent` object, not flat to/amount/type fields. The flags below build the simple
     // native-transfer shape; `--intent` takes a JSON file or literal for multi-leg and contract-call
     // intents, which have no sensible flag representation.
-    .requiredOption('--identity <id>', 'Identity ID (uuid)')
+    .option('--identity <ref>', 'Identity: UUID, ADI URL or name (default: your context, see `certen context`)')
     .option('--intent <json>', 'Intent as JSON, or @path/to/intent.json. Overrides the flags below.')
     .option('--from-chain <chain>', 'Source chain', 'accumulate')
-    .option('--to-chain <chain>', 'Destination chain, e.g. ethereum-sepolia')
-    .option('--from <address>', 'Source address (the identity ADI or its abstract account)')
+    .option('--to-chain <chain>', 'Destination chain, e.g. ethereum-sepolia (default: your context)')
+    .option('--from <address>', "Source address (default: the identity's abstract account on --to-chain)")
     .option('--to <address>', 'Destination address')
     // WHOLE units, not base units. "1" is one ETH. This said "base units (wei)"
     // until 2026-08-11 — the inverse, and inverted in the dangerous direction:
@@ -121,8 +124,8 @@ export function registerTransactionCommands(program: Command): void {
     .option('--sign-with <key>', 'Local key: sign the returned hash and submit it in one step')
     .option('--wait', 'Wait for the proof cycle to reach a terminal state (default off with --json)')
     .option('--no-wait', 'Return as soon as the signature is submitted')
-    .option('--timeout <minutes>', `How long to wait (default ${TX_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait (90s, 6m, 1h; a bare number is minutes. Default ${TX_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${TX_WAIT.intervalSec}s)`)
     .option('--force', 'Submit even if the abstract account has no gas to execute with')
     .option('--authority <acc-url>', AUTHORITY_HELP, collect)
     .option('--expires-in <duration>', EXPIRES_IN_HELP)
@@ -131,21 +134,79 @@ export function registerTransactionCommands(program: Command): void {
       // Flag checks that need no network come first, as in `certen call`.
       const additionalAuthorities = parseAuthorityFlags(opts.authority);
       parseExpiresIn(opts.expiresIn); // validated now, measured just before the intent is opened
-      const client = await getClient();
 
-      // Resolve (and unlock) the signer BEFORE opening the intent. Prompting for a passphrase
-      // after the intent exists would leave an unsigned intent behind every time someone
-      // mistypes it or hits Ctrl-C at the prompt.
+      // The context, locally: which identity, and (when the intent is built from flags) which chain. An `--intent` names its own
+      // chains, so the context chain is not consulted for it. This moves value, so a chain that is not a known testnet is refused as
+      // a default (context.ts). A signing key is deliberately NOT defaulted: leaving `--sign-with` out of `tx create` is a
+      // supported mode (open the intent, return signing data for an external signer), and signing there on a guess would start
+      // signing for people who rely on it.
+      const ctx = resolveContext(
+        { identity: opts.identity, chain: opts.toChain },
+        { valueMoving: true, fields: opts.intent ? ['identity'] : ['identity', 'chain'] },
+      );
+      requireIdentity(ctx);
+      const chainFrom = opts.intent ? undefined : ctx.chain;
+      const toChain: string | undefined = opts.intent ? opts.toChain : chainFrom?.value;
+
       // Chains are checked before the signer is unlocked, so a typo costs a message rather than a
       // passphrase prompt followed by a gateway rejection.
-      if (opts.toChain) assertChain(opts.toChain, '--to-chain');
+      if (toChain) assertChain(toChain, chainFrom ? sourceLabel(chainFrom, '--to-chain') : '--to-chain');
       // `--from-chain` defaults to `accumulate`, which is not an EVM chain and is not in the
       // supported set; only validate it when the caller named an EVM chain explicitly.
       if (opts.fromChain && opts.fromChain !== 'accumulate') assertChain(opts.fromChain, '--from-chain');
 
+      if (!opts.intent) {
+        // Several linked chains and none chosen is a question that lists them, not a missing flag.
+        if (!toChain && ctx.candidates.chain.length > 1 && opts.to && opts.amount) requireChain(ctx, '--to-chain');
+        // `--from` is no longer on this list: it is derived from the identity when not given, exactly as `certen call` does.
+        const missing = [
+          !toChain && '--to-chain',
+          !opts.to && '--to',
+          !opts.amount && '--amount',
+        ].filter(Boolean);
+
+        if (missing.length > 0) {
+          throw new UsageError(
+            `A simple transfer needs ${missing.join(', ')}. `
+            + 'Give --to-chain, --to and --amount (--identity, --to-chain and --from come from your context when left out: certen context), '
+            + 'or pass --intent for a multi-leg or contract-call intent.',
+            'INCOMPLETE_INTENT',
+          );
+        }
+      }
+
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
+      const client = await getClient();
 
+      // The identity as a UUID, however it was named. Echoed (unless typed) once it resolves.
+      const who = await resolveCommandIdentity(ctx, client, 'id');
+      echoFromContext('chain', chainFrom);
+
+      // Deriving `--from` needs the identity. The one read also carries what the funding guard and the signing summary need (the
+      // per-chain balances and the ADI), so none of them reads it again. With an explicit `--from` or an `--intent` nothing here
+      // needs the identity, and no read is made, exactly as before.
+      let identityRead: IdentityResponse | undefined;
+      let fromAddress: string | undefined = opts.from;
+      if (!opts.intent && !fromAddress) {
+        identityRead = await client.identity.get(who.id!, { include: ['balances'] });
+        fromAddress = abstractAccountFor(identityRead, toChain!);
+        if (!fromAddress) {
+          // Naming the fix precisely: the identity exists, it simply has no account on this chain.
+          throw new CliError(
+            `Identity ${identityRead.adi_url} has no abstract account on ${toChain}, so it has no `
+            + 'msg.sender there. Link the chain first:\n'
+            + `  certen identity link-chain ${identityRead.id} --chain ${toChain}`,
+            'NO_ABSTRACT_ACCOUNT',
+            EXIT.FAILED,
+          );
+        }
+        hint(`using from ${fromAddress} (derived: the abstract account of ${identityRead.adi_url} on ${toChain})`);
+      }
+
+      // Resolve (and unlock) the signer BEFORE opening the intent. Prompting for a passphrase
+      // after the intent exists would leave an unsigned intent behind every time someone
+      // mistypes it or hits Ctrl-C at the prompt.
       const signer = opts.signWith ? await resolveSigner(opts.signWith) : null;
 
       let intent: Record<string, unknown>;
@@ -163,30 +224,13 @@ export function registerTransactionCommands(program: Command): void {
           );
         }
       } else {
-        // `--from` belongs in this list. The gateway rejects a native transfer without
-        // `fromAddress` ("Native transfer intent is missing required field(s): fromAddress"), so
-        // omitting it was always a failure — just one that cost a round trip and arrived phrased
-        // in the API's field names rather than the flags the user typed.
-        const missing = [
-          !opts.toChain && '--to-chain',
-          !opts.from && '--from',
-          !opts.to && '--to',
-          !opts.amount && '--amount',
-        ].filter(Boolean);
-
-        if (missing.length > 0) {
-          throw new UsageError(
-            `A simple transfer needs ${missing.join(', ')}. `
-            + 'Give all of --to-chain, --from, --to and --amount, or pass --intent for a '
-            + 'multi-leg or contract-call intent. '
-            + '--from is the identity\'s abstract account on the source chain (certen portfolio shows it).',
-            'INCOMPLETE_INTENT',
-          );
-        }
+        // The gateway rejects a native transfer without `fromAddress` ("Native transfer intent is missing required
+        // field(s): fromAddress"), which is why it is derived above when not given, rather than left for the gateway to refuse in
+        // the API's field names. Everything required was checked before the network was touched.
         intent = {
           fromChain: opts.fromChain,
-          toChain: opts.toChain,
-          fromAddress: opts.from,
+          toChain,
+          fromAddress,
           toAddress: opts.to,
           amount: String(opts.amount),
           tokenSymbol: opts.token,
@@ -196,11 +240,12 @@ export function registerTransactionCommands(program: Command): void {
       // Checked after the intent is assembled and BEFORE it is opened: an intent that cannot
       // execute should never exist. See funding-guard.ts for why this only ever refuses on a
       // positively observed zero.
-      const executionChain = (intent.toChain ?? intent.to_chain ?? opts.toChain) as string | undefined;
-      await assertFundedForValue(client, opts.identity, executionChain, intent, Boolean(opts.force));
+      const executionChain = (intent.toChain ?? intent.to_chain ?? toChain) as string | undefined;
+      // The identity read above, when there is one, already carries the balances: no second read of the same numbers.
+      await assertFundedForValue(client, who.id!, executionChain, intent, Boolean(opts.force), identityRead?.balances);
 
       const result = await client.transaction.create({
-        identityId: opts.identity,
+        identityId: who.id!,
         intent,
         contractAddresses: opts.contractAddress,
         signerKeyPage: opts.signerKeyPage,
@@ -238,7 +283,9 @@ export function registerTransactionCommands(program: Command): void {
 
       // Rebuild the transaction the gateway returned, recompute every hash and match it to THIS request before a signature exists.
       // A mismatch, or no transaction to rebuild, ends the command here with nothing signed.
-      const adiUrl = typeof intent.adiUrl === 'string' && intent.adiUrl ? intent.adiUrl : (await client.identity.get(opts.identity)).adi_url;
+      const adiUrl = typeof intent.adiUrl === 'string' && intent.adiUrl
+        ? intent.adiUrl
+        : (identityRead?.adi_url ?? (await client.identity.get(who.id!)).adi_url);
       const summary = await checkIntentSigning(signingData, {
         intentId,
         adiUrl,
@@ -312,7 +359,7 @@ export function registerTransactionCommands(program: Command): void {
     .command('inspect <id>')
     .description('Rebuild what an open intent asks to be signed, check every hash, and show what a signature would authorise. Signs nothing.')
     .option('--intent <json|@file>', 'The intent as you sent it: with it, the transaction is also matched to your request')
-    .option('--identity <id>', 'The identity the intent belongs to (with --intent, to learn its ADI)')
+    .option('--identity <ref>', 'The identity the intent belongs to: UUID, ADI URL or name (with --intent, to learn its ADI)')
     .option('--signer-public-key <hex>', 'The key that will sign: the signature metadata must name it')
     .action(async (id: string, opts) => {
       const client = await getClient();
@@ -332,7 +379,9 @@ export function registerTransactionCommands(program: Command): void {
         try { asked = JSON.parse(raw); } catch (err) {
           throw new UsageError(`--intent is not valid JSON: ${err instanceof Error ? err.message : String(err)}`, 'INVALID_INTENT_JSON');
         }
-        const adiUrl = typeof asked.adiUrl === 'string' && asked.adiUrl ? asked.adiUrl : opts.identity ? (await client.identity.get(opts.identity)).adi_url : '';
+        const adiUrl = typeof asked.adiUrl === 'string' && asked.adiUrl
+          ? asked.adiUrl
+          : opts.identity ? ((await resolveIdentityRef(opts.identity, { client, need: 'adi' })).adi_url ?? '') : '';
         summary = await checkIntentSigning(sd, { intentId: id, adiUrl, intent: asked, ...(opts.signerPublicKey ? { signerPublicKey: opts.signerPublicKey } : {}) });
       } else {
         summary = await inspectSigningData(sd, { signerPublicKey: opts.signerPublicKey });
@@ -349,8 +398,8 @@ export function registerTransactionCommands(program: Command): void {
     // and asking "tell me when it is done" are different questions, and a status command that
     // silently blocked for seven minutes would be the wrong answer to the first one.
     .option('--wait', 'Poll until the intent reaches a terminal state')
-    .option('--timeout <minutes>', `How long to wait with --wait (default ${TX_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait with --wait (90s, 6m, 1h; a bare number is minutes. Default ${TX_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${TX_WAIT.intervalSec}s)`)
     .action(async (id: string, opts: { wait?: boolean; timeout?: string; pollInterval?: string }) => {
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
       const client = await getClient();

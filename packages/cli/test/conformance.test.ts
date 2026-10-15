@@ -232,6 +232,90 @@ describe('CLI contract: --help --json describes the whole tree', () => {
   });
 });
 
+describe('CLI contract: context, profiles and the identity reference (docs/CLI-CONTRACT.md section 7)', () => {
+  it('certen context emits one envelope, locally, with no API key and no network', () => {
+    const r = certen(['--json', 'context']);
+    expect(r.code).toBe(0);
+    const env = soleJson(r.stdout);
+    expect(env.ok).toBe(true);
+    const d = env.data as Record<string, unknown>;
+    // Every field the contract names is present, and absent choices are null rather than missing.
+    for (const k of ['profile', 'profiles', 'gateway', 'credential', 'identity', 'key', 'chain', 'allow_mainnet_default', 'candidates']) {
+      expect(d, k).toHaveProperty(k);
+    }
+    expect(d.profile).toBe('default');
+    expect(d.identity).toBeNull();
+    expect(d.allow_mainnet_default).toBe(false);
+  });
+
+  it('the human lines of context stay off stdout in JSON mode', () => {
+    const r = certen(['--json', 'context']);
+    // Exactly one line: the envelope. The human summary goes to stderr.
+    expect(r.stdout.trim().split(/\r?\n/)).toHaveLength(1);
+  });
+
+  it('certen use chain emits one envelope naming the profile it wrote to, and the chain', () => {
+    const r = certen(['--json', 'use', 'chain', 'base-sepolia']);
+    expect(r.code).toBe(0);
+    expect(soleJson(r.stdout).data).toMatchObject({ profile: 'default', chain: 'base-sepolia', known_testnet: true });
+  });
+
+  it('2 — use key for a key that does not exist is a usage error naming the code, and writes nothing', () => {
+    const r = certen(['--json', 'use', 'key', 'nosuchkey']);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('UNKNOWN_KEY');
+  });
+
+  it('2 — use with neither a value nor --unset is a usage error', () => {
+    const r = certen(['--json', 'use', 'chain']);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('MISSING_VALUE');
+  });
+
+  it('2 — a bad --profile is reported in an envelope, before anything is read', () => {
+    const r = certen(['--json', 'context', '--profile', '../escape']);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('INVALID_PROFILE_NAME');
+  });
+
+  it('--profile may appear before or after the subcommand, and a profile that does not exist is named', () => {
+    for (const args of [['--profile', 'ghost', '--json', 'context'], ['--json', 'context', '--profile', 'ghost']]) {
+      const r = certen(args);
+      expect(r.code, args.join(' ')).toBe(2);
+      expect((soleJson(r.stdout).error as { code: string }).code).toBe('PROFILE_NOT_FOUND');
+    }
+  });
+
+  it('2 — an identity reference that is none of a UUID, an ADI URL or a name is refused before any request', () => {
+    const r = certen(['--json', 'identity', 'get', 'not a valid reference'], { CERTEN_API_KEY: 'ck_test_notreal', CERTEN_API_URL: 'http://127.0.0.1:9' });
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('INVALID_IDENTITY_REF');
+  });
+
+  it('2 — a command that needs an identity and has none says so before any request (the gateway here is unreachable)', () => {
+    const r = certen(['--json', 'call', '--to', '0x1111111111111111111111111111111111111111', '--fn', 'f()', '--chain', 'base-sepolia'], { CERTEN_API_KEY: 'ck_test_notreal', CERTEN_API_URL: 'http://127.0.0.1:9' });
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('MISSING_IDENTITY');
+  });
+
+  it('2 — a duration with a bad unit is a usage error before any request', () => {
+    const r = certen(['--json', 'tx', 'status', 'abc', '--timeout', '6 minutes'], { CERTEN_API_KEY: 'ck_test_notreal', CERTEN_API_URL: 'http://127.0.0.1:9' });
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('INVALID_TIMEOUT');
+  });
+
+  it('--help --json lists the new commands and the global --profile option', () => {
+    const r = certen(['--json', '--help']);
+    const data = soleJson(r.stdout).data as { commands: Array<{ name: string; commands?: Array<{ name: string }> }>; options?: Array<{ name: string }> };
+    const names = data.commands.map((c) => c.name);
+    expect(names).toEqual(expect.arrayContaining(['context', 'use']));
+    expect((data.commands.find((c) => c.name === 'use')!.commands ?? []).map((c) => c.name)).toEqual(
+      expect.arrayContaining(['identity', 'key', 'chain', 'gateway', 'profile', 'allow-mainnet-default']),
+    );
+    expect(JSON.stringify(data)).toContain('"profile"');
+  });
+});
+
 describe('CLI contract: table mode is unchanged for humans', () => {
   it('prints a table, not JSON, when --json is absent', () => {
     const r = certen(['auth', 'status']);

@@ -10,6 +10,9 @@ import { assertChain, assertChains } from '../chains.js';
 import { UsageError } from '../errors.js';
 import { resolveWait, parseWaitBudget, waitForIdentity, IDENTITY_WAIT } from '../wait.js';
 import { faucetFor } from '../funding-guard.js';
+import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
+import { resolveCommandIdentity, assertContextKeyExists } from '../command-context.js';
+import { resolveIdentityRef } from '../identity-ref.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -56,7 +59,7 @@ export function registerIdentityCommands(program: Command): void {
     .command('create')
     .description('Create a new identity')
     .requiredOption('--name <name>', 'Identity name')
-    .option('--sign-with <key>', 'Local key to own this identity (see `certen keys generate`)')
+    .option('--sign-with <key>', 'Local key to own this identity (default: your context key, or your only key; see `certen keys generate`)')
     .option('--public-key-hash <hash>', 'Public key hash (omit when using --sign-with)')
     .option('--public-key <key>', 'Public key (hex)')
     .option('--chains <chains>', 'Comma-separated chains, e.g. base-sepolia,arbitrum-sepolia')
@@ -66,8 +69,8 @@ export function registerIdentityCommands(program: Command): void {
     // silently start blocking. See resolveWait().
     .option('--wait', 'Wait until the identity is provisioned AND can sign (default off --json)')
     .option('--no-wait', 'Return as soon as the gateway accepts the request')
-    .option('--timeout <minutes>', `How long to wait (default ${IDENTITY_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${IDENTITY_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait (90s, 6m, 1h; a bare number is minutes. Default ${IDENTITY_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${IDENTITY_WAIT.intervalSec}s)`)
     .action(async (opts) => {
       // --public-key-hash was required, which is why the CLI could not create an identity on its
       // own: the hash is sha256 of the RAW 32-byte public key, and working that out was left to
@@ -85,14 +88,34 @@ export function registerIdentityCommands(program: Command): void {
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, IDENTITY_WAIT);
 
-      if (opts.signWith) {
+      // The key that owns the identity. Leaving it out was always MISSING_SIGNING_KEY, so a context key (a profile's, CERTEN_KEY, or the
+      // only key on this machine) can fill the gap without changing what any working invocation does. It is chosen only when the key
+      // material was not given explicitly, never between several keys, and it is said BEFORE the passphrase prompt: the key chosen
+      // here owns the identity, and the identity is quota.
+      let signWith: string | undefined = opts.signWith;
+      if (!signWith && !publicKeyHash && !publicKey) {
+        const ctx = resolveContext({}, { fields: ['key'] });
+        if (ctx.key) {
+          assertContextKeyExists(ctx.key);
+          echoFromContext('key', ctx.key);
+          signWith = ctx.key.value;
+        } else if (ctx.candidates.key.length > 1) {
+          throw new UsageError(
+            `Which key owns this identity? You have ${ctx.candidates.key.join(', ')}. Pass --sign-with <key>, set CERTEN_KEY, or choose one once `
+            + 'with: certen use key <name>',
+            'MISSING_SIGNING_KEY',
+          );
+        }
+      }
+
+      if (signWith) {
         if (publicKeyHash || publicKey) {
           throw new UsageError(
             'Pass either --sign-with or --public-key-hash/--public-key, not both.',
             'CONFLICTING_KEY_FLAGS',
           );
         }
-        const signer = await resolveSigner(opts.signWith);
+        const signer = await resolveSigner(signWith);
         publicKeyHash = signer.publicKeyHash;
         publicKey = signer.publicKey;
       }
@@ -146,7 +169,8 @@ export function registerIdentityCommands(program: Command): void {
       const id = result.id;
       // Recorded the moment it exists. The gateway has no identity list route and the portfolio
       // view returns no UUIDs, so an id that is only printed is an id that can be lost.
-      if (id) rememberIdentity({ id, adi_url: result.adi_url, chains: chains ?? [] });
+      // `name` is kept so `--identity <name>` finds it later (see identity-ref.ts).
+      if (id) rememberIdentity({ id, adi_url: result.adi_url, chains: chains ?? [], name: opts.name });
 
       if (!wait || !id) {
         if (result.id) printIdentity(result);
@@ -244,12 +268,15 @@ export function registerIdentityCommands(program: Command): void {
     });
 
   identity
-    .command('get <id>')
-    .description('Get identity details')
-    .action(async (id: string) => {
+    .command('get [ref]')
+    .description('Get identity details: by UUID, ADI URL or name (default: your context identity)')
+    .action(async (ref: string | undefined) => {
+      const ctx = resolveContext({ identity: ref }, { fields: ['identity'] });
+      requireIdentity(ctx);
       const client = await getClient();
+      const who = await resolveCommandIdentity(ctx, client, 'id');
       // No `--include`: the route takes no query parameters. It used to be sent and silently ignored.
-      const result = await client.identity.get(id);
+      const result = await client.identity.get(who.id!);
       printIdentity(result);
 
       if (isJsonMode()) return;
@@ -276,13 +303,17 @@ export function registerIdentityCommands(program: Command): void {
     });
 
   identity
-    .command('retire <id>')
-    .description('Retire an identity, freeing the org quota slot it occupies')
+    .command('retire <ref>')
+    .description('Retire an identity (UUID, ADI URL or name), freeing the org quota slot it occupies')
     .requiredOption('--yes', 'Confirm. There is no prompt — see below')
-    .action(async (id: string) => {
+    .action(async (ref: string) => {
       // No y/N prompt: the required --yes IS the confirmation, matching `keys delete`. An identity
       // that a live integration depends on should not be retirable by an accidental Enter.
       const client = await getClient();
+
+      // Any spelling of the identity works, but it is NEVER taken from the context: retiring the identity of the day is not
+      // something to infer. The argument stays required.
+      const id = (await resolveIdentityRef(ref, { client, need: 'id' })).id!;
 
       // Resolved first so the confirmation message names what is being retired. An id pasted from
       // the wrong terminal is the mistake worth catching, and it is invisible until something says
@@ -307,13 +338,19 @@ export function registerIdentityCommands(program: Command): void {
     });
 
   identity
-    .command('link-chain <id>')
-    .description('Link a chain to an identity')
-    .requiredOption('--chain <chain>', 'Chain to link, e.g. base-sepolia')
-    .action(async (id: string, opts) => {
-      const chain = assertChain(opts.chain);
+    .command('link-chain [ref]')
+    .description('Link a chain to an identity (default: your context identity and chain)')
+    .option('--chain <chain>', 'Chain to link, e.g. base-sepolia (default: your context)')
+    .action(async (ref: string | undefined, opts) => {
+      // `inferChain: false`: the chain an identity is ALREADY linked to is no reason to link it again.
+      const ctx = resolveContext({ identity: ref, chain: opts.chain }, { fields: ['identity', 'chain'], inferChain: false });
+      requireIdentity(ctx);
+      const chainFrom = requireChain(ctx);
+      const chain = assertChain(chainFrom.value, sourceLabel(chainFrom, '--chain'));
       const client = await getClient();
-      const result = await client.identity.update(id, {
+      const who = await resolveCommandIdentity(ctx, client, 'id');
+      echoFromContext('chain', ctx.chain);
+      const result = await client.identity.update(who.id!, {
         linkChains: [chain],
       });
       printOutput(result as unknown as Record<string, unknown>);
@@ -321,12 +358,19 @@ export function registerIdentityCommands(program: Command): void {
 
   identity
     .command('mnemonic <id-or-url> [token]')
-    .description('Collect a provider-mode mnemonic — works exactly once')
+    .description('Collect a provider-mode mnemonic — works exactly once. With a token, the identity may be a UUID, an ADI URL or a name')
     .option('--out <file>', 'Where to write it. Defaults to ./<id>-mnemonic.txt, mode 0600.')
     .option('--print', 'Print it to the terminal instead of writing a file')
     .action(async (idOrUrl: string, token: string | undefined, opts: { out?: string; print?: boolean }) => {
       const client = await getClient();
-      const { mnemonic } = await client.identity.retrieveMnemonic(idOrUrl, token);
+
+      // With a token the first argument is an identity, in any spelling: resolved to the UUID the route wants BEFORE the one-time
+      // token is spent, so a name nobody has is refused here instead of being sent to a guess. A retrieval URL (no token) is left
+      // exactly as it was. (An ADI URL also contains "://", which is why this tests for an http(s) URL rather than for "://".)
+      const target = token && !/^https?:\/\//i.test(idOrUrl)
+        ? (await resolveIdentityRef(idOrUrl, { client, need: 'id' })).id!
+        : idOrUrl;
+      const { mnemonic } = await client.identity.retrieveMnemonic(target, token);
 
       // A machine consumer asked for the value in its output, so give it the value. Anything else
       // would mean a script has to go read a file the CLI chose the name of.
@@ -347,7 +391,7 @@ export function registerIdentityCommands(program: Command): void {
       // Writing beats printing by default. A seed phrase on stdout lands in scrollback, in CI
       // logs, and in whatever is recording the session — all places it outlives its usefulness by
       // years. `--print` is there for anyone who genuinely wants that.
-      const { id } = parseMnemonicTarget(idOrUrl, token);
+      const { id } = parseMnemonicTarget(target, token);
       const path = opts.out ?? `${id}-mnemonic.txt`;
       writeFileSync(path, `${mnemonic}\n`, { encoding: 'utf-8', mode: 0o600 });
       try {

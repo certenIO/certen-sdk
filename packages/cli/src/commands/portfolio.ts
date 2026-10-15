@@ -4,6 +4,7 @@ import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, isJsonMode } from '../output.js';
 import { faucetFor } from '../funding-guard.js';
 import { normalizeChain } from '../chains.js';
+import { filterIdentity } from '../identity-ref.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -13,10 +14,11 @@ export function registerPortfolioCommands(program: Command): void {
   program
     .command('portfolio')
     .description('Get multi-chain portfolio balances')
-    .option('--identity <id>', 'Filter by identity')
+    .option('--identity <ref>', 'Filter by identity: UUID, ADI URL or name (a filter: left out, you see them all)')
     .action(async (opts) => {
       const client = await getClient();
-      const result = await client.portfolio.get(opts.identity);
+      // Whichever way it was spelled, in the form the route takes. Never filled in from the context: a filter left out means "all".
+      const result = await client.portfolio.get(opts.identity ? await filterIdentity(opts.identity) : undefined);
       printOutput(result as unknown as Record<string, unknown>);
 
       if (isJsonMode()) return;

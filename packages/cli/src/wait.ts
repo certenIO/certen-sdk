@@ -1,7 +1,8 @@
 import type { CertenClient, Identity } from '@certen.io/sdk';
 import { CertenIntentFailedError, CertenWaitTimeoutError, describeReasonCode, intentOutcome } from '@certen.io/sdk';
-import { CliError, UsageError, EXIT } from './errors.js';
+import { CliError, EXIT } from './errors.js';
 import { human, isJsonMode } from './output.js';
+import { parseSpanMs } from './duration.js';
 
 /**
  * Waiting for asynchronous work to finish.
@@ -60,15 +61,15 @@ export function parseWaitBudget(
   pollInterval: string | undefined,
   defaults: { timeoutMin: number; intervalSec: number },
 ): WaitBudget {
-  const timeoutMin = timeout === undefined ? defaults.timeoutMin : Number(timeout);
-  if (!Number.isFinite(timeoutMin) || timeoutMin <= 0) {
-    throw new UsageError('--timeout must be a positive number of minutes', 'INVALID_TIMEOUT');
-  }
-  const intervalSec = pollInterval === undefined ? defaults.intervalSec : Number(pollInterval);
-  if (!Number.isFinite(intervalSec) || intervalSec <= 0) {
-    throw new UsageError('--poll-interval must be a positive number of seconds', 'INVALID_POLL_INTERVAL');
-  }
-  return { timeoutMs: timeoutMin * 60_000, intervalMs: intervalSec * 1_000 };
+  // `90s`, `6m` and `1h` say what they mean; a bare number keeps its old meaning (minutes, and seconds for the interval). The
+  // per-operation defaults below are untouched: this is a way to write a budget down, never a way to shorten one.
+  const timeoutMs = timeout === undefined
+    ? defaults.timeoutMin * 60_000
+    : parseSpanMs(timeout, 'minutes', '--timeout', 'INVALID_TIMEOUT');
+  const intervalMs = pollInterval === undefined
+    ? defaults.intervalSec * 1_000
+    : parseSpanMs(pollInterval, 'seconds', '--poll-interval', 'INVALID_POLL_INTERVAL');
+  return { timeoutMs, intervalMs };
 }
 
 /**

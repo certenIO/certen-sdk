@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { CertenClient, CertenError, revokeOAuthToken } from '@certen.io/sdk';
 import {
-  readConfig, writeConfig, setApiKey, clearApiKey, DEFAULT_API_URL, getPortalUrl, getApiUrl,
+  readConfig, setApiKey, clearApiKey, DEFAULT_API_URL, getPortalUrl, getApiUrl,
+  activeProfile, credentialInfo, readProfile, updateProfile, DEFAULT_PROFILE,
 } from '../config.js';
 import { printOutput, human, hint, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -108,9 +109,9 @@ export function registerAuthCommands(program: Command): void {
       const { key, source } = await resolveKeyInput(opts.apiKey);
 
       // The URL the key will be checked against has to be the one it will be USED against, so a
-      // --api-url passed in the same invocation applies to the verification too.
-      const cfg = readConfig();
-      const baseUrl = opts.apiUrl ?? process.env.CERTEN_API_URL ?? cfg.api_url ?? DEFAULT_API_URL;
+      // --api-url passed in the same invocation applies to the verification too. getApiUrl() is the
+      // active profile's gateway: a key saved under a profile is verified against that profile's host.
+      const baseUrl = opts.apiUrl ?? getApiUrl();
 
       let note: string | undefined;
       if (opts.verify !== false) {
@@ -135,13 +136,11 @@ export function registerAuthCommands(program: Command): void {
         throw new CliError(`Failed to save API key: ${msg}`, 'KEY_STORAGE_FAILED', EXIT.FAILED);
       }
 
-      if (opts.apiUrl) {
-        const updated = readConfig();
-        updated.api_url = opts.apiUrl;
-        writeConfig(updated);
-      }
+      // Saved on the profile the key was saved under, so the key and the gateway it was verified against travel together.
+      if (opts.apiUrl) updateProfile(activeProfile(), { api_url: opts.apiUrl });
 
       printOutput({
+        profile: activeProfile(),
         storage: useKeyring ? 'keyring' : 'file',
         key_prefix: `${key.substring(0, 12)}...`,
         api_url: baseUrl,
@@ -203,7 +202,8 @@ export function registerAuthCommands(program: Command): void {
     .description('Remove the saved API key from keyring or config file')
     .action(async () => {
       await clearApiKey();
-      human('API key cleared');
+      const profile = activeProfile();
+      human(profile === DEFAULT_PROFILE ? 'API key cleared' : `API key cleared for profile "${profile}"`);
     });
 
   auth
@@ -211,6 +211,10 @@ export function registerAuthCommands(program: Command): void {
     .description('Show LOCAL authentication config (offline — never contacts the gateway, never reveals the full key)')
     .action(() => {
       const cfg = readConfig();
+      // The ACTIVE profile's credential and gateway: `default` is the top level of the file, as it always was.
+      const profile = activeProfile();
+      const cred = credentialInfo(profile);
+      const profileUrl = readProfile(profile).api_url;
       // Round-2 #43: when storage=keyring the prefix is persisted at login
       // time, so we can still display "which key is selected" without
       // round-tripping through the OS keyring. The prefix has zero
@@ -218,19 +222,20 @@ export function registerAuthCommands(program: Command): void {
       let apiKey: string;
       if (process.env.CERTEN_API_KEY) {
         apiKey = `${process.env.CERTEN_API_KEY.substring(0, 12)}... (from CERTEN_API_KEY env)`;
-      } else if (cfg.api_key) {
-        apiKey = `${cfg.api_key.substring(0, 12)}...`;
-      } else if (cfg.storage === 'keyring' && cfg.key_prefix) {
-        apiKey = `${cfg.key_prefix}... (in OS keyring)`;
-      } else if (cfg.storage === 'keyring') {
+      } else if (cred.has_file_key && cred.key_prefix) {
+        apiKey = `${cred.key_prefix}...`;
+      } else if (cred.storage === 'keyring' && cred.key_prefix) {
+        apiKey = `${cred.key_prefix}... (in OS keyring)`;
+      } else if (cred.storage === 'keyring') {
         apiKey = '(in OS keyring; prefix unknown — re-run `certen auth login` to record it)';
       } else {
         apiKey = '(not set)';
       }
       printOutput({
-        storage: cfg.storage ?? 'file (default)',
+        profile,
+        storage: cred.storage ?? 'file (default)',
         api_key: apiKey,
-        api_url: cfg.api_url ?? `${DEFAULT_API_URL} (default)`,
+        api_url: profileUrl ?? cfg.api_url ?? `${DEFAULT_API_URL} (default)`,
         output: cfg.output ?? 'table (default)',
       });
       // This command answers "what is configured here", not "does it work". Those are different

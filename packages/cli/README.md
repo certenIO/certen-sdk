@@ -38,6 +38,27 @@ Stuck at any point:
 certen doctor         # names the one thing blocking you, and the command that fixes it
 ```
 
+### Say it once
+
+The CLI records the identity it made, so it stops asking for it. Choose the identity, key and chain once and leave the flags out:
+
+```bash
+certen context                       # what the next command will use, and where each value came from
+certen use identity jason-dev        # a name, an acc:// ADI URL or a UUID
+certen use key dev
+certen use chain base-sepolia
+
+certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait
+```
+
+Flag, then environment (`CERTEN_IDENTITY`, `CERTEN_KEY`, `CERTEN_CHAIN`), then profile, then "the only one there is". Two candidates and no choice
+is a question that lists them, never a guess. Every value taken from context is printed on stderr before anything is signed, and a chain that
+is not a known testnet is **never** taken from a default by a command that moves value: spell it out with `--chain`.
+
+`--profile <name>` (or `CERTEN_PROFILE`, or `certen use profile`) switches between setups, for example testnet and a second organization. A
+profile has its own gateway and its **own API key**, so one profile's key is never sent to another's gateway. `--timeout` takes `90s`, `6m`,
+`1h` (a bare number is minutes).
+
 ### If your gateway predates device authorization
 
 `certen login` will say so and point at the portal. Mint a key there and hand it over without
