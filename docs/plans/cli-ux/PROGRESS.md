@@ -7,7 +7,7 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 | Phase | Title | Status | PR |
 |---|---|---|---|
 | 0 | Sync, baseline, AGENTS.md header | merged | #27 (da4aeb4) |
-| 1 | Context (W1) | in-progress (branch `ux/phase-1-context`) | not opened |
+| 1 | Context (W1) | in-progress (work complete, branch `ux/phase-1-context` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
 | 2 | Readiness (W3) | not-started | |
 | 3 | Setup + gas (W2, W6) | not-started | |
 | 4 | Send + receipt (W4, W5) | not-started | |
@@ -166,7 +166,7 @@ Pre-existing failures: none.
 3. **An alias is the name an identity was created with** (stored on the local record, new field `name`) **or the
    label of its ADI** (`acc://jason-dev.acme` → `jason-dev`), matched case-insensitively among the identities recorded on
    this machine. Two matches is an ambiguity error listing both.
-4. **The signing key defaults only where omitting it is an error today.** `call` without `--sign-with` fails
+4. **The signing key defaults only where omitting it is an error today.** `call` and `identity create` without a key fail
    (`MISSING_SIGNING_KEY`), so a context key can fill it. `tx create`, `governance <op>` and `pending sign` without
    `--sign-with` are a supported mode (open the intent, return signing data for an external signer or HSM); defaulting a
    key there would start signing for people who rely on that. So no key default in those three. (`send` in Phase 4 signs with the context key.)
@@ -179,33 +179,38 @@ Pre-existing failures: none.
    profile or single-candidate) on a value-moving command (`call`, `tx create`, `fund`) unless the profile says
    `allow_mainnet_default`; `--chain` on the command line always wins.
 7. **Not touched, with reasons:** `identity retire` keeps a required explicit argument (destructive: never from context);
-   `identity mnemonic <id-or-url>` takes a one-time retrieval target, not an identity reference; `pending list` and
+   `identity mnemonic <id> <token>` takes any spelling of the id (resolved before the one-time token is spent) and leaves a retrieval URL alone; `pending list` and
    `portfolio` `--identity` are filters, so absence must keep meaning "all", not "the context identity"; `doctor`'s hardcoded
    chain hint is Phase 2 (PLAN W3); `init` writing the context is Phase 3 (`setup`).
 8. The confirmation **card** is Phase 4. Phase 1 echoes each context-derived value on stderr (both modes), before any
    passphrase prompt and before the signing summary; Phase 4's card renders the same `ResolvedContext` sources.
 
-### Tasks (each with its acceptance check; checked off as completed)
+### Tasks (check = the acceptance check; evidence = what was run)
 
-- [x] 1. Profiles in config: active-profile selection (`--profile` > `CERTEN_PROFILE` > `config.profile` > `default`), *Evidence: `config-profiles.test.ts` (red first, then green); the existing `config.test.ts` still passes untouched.*
-  per-profile settings, per-profile credential and gateway URL, no migration for `default`. *Check: `config-profiles.test.ts`.*
-- [x] 2. `--profile` as a global flag that may appear anywhere, like `--json`. *Check: conformance case + `--help --json` lists it.* *Evidence: `global-flags.test.ts`; conformance cases; `--help --json` lists the option.*
-- [x] 3. `src/context.ts`: `resolveContext()`; precedence flag > env > profile > single candidate; ambiguity is a usage *Evidence: `context.test.ts`.*
-  error listing candidates; mainnet-default refusal; echo helper. *Check: `context.test.ts`.*
-- [x] 4. `src/identity-ref.ts`: `resolveIdentityRef()` for UUID / ADI / alias, local record first, then gateway. *Evidence: `identity-ref.test.ts`. Local records gain `name` (written by `identity create` and `init`).*
-  Local records gain `name`. *Check: `identity-ref.test.ts` against a fake client.*
-- [x] 5. `--timeout` / `--poll-interval` accept `90s`, `6m`, `1h`; a bare number keeps its meaning (minutes / seconds), in all 7 places. *Check: `duration.test.ts` + a subprocess case per command family.* *Evidence: `duration.test.ts`, `wait.test.ts` unchanged and green; applied in `call`, `tx create|status`, `identity create`, `init`, `fund`, `login|signup`.*
-- [x] 6. `certen context` and `certen use identity|key|chain|profile|gateway|allow-mainnet-default`. *Check: conformance cases + subprocess tests in both modes.* *Evidence: `context-commands.test.ts` (human and `--json`), conformance cases.*
-- [x] 7. Wire the resolver into `call` (identity, chain, key), `tx create` (identity, `--to-chain`, derived `--from`), *Evidence: `context-wiring.test.ts` and `context-identity-create.test.ts`, against a stub gateway with honest signing data. Also `identity create` (context key) and `identity mnemonic` (any spelling of the id, resolved before the one-time token is spent).*
-  `tx inspect`, `identity get|link-chain`, the six `governance` operations, `pending sign`, `pending list`, `portfolio`, `fund`. *Check: subprocess tests against the fake gateway (`context-commands.test.ts`).*
-- [x] 8. `tx create` derives `--from` from the identity like `call`, and reuses the one identity read for the funding guard *Evidence: wiring test asserts exactly `GET identity, POST transaction, POST signature`; `--journey context` shows 5 → 4.*
-  and the ADI (5 → 4 round trips). *Check: `tx-create-derives-from.test.ts` + measure-onboarding.*
-- [x] 9. Context echo on stderr for every non-flag value, in table and `--json` mode, before any passphrase prompt. *Check: `context-echo.test.ts`.* *Evidence: echo asserted on stderr in both modes, with exactly one line on stdout; transcript in the PR body.*
-- [x] 10. Docs: CHANGELOG (cli), `docs/CLI-CONTRACT.md` (`context` / `use` envelopes, `--profile`, new error codes), README / *Evidence: CHANGELOG, CLI-CONTRACT section 7, both READMEs, the llms template (regenerated, `agentgen:check` clean), the skill, the guide, PLAN corrections.*
-  CLI README, root help grouping, PLAN corrections. *Check: `git diff` lists them; conformance + readme tests green.*
-- [x] 11. Measurement: a `context` journey in `scripts/lib/onboarding-journeys.mjs` (the same transaction on the Phase 1 CLI), *Evidence: `measure-onboarding.test.ts` pins `context` (34 round trips, 4 values) next to the unchanged `published` (35, 5).*
-  before/after against the pinned `published` baseline. *Check: `measure-onboarding.test.ts` pins it.*
-- [ ] 12. Gates, user-run transcript (offline), §5 self-review, push, PR body. *Check: outputs quoted.*
+- [x] 1. **Profiles in config**: active profile (`--profile` > `CERTEN_PROFILE` > saved > `default`), per-profile settings, credential and gateway URL, no migration for `default`.
+  Check: `config-profiles.test.ts`. Evidence: red first, then green; the existing `config.test.ts` passes untouched.
+- [x] 2. **`--profile` as a global flag** that may appear anywhere, like `--json`.
+  Check: `global-flags.test.ts`, conformance cases. Evidence: `--help --json` lists the option.
+- [x] 3. **`src/context.ts`**: `resolveContext()`; flag > env > profile > single candidate; ambiguity is a usage error listing candidates; mainnet-default refusal; echo helper.
+  Check: `context.test.ts`.
+- [x] 4. **`src/identity-ref.ts`**: `resolveIdentityRef()` for UUID / ADI / name, local record first, then the gateway. Local records gain `name` (written by `identity create` and `init`).
+  Check: `identity-ref.test.ts` against a fake client.
+- [x] 5. **`--timeout` / `--poll-interval` accept `90s`, `6m`, `1h`**; a bare number keeps its meaning, in all seven places (`call`, `tx create`, `tx status`, `identity create`, `init`, `fund`, `login|signup`).
+  Check: `duration.test.ts`; `wait.test.ts` is unchanged and green.
+- [x] 6. **`certen context` and `certen use identity|key|chain|gateway|profile|allow-mainnet-default`.**
+  Check: `context-commands.test.ts` (human and `--json`), 11 conformance cases (18 → 29).
+- [x] 7. **Wire the resolver in**: `call` (identity, chain, key), `tx create` (identity, `--to-chain`, derived `--from`), `tx inspect`, `identity get|link-chain|retire|create|mnemonic`, the six `governance` operations, `pending list|sign`, `portfolio`, `fund`.
+  Check: `context-wiring.test.ts` and `context-identity-create.test.ts`, against a stub gateway with honest signing data.
+- [x] 8. **`tx create` derives `--from`** like `call`, with one identity read serving the ADI, the account and the funding guard (5 → 4 round trips).
+  Check: `context-wiring.test.ts` asserts exactly `GET identity, POST transaction, POST signature`; `--journey context` shows it.
+- [x] 9. **Context echo on stderr** for every non-flag value, in table and `--json` mode, before any passphrase prompt.
+  Check: `context-wiring.test.ts` (both modes, one stdout line) and the transcript in the PR body.
+- [x] 10. **Docs**: CHANGELOG, `docs/CLI-CONTRACT.md` section 7, both READMEs, the llms template (regenerated; `agentgen:check` clean), the skill, the first-proof guide, PLAN corrections.
+  Check: `git diff` lists them.
+- [x] 11. **Measurement**: a `context` journey (the same transaction on this CLI) beside the unchanged `guide` and `published` baselines.
+  Check: `measure-onboarding.test.ts` pins `context` (34 round trips, 4 values) next to `published` (35, 5).
+- [x] 12. **Gates, offline transcript, §5 self-review, push.** Outputs are quoted in the PR body.
+  **Opening the PR needs a human**: `gh` is not installed on this machine.
 
 ### Phase 1 results
 
@@ -223,7 +228,7 @@ The remaining four copies are the work of later phases: `adi_url` and `key_page_
 `abstract_account` only to fund it (Phase 3), `intent_id` to read the outcome (Phase 4's receipt). The pinned `guide` and `published` baselines did not move,
 which is the evidence that nothing existing changed: they drive the unchanged invocations through the changed CLI.
 
-**Tests:** TESTS_LINE
+**Tests:** 1429 → **1633** in 97 → 105 files (cli 435 → 639; conformance 18 → 29). Gates on the final tree: build ✓ typecheck ✓ `test-all` ✓ `agentgen:check` ✓ `test:counts` ✓ (quoted in the PR body).
 
 **Proven in the transcript, not only in tests:** the echo is on stderr in table and `--json` mode with exactly one line on stdout; two identities and no choice
 lists both before any request; a mainnet default is refused before any request while a typo keeps its sharper error; `tx create` with `--sign-with` makes three
