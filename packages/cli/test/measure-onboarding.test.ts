@@ -117,6 +117,39 @@ const BASELINE = {
       ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
     ],
   },
+  /**
+   * The same transaction once `certen setup` exists. One command makes the key, the account, the identity and the readiness card (it replaces
+   * the gateway check, the sign-in, init and status), and it runs twice, as a person would who cannot fund the account on the spot: the first
+   * run exits 1 on purpose (everything is made, and the new account has no gas), the second skips all of it. Round trips are the same 32 as
+   * `readiness`: what changed is the number of commands and what each one asks the person to do.
+   */
+  setup: {
+    round_trips: 32,
+    per_step: [
+      ['certen setup --yes --new-account --org-name journey --name journey-probe --chain base-sepolia --no-keyring', 9],
+      ['certen setup --yes --no-keyring', 7],
+      ['certen tx create --to {recipient} --amount 0.0001 --sign-with dev --wait --timeout 6m', 4],
+      ['certen tx status {intent_id}', 1],
+      ['certen proof get {intent_id}', 2],
+      ['certen proof verify {intent_id}', 4],
+      ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
+    ],
+  },
+  /**
+   * One setup that WAITS for the gas, so there is no second run. Its 16 round trips include the polls (the identity read, once per interval
+   * while the funds were on their way: five more than the 9 of a setup that does not wait), which is the cost of not typing the command again.
+   */
+  'setup-wait': {
+    round_trips: 32,
+    per_step: [
+      ['certen setup --yes --new-account --org-name journey --name journey-probe --chain base-sepolia --no-keyring --wait-for-funds --poll-interval 0.2 --funds-timeout 10s', 16],
+      ['certen tx create --to {recipient} --amount 0.0001 --sign-with dev --wait --timeout 6m', 4],
+      ['certen tx status {intent_id}', 1],
+      ['certen proof get {intent_id}', 2],
+      ['certen proof verify {intent_id}', 4],
+      ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
+    ],
+  },
 } as const;
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -190,6 +223,7 @@ describe('--journey refuses what would be unsafe or unclear', () => {
     expect(r.stderr).toContain('published');
     expect(r.stderr).toContain('context');
     expect(r.stderr).toContain('readiness');
+    expect(r.stderr).toContain('setup-wait');
   });
 
   it('refuses a --fault it does not know, rather than running a clean journey and calling it a fault run', async () => {
@@ -197,6 +231,7 @@ describe('--journey refuses what would be unsafe or unclear', () => {
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('cannot-sign');
     expect(r.stderr).toContain('key-page-lacks-key');
+    expect(r.stderr).toContain('funds-never-arrive');
   });
 });
 
@@ -296,6 +331,58 @@ describe('the baseline: the documented first-transaction journeys, as they are t
     expect(rep.totals.round_trips).toBeLessThan(context.totals.round_trips);
   }, 290_000);
 
+  it('setup: one command does the front of the walkthrough. 7 commands, not 12; no auth login, whoami, init, status or chains check', async () => {
+    const r = await measureOnce('--journey', 'setup', '--json');
+    expect(r.code, r.stderr).toBe(0);
+    const rep = report(r);
+
+    expect(rep.journey).toBe('setup');
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    for (const s of certenSteps(rep)) expect(s.ok, `${s.label}: ${s.command}`).toBe(true);
+
+    // 12 commands become 7: `chains --refresh`, `auth login`, `whoami`, `init` and the two `status` runs are two runs of `setup`.
+    expect(rep.totals.commands).toBe(7);
+    expect(rep.totals.external).toBe(3); // install, fund, the effect check
+    // The faucet needs the address pasted: still copied once. The intent id is Phase 4's.
+    expect(rep.totals.values_copied).toEqual(['abstract_account', 'intent_id']);
+    expect(rep.totals.compared_by_eye).toEqual([]);
+    expect(rep.totals.passphrase_prompts).toBe(2);
+    expect(rep.totals.round_trips).toBe(BASELINE.setup.round_trips);
+    expect(certenSteps(rep).map((s) => [s.command, s.round_trips])).toEqual(BASELINE.setup.per_step);
+
+    // The first run exits 1 because the account has no gas, and the second is ready: the pair a person runs when they cannot fund it at once.
+    const setups = certenSteps(rep).filter((s) => s.command!.startsWith('certen setup'));
+    expect(setups.map((s) => s.exit)).toEqual([1, 0]);
+    // It is cheaper than the journey it improves on, in commands, and no dearer in round trips.
+    const readiness = report(await measureOnce('--journey', 'readiness', '--json'));
+    expect(rep.totals.commands).toBeLessThan(readiness.totals.commands);
+    expect(rep.totals.round_trips).toBeLessThanOrEqual(readiness.totals.round_trips);
+  }, 290_000);
+
+  it('setup-wait: one setup that waits for the gas. 6 commands, and the gas arrives while it polls', async () => {
+    const r = await measureOnce('--journey', 'setup-wait', '--json');
+    expect(r.code, r.stderr).toBe(0);
+    const rep = report(r);
+
+    expect(rep.journey).toBe('setup-wait');
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    for (const s of certenSteps(rep)) expect(s.ok, `${s.label}: ${s.command}`).toBe(true);
+
+    expect(rep.totals.commands).toBe(6);
+    expect(rep.totals.external).toBe(3);
+    expect(rep.totals.values_copied).toEqual(['abstract_account', 'intent_id']);
+    expect(rep.totals.round_trips).toBe(BASELINE['setup-wait'].round_trips);
+    expect(certenSteps(rep).map((s) => [s.command, s.round_trips])).toEqual(BASELINE['setup-wait'].per_step);
+
+    // It waited: more reads of the identity than a setup that does not, and it exited 0 in one run.
+    const setup = report(await measureOnce('--journey', 'setup', '--json'));
+    const waiting = certenSteps(rep)[0]!;
+    const first = certenSteps(setup)[0]!;
+    expect(waiting.exit).toBe(0);
+    expect(waiting.round_trips!).toBeGreaterThan(first.round_trips!);
+    expect(rep.totals.commands).toBe(setup.totals.commands - 1);
+  }, 290_000);
+
   it('status reads the key page from the Accumulate stand-in, with no CERTEN credential, and is blocked on the gas before funding and on nothing else', async () => {
     const rep = report(await measureOnce('--journey', 'readiness', '--json'));
     const statuses = certenSteps(rep).filter((s) => s.command!.startsWith('certen status'));
@@ -355,6 +442,17 @@ describe('the harness can go red', () => {
     // The first of the two was declared to fail, and did: but for the wrong reason, which is what is reported.
     expect((bad[0] as unknown as { reason: string }).reason).toMatch(/first_blocker\.name to be "gas", got "key page"/);
     expect((bad[1] as unknown as { reason: string }).reason).toMatch(/KEY_PAGE_DISAGREES|does not list your key/);
+  }, 290_000);
+
+  it('exits 1 and names the reason when the gas never arrives while setup waits', async () => {
+    const r = await measureOnce('--journey', 'setup-wait', '--fault', 'funds-never-arrive', '--json');
+    expect(r.code).toBe(1);
+    const rep = report(r);
+    expect(rep.totals.all_steps_as_declared).toBe(false);
+    const bad = certenSteps(rep).filter((s) => !s.ok);
+    // The setup step is the first to go wrong, for the declared reason: it waited, and the funds did not come.
+    expect(bad[0]!.command).toMatch(/^certen setup .* --wait-for-funds/);
+    expect((bad[0] as unknown as { reason: string }).reason).toMatch(/FUNDS_WAIT_TIMEOUT/);
   }, 290_000);
 
   it('exits 1 and names the step when an identity that cannot sign makes a step misbehave', async () => {

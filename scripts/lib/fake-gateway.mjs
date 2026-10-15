@@ -12,6 +12,9 @@
  *     `active`, so no run waits. That does not shorten any wait the CLI makes: the budgets in wait.ts are
  *     untouched, the fake simply has nothing left to wait for.
  *   - the abstract account's `chain_id` is numeric on the identity and a slug in the portfolio;
+ *   - a new account can be made with a key: `POST /v1/signup` VERIFIES the Ed25519 signature over the nonce BYTES, so a CLI that signed
+ *     the wrong thing is refused rather than waved through;
+ *   - gas can arrive while someone waits (`fundAfterMoreReads(n)`), which is what a faucet does while `setup` polls;
  *   - a new abstract account holds no gas until something pays it (`fundAbstractAccount()`), and the
  *     funding guard reads that;
  *   - `/v1/portfolio` carries no identity UUIDs;
@@ -26,7 +29,7 @@
  * round trips are counted: what actually arrived, not what the SDK says it sent.
  */
 import { createServer } from 'node:http';
-import { createHash } from 'node:crypto';
+import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -42,7 +45,7 @@ const PROOF_FIXTURES = join(ROOT, 'packages', 'verify', 'test', 'fixtures', 'pro
 const EXEC_FIXTURE = join(ROOT, 'packages', 'sdk', 'test', 'fixtures', 'execution-proof-base-46437431.json');
 
 /** The ways this fake can be made to misbehave, for proving the harness goes red. */
-export const FAULTS = Object.freeze(['cannot-sign', 'key-page-lacks-key']);
+export const FAULTS = Object.freeze(['cannot-sign', 'key-page-lacks-key', 'funds-never-arrive']);
 
 /** Fixed, so two runs of the same journey print the same transcript. */
 export const IDS = Object.freeze({
@@ -134,6 +137,7 @@ function chainRegistry(accumulateApi) {
  * @param {'cannot-sign'|'key-page-lacks-key'} [options.fault] A way for the gateway to be wrong, so a test can prove the
  *   harness goes red when a step does not behave as declared. `cannot-sign`: the gateway says the identity cannot sign.
  *   `key-page-lacks-key`: the Accumulate node lists a different key than the one the identity was created with.
+ *   `funds-never-arrive`: gas that is supposed to arrive while `setup` waits never does.
  */
 export async function startFakeGateway(options = {}) {
   const exec = JSON.parse(readFileSync(EXEC_FIXTURE, 'utf8'));
@@ -144,6 +148,10 @@ export async function startFakeGateway(options = {}) {
   const state = {
     identityCreated: false,
     funded: false,
+    /** Reads of the identity so far, and the read count at which gas arrives (null: only when funded by hand). */
+    identityReads: 0,
+    fundAtRead: null,
+    nonces: new Map(),
     intentOpened: false,
     publicKey: null,
     /** SHA-256 of the key the identity was created with, as the key page on Accumulate lists it. */
@@ -151,6 +159,8 @@ export async function startFakeGateway(options = {}) {
   };
   /** Filled in once the server is listening: the registry advertises this fake's own Accumulate endpoint. */
   const self = { url: '' };
+
+  const isFunded = () => state.funded || (state.fundAtRead !== null && state.identityReads >= state.fundAtRead);
 
   const identityBody = () => ({
     id: IDS.identity,
@@ -164,7 +174,7 @@ export async function startFakeGateway(options = {}) {
     // Numeric here, a slug in the portfolio: the live gateway does both.
     chain_accounts: [{ chain_id: String(BASE_SEPOLIA), address: IDS.abstractAccount, status: 'deployed' }],
     // Whole units, as the live gateway reports them (it formats the balance with ethers.formatEther).
-    balances: [{ chain_id: 'base-sepolia', address: IDS.abstractAccount, token: 'ETH', balance: state.funded ? '0.001' : '0' }],
+    balances: [{ chain_id: 'base-sepolia', address: IDS.abstractAccount, token: 'ETH', balance: isFunded() ? '0.001' : '0' }],
     created_at: '2026-10-15T00:00:00Z',
   });
 
@@ -174,7 +184,7 @@ export async function startFakeGateway(options = {}) {
         adi_url: IDS.adi, status: 'active', credit_balance: 500, pending_actions: 0,
         chains: [{
           chain_id: 'base-sepolia', address: IDS.abstractAccount, deployed: true,
-          balances: [{ token: 'ETH', balance: state.funded ? '0.001' : '0' }],
+          balances: [{ token: 'ETH', balance: isFunded() ? '0.001' : '0' }],
         }],
       }]
       : [],
@@ -214,7 +224,30 @@ export async function startFakeGateway(options = {}) {
       state.identityCreated = true;
       return [202, { ...identityBody(), status: 'provisioning', can_sign: null }];
     }],
-    ['GET', /^\/v1\/identity\/([^/]+)$/, (m) => (m[1] === IDS.identity && state.identityCreated ? [200, identityBody()] : [404, { message: 'identity not found' }])],
+    ['GET', /^\/v1\/identity\/([^/]+)$/, (m) => {
+      if (m[1] !== IDS.identity || !state.identityCreated) return [404, { message: 'identity not found' }];
+      state.identityReads += 1;
+      return [200, identityBody()];
+    }],
+    // A new account made with a key, as `certen setup --new-account` does it. The nonce is signed as BYTES with the key it was issued for.
+    ['POST', /^\/v1\/signup\/challenge$/, (_m, body) => {
+      const nonce = randomBytes(32).toString('hex');
+      state.nonces.set(nonce, String(JSON.parse(body || '{}').public_key ?? ''));
+      return [200, { nonce, expires_in: 300, algorithm: 'ed25519', instructions: 'sign the nonce bytes' }];
+    }],
+    ['POST', /^\/v1\/signup$/, (_m, body) => {
+      const b = JSON.parse(body || '{}');
+      const issuedFor = state.nonces.get(b.nonce);
+      state.nonces.delete(b.nonce);
+      if (issuedFor === undefined || issuedFor !== b.public_key) return [400, { message: 'unknown or mismatched nonce', code: 'SIGNUP_FAILED' }];
+      let ok = false;
+      try {
+        const pub = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(b.public_key, 'hex')]), format: 'der', type: 'spki' });
+        ok = verify(null, Buffer.from(b.nonce, 'hex'), pub, Buffer.from(b.signature ?? '', 'hex'));
+      } catch { ok = false; }
+      if (!ok) return [400, { message: 'signature does not verify over the nonce bytes', code: 'SIGNUP_FAILED' }];
+      return [201, { org: { id: 'org-journey', name: b.org_name ?? 'journey', plan: 'trial' }, api_key: 'ck_live_journey_signup_not_a_real_key', key_prefix: 'ck_live_jour', permissions: ['*'] }];
+    }],
     ['POST', /^\/v1\/transaction$/, async (_m, body) => {
       state.intentOpened = true;
       return [201, await honestIntent(JSON.parse(body), { adiUrl: IDS.adi, keyPage: KEY_PAGE, intentId: IDS.intent })];
@@ -289,6 +322,8 @@ export async function startFakeGateway(options = {}) {
     take: () => seen.splice(0, seen.length),
     /** Somebody pays the abstract account: what the faucet and the wallet transfer do on a real chain. */
     fundAbstractAccount: () => { state.funded = true; },
+    /** Gas arrives after this many MORE reads of the identity: what a faucet does while `setup` polls. Never, under the `funds-never-arrive` fault. */
+    fundAfterMoreReads: (n) => { if (options.fault !== 'funds-never-arrive') state.fundAtRead = state.identityReads + n; },
     close: () => new Promise((resolve) => { server.closeAllConnections?.(); server.close(resolve); }),
   };
 }

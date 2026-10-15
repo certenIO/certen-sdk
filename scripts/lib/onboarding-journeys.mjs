@@ -269,6 +269,106 @@ export const JOURNEYS = Object.freeze({
       },
     ],
   },
+
+  /**
+   * The same transaction once `certen setup` exists (Phase 3). `setup` is the whole front of the walkthrough: the gateway check that
+   * `chains --refresh` was, the sign-in (`auth login`, `whoami`), the key and the identity (`init`), and the readiness card (`status`). It runs
+   * twice, as a person would when they cannot fund the account on the spot: once to make everything and learn what is still in the way (the new
+   * account has no gas, so it exits 1 on purpose, for that reason and no other, and names the account to fund), and once after funding, which
+   * skips every step already done and comes back ready.
+   *
+   * The account is made WITH the signing key (`--new-account`: no browser, no pasted secret), so this journey needs no `auth login`.
+   */
+  setup: {
+    source: 'PLAN.md section 1, with the Phase 3 CLI: `setup` replaces the gateway check, the sign-in, init and the readiness check',
+    summary: 'the same transaction once setup does the whole front of the walkthrough',
+    steps: [
+      { label: 'Install the CLI', external: true, description: 'npm i -g @certen.io/cli' },
+      {
+        // Exit 1 on purpose: everything is made, and the account has no gas. Setup says so and names the account.
+        label: 'Set everything up',
+        args: ['setup', '--yes', '--new-account', '--org-name', 'journey', '--name', 'journey-probe', '--chain', 'base-sepolia', '--no-keyring'],
+        exit: [1],
+        expectError: { code: 'NOT_READY', 'details.readiness.first_blocker.name': 'gas', 'details.readiness.first_blocker.code': 'ABSTRACT_ACCOUNT_UNFUNDED' },
+        captureFrom: 'error',
+        capture: { abstract_account: 'details.readiness.context.abstract_account' },
+        prompts: 1,
+      },
+      {
+        label: 'Send gas to the abstract account',
+        external: true,
+        description: 'a faucet website, then a wallet transfer to the abstract account',
+        uses: ['abstract_account'],
+        effect: 'fund',
+      },
+      // Everything is already done, so this skips it all and checks that it is ready.
+      { label: 'Continue where it stopped', args: ['setup', '--yes', '--no-keyring'] },
+      {
+        label: 'Make the transaction',
+        args: ['tx', 'create', '--to', '{recipient}', '--amount', '0.0001', '--sign-with', 'dev', '--wait', '--timeout', '6m'],
+        capture: { intent_id: 'intent_id' },
+        prompts: 1,
+      },
+      { label: 'Read the outcome', args: ['tx', 'status', '{intent_id}'] },
+      { label: 'Fetch the proof', args: ['proof', 'get', '{intent_id}'] },
+      { label: 'Verify the proof', args: ['proof', 'verify', '{intent_id}'], exit: [0, 4, 5] },
+      { label: 'Verify against your own node', args: ['proof', 'verify', '{intent_id}', '--rpc', '{rpc_url}'], exit: [0, 4, 5] },
+      {
+        label: 'Check the effect by hand',
+        external: true,
+        description: 'compare the proved recipient, amount and chain with your own notes, and read the recipient\'s balance',
+      },
+    ],
+  },
+
+  /**
+   * The headline of Phase 3: ONE `setup` that waits for the gas, so there is no second run. At a terminal that is the default; here
+   * `--wait-for-funds` says it, because a journey is not a terminal. The gas arrives while it waits, which is what a faucet and a wallet do, and
+   * the fake models it: the account is funded after a few reads of the identity, so the wait polls more than once and then returns.
+   *
+   * `--poll-interval 0.2` and `--funds-timeout 10s` only make the offline wait short; the budgets a person gets are 6 seconds and 30 minutes.
+   */
+  'setup-wait': {
+    source: 'PLAN.md section 2, with the Phase 3 CLI: `setup` waits for the funds to arrive',
+    summary: 'the same transaction with one setup that waits for the gas',
+    steps: [
+      { label: 'Install the CLI', external: true, description: 'npm i -g @certen.io/cli' },
+      {
+        label: 'Set everything up, and wait for gas',
+        args: [
+          'setup', '--yes', '--new-account', '--org-name', 'journey', '--name', 'journey-probe', '--chain', 'base-sepolia', '--no-keyring',
+          '--wait-for-funds', '--poll-interval', '0.2', '--funds-timeout', '10s',
+        ],
+        // Provisioning, then the readiness read, then two polls that find nothing: the gas lands on the fifth read.
+        fundsArrive: { afterReads: 5 },
+        capture: { abstract_account: 'readiness.context.abstract_account' },
+        prompts: 1,
+      },
+      {
+        // Done by a person while the step above waits. It is not a certen command and it cannot be skipped; it is shown where it happens.
+        label: 'Send gas to the abstract account, while setup waits',
+        external: true,
+        description: 'a faucet website (or the wallet link setup printed), into the abstract account',
+        uses: ['abstract_account'],
+        effect: 'during',
+      },
+      {
+        label: 'Make the transaction',
+        args: ['tx', 'create', '--to', '{recipient}', '--amount', '0.0001', '--sign-with', 'dev', '--wait', '--timeout', '6m'],
+        capture: { intent_id: 'intent_id' },
+        prompts: 1,
+      },
+      { label: 'Read the outcome', args: ['tx', 'status', '{intent_id}'] },
+      { label: 'Fetch the proof', args: ['proof', 'get', '{intent_id}'] },
+      { label: 'Verify the proof', args: ['proof', 'verify', '{intent_id}'], exit: [0, 4, 5] },
+      { label: 'Verify against your own node', args: ['proof', 'verify', '{intent_id}', '--rpc', '{rpc_url}'], exit: [0, 4, 5] },
+      {
+        label: 'Check the effect by hand',
+        external: true,
+        description: 'compare the proved recipient, amount and chain with your own notes, and read the recipient\'s balance',
+      },
+    ],
+  },
 });
 
 /** The `{name}` placeholders in a step's args, in order. */
@@ -293,7 +393,8 @@ export function copiedBy(step, given) {
  */
 export function writesCredential(step) {
   const a = step.args ?? [];
-  return a.includes('login') || a.includes('signup');
+  // `setup` can write one too: a new account's key, a registration token's, or the one the device flow returns.
+  return a.includes('login') || a.includes('signup') || a.includes('setup');
 }
 
 export function assertJourneyIsContained(name, journey) {
