@@ -148,6 +148,7 @@ parsing prose:
 | `3` | The gateway could not be reached | **Nothing was submitted.** Safe to retry. |
 | `4` | `proof verify` only: **partial** — the layers the proof carries were checked and one is not established | Read `data.layers`: every layer with `verdict: not_checked` names why. This is not a verified proof. |
 | `5` | `proof verify` only: **no evidence** — nothing the Accumulate side can be checked from (`data.evidence.code`: `PROOF_V2_EVIDENCE_NOT_SERVED`, or `PROOF_SERVICE_UNAVAILABLE`) | The gateway serves no proof v2 document for this proof (yet). Do not treat the gateway's own receipt as verification. |
+| `130` | `setup` and `gas` only: **stopped with Ctrl-C while waiting for funds** (`error.code` `INTERRUPTED`) | Nothing was left half-done. Run the same command again to continue. Never a failure of the operation. |
 
 The distinction between `2` and `3` is the one that matters most: `3` guarantees no request was
 accepted, so a retry cannot double-execute.
@@ -225,7 +226,7 @@ certen --help --json
 ```json
 { "ok": true, "data": {
   "name": "certen", "version": "0.3.1",
-  "exitCodes": { "0": "ok", "1": "operation failed", "2": "usage error", "3": "gateway unreachable", "4": "proof verify: partial (a layer is not established)", "5": "proof verify: no evidence to check" },
+  "exitCodes": { "0": "ok", "1": "operation failed", "2": "usage error", "3": "gateway unreachable", "4": "proof verify: partial (a layer is not established)", "5": "proof verify: no evidence to check", "130": "stopped with Ctrl-C while waiting (setup, gas); nothing was left half-done" },
   "commands": [ { "name": "identity", "path": "certen identity", "commands": [ … ] } ]
 } }
 ```
@@ -470,6 +471,119 @@ context's, or the placeholder `<chain>`; it never names a chain nobody chose.
 | `INVALID_ACCUMULATE_RPC` | `--accumulate-rpc` is not an http(s) URL, or carries a username or password |
 | `NO_IDENTITIES`, `NO_CHAINS` | `--all` with nothing recorded, or no linked chain on record |
 | `MISSING_IDENTITY`, `AMBIGUOUS_IDENTITY`, `MISSING_CHAIN`, `AMBIGUOUS_CHAIN` | as in section 7 |
+
+### 9. Setup and gas: `certen setup`, `certen gas`
+
+**`certen setup`** takes a machine from nothing to an identity that can act on a chain, in one resumable command, and **exits `0` only when
+it is ready**: every readiness check (section 8) is `ok` or `warn`. Nothing crashing is not ready; a check that could not be answered is not ready.
+
+```
+certen setup [--name <name>] [--identity <ref>] [--key <name>] [--chain <chain> | --chains <a,b>] [--yes]
+             [--existing-account | --new-account | --token <registration token>] [--org-name <name>]
+             [--no-passphrase] [--no-keyring] [--no-browser] [--payer <address>]
+             [--wait-for-funds | --no-wait-for-funds] [--amount <whole units>] [--gas-reserve <amount|none>] [--accumulate-rpc <url>]
+             [--timeout <duration>] [--funds-timeout <duration>] [--poll-interval <interval>]
+```
+
+Steps, in this order, each skipped when already satisfied: the gateway (reachable, serves the chain); the signing key (**before** the account,
+because a new account is created by it); the sign-in; the identity; the context (written as soon as identity, key and chain are settled);
+readiness (`client.readiness()`, the same card as `certen status`); and, if gas is the only thing in the way, a wait for it.
+
+**Running it again continues; it does not repeat.** The identity is recorded locally the moment the gateway returns its id, before the wait,
+so a run that was interrupted or timed out while provisioning is picked up rather than repeated (an organisation made with a key may hold one
+identity until approved, and a second create is refused). A working credential is never replaced by an option. `--yes` never creates an
+account and never retires an identity.
+
+**Which kind of account.** With no API key configured, exactly one of `--token <registration token>` (CI), `--new-account` (an organisation
+created with the signing key: the only thing that crosses the wire is a signature over a nonce, no browser), or `--existing-account` (the
+device flow, with a pasted key as the fallback for a gateway without it). On a terminal with none of them, the question is asked, with no
+default, **before** any key is made. With no terminal, or with `--yes`, and none of them, it exits `2` with `NO_API_KEY` naming the three. A
+credential that is configured and works is kept, whatever else was passed.
+
+**Passphrase.** A new signing key is encrypted. With `--yes` and no terminal it needs `CERTEN_KEY_PASSPHRASE` or an explicit `--no-passphrase`
+(`PASSPHRASE_REQUIRED`, exit `2`, otherwise): an unencrypted key is a choice, never what happens because a prompt had no one to ask.
+
+**Waiting for funds.** On by default only where a person is watching (a terminal and not `--json`); `--wait-for-funds` turns it on anywhere and
+`--no-wait-for-funds` off. It starts only when gas is the **only** failing check and the gap is one that sending funds fixes (an empty or short
+account, or a balance not reported yet); a gas row that cannot be identified, or any other failing or unknown check, is a blocker with its fix and
+no wait. It polls the identity read (one request per poll) at `--poll-interval` (default 6s) for up to `--funds-timeout` (default 30m).
+
+| Exit | `error.code` | When |
+|:--:|---|---|
+| `0` | (success) | ready |
+| `1` | `NOT_READY` / `NOT_CONFIRMED` | `readiness.state` is `blocked` / `unconfirmed` (as in section 8). If gas is what is missing, `error.details.funding` says what to send where |
+| `1` | `FUNDS_WAIT_TIMEOUT` | it waited and no funds arrived in time. The setup is saved; run it again |
+| `1` | `CREDENTIAL_REJECTED` | the gateway rejected the configured credential (never replaced unless asked) |
+| `1` | `IDENTITY_PROVISIONING_FAILED` | the identity ended in `error`. The message names `certen identity retire <id> --yes`; setup retires only when a person answers yes at a terminal |
+| `1` | `SELF_SERVICE_DISABLED` | the gateway does not allow creating an account from a key; the message names the other ways in |
+| `1` | `KEY_STORAGE_FAILED` | an account was created and its key (returned once) could not be saved. The message says how to sign in to it |
+| `2` | `NO_API_KEY`, `CONFLICTING_OPTIONS`, `PASSPHRASE_REQUIRED`, `AMBIGUOUS_KEY`, `AMBIGUOUS_IDENTITY`, `AMBIGUOUS_CHAIN`, `UNKNOWN_KEY`, `INVALID_AMOUNT`, `INVALID_ACCUMULATE_RPC`, `INVALID_TIMEOUT`, `INVALID_POLL_INTERVAL`, `UNSUPPORTED_CHAIN` | a mistake in the invocation, raised before anything is made (the chain is judged after the registry is read) |
+| `3` | `NETWORK_ERROR` | the gateway could not be reached. Retryable; nothing was made |
+| `130` | `INTERRUPTED` | Ctrl-C while waiting for funds. Nothing is half-done |
+
+On success, one envelope:
+
+```json
+{ "ok": true, "data": {
+  "ready": true, "api_url": "https://gateway.kompendium.co", "profile": "default", "chain": "base-sepolia",
+  "context": { "identity_id": "11111111-…", "adi_url": "acc://alpha.acme", "key": "dev", "chain": "base-sepolia" },
+  "created": { "key": true, "account": true, "identity": true },
+  "readiness": { "ready": true, "state": "ready", "first_blocker": null, "context": { }, "checks": [ ] },
+  "steps": [ { "step": "gateway", "status": "done", "detail": "registry v2026-10-15, 3 chains" } ],
+  "next_command": "certen tx create --to 0xRecipient --amount 0.0001 --sign-with dev --wait"
+} }
+```
+
+`created` says what THIS run made; a rerun reports all three `false`. `steps[].status` is `done` | `skipped` | `created` | `waited`, in the
+order the steps ran (`gateway`, `signing key`, `sign-in`, `identity`, `context`, `readiness`, and `gas` when it waited). `readiness` is exactly
+section 8's object. When setup is not ready, `error.details` carries the same `readiness`, `steps`, `context` and `created`, and `funding` when
+gas is the only gap:
+
+```json
+"funding": {
+  "chain": "base-sepolia", "symbol": "ETH", "address": "0xE293…cAcB", "balance": "0",
+  "minimum": "0.0001", "suggested": "0.001", "send": "0.001", "least": "0.0001", "satisfied": false, "estimated": true,
+  "faucet": "https://www.alchemy.com/faucets/base-sepolia",
+  "payment_uri": "ethereum:0xE293…cAcB@84532?value=1000000000000000",
+  "steps": [ "Send 0.001 ETH to … (0.0001 ETH is the least that works; the rest saves a second trip)." ],
+  "wallet_steps": [ "Some faucets refuse a contract address, and this account is one. …", "Then, from that wallet, send 0.001 ETH to … " ]
+}
+```
+
+`minimum` is what lets the readiness gas check pass: the chain's gas reserve (an **estimate**; no per-execution figure is published) plus
+`--amount`. `suggested` is ten reserves, so the next few sends do not each need a faucet. `send` is the difference from `balance` (all of
+`suggested` when the balance is unknown); `least` is the least to send now to clear `minimum` (`"0"` when it is already cleared). A chain with no estimate has `null` for the three and `estimated: false`: no number is invented.
+`payment_uri` is an EIP-681 request with the network, the account and the amount set, in **integer wei**. Nothing in `funding` is a quote.
+
+**`certen gas`** is the abstract account's gas on one chain: what it holds, what to send where, and (with `--wait`) the moment it arrives. It
+is not `certen fund`, which tops up the organization's gateway balance (the stablecoin that pays CERTEN's fees). It signs nothing and takes no
+key; `--from-wallet` prints the transfer to make from a wallet you control.
+
+```
+certen gas [--chain <chain>] [--identity <ref>] [--amount <whole units>] [--gas-reserve <amount|none>]
+           [--wait] [--from-wallet] [--timeout <duration>] [--poll-interval <interval>]
+```
+
+Which identity and chain comes from the context (section 7), echoed on stderr. **Exit `0` only when the account has enough** (the `gas` check of
+section 8 is `ok` or `warn`). Otherwise `1`, with `error.code` the check's code (`ABSTRACT_ACCOUNT_UNFUNDED`, `ABSTRACT_ACCOUNT_UNDERFUNDED`,
+`ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE`), `FUNDS_WAIT_TIMEOUT` or `CHAIN_NOT_LINKED` (the identity has no account on that chain); `2` for a
+mistake in the invocation; `3` unreachable; `130` interrupted. The envelope carries the whole plan either way, under `data` on success and
+`error.details` on failure, so a script can show the address and the wallet link without parsing prose:
+
+```json
+{ "identity_id": "11111111-…", "abstract_account": "0xE293…cAcB", "funded": false,
+  "chain": "base-sepolia", "symbol": "ETH", "address": "0xE293…cAcB", "balance": "0", "minimum": "0.0001", "suggested": "0.001", "send": "0.001", "least": "0.0001",
+  "satisfied": false, "estimated": true, "faucet": "https://…", "payment_uri": "ethereum:0xE293…cAcB@84532?value=1000000000000000",
+  "steps": [ ], "wallet_steps": [ ],
+  "check": { "name": "gas", "status": "fail", "code": "ABSTRACT_ACCOUNT_UNFUNDED", "detail": "…" } }
+```
+
+`waited: true` is added when `--wait` returned because the funds arrived; `timed_out: true` / `interrupted: true` on the failures that end a wait.
+`funded` is the readiness check's verdict; `satisfied` is the plan's own arithmetic on the balance it was given, and the two agree on every balance
+the check can read.
+
+**Not changed:** `certen init` exits `0` once its own steps are done, whether or not the account can act yet, and keeps its output. `setup` is the
+strict command; it shares the credential, key and identity steps with `init` rather than replacing it.
 
 ## Example: a correct retry loop
 

@@ -88,12 +88,14 @@ if (!r.ready) console.error(r.state, r.first_blocker);   // 'blocked' or 'unconf
 ## CLI (no code required)
 ```
 npm install -g @certen.io/cli
+certen setup                    # signing key, account, identity, checks, gas; resumable; exit 0 only when ready
 certen login                    # device authorization — no key is ever copied by hand
 certen init                     # signing key, identity, funding; idempotent
 certen call --identity <id> --chain base-sepolia --to 0x… --fn 'confirm(bytes32)' --arg 0x…     --sign-with dev --wait
 certen proof get <intent-id>
 certen doctor                   # names the one thing blocking you
 certen status                   # is this identity, on this chain, with this key ready? exit 0 only when it is
+certen gas [--wait]             # the abstract account's gas: address, amount, faucet, wallet link; --wait returns when it arrives
 ```
 - **Say it once.** `certen use identity|key|chain <value>` chooses them, `certen context` shows what the next command will use and why,
   and `--profile <name>` switches between setups (each with its own gateway and API key). After that `--identity`, `--chain` and

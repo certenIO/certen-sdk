@@ -14,21 +14,40 @@ Requires **Node 22 or 24** (`engines.node >=22`).
 ## From nothing to a proof
 
 ```bash
-certen login          # approve this machine once in the portal; the key arrives here
-certen init           # signing key, identity, funding — created and checked
+certen setup          # key, account, identity, on-chain checks and gas, until it says "Ready"
 
-certen call --identity <id> --chain base-sepolia --to 0xYourContract \
-    --fn 'confirm(bytes32)' --arg 0x… --sign-with dev --wait
+certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait
 
 certen proof get <intent-id>   # the evidence, to hand to a counterparty
 ```
 
-**You never copy an API key.** `certen login` uses the device authorization grant: it prints a
+`certen setup` is one resumable command. It makes (or reuses) your signing key, **then** the account the key creates (or signs you in to the one
+you have), then the identity, waits until the identity can sign, reads your key page from Accumulate, checks the credits, the gateway balance and the
+gas on the abstract account, and saves what it settled on as your context. Run it again and it continues instead of repeating: one account, one
+identity. It exits `0` only when you are ready to act.
+
+```bash
+certen setup --new-account      # no account yet: create one with your signing key (no browser)
+certen setup --existing-account # you have one: approve this machine in the portal (never copy a key)
+certen setup --token crt_…      # CI: redeem a registration token
+```
+
+When gas is the only thing in the way, `setup` does not stop at a URL. It shows the account, a faucet, a wallet link (EIP-681) and what to send, then
+**waits for the funds to arrive** (that is the default at a terminal; `--wait-for-funds` does it anywhere, `--no-wait-for-funds` never). Ctrl-C is safe:
+run `certen setup` again to continue. The amounts are planning figures, not a quote: the gateway publishes no per-execution gas cost.
+
+`certen gas` is the same, on its own: what the abstract account holds, what to send where, and `--wait` for it. It is **not** `certen fund`, which
+tops up the organization's gateway balance (the stablecoin that pays CERTEN's fees).
+
+The steps one at a time, if you prefer them: `certen login` (approve this machine once in the portal; the key arrives here) and `certen init`
+(signing key, identity, funding). `init` is unchanged: it exits `0` once its steps are done, whether or not the account can act yet.
+
+**You never copy an API key.** `certen login` (and `setup --existing-account`) uses the device authorization grant: it prints a
 short code, you approve that code in a portal session you already trust, and the CLI collects the
 key over its own channel. The secret is never displayed here and never passes through your
 clipboard or your shell history.
 
-`certen init` is idempotent. It creates only what is missing, records the identity id so a later
+`certen init` and `certen setup` are idempotent. They create only what is missing, records the identity id so a later
 run reuses it, waits until the identity can actually sign, and tells you if an abstract account
 needs gas before it can execute anything.
 

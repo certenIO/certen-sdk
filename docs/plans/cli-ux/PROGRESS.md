@@ -8,8 +8,8 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 |---|---|---|---|
 | 0 | Sync, baseline, AGENTS.md header | merged | #27 (da4aeb4) |
 | 1 | Context (W1) | merged | #28 (7c9fb45) |
-| 2 | Readiness (W3) | in-progress (work complete, branch `ux/phase-2-readiness` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
-| 3 | Setup + gas (W2, W6) | not-started | |
+| 2 | Readiness (W3) | merged | #29 (65d6bbe) |
+| 3 | Setup + gas (W2, W6) | in-progress (work complete, branch `ux/phase-3-setup` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
 | 4 | Send + receipt (W4, W5) | not-started | |
 | 5 | Learnability (W7) | not-started | |
 | 6 | Agents (W8) | not-started | |
@@ -334,6 +334,93 @@ Pre-existing failures: none.
 - The gas reserve figures are planning numbers, not measurements (decision 7). **A human should replace them with measured values.**
 - The unit of the key page's `creditBalance` is unconfirmed, which is why credits fail only at zero (decision 8).
 
+## Phase 3: Setup + gas (W2, W6)
+
+Branch `ux/phase-3-setup`, from `main` at `65d6bbe` (Phase 2 merged as #29). Acceptance (HARNESS-PROMPT §8): `certen setup` (alias `init`) step machine, resumable; key
+before credential, with both the device flow (existing org) and keypair signup (new org, no browser) paths tested against fakes; reuses the existing identity rather than
+hitting the one-identity cap on unapproved orgs; wait-for-funds with EIP-681 output; `certen gas`; readiness card; exit 0 only when ready.
+
+### Baseline for this phase (before any change, 2026-10-15, `main` = `65d6bbe`)
+
+| Gate | Result |
+|---|---|
+| `npm install` | exit 0 |
+| `node scripts/build-all.mjs` | exit 0 |
+| `node scripts/typecheck-all.mjs` | exit 0 |
+| `node scripts/test-all.mjs` | exit 0, **1776 passed in 111 files**, 0 failed, 0 skipped |
+| `npm run agentgen:check` | exit 0, 4 artifacts up to date (125 operations, 82 SDK methods) |
+
+Pre-existing failures: none.
+
+### Design decisions, from reading the code (the plan is silent or wrong on these)
+
+1. **`init` is not a pure alias of `setup`; they share the step functions.** PLAN W2 says `init` "stays as an alias, same flags", but PLAN §5 rule 2 and HARNESS §3 say every existing command keeps its meaning,
+   and `init`'s meaning includes exiting 0 when the identity exists and the account is merely unfunded (the pinned `guide`, `published`, `context` and `readiness` baselines all run `init` on an unfunded account and
+   declare exit 0). `setup` exits 0 only when ready. So the credential, key and identity steps are extracted once and both commands call them; `init` keeps its order (credential first), its output and its exit code,
+   and accepts every flag it did. Conflict recorded under "Conflicts between sources of truth".
+2. **Key before credential, and the passphrase asked once.** `setup` makes or reuses the key first because a new account is created BY that key. `init` called `resolveSigner()` for the identity's public key, which prompts for the
+   passphrase to read two public values; `setup` reads them with `getKeyInfo()` (no prompt) and signs the signup nonce with the passphrase it already holds from creating the key (one prompt for a new key, one for an
+   existing encrypted key on the new-org path, none on the existing-org path).
+3. **The credential question is explicit, never guessed.** Nothing configured: `--token <registration token>` redeems it (CI); `--new-account` creates an org with the key (keypair signup, no browser); `--existing-account` runs the
+   device flow. On a TTY with none of those, one question is asked with no default (creating an organisation is not something to do on an Enter). `--yes` or no TTY with none of those is a usage error that names the three.
+   A credential that is configured is probed once; a 401 is never silently replaced (that would hide which key was in use): it fails with `CREDENTIAL_REJECTED` naming `certen setup --existing-account` (or `--new-account`, `--token`), and is replaced only on that explicit option or a yes at the prompt. `CERTEN_API_KEY` can never be replaced (it takes precedence over anything saved). The question is asked before the key is made, so someone who gives no answer leaves nothing behind.
+4. **The identity is recorded the moment `create` returns its id**, before the wait (`init` records after). A Ctrl-C or timeout during provisioning otherwise loses the UUID, and the rerun would create a second identity that an
+   unapproved org (cap: 1) refuses. A rerun finds the record, reads the identity, and waits on the one that exists. A recorded identity in `error` is offered `identity retire` + retry on a TTY; with `--yes` it is never retired
+   automatically (retiring is destructive, PLAN W1 keeps it explicit) and the failure names the command.
+5. **Readiness is `client.readiness()`, not a copy.** Steps 1 to 4 act; steps 5 to 8 of PLAN W2 (key page, credits, gateway balance, gas) are the SDK's checks, run once after the actions and rendered by the Phase 2 card. Only gas is
+   actionable by `setup`: credits have no top-up endpoint (PLAN G6) and the gateway balance is money, so those two end the run as blockers with their fix, never as something `setup` pays for.
+6. **Gas waiting polls the SDK's own judgement.** `runReadiness`'s gas section is extracted as `checkGas()` (behaviour-preserving, covered by the 47 existing readiness tests) so the wait compares with the same `assessGas` and cannot
+   disagree with `status` about when the account is funded. A wait is on only when asked (`--wait-for-funds`) or when interactive (a TTY and not `--json`): a CI job must never hang by default (the same rule as `resolveWait`).
+7. **How much to ask for.** The minimum to proceed is what the readiness gas check accepts (the catalogue's reserve, plus `--amount` when given). The amount shown to send is 10 times the reserve (so base-sepolia asks for
+   0.001 ETH, the plan's example), labelled a suggestion. Both are planning figures, as the reserve is (Phase 2 decision 7). A chain with no reserve says "any amount" and that there is no estimate.
+8. **EIP-681 is exact and in the SDK.** `ethereum:<address>@<chainId>?value=<wei>` with integer wei from `parseUnits`, never a float (`1e15` is valid EIP-681, but a plain integer is read by more wallets). The address is the abstract
+   account, which is a contract: some faucets refuse a contract address, so the output always carries the two-step alternative (fund a wallet you control, then send from it with the link) without claiming to know which faucets do.
+   `gas --from-wallet` prints exactly that transfer and signs nothing.
+9. **Ctrl-C during the funds wait** is trapped: it prints how to resume and exits **130** (the shell convention; PLAN W5 uses it for `watch`). In `--json` mode it emits the one failure envelope (`INTERRUPTED`). Nothing is half-done at that point
+   (the key, credential and identity are saved and the context is already written). Any other phase keeps the default SIGINT behaviour.
+10. **The context is written as soon as identity, key and chain are settled**, before the wait, so `certen gas` / `status` / a rerun resolve the same triple after an interruption. It is not claimed as "ready" until the card says so.
+11. **Not in this phase, with reasons:** `certen credits` (PLAN W6 says "or a `credits` line in `status`"; the line exists since Phase 2 and appears on the setup card); the testnet gas drip (a gateway ask, PLAN G1: `setup` does not call an endpoint that does not exist);
+    the `next:` field on every error (Phase 5, W7); `certen send` in the closing hint (Phase 4: the card prints the `tx create` that works today).
+
+### Tasks (check = the acceptance check; evidence = what was run)
+
+- [x] 1. **SDK `checkGas()`** extracted from `runReadiness`, exported. Check: the 47 `readiness.test.ts` tests unchanged and green, plus `gas-funding.test.ts` (4 tests drive `checkGas` alone: one request, the funding code and facts, `unknown` with the HTTP status, a malformed call).
+- [x] 2. **SDK `nativeTransferUri()` and `gasFundingPlan()`** (exact EIP-681 in integer wei, minimum / suggested / send / least, faucet, the two-step block, no number for a chain with no estimate). Check: `gas-funding.test.ts` (19 tests). Mutation-checked: a float for the wei turned "keeps the last digit that a float would lose" red; ignoring the balance turned "counts what is already there" red; restored.
+- [x] 3. **CLI: `init`'s sign-in (device flow, paste fallback) and payer registration extracted** into `credential-flow.ts`; `status`'s post-processing into `finishReadiness`; flag parsers into `flag-parsers.ts`. `init` and `status` unchanged. Check: `call-init`, `signup`, `status`, `doctor`, `context-*` and the pinned `guide` / `published` / `context` / `readiness` journeys green and unedited (the `doctor` fix text aside, task 7).
+- [x] 4. **`certen setup`**: gateway, key, sign-in (token / new account / existing account / configured / rejected), identity (reuse, resume, retire offer, polling hints), context, readiness, funds; exit 0 only when ready. Check: `setup.test.ts` (32 tests, the real built CLI against a stateful fake that VERIFIES the Ed25519 signup signature, enforces the one-identity cap and serves the device flow), `setup-interactive.test.ts` (16, scripted prompter). Mutation-checked (each turned tests red, then restored byte-identical): recording the identity after the wait (2 red), waiting for funds whatever else is wrong (3), signing the hex text instead of the bytes (23), replacing a rejected key unasked (2), letting `--yes` retire an identity (2).
+- [x] 5. **Wait for funds**: `--wait-for-funds` / interactive default, `--poll-interval`, `--funds-timeout`, Ctrl-C trap (listener only around the wait). Check: `setup-wait.test.ts` (6: arrival, timeout then resume, no wait when funds cannot fix it, piped does not wait, `--no-wait-for-funds`, `--amount`), `funds-wait.test.ts` (16: the loop with an injected clock, `gasGapIsFundable`, `trapSigint`, the prompter), `setup-interactive.test.ts` (abort, dispose on abort and on a throw). A real SIGINT cannot be delivered to a child on Windows (node terminates it), so the trap is tested with an injected emitter and the command wiring by the in-process abort; **unverified live: Ctrl-C in a real terminal**.
+- [x] 6. **`certen gas`** (`--chain`, `--identity`, `--amount`, `--gas-reserve`, `--wait`, `--from-wallet`, `--timeout`, `--poll-interval`). Check: `gas.test.ts` (17: unfunded / funded / short, `--wait` arrival and timeout, `--from-wallet` sends only reads, refusals before any request, 401 and unreachable).
+- [x] 7. **`status` / `doctor` fix commands for the gas codes** (`certen gas --chain <chain> --wait`; `fund` is a different balance). Check: `status.test.ts` and `doctor.test.ts` assert the command and that `certen fund` is absent.
+- [x] 8. **Fake gateway and two journeys** (`setup`, `setup-wait`) with signup endpoints verified by signature, gas arriving mid-wait, a `funds-never-arrive` fault. Check: `measure-onboarding.test.ts` (16) pins both; `--fault funds-never-arrive` goes red naming `FUNDS_WAIT_TIMEOUT`.
+- [x] 9. **Contract and help**: 6 conformance cases (`setup` and `gas`: usage errors before any request, unreachable, `--help --json` options and exit code 130), root help leads with `setup` and lists `gas`, `fund` says "gateway balance". Check: `conformance.test.ts` (41).
+- [x] 10. **Docs**: CHANGELOGs (cli, sdk), `docs/CLI-CONTRACT.md` section 9 and the 130 row, `packages/cli/README.md`, the first-proof and onboarding guides, the skill, the llms template (regenerated; `agentgen:check` clean), PLAN corrections, `test:counts` refreshed.
+- [x] 11. **Gates, offline transcript, §5 self-review, push.** Outputs are quoted in the PR body (kept outside the repo, in the session scratchpad). **Opening the PR needs a human**: `gh` is not installed on this machine.
+
+### Phase 3 results
+
+**Measured (offline, fake gateway, `node scripts/measure-onboarding.mjs --journey <name>`):** the same transaction, before and after.
+
+| | `readiness` (Phase 2 CLI) | `setup` (Phase 3, two runs) | `setup-wait` (Phase 3, one run that waits) |
+|---|---|---|---|
+| `certen` commands | 12 | **7** | **6** |
+| Steps outside the CLI | 3 (install, fund, effect check) | 3 | 3 |
+| HTTP round trips | 32 | 32 | 32 (the setup's 16 include 5 polls while the funds were on their way) |
+| Values copied by hand | 2 (`abstract_account`, `intent_id`) | 2 | 2 |
+| Passphrase prompts | 2 | 2 | 2 (key creation, then `tx create`; the signup signs with the passphrase just typed) |
+
+`chains --refresh`, `auth login`, `whoami`, `init` and the two `status` runs become two `setup` runs (or one that waits). The numbers that did not move are the evidence that nothing else changed: the `guide`, `published`, `context` and `readiness` baselines are exactly as they were, and `init` costs what it cost.
+What did not improve, plainly: round trips (the wait's polls and the repeat registry read replace what the second run cost), the address still has to be pasted into a faucet, and the intent id is still read by hand until Phase 4's receipt.
+
+**Tests:** 1776 → **1891** in 111 → 117 files (sdk 627 → 646, cli 691 → 787). Gates on the final tree: build ✓ typecheck ✓ `test-all` ✓ `agentgen:check` ✓ `test:counts` ✓ (quoted in the PR body).
+
+**Proven in the transcript, not only in tests:** a fresh machine goes key → account → identity in that order and stops on the gas with the exact amount and a wallet link (exit 1, nothing waits when nobody is watching); `gas` and `gas --from-wallet` and `gas --json` carry the same plan; `gas --wait` returns when the funds arrive; `setup` again skips every step and is ready; `setup --wait-for-funds` is one command from nothing to ready; `--json` is one envelope on stdout; conflicting options, a wei amount and a missing account choice are exit 2 before any request.
+
+**Unverified live / limits stated plainly:**
+- Nothing here touched a live gateway, signed for real, or minted a credential (HARNESS §4). **A human should run `certen setup --new-account` once against a real testnet gateway** (and `setup --existing-account`, which opens a browser): the fake verifies the signature the way the spec says the gateway does, and a real gateway is the only proof of that. The unapproved-organisation cap, self-service being switched off, and the real status codes of a refused second identity are modelled from PLAN §6, not observed.
+- Ctrl-C in a real terminal (see task 5), and the interactive prompts in a real TTY (the prompter is tested against streams; the questions are tested with a scripted one).
+- The gas amounts are the planning figures from Phase 2, ten of them suggested. **A human should replace them with measured values.** It does not know which faucets refuse a contract address; it says "some do" and always shows the two-step route.
+- **A decision for the human, not made here: the keypair signup signs a nonce the gateway chose** (`selfSignup`, already how `signup --with-key` works, and what PLAN W2 specifies). It is an Ed25519 signature over 32 gateway-chosen bytes made with the key that will also hold the identity's key page. A malicious gateway could pick those bytes to be an Accumulate hash-to-sign. For a key made in this very run the risk does not exist (nothing holds it yet); for a REUSED key that is already on a key page it does. Proportionate mitigations: a gateway-side domain separator (sign a prefixed nonce; a gateway change), or have `setup --new-account` sign only with a key created in the same run, or say before signing with a reused key. `setup` does none of these yet; it prints which key created the organisation.
+
 ## Found, not fixed
 
 - **`npm install` reports 5 vulnerabilities (2 moderate, 3 high).** Present on a clean `main`; not
@@ -370,6 +457,15 @@ Pre-existing failures: none.
 - **A stale local record is not self-healing for an identity retired from another machine.** `identity retire` forgets it locally, but a retire elsewhere leaves this machine's record; the next use fails with the gateway's own 404, which is clear. Not fixed.
 - **Working-tree line endings on this machine are CRLF for some pre-existing files** (git normalises to LF per `.gitattributes`, and the commits are clean). Scripts that edit those files preserve whatever they find.
 - **Shell heredocs eat backslashes in this environment.** It twice produced a subtly wrong regex or a broken string in a scripted test edit. One looser-than-intended regex slipped into a test and was caught on review and fixed; edits containing regexes now go through the Edit tool.
+
+- **`certen login --json` / `signup --json` were silent about the approval code** (the device flow printed it only outside JSON mode), so a device flow started that way waited for an approval nobody had been told to give. Fixed in this phase because `setup --existing-account --json` needed it: the code and link now go to stderr (where the contract puts human text). stdout is unchanged.
+- **A new credential goes to a FILE on a fresh machine, not the OS keyring.** `login`, `signup` and `init` write to the keyring only when the machine already keeps its credential there (`storage === 'keyring'`); `auth login` is the only one that defaults to it. `setup` copies that rule and adds `--no-keyring`. Which store a new user should get is a security decision; not changed here.
+- **`waitForIdentity` polls with every enrichment** (governance, balances, pending), each a live query, on a call whose only job is `status` and `can_sign` (the SDK's own doc says to pass `[]`). `setup` inherits it. Not changed: it is the existing wait.
+- **`setup` reads `GET /v1/chains` twice** (the gateway step, then the readiness gateway check). The second is deliberate (a "reachable" claim should not rest on an earlier read), but it is a round trip.
+- **The gateway's `polling` hints are honoured** (cadence clamped to 2 to 30 s, and the first poll deferred up to 60 s) when `--poll-interval` is not typed; the real values have not been seen. If the gateway's hint is wrong the wait still ends at its own budget (5 min), which is unchanged.
+- **`setup` does not link a chain** the reused identity lacks (`CHAIN_NOT_LINKED` is a blocker with the exact `identity link-chain` command): linking may be billed, and the plan does not say it should be silent.
+- **A rerun after the identity was created but before the signup key was saved** cannot be recovered by the CLI: the API key is returned once. `setup` names the failure (`KEY_STORAGE_FAILED`) and the way back in.
+- **`readNativeBalance` reports a failed balance read as zero on the gateway's bridge** (Phase 2's note) matters more now: `setup` will tell someone with a funded account to wait for funds. `gas`'s `--force` equivalent does not exist (`status` has none either).
 
 ## Conflicts between sources of truth
 

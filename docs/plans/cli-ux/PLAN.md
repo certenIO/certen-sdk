@@ -181,9 +181,15 @@ Each one ships separately, is useful alone, and goes in the order given in §4.
 
 Rework `init` into a step machine and add `setup` as its primary name (`init` stays as an alias,
 same flags). Steps, each with check → act → verify, skipped when already satisfied:
+*(Phase 3: `init` stays as its own command, not an alias. §5 rule 2 says every command keeps its meaning, and `init`'s includes exiting 0 once its steps are done
+whether or not the account can act yet: the pinned `guide`, `published`, `context` and `readiness` journeys run it on an unfunded account. `setup` is the strict
+one (exit 0 only when ready) and the two share the sign-in and payer code. The steps below are the order `setup` runs them in, with one change: the question of
+which kind of account is asked BEFORE the key is made, so that someone who gives no answer leaves nothing behind; the account itself is still made after the key.)*
 
 1. **Gateway**: reachable, serves this CLI version (`check:gateway` logic), serves the requested chain
    (replaces `chains --refresh` as a manual step).
+   *(Phase 3: reachable and serving the requested chain, judged from `GET /v1/chains`, whose answer is also written to the chain cache. "Serves this CLI version" is
+   not a runtime check: `check:gateway` is `scripts/check-gateway-serves.mjs`, a pre-publish script that compares the live spec with the vendored one.)*
 2. **Signing key**: reuse or create (encrypted by default). This comes *before* the credential,
    because a new user's key is what creates their account.
 3. **Credential**: one question when nothing is configured: "Sign in to an existing CERTEN account
@@ -212,6 +218,16 @@ same flags). Steps, each with check → act → verify, skipped when already sat
 Flags: `--name`, `--key`, `--chain(s)`, `--yes`, `--no-wait-for-funds`, `--accumulate-rpc`,
 `--profile`. Exit codes: `0` ready; `1` blocked (envelope carries `readiness` with the first
 blocker); `3` unreachable. If interrupted, rerun the same command; it picks up where it stopped.
+*(Phase 3, what the code settled that the plan left open: **the account question is explicit, never guessed.** `--new-account` (keypair signup), `--existing-account`
+(device flow, pasted key as the fallback) and `--token` (CI) name the answer; on a TTY with none of them it is asked, with no default; with `--yes` or no TTY it is a usage
+error, because creating an organisation is not something to do on an Enter. A credential that works is kept, whatever else was passed. **The identity is recorded the moment
+`create` returns its id**, before the wait, so an interrupted run does not lose it and the rerun does not hit the one-identity cap; a recorded identity in `error` is offered
+`identity retire` on a TTY and never retired by `--yes`. **Waiting for funds is the default only where a person is watching** (a TTY and not `--json`); `--wait-for-funds` /
+`--no-wait-for-funds` override. It starts only when gas is the only failing check and the gap is one funds fix. **Ctrl-C** during that wait prints how to continue and exits 130 (new,
+additive; nothing else changes its SIGINT behaviour). The context is written before the wait. A new signing key is encrypted: `--yes` needs `CERTEN_KEY_PASSPHRASE` or
+`--no-passphrase`. Added flags: `--identity`, `--existing-account`, `--new-account`, `--token`, `--org-name`, `--no-passphrase`, `--no-keyring`, `--no-browser`, `--payer`,
+`--wait-for-funds`, `--amount`, `--gas-reserve`, `--funds-timeout`, `--timeout`, `--poll-interval`. Steps 6 and 7 are not acted on: credits have no top-up endpoint (§6 G6) and the
+gateway balance is money, so they end the run as blockers with their fix.)*
 
 ### W3. Readiness: one model, three surfaces
 
@@ -283,8 +299,12 @@ blocker); `3` unreachable. If interrupted, rerun the same command; it picks up w
   not "fund".
 - `certen credits` (or a `credits` line in `status`) shows Accumulate credits and how to top up,
   using whatever the gateway provides (§6).
+  *(Phase 3: the `credits` line in `status` and on the `setup` card, which the plan allows for; there is no separate `credits` command.)*
 - When a faucet can't pay a contract address, `gas` says so and gives the two-step workaround
   in one block (fund a dev wallet, then `gas --from-wallet` prints the exact transfer to make).
+  *(Phase 3: `gas` also takes `--identity`, `--amount` and `--gas-reserve`, and exits 0 only when the account has enough. It does not know which faucets refuse a contract address (nothing
+  published says so), so the two-step route is always shown, worded as "some faucets refuse one". The link is EIP-681 in exact integer wei. The figures are the planning estimates from
+  Phase 2, ten of them suggested so the next few sends do not each need a faucet visit. The SDK owns it: `gasFundingPlan`, `nativeTransferUri`, `checkGas`.)*
 - If the gateway gets a testnet drip or sponsored gas (§6), `setup` uses it automatically on
   testnets and this whole step disappears for most users.
 
