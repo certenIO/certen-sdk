@@ -146,6 +146,12 @@ values are copied and which steps prompt for a passphrase are declared by the jo
 `packages/cli/test/measure-onboarding.test.ts` pins the numbers and checks that the run goes red
 (`--fault cannot-sign`) when a step does not behave as declared.
 
+Read the round trips as a **floor to compare across changes, not a forecast of live traffic**: the fake
+answers every wait on the first poll, so `init`, `call --wait` and `tx create --wait` each count one poll
+where a live run polls for the 45-110 seconds provisioning and the proof cycle really take. Steps run
+with `--json` so values can be carried forward; round trips and exit codes were checked equal to human
+mode for every command that reaches the gateway.
+
 **The end-to-end check** signs up with a freshly generated keypair, creates an identity, confirms the
 trial credit covers new work, and — given `--contract` — executes a proof-gated call and verifies the
 proof. It holds no credential: the key is generated per run and discarded, which is the entire reason

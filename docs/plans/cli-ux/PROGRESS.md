@@ -118,6 +118,14 @@ Observations for later phases, from the per-step endpoints:
   because `confirm(bytes32)` forwards no value. Funding is what the `published` journey adds (and what
   Phase 3's `setup` has to own).
 
+**How to read these numbers.** They are a floor to compare across phases, not a forecast of live traffic. The
+fake answers every wait on the first poll, so `init`, `call --wait` and `tx create --wait` each count one
+poll where a live run polls repeatedly (identity provisioning at a 3 s interval over ~45-90 s; the proof cycle
+at 8 s over 60-110 s). The runner passes `--json` on every step so values can be carried forward; round trips
+and exit codes were checked **equal to human mode** for all 12 commands that reach the gateway (`auth login`,
+`init`, `whoami`, `identity list`, `identity get`, `portfolio`, `doctor`, `balance`, `tx create`, `tx status`,
+`proof get`, `proof verify`).
+
 What the offline measurement does not cover, and a human has to: the device-flow `certen login` (a browser
 and a person; the journeys use the documented `auth login --api-key -` fallback and say so in the output),
 real provisioning and proof-cycle time (60–110 s), real gas funding, and the live gateway's behaviour.
