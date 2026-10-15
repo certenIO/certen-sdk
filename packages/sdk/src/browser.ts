@@ -40,7 +40,7 @@ export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS }
 export type { PaymentResolution } from './errors.js';
 export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';
 // Readiness for one identity on one chain, and the Accumulate key page read behind it. See readiness.ts and key-page.ts.
-export { runReadiness, summarizeReadiness, READINESS_CHECKS, CONTEXT_CHECKS } from './readiness.js';
+export { runReadiness, checkGas, summarizeReadiness, READINESS_CHECKS, CONTEXT_CHECKS } from './readiness.js';
 export type {
   Readiness, ReadinessCheck, ReadinessContext, ReadinessFix, ReadinessParams, ReadinessState, ReadinessStatus,
 } from './readiness.js';
@@ -70,8 +70,9 @@ export { redeemRegistrationToken } from './registration.js';
 export { selfSignup, requestSignupChallenge, completeSignup } from './self-signup.js';
 export {
   CertenUnfundedAccountError, CertenUnderfundedAccountError, CertenFundingUnverifiableError, movesValue, normalizeChainId, assessGas, nativeAmountOf,
+  nativeTransferUri, gasFundingPlan,
 } from './funding.js';
-export type { FundingUnverifiableReason, GasAssessment } from './funding.js';
+export type { FundingUnverifiableReason, GasAssessment, GasFundingPlan } from './funding.js';
 // The chain catalogue: the single source the CLI and MCP derive every chain table from. See chains.ts.
 export {
   CHAIN_CATALOGUE, chainInfo, chainSlug, nativeSymbolFor, faucetForChain, defaultEnabledChains, enablableChains,

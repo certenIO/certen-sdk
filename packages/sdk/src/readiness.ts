@@ -318,6 +318,51 @@ export async function runReadiness(client: CertenClient, params: ReadinessParams
   if (full) checks.push(balanceCheck(balanceR as PromiseSettledResult<BalanceResponse | null>));
 
   // ── gas ────────────────────────────────────────────────────────────────────────────────────────────────
+  checks.push(await gasCheckOf(client, ident, chain, account?.address, params));
+
+  return finish(checks, context);
+}
+
+/**
+ * The gas check on its own: the same judgement `runReadiness` makes, for a caller that is waiting for one number to change.
+ *
+ * `setup --wait-for-funds` and `gas --wait` poll this, not the whole of `readiness()`: the rest of it (the registry, the Accumulate key page,
+ * the organization's balance) cannot change while someone is sending gas from a faucet, and asking again every few seconds would be noise
+ * on the gateway and on a public Accumulate node. It is the SAME function `runReadiness` calls, so the wait and `status` cannot disagree
+ * about when an account counts as funded.
+ *
+ * Never throws for a read that failed: that is an `unknown` check carrying the HTTP status in `data.status`, so a poller can tell a
+ * rejected credential (stop) from a gateway having a bad moment (carry on). It throws only for a malformed call.
+ */
+export async function checkGas(
+  client: CertenClient,
+  params: Pick<ReadinessParams, 'identityId' | 'chain' | 'amount' | 'tokenSymbol' | 'gasReserve'>,
+): Promise<ReadinessCheck> {
+  if (!params.identityId) throw new CertenError('certen: checkGas needs an identity id.', 0, 'MISSING_IDENTITY');
+  if (!params.chain) throw new CertenError('certen: checkGas needs a chain.', 0, 'MISSING_CHAIN');
+  const chain = chainSlug(params.chain);
+  let ident: IdentityResponse;
+  try {
+    ident = await client.identity.get(params.identityId, { include: ['balances'] });
+  } catch (err) {
+    return check(NAMES.gas, 'unknown', `Could not read the identity to find its gas balance: ${messageOf(err)}`, {
+      code: 'GAS_UNREADABLE',
+      fix: { text: 'Retry. If it persists, check the gateway status.' },
+      data: { chain, status: statusOf(err) ?? null },
+    });
+  }
+  const account = (ident.chain_accounts ?? []).find((a) => chainSlug(a.chain_id) === chain);
+  return gasCheckOf(client, ident, chain, account?.address, params);
+}
+
+/** Find the chain's balance rows on an identity already read (falling back to the portfolio on a gateway that predates `balances`) and judge them. */
+async function gasCheckOf(
+  client: CertenClient,
+  ident: IdentityResponse,
+  chain: string,
+  accountAddress: string | undefined,
+  params: Pick<ReadinessParams, 'identityId' | 'amount' | 'tokenSymbol' | 'gasReserve'>,
+): Promise<ReadinessCheck> {
   let rows = ident.balances;
   if (rows === undefined) {
     // A gateway that predates the balances enrichment. The portfolio carries the same numbers.
@@ -333,9 +378,7 @@ export async function runReadiness(client: CertenClient, params: ReadinessParams
     }
   }
   const onChain = (rows ?? []).filter((b) => chainSlug(b.chain_id) === chain);
-  checks.push(gasCheck(chain, account?.address ?? onChain[0]?.address, readNativeBalance(chain, onChain), params));
-
-  return finish(checks, context);
+  return gasCheck(chain, accountAddress ?? onChain[0]?.address, readNativeBalance(chain, onChain), params);
 }
 
 /**
@@ -530,7 +573,10 @@ function balanceCheck(r: PromiseSettledResult<BalanceResponse | null>): Readines
   return check(NAMES.balance, 'ok', `$${balance.spendable_usd} spendable${balance.remaining_usd !== undefined ? `, $${balance.remaining_usd} left to commit` : ''}`, { data });
 }
 
-function gasCheck(chain: string, address: string | undefined, reading: NativeBalanceReading, p: ReadinessParams): ReadinessCheck {
+function gasCheck(
+  chain: string, address: string | undefined, reading: NativeBalanceReading,
+  p: Pick<ReadinessParams, 'amount' | 'tokenSymbol' | 'gasReserve'>,
+): ReadinessCheck {
   const symbol = nativeSymbolFor(chain);
   const where = address ? `${address} on ${chain}` : chain;
   const faucet = faucetForChain(chain);
