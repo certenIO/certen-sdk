@@ -15,6 +15,19 @@
  * Steps that need on-chain provisioning are skipped unless `--full` is passed, since they take
  * 60-90 seconds each and need a funded sponsor. The read-path numbers are the ones that regress
  * quietly; the write path is slow for reasons no client change will fix.
+ *
+ * `--journey <name>` is the other mode, and it is offline. It runs a DOCUMENTED first-transaction
+ * journey (what the docs tell a new developer to do, in order) through the real built CLI against an
+ * in-process fake gateway, in a throwaway HOME, and reports commands, round trips and the values a
+ * person has to copy by hand. It exists so the CLI UX plan (docs/plans/cli-ux/PLAN.md) can show before
+ * and after for every phase without a network, an API key or funds:
+ *
+ *   node scripts/measure-onboarding.mjs --journey guide
+ *   node scripts/measure-onboarding.mjs --journey published --json
+ *
+ * Journeys sign and create identities, so they never run against a real gateway: `--journey` with
+ * `--url` is refused. `--fault cannot-sign` makes the fake misbehave, to prove the run goes red when a
+ * step does not behave as declared. Exit 0: every step behaved as declared. 1: one did not. 2: bad request.
  */
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -28,6 +41,26 @@ const CLI = join(HERE, '..', 'packages', 'cli', 'dist', 'index.js');
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
   return i === -1 ? fallback : process.argv[i + 1];
+}
+
+if (process.argv.includes('--journey')) {
+  const live = ['--url', '--key', '--full', '--intent'].filter((f) => process.argv.includes(f));
+  if (live.length > 0) {
+    console.error(`--journey runs offline against a fake gateway and cannot be combined with ${live.join(', ')}: `
+      + 'a journey signs and creates identities, which is never done against a real gateway from here.');
+    process.exit(2);
+  }
+  const { runJourney, renderJourney } = await import('./lib/journey-runner.mjs');
+  const { exitCode, report } = await runJourney({ name: arg('journey', ''), cli: CLI, fault: arg('fault', undefined) });
+  if (report.error) {
+    console.error(report.error);
+    process.exit(exitCode);
+  }
+  // Exit only once the report has been flushed: a piped stdout can still hold the tail of a large JSON
+  // document when process.exit() runs, and a truncated report parses as nothing.
+  const text = process.argv.includes('--json') ? JSON.stringify(report) : renderJourney(report);
+  process.stdout.write(`${text}\n`, () => process.exit(exitCode));
+  await new Promise(() => { /* the write callback exits; nothing below this block may run */ });
 }
 
 const TARGET = arg('url', process.env.CERTEN_API_URL ?? 'http://127.0.0.1:8090');

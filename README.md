@@ -78,7 +78,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->1415 tests in 95 files (sdk 536, cli 421, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->1429 tests in 97 files (sdk 536, cli 435, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 
@@ -130,8 +130,27 @@ worth calling is reachable from a client, and that onboarding is fast. Both are 
 ```bash
 node scripts/coverage.mjs                  # which operations no client can reach
 node scripts/measure-onboarding.mjs --url https://gateway.kompendium.co --key ck_live_...
+node scripts/measure-onboarding.mjs --journey published         # offline: what the documented journey costs
 node scripts/e2e-onboarding.mjs --url https://staging.example   # the whole journey, from nothing
 ```
+
+**The journey measurement** (`--journey guide` or `--journey published`) runs what the docs tell a new
+developer to do, in order, through the real built CLI against an in-process fake gateway, in a
+throwaway `HOME`. It reports the `certen` commands, the steps that are not commands (an install, a
+`curl`, a faucet), the HTTP round trips that reached the fake, and the values a person has to carry from
+one step to the next by hand. It needs no network, no API key and no funds, so every change to the
+onboarding path can show a before and after. It refuses `--url`: a journey signs and creates
+identities, which is never done against a real gateway from here. Round trips are measured; which
+values are copied and which steps prompt for a passphrase are declared by the journey
+(`scripts/lib/onboarding-journeys.mjs`), and the report says so.
+`packages/cli/test/measure-onboarding.test.ts` pins the numbers and checks that the run goes red
+(`--fault cannot-sign`) when a step does not behave as declared.
+
+Read the round trips as a **floor to compare across changes, not a forecast of live traffic**: the fake
+answers every wait on the first poll, so `init`, `call --wait` and `tx create --wait` each count one poll
+where a live run polls for the 45-110 seconds provisioning and the proof cycle really take. Steps run
+with `--json` so values can be carried forward; round trips and exit codes were checked equal to human
+mode for every command that reaches the gateway.
 
 **The end-to-end check** signs up with a freshly generated keypair, creates an identity, confirms the
 trial credit covers new work, and — given `--contract` — executes a proof-gated call and verifies the

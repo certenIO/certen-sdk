@@ -2,7 +2,9 @@
 
 TypeScript client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) —
 proof-gated cross-chain execution on Accumulate. An npm workspaces monorepo publishing
-`@certen.io/sdk` (v0.3.1), `@certen.io/cli` (v0.4.0) and `@certen.io/mcp` (v0.1.0).
+`@certen.io/sdk` (v0.10.0), `@certen.io/cli` (v0.10.0), `@certen.io/mcp` (v0.5.0) and
+`@certen.io/proof-verify` (v0.1.0). A release that bumps one of these edits this line;
+`packages/cli/test/agents-md.test.ts` fails until it does.
 
 > Building **on** CERTEN rather than **on this SDK**? You want `llms.txt` (quickstart + rules) and
 > `llms-full.txt` (full API digest). This file is about working on the SDK itself.
@@ -29,7 +31,7 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->1415 tests in 95 files (sdk 536, cli 421, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->1429 tests in 97 files (sdk 536, cli 435, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
 | `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |
