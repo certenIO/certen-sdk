@@ -176,7 +176,7 @@ describe('the CLI funding guard reads each chain\'s own gas token', () => {
   });
 
   it('allows a funded TEL account on 2017', async () => {
-    expect(await refusal(assertFundedForValue(fakeClient('telcoin-adiri', [{ token: 'TEL', balance: '1' }]), 'id', 'telcoin-adiri', VALUE, false))).toBeNull();
+    expect(await refusal(assertFundedForValue(fakeClient('telcoin-adiri', [{ token: 'TEL', balance: '100000' }]), 'id', 'telcoin-adiri', VALUE, false))).toBeNull();
   });
 
   it('refuses by name when 2017 reports only an ETH row', async () => {
@@ -209,7 +209,7 @@ describe('the CLI funding guard reads each chain\'s own gas token', () => {
     for (const [chainId, chain] of [['ethereum-sepolia', 'ethereum-sepolia'], ['84532', 'base-sepolia'], ['421614', 'arbitrum-sepolia']]) {
       expect((await refusal(assertFundedForValue(fakeClient(chainId, [{ token: 'ETH', balance: '0' }]), 'id', chain, VALUE, false)))?.code)
         .toBe('ABSTRACT_ACCOUNT_UNFUNDED');
-      expect(await refusal(assertFundedForValue(fakeClient(chainId, [{ token: 'ETH', balance: '1' }]), 'id', chain, VALUE, false))).toBeNull();
+      expect(await refusal(assertFundedForValue(fakeClient(chainId, [{ token: 'ETH', balance: '100000' }]), 'id', chain, VALUE, false))).toBeNull();
       // Not in the portfolio, or nothing reported yet: proceeds, as before.
       expect(await refusal(assertFundedForValue(fakeClient('other', []), 'id', chain, VALUE, false))).toBeNull();
       expect(await refusal(assertFundedForValue(fakeClient(chainId, []), 'id', chain, VALUE, false))).toBeNull();

@@ -316,6 +316,69 @@ describe('CLI contract: context, profiles and the identity reference (docs/CLI-C
   });
 });
 
+describe('CLI contract: readiness, `certen status` (docs/CLI-CONTRACT.md section 8)', () => {
+  const OFFLINE = { CERTEN_API_KEY: 'ck_test_notreal', CERTEN_API_URL: 'http://127.0.0.1:9' };
+  const UUID = '11111111-1111-4111-8111-111111111111';
+
+  it('2 — a command that needs an identity and has none says so before any request', () => {
+    const r = certen(['--json', 'status', '--chain', 'base-sepolia'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('MISSING_IDENTITY');
+  });
+
+  it('2 — an amount that looks like wei, a bad Accumulate URL and a bad gas reserve are usage errors before any request', () => {
+    for (const [args, code] of [
+      [['--amount', '1000000000000000'], 'INVALID_AMOUNT'],
+      [['--amount', 'lots'], 'INVALID_AMOUNT'],
+      [['--accumulate-rpc', 'not a url'], 'INVALID_ACCUMULATE_RPC'],
+      [['--accumulate-rpc', 'ftp://node/v3'], 'INVALID_ACCUMULATE_RPC'],
+      [['--gas-reserve', 'lots'], 'INVALID_AMOUNT'],
+    ] as Array<[string[], string]>) {
+      const r = certen(['--json', 'status', '--identity', UUID, '--chain', 'base-sepolia', ...args], OFFLINE);
+      expect(r.code, args.join(' ')).toBe(2);
+      expect((soleJson(r.stdout).error as { code: string }).code, args.join(' ')).toBe(code);
+    }
+  });
+
+  it('2 — --all with nothing recorded has nothing to check, before any request', () => {
+    const r = certen(['--json', 'status', '--all'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('NO_IDENTITIES');
+  });
+
+  it('3 — an unreachable gateway: retryable, every check still present, everything after the gateway skipped', () => {
+    const r = certen(['--json', 'status', '--identity', UUID, '--chain', 'base-sepolia'], OFFLINE);
+    expect(r.code).toBe(3);
+    const error = soleJson(r.stdout).error as { code: string; retryable: boolean; details: { readiness: { ready: boolean; state: string; checks: Array<{ name: string; status: string }> } } };
+    expect(error).toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+    expect(error.details.readiness).toMatchObject({ ready: false, state: 'blocked' });
+    expect(error.details.readiness.checks.map((c) => c.name)).toEqual(
+      ['gateway', 'credential', 'signing key', 'identity', 'chain', 'key page', 'accumulate credits', 'gateway balance', 'gas'],
+    );
+    expect(error.details.readiness.checks[0]!.status).toBe('fail');
+    // Not "ok", not "unknown": nothing past the gateway was evaluated, and the list says so.
+    expect(error.details.readiness.checks.filter((c) => c.name !== 'gateway' && c.name !== 'signing key').every((c) => c.status === 'skipped')).toBe(true);
+  });
+
+  it('--help --json lists status with its options', () => {
+    const r = certen(['--json', '--help']);
+    const data = soleJson(r.stdout).data as { commands: Array<{ name: string; options?: Array<{ name: string }> }> };
+    const status = data.commands.find((c) => c.name === 'status');
+    expect(status, 'status is in the command tree').toBeDefined();
+    expect((status!.options ?? []).map((o) => o.name)).toEqual(
+      expect.arrayContaining(['identity', 'chain', 'signWith', 'amount', 'token', 'accumulateRpc', 'gasReserve', 'all']),
+    );
+  });
+
+  it('doctor takes --identity, --chain and --sign-with', () => {
+    const r = certen(['--json', '--help']);
+    const data = soleJson(r.stdout).data as { commands: Array<{ name: string; options?: Array<{ name: string }> }> };
+    expect((data.commands.find((c) => c.name === 'doctor')!.options ?? []).map((o) => o.name)).toEqual(
+      expect.arrayContaining(['all', 'identity', 'chain', 'signWith']),
+    );
+  });
+});
+
 describe('CLI contract: table mode is unchanged for humans', () => {
   it('prints a table, not JSON, when --json is absent', () => {
     const r = certen(['auth', 'status']);
