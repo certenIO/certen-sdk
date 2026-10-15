@@ -6,7 +6,7 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 
 | Phase | Title | Status | PR |
 |---|---|---|---|
-| 0 | Sync, baseline, AGENTS.md header | in-progress | not opened |
+| 0 | Sync, baseline, AGENTS.md header | in-progress (branch `ux/phase-0-baseline` pushed; PR not opened, `gh` is not installed) | not opened |
 | 1 | Context (W1) | not-started | |
 | 2 | Readiness (W3) | not-started | |
 | 3 | Setup + gas (W2, W6) | not-started | |
@@ -74,9 +74,10 @@ documented first-transaction path.
   red; a login without `--no-keyring` is refused. Real `~/.certen` unmodified (newest file 2026-10-09).*
 - [x] 5. Record the measured baseline for both journeys. *Check: tables below, reproducible with
   `node scripts/measure-onboarding.mjs --journey guide` and `--journey published`.*
-- [ ] 6. Commit `docs/plans/cli-ux/` and document `--journey` in the README. *Check: `git show --stat`.*
-- [ ] 7. Gates, the user-run transcript, self-review against PLAN §5, push the branch. PR: **needs a
-  human** unless `gh` is installed. *Check: gate output quoted in the PR body.*
+- [x] 6. Commit `docs/plans/cli-ux/` and document `--journey` in the README. *Check: `git show --stat 07f7429` lists PLAN, HARNESS-PROMPT, PROGRESS; README "Measuring, rather than asserting" describes `--journey`.*
+- [~] 7. Gates, the user-run transcript, self-review against PLAN §5, push the branch. PR: **needs a
+  human** (`gh` is not installed). *Check: gate output, the user-run transcript and the PLAN §5 checklist are in the
+  drafted PR body (kept outside the repo, in the session scratchpad); the human pastes it when opening the PR.*
 
 ### Measured baseline (offline, fake gateway; origin/main `558608f`, sdk/cli 0.10.0)
 
@@ -133,6 +134,17 @@ Unverified live.
   reports 125 spec operations and 82 SDK methods. The two counts may not mean the same thing, so I did
   not change the sentence. Worth a look by whoever owns that page.
 
+- **Proxy settings break every CLI test that spawns the CLI against a loopback fake.** The CLI talks through
+  axios, which honours `HTTP_PROXY`; with one set and no `NO_PROXY`, a call to `127.0.0.1` goes to the proxy
+  (verified: `NETWORK_ERROR connect ECONNREFUSED 127.0.0.1:9`, no request reaches the fake). The new
+  journey runner sets `NO_PROXY`. The existing tests (`call-init.test.ts`, `proof-verify.test.ts`, ...) pass
+  the caller's environment through unchanged, so they would fail on a machine with a proxy configured. Not
+  reproduced across the whole suite, only shown for one command; worth a one-line fix in their shared env.
+- **`gh` is not installed on this Windows machine**, so this harness cannot run `gh pr view` / `gh pr create`.
+  A human opens each phase's PR (or installs `gh` and re-runs the session).
+
 ## Conflicts between sources of truth
 
-None so far.
+- **Commit trailers.** The session's attribution reminder asked for a `Co-Authored-By` trailer on commits.
+  HARNESS-PROMPT §7 (and the standing certenIO convention in the user's memory) say one plain line, no
+  trailers. Followed the higher source: the user's own rules and the harness. No trailer on any commit.
