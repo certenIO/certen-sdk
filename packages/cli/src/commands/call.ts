@@ -1,13 +1,16 @@
 import { Command, Option } from 'commander';
-import { CertenClient, type Identity } from '@certen.io/sdk';
+import { CertenClient } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { resolveSigner } from '../signer.js';
-import { assertChain, normalizeChain, chainIdFor } from '../chains.js';
+import { assertChain, chainIdFor } from '../chains.js';
+import { keyExists } from '../keystore.js';
 import { parseSignature, checkArgs } from '../solidity-args.js';
 import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
 import { assertFundedForValue } from '../funding-guard.js';
+import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
+import { resolveCommandIdentity, abstractAccountFor } from '../command-context.js';
 import {
   AUTHORITY_HELP, EXPIRES_IN_HELP, HEADER_FIELDS_HELP, collect, parseAuthorityFlags, parseExpiresIn,
   withOutcomeFields, emitOutcomeHints,
@@ -25,30 +28,28 @@ import {
  * dereferenced without a null check, and omitting either produces a **bodyless 502** that reads as
  * "the gateway is down" rather than "you left out a field". Nobody should have to know that. The
  * CLI holds the identity id already; it can look the two up.
+ *
+ * `--identity`, `--chain` and `--sign-with` come from the context when not given (see context.ts): flag > environment > profile >
+ * the only candidate there is. Every value taken from context is said on stderr before anything is signed. The key is the one
+ * place a default is safe to add here: leaving `--sign-with` out of a `call` was always an error, so no invocation that worked
+ * changes meaning. (`tx create` and `governance` without `--sign-with` are a supported external-signer mode, and do NOT default one.)
  */
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
 }
 
-/** The abstract account for a chain, from whichever spelling of `chain_id` the gateway used. */
-function abstractAccountFor(identity: Identity, chain: string): string | undefined {
-  const want = normalizeChain(chain);
-  return (identity.chain_accounts ?? [])
-    .find((account) => normalizeChain(account.chain_id) === want && account.address)?.address;
-}
-
 export function registerCallCommands(program: Command): void {
   program
     .command('call')
     .description('Authorize a proof-gated contract call')
-    .requiredOption('--identity <uuid>', 'Identity that authorizes the call')
-    .requiredOption('--chain <chain>', 'Chain the call executes on, e.g. base-sepolia')
+    .option('--identity <ref>', 'Identity that authorizes the call: UUID, ADI URL or name (default: your context, see `certen context`)')
+    .option('--chain <chain>', 'Chain the call executes on, e.g. base-sepolia (default: your context)')
     .requiredOption('--to <address>', 'Contract to call')
     .requiredOption('--fn <signature>', 'Solidity function signature, e.g. \'confirm(bytes32)\'')
     .option('--arg <value...>', 'Argument values, in order. Repeat or pass several after one --arg')
     .option('--value <wei>', 'Native wei to forward with the call (string)', '0')
-    .option('--sign-with <key>', 'Local key to sign with (see `certen keys generate`)')
+    .option('--sign-with <key>', 'Local key to sign with (default: your context key, or your only key; see `certen keys generate`)')
     .option('--signer-key-page <url>', 'Which key page signs, e.g. acc://org.acme/book/2')
     .addOption(new Option('--proof-class <class>', 'When the proof runs')
       .choices(['on_demand', 'on_cadence']))
@@ -66,7 +67,7 @@ export function registerCallCommands(program: Command): void {
     .option('--expires-in <duration>', EXPIRES_IN_HELP)
     .addHelpText('after', HEADER_FIELDS_HELP)
     .action(async (opts: {
-      identity: string; chain: string; to: string; fn: string; arg?: string[]; value: string;
+      identity?: string; chain?: string; to: string; fn: string; arg?: string[]; value: string;
       signWith?: string; signerKeyPage?: string; proofClass?: 'on_demand' | 'on_cadence';
       from?: string; adiUrl?: string; chainId?: number; idempotencyKey?: string;
       dryRun?: boolean; timeout?: string; pollInterval?: string; force?: boolean;
@@ -74,7 +75,13 @@ export function registerCallCommands(program: Command): void {
     }) => {
       // Everything checkable without the network is checked first, so a typo costs a message
       // rather than a round trip — and, with --sign-with, rather than a passphrase prompt too.
-      const chain = assertChain(opts.chain);
+      //
+      // The context is resolved here, locally: which identity, which chain, which key. A call authorises execution on a chain, so the
+      // chain is held to the value-moving rule: a default that is not a known testnet is refused (context.ts).
+      const ctx = resolveContext({ identity: opts.identity, chain: opts.chain, key: opts.signWith }, { valueMoving: true });
+      requireIdentity(ctx);
+      const chainFrom = requireChain(ctx);
+      const chain = assertChain(chainFrom.value, sourceLabel(chainFrom, '--chain'));
       const signature = parseSignature(opts.fn);
       const args = checkArgs(signature, opts.arg ?? []);
       const additionalAuthorities = parseAuthorityFlags(opts.authority);
@@ -102,6 +109,11 @@ export function registerCallCommands(program: Command): void {
 
       const client = await getClient();
 
+      // The identity as a UUID, whichever way it was named (a UUID, an ADI URL or a name). Recorded or typed spellings need no
+      // request. The value is echoed once it resolves, so the person sees the ADI they recognise.
+      const who = await resolveCommandIdentity(ctx, client, 'id');
+      echoFromContext('chain', ctx.chain);
+
       // Resolve the identity BEFORE unlocking the signer: if the identity cannot sign, prompting
       // for a passphrase first would be asking for a secret in order to fail.
       // The response IS the identity now — it is no longer nested under an `identity` key.
@@ -109,7 +121,7 @@ export function registerCallCommands(program: Command): void {
       // per-chain balances (for the unfunded-account guard), and never touches `governance` or
       // `pending`. Both of those are live fetches on the critical path of the flagship command:
       // governance is a network round trip, pending a database read, and neither answer was used.
-      const identity = await client.identity.get(opts.identity, { include: ['balances'] });
+      const identity = await client.identity.get(who.id!, { include: ['balances'] });
 
       if (identity.can_sign === false) {
         throw new CliError(
@@ -148,7 +160,7 @@ export function registerCallCommands(program: Command): void {
         // Also the documented starting point for `--intent @file.json`: someone who needs a
         // multi-leg intent can take this, edit it, and pass it to `tx create`.
         printOutput({
-          identity_id: opts.identity,
+          identity_id: who.id!,
           adi_url: adiUrl,
           chain,
           chain_id: chainId ?? null,
@@ -165,27 +177,43 @@ export function registerCallCommands(program: Command): void {
         return;
       }
 
-      if (!opts.signWith) {
+      // The key. Leaving `--sign-with` out of a `call` was always an error, so a context key can fill it without changing what any
+      // working invocation does. Several local keys and none chosen is a question, never a guess.
+      const keyFrom = ctx.key;
+      if (!keyFrom) {
+        const local = ctx.candidates.key;
         throw new UsageError(
-          'Nothing would sign this call. Pass --sign-with <key>, or --dry-run to see the intent. '
-          + 'To make a key: certen keys generate --name dev',
+          local.length > 1
+            ? `Which key signs this call? You have ${local.join(', ')}. Pass --sign-with <key>, set CERTEN_KEY, or choose one once with: certen use key <name>. `
+              + 'Or --dry-run to see the intent.'
+            : 'Nothing would sign this call. Pass --sign-with <key>, or --dry-run to see the intent. '
+              + 'To make a key: certen keys generate --name dev',
           'MISSING_SIGNING_KEY',
         );
       }
+      if (keyFrom.source !== 'flag' && !keyExists(keyFrom.value)) {
+        throw new UsageError(
+          `There is no signing key named "${keyFrom.value}" on this machine (it came from ${keyFrom.detail}). `
+          + 'Pass --sign-with <key>, or choose another with: certen use key <name>. Yours: certen keys list',
+          'UNKNOWN_KEY',
+        );
+      }
+      // Before the passphrase prompt and before the summary of what the signature authorises.
+      echoFromContext('key', keyFrom);
 
       // A payable call forwards value from the abstract account, so it needs gas there for the
       // same reason a transfer does.
       // The identity fetched above already carries per-chain balances, so this reuses them instead
       // of reading the same numbers again from /v1/portfolio.
       await assertFundedForValue(
-        client, opts.identity, chain, { amount: opts.value }, Boolean(opts.force),
+        client, who.id!, chain, { amount: opts.value }, Boolean(opts.force),
         identity.balances,
       );
 
-      const signer = await resolveSigner(opts.signWith);
+      const signer = await resolveSigner(keyFrom.value);
 
       const opened = await client.execute.contractCall({
-        identityId: opts.identity,
+        identityId: who.id!,
         adiUrl,
         fromAddress,
         chain,

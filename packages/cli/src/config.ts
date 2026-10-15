@@ -182,7 +182,8 @@ export function listProfiles(): string[] {
   return [DEFAULT_PROFILE, ...named];
 }
 
-function assertProfileKnown(name: string): void {
+/** A usage error naming the profiles that do exist, for a command that must not run as a profile nobody made. */
+export function assertProfileKnown(name: string): void {
   if (profileExists(name)) return;
   throw new UsageError(
     `There is no profile "${name}". Profiles: ${listProfiles().join(', ')}. `

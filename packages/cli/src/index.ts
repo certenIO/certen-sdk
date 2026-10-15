@@ -35,6 +35,7 @@ import { registerDoctorCommands } from './commands/doctor.js';
 import { registerProofCommands } from './commands/proof.js';
 import { registerCallCommands } from './commands/call.js';
 import { registerInitCommands } from './commands/init.js';
+import { registerContextCommands } from './commands/context.js';
 import { registerSignupCommands } from './commands/signup.js';
 import { registerWebhookCommands } from './commands/webhooks.js';
 import { registerOAuthClientCommands } from './commands/oauth-clients.js';
@@ -61,6 +62,7 @@ export function buildProgram(): Command {
 
   registerSignupCommands(program);
   registerInitCommands(program);
+  registerContextCommands(program);
   registerChainsCommands(program);
   registerAuthCommands(program);
   registerKeysCommands(program);

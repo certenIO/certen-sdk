@@ -4,6 +4,7 @@ import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.j
 import { printOutput, human, hint, isJsonMode, usd } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import { assertChain } from '../chains.js';
+import { resolveContext, echoFromContext, sourceLabel } from '../context.js';
 import { buildPaymentUri, estimateWait, preciseDuration } from '../payment-uri.js';
 import { parseSpanMs } from '../duration.js';
 
@@ -637,7 +638,7 @@ export function registerBillingCommands(program: Command): void {
     .command('fund')
     .argument('<amount>', 'Amount in USD to send, e.g. 25 or 25.50')
     .description('Get payment details for adding funds, and wait until they are credited')
-    .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia')
+    .option('--chain <chain>', 'Chain to send stablecoin on, e.g. base-sepolia (default: your context chain)')
     // `--wait` is accepted although waiting is already the default, because every other
     // long-running command (`identity create`, `tx create`, `call`) takes it. Someone who learned
     // the flag there types it here and, without this, meets "unknown option" on a command that was
@@ -668,9 +669,12 @@ export function registerBillingCommands(program: Command): void {
           EXIT.USAGE,
         );
       }
-      if (!opts.chain) {
+      // This moves real money, so a chain that is not a known testnet is never taken from a default (context.ts). The organization's
+      // balance is what is funded, not an identity, so an identity's only linked chain is no reason to pick one.
+      const ctx = resolveContext({ chain: opts.chain }, { fields: ['chain'], valueMoving: true, inferChain: false });
+      if (!ctx.chain) {
         throw new CliError(
-          'Which chain will you send on? Pass --chain (e.g. --chain base-sepolia)',
+          'Which chain will you send on? Pass --chain (e.g. --chain base-sepolia), set CERTEN_CHAIN, or choose one once with: certen use chain <chain>',
           'CHAIN_REQUIRED',
           EXIT.USAGE,
         );
@@ -679,7 +683,8 @@ export function registerBillingCommands(program: Command): void {
       // a wrong chain must not be discovered after a real payment intent has been opened against
       // it. `base` and `base-sepolia` are different networks and money sent to the wrong one is
       // not recoverable by anything this CLI can do.
-      const chain = assertChain(opts.chain);
+      const chain = assertChain(ctx.chain.value, sourceLabel(ctx.chain, '--chain'));
+      echoFromContext('chain', ctx.chain);
 
       // Every option is validated BEFORE the network call. Checking after would
       // mean a typo in --timeout had already opened a real payment intent that the

@@ -3,12 +3,14 @@ import { CertenClient, checkGovernanceSigning, inspectSigningData, type Expected
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint } from '../output.js';
 import { resolveSigner } from '../signer.js';
+import { resolveContext, requireIdentity } from '../context.js';
+import { resolveCommandIdentity } from '../command-context.js';
 
 /** `--account` for an authority operation: nothing for the identity, `<adi>/book` for "book", a URL as given. */
-function accountTarget(opts: { identity: string; account?: string }): { account_url?: string } {
-  if (!opts.account || opts.account === 'identity') return {};
-  if (opts.account === 'book') return { account_url: `${opts.identity.replace(/\/+$/, '')}/book` };
-  return { account_url: opts.account };
+function accountTarget(adiUrl: string, account?: string): { account_url?: string } {
+  if (!account || account === 'identity') return {};
+  if (account === 'book') return { account_url: `${adiUrl.replace(/\/+$/, '')}/book` };
+  return { account_url: account };
 }
 
 async function getClient(): Promise<CertenClient> {
@@ -20,15 +22,25 @@ async function getClient(): Promise<CertenClient> {
  * and returns `signing_data.hash_to_sign`; a key that is ON THE PAGE signs it and the signature is
  * submitted. Without `--sign-with` the first step happens and the hash is printed for an external
  * signer, which is how an HSM or the policy signer participates. With it, both steps happen here.
+ *
+ * The identity is any spelling (an ADI URL, a UUID or a name) or the context's; the governance route keys on the ADI, so that is
+ * what it is resolved to. A signing key is NOT defaulted from context: without `--sign-with` this is the external-signer mode,
+ * and signing there on a guess would start signing for people who rely on that.
  */
 async function submitGovernance(
-  operation: Record<string, unknown>,
-  opts: { identity: string; signWith?: string; signerKeyPage?: string },
+  build: (adiUrl: string) => Record<string, unknown>,
+  opts: { identity?: string; signWith?: string; signerKeyPage?: string },
 ): Promise<void> {
+  const ctx = resolveContext({ identity: opts.identity }, { fields: ['identity'] });
+  requireIdentity(ctx);
   const client = await getClient();
+  const who = await resolveCommandIdentity(ctx, client, 'adi');
+  const adiUrl = who.adi_url!;
+  const operation = build(adiUrl);
+
   const signer = opts.signWith ? await resolveSigner(opts.signWith) : null;
   const created = await client.governance.create({
-    identity: opts.identity,
+    identity: adiUrl,
     operations: [operation],
     signerKeyPage: opts.signerKeyPage,
     signerPublicKey: signer?.publicKey,
@@ -44,7 +56,7 @@ async function submitGovernance(
   }
   // Rebuild the transaction the gateway returned and match it to the operation asked for, before a signature exists. Nothing is signed on a mismatch.
   const summary = await checkGovernanceSigning(created.signing_data, {
-    adiUrl: opts.identity,
+    adiUrl,
     operations: [operation as unknown as ExpectedOperation],
     signerPublicKey: signer.publicKey,
     signerKeyPage: opts.signerKeyPage,
@@ -57,6 +69,8 @@ async function submitGovernance(
   printOutput({ ...created, ...submitted } as unknown as Record<string, unknown>);
 }
 
+const IDENTITY_HELP = 'Identity: ADI URL (acc://org.acme), UUID or name (default: your context, see `certen context`)';
+
 export function registerGovernanceCommands(program: Command): void {
   const governance = program.command('governance').description('Who may sign for an identity, and under what rules');
 
@@ -67,58 +81,58 @@ export function registerGovernanceCommands(program: Command): void {
   signing(governance
     .command('add-key')
     .description('Seat another key on the identity\'s key page — a co-signer, a human, a second agent')
-    .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
+    .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--public-key-hash <hex>', 'sha256 of the new key\'s raw public key, 64 hex (certen keys list shows it)'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'add_key', public_key_hash: opts.publicKeyHash }, opts);
+      await submitGovernance(() => ({ type: 'add_key', public_key_hash: opts.publicKeyHash }), opts);
     });
 
   signing(governance
     .command('remove-key')
     .description('Remove a seat from the identity\'s key page')
-    .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
+    .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--public-key-hash <hex>', 'sha256 of the key to remove, 64 hex'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'remove_key', public_key_hash: opts.publicKeyHash }, opts);
+      await submitGovernance(() => ({ type: 'remove_key', public_key_hash: opts.publicKeyHash }), opts);
     });
 
   signing(governance
     .command('set-threshold')
     .description('Set the M-of-N acceptThreshold on an identity key page')
-    .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
+    .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--threshold <n>', 'New threshold', parseInt))
     .action(async (opts) => {
-      await submitGovernance({ type: 'set_threshold', threshold: opts.threshold }, opts);
+      await submitGovernance(() => ({ type: 'set_threshold', threshold: opts.threshold }), opts);
     });
 
   signing(governance
     .command('add-authority')
     .description('Name a key book as a REQUIRED authority: every transaction then waits for it to sign too — how a policy signer regulates an agent')
-    .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
+    .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--authority <book-url>', 'The key book that must co-sign, e.g. acc://owner-policy.acme/book')
     .option('--account <url>', 'The account to put it on: the identity (default), "book" for its key book — so seats and thresholds face the authority too — or a full account URL under the identity'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'add_authority', authority_url: opts.authority, ...accountTarget(opts) }, opts);
+      await submitGovernance((adi) => ({ type: 'add_authority', authority_url: opts.authority, ...accountTarget(adi, opts.account) }), opts);
     });
 
   signing(governance
     .command('remove-authority')
     .description('Release a required authority')
-    .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
+    .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--authority <book-url>', 'The key book to release')
     .option('--account <url>', 'The account to release it from: the identity (default), "book", or a full account URL under the identity'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'remove_authority', authority_url: opts.authority, ...accountTarget(opts) }, opts);
+      await submitGovernance((adi) => ({ type: 'remove_authority', authority_url: opts.authority, ...accountTarget(adi, opts.account) }), opts);
     });
 
   signing(governance
     .command('add-delegate')
-    // `--identity` is the ADI (acc://org.acme), not a uuid — the governance endpoint keys on the ADI.
+    // `--identity` is resolved to the ADI (acc://org.acme): the governance endpoint keys on the ADI, not on a uuid.
     .description('Add a delegate to an identity key book')
-    .requiredOption('--identity <adi>', 'Identity ADI, e.g. acc://org.acme')
+    .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--delegate-url <url>', 'Delegate URL to add'))
     .action(async (opts) => {
-      await submitGovernance({ type: 'add_delegate', delegate_url: opts.delegateUrl }, opts);
+      await submitGovernance(() => ({ type: 'add_delegate', delegate_url: opts.delegateUrl }), opts);
     });
 
   governance

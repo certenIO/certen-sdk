@@ -231,7 +231,7 @@ export function registerInitCommands(program: Command): void {
           .map((a) => ({ chain_id: a.chain_id, address: a.address }));
         // Written down immediately: this is the only moment the UUID is knowable, and without a
         // record it is unrecoverable from any endpoint.
-        rememberIdentity({ id: identityId, adi_url: adiUrl, chains });
+        rememberIdentity({ id: identityId, adi_url: adiUrl, chains, name });
         steps.push({ step: 'identity', status: 'created', detail: `${adiUrl} (${identityId})` });
         say(`                  ${adiUrl} is active and can sign`);
       }

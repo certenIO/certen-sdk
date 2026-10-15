@@ -4,6 +4,8 @@ import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { resolveSignature, resolveSigner } from '../signer.js';
 import { UsageError } from '../errors.js';
+import { resolveContext, requireIdentity, echoFromContext } from '../context.js';
+import { filterIdentity, resolveIdentityRef } from '../identity-ref.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -41,7 +43,7 @@ export function registerPendingCommands(program: Command): void {
   pending
     .command('list')
     .description('List pending actions')
-    .option('--identity <id>', 'Filter by identity')
+    .option('--identity <ref>', 'Filter by identity: UUID, ADI URL or name (a filter: left out, you see them all)')
     .option('--status <status>', 'Filter by status')
     .option('--category <cat>', 'Filter by category')
     .option('--limit <n>', 'Max results', parseInt)
@@ -49,7 +51,8 @@ export function registerPendingCommands(program: Command): void {
     .action(async (opts) => {
       const client = await getClient();
       const result = await client.pending.list({
-        identity: opts.identity,
+        // Whichever way it was spelled, in the form the route takes. Never filled in from the context: a filter left out means "all".
+        identity: opts.identity ? await filterIdentity(opts.identity) : undefined,
         status: opts.status,
         category: opts.category,
         limit: opts.limit,
@@ -78,7 +81,7 @@ export function registerPendingCommands(program: Command): void {
     .description(
       'Create a sign request for a pending action (inbox id) or a pending transaction (hash or TxID)',
     )
-    .option('--identity <id>', 'Identity to sign as (required with a transaction hash)')
+    .option('--identity <ref>', 'Identity to sign as: UUID, ADI URL or name (required with a transaction hash; default: your context)')
     .option('--signer-url <url>', 'Signer URL (required with a transaction hash)')
     .option('--public-key <hex>', 'Public key that will sign, 64-char hex (required with a transaction hash)')
     // Was documented as "accept/reject". The API takes a lowercase `approve` | `reject` |
@@ -98,12 +101,17 @@ export function registerPendingCommands(program: Command): void {
       }
 
       let params: SignRequestParams;
+      // The identity a transaction hash is signed as comes from the flag or the context. An inbox id derives it itself, so there the
+      // context is not consulted. (A signing key is NOT defaulted here either: without --sign-with this is the external-signer mode.)
+      const ctx = target.type === 'pending_tx' ? resolveContext({ identity: opts.identity }, { fields: ['identity'] }) : undefined;
       if (target.type === 'pending_tx') {
+        // Several identities and none chosen is a question that lists them, not just a missing flag.
+        if (ctx && !ctx.identity && ctx.candidates.identity.length > 1) requireIdentity(ctx);
         // A raw transaction has no inbox row behind it, so nothing derives these. Fail here with
         // the CLI's own usage error rather than letting the gateway answer 400 — the caller can
         // tell "you left a flag out" from "the gateway refused" only if we say so.
         const missing = ([
-          ['identity', opts.identity],
+          ['identity', ctx?.identity?.value],
           ['signer-url', opts.signerUrl],
           ['public-key', opts.publicKey],
         ] as const).filter(([, v]) => !v).map(([flag]) => flag);
@@ -114,10 +122,14 @@ export function registerPendingCommands(program: Command): void {
             'MISSING_SIGNER_DETAILS',
           );
         }
+        // The spelling the route takes: what was typed, or the UUID a name stands for.
+        const identityValue = ctx!.identity!.value;
+        const shown = await resolveIdentityRef(identityValue, { need: 'any' });
+        echoFromContext('identity', ctx!.identity, shown.adi_url ?? shown.id);
         params = {
           type: 'pending_tx',
           targetId: target.targetId,
-          identity: opts.identity,
+          identity: await filterIdentity(identityValue),
           signerUrl: opts.signerUrl,
           publicKey: opts.publicKey,
           vote: opts.vote,
@@ -126,7 +138,7 @@ export function registerPendingCommands(program: Command): void {
         params = {
           type: 'pending_action',
           targetId: target.targetId,
-          identity: opts.identity,
+          identity: opts.identity ? await filterIdentity(opts.identity) : undefined,
           signerUrl: opts.signerUrl,
           publicKey: opts.publicKey,
           vote: opts.vote,

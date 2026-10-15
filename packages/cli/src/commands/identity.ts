@@ -10,6 +10,9 @@ import { assertChain, assertChains } from '../chains.js';
 import { UsageError } from '../errors.js';
 import { resolveWait, parseWaitBudget, waitForIdentity, IDENTITY_WAIT } from '../wait.js';
 import { faucetFor } from '../funding-guard.js';
+import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
+import { resolveCommandIdentity } from '../command-context.js';
+import { resolveIdentityRef } from '../identity-ref.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -146,7 +149,8 @@ export function registerIdentityCommands(program: Command): void {
       const id = result.id;
       // Recorded the moment it exists. The gateway has no identity list route and the portfolio
       // view returns no UUIDs, so an id that is only printed is an id that can be lost.
-      if (id) rememberIdentity({ id, adi_url: result.adi_url, chains: chains ?? [] });
+      // `name` is kept so `--identity <name>` finds it later (see identity-ref.ts).
+      if (id) rememberIdentity({ id, adi_url: result.adi_url, chains: chains ?? [], name: opts.name });
 
       if (!wait || !id) {
         if (result.id) printIdentity(result);
@@ -244,12 +248,15 @@ export function registerIdentityCommands(program: Command): void {
     });
 
   identity
-    .command('get <id>')
-    .description('Get identity details')
-    .action(async (id: string) => {
+    .command('get [ref]')
+    .description('Get identity details: by UUID, ADI URL or name (default: your context identity)')
+    .action(async (ref: string | undefined) => {
+      const ctx = resolveContext({ identity: ref }, { fields: ['identity'] });
+      requireIdentity(ctx);
       const client = await getClient();
+      const who = await resolveCommandIdentity(ctx, client, 'id');
       // No `--include`: the route takes no query parameters. It used to be sent and silently ignored.
-      const result = await client.identity.get(id);
+      const result = await client.identity.get(who.id!);
       printIdentity(result);
 
       if (isJsonMode()) return;
@@ -276,13 +283,17 @@ export function registerIdentityCommands(program: Command): void {
     });
 
   identity
-    .command('retire <id>')
-    .description('Retire an identity, freeing the org quota slot it occupies')
+    .command('retire <ref>')
+    .description('Retire an identity (UUID, ADI URL or name), freeing the org quota slot it occupies')
     .requiredOption('--yes', 'Confirm. There is no prompt — see below')
-    .action(async (id: string) => {
+    .action(async (ref: string) => {
       // No y/N prompt: the required --yes IS the confirmation, matching `keys delete`. An identity
       // that a live integration depends on should not be retirable by an accidental Enter.
       const client = await getClient();
+
+      // Any spelling of the identity works, but it is NEVER taken from the context: retiring the identity of the day is not
+      // something to infer. The argument stays required.
+      const id = (await resolveIdentityRef(ref, { client, need: 'id' })).id!;
 
       // Resolved first so the confirmation message names what is being retired. An id pasted from
       // the wrong terminal is the mistake worth catching, and it is invisible until something says
@@ -307,13 +318,19 @@ export function registerIdentityCommands(program: Command): void {
     });
 
   identity
-    .command('link-chain <id>')
-    .description('Link a chain to an identity')
-    .requiredOption('--chain <chain>', 'Chain to link, e.g. base-sepolia')
-    .action(async (id: string, opts) => {
-      const chain = assertChain(opts.chain);
+    .command('link-chain [ref]')
+    .description('Link a chain to an identity (default: your context identity and chain)')
+    .option('--chain <chain>', 'Chain to link, e.g. base-sepolia (default: your context)')
+    .action(async (ref: string | undefined, opts) => {
+      // `inferChain: false`: the chain an identity is ALREADY linked to is no reason to link it again.
+      const ctx = resolveContext({ identity: ref, chain: opts.chain }, { fields: ['identity', 'chain'], inferChain: false });
+      requireIdentity(ctx);
+      const chainFrom = requireChain(ctx);
+      const chain = assertChain(chainFrom.value, sourceLabel(chainFrom, '--chain'));
       const client = await getClient();
-      const result = await client.identity.update(id, {
+      const who = await resolveCommandIdentity(ctx, client, 'id');
+      echoFromContext('chain', ctx.chain);
+      const result = await client.identity.update(who.id!, {
         linkChains: [chain],
       });
       printOutput(result as unknown as Record<string, unknown>);
