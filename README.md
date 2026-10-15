@@ -134,7 +134,7 @@ node scripts/measure-onboarding.mjs --journey published         # offline: what 
 node scripts/e2e-onboarding.mjs --url https://staging.example   # the whole journey, from nothing
 ```
 
-**The journey measurement** (`--journey guide` or `--journey published`) runs what the docs tell a new
+**The journey measurement** (`--journey guide`, `published` or `context`) runs what the docs tell a new
 developer to do, in order, through the real built CLI against an in-process fake gateway, in a
 throwaway `HOME`. It reports the `certen` commands, the steps that are not commands (an install, a
 `curl`, a faucet), the HTTP round trips that reached the fake, and the values a person has to carry from
@@ -144,7 +144,10 @@ identities, which is never done against a real gateway from here. Round trips ar
 values are copied and which steps prompt for a passphrase are declared by the journey
 (`scripts/lib/onboarding-journeys.mjs`), and the report says so.
 `packages/cli/test/measure-onboarding.test.ts` pins the numbers and checks that the run goes red
-(`--fault cannot-sign`) when a step does not behave as declared.
+(`--fault cannot-sign`) when a step does not behave as declared. `guide` and `published` are the documented
+journeys as they stand; `context` is `published` written the way the CLI's context allows (the identity, chain
+and abstract account come from what `init` recorded), so the difference between the two is exactly what the
+context changed.
 
 Read the round trips as a **floor to compare across changes, not a forecast of live traffic**: the fake
 answers every wait on the first poll, so `init`, `call --wait` and `tx create --wait` each count one poll

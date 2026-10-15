@@ -45,6 +45,8 @@ before the developer sees one outcome. Most of it is bookkeeping the CLI already
 3. **Identifiers are inconsistent.** `identity get`/`tx create`/`call` take a UUID. `governance *`
    takes an ADI URL (`governance.ts:70-118`). The portfolio may not return UUIDs at all
    (`identity list` prints `—` and tells you to upgrade the gateway).
+   *(Phase 1 correction: gateway 2026-08 and later returns `id` in the portfolio, so this is only true of an older
+   gateway. The ADI → UUID lookup the plan assumed it lacked is `GET /v1/portfolio?identity=<adi>`.)*
 4. **Readiness is scattered and only reported at org level.** `doctor` runs org-wide checks
    ("some identity can sign", "all chain accounts have gas"). Nothing checks *the identity and
    chain I'm about to use*. Nothing reads Accumulate credits, and nothing independently checks the
@@ -147,6 +149,9 @@ Each one ships separately, is useful alone, and goes in the order given in §4.
 - Add an **active context** to `~/.certen/config.json`: `{ identity, key, chain }`, plus named
   **profiles** (`--profile`, `CERTEN_PROFILE`) for people who switch between testnet and mainnet
   or between orgs. Store the gateway URL per profile.
+  *(Phase 1: the credential is per profile too. A profile names its own gateway, so a key shared across profiles
+  would be sent to whichever host the active profile points at. The `default` profile keeps its credential and
+  gateway at the top level of the file, so nothing is migrated; a named profile never falls back to it.)*
 - `certen use identity <id|adi|alias>`, `certen use key <name>`, `certen use chain <slug>`,
   `certen context` (show it). `setup` writes the context when it finishes.
 - **One resolver** (`resolveContext()` in a new `src/context.ts`), used by every command. Order:
@@ -156,12 +161,21 @@ Each one ships separately, is useful alone, and goes in the order given in §4.
 - **One identity reference type** everywhere: UUID, `acc://` ADI URL, or a local alias. It
   resolves to `{id, adi_url}` (by local record first, then gateway). Governance commands accept
   UUIDs; UUID commands accept ADI URLs.
+  *(Phase 1: the gateway's identity routes take a UUID only, so an ADI or an alias is resolved client-side. An alias is
+  the name the identity was created with, or its ADI label. Each route is sent the form it takes: UUID for
+  `/v1/identity` and `/v1/transaction`, ADI URL for `/v1/governance`, either for `/v1/portfolio`, `/v1/pending`, `/v1/sign`.)*
 - Relax `requiredOption('--identity')` and the mandatory `--sign-with` to optional-with-default.
   Relaxing a required flag doesn't break any working invocation.
+  *(Phase 1: the signing key defaults ONLY where leaving it out was an error, which is `call`. `tx create`, `governance
+  <op>` and `pending sign` without `--sign-with` are a supported external-signer mode, and silently signing there would
+  start signing for people who rely on it. `send` (Phase 4) signs with the context key.)*
 - **Safety rule:** when a value came from context rather than a flag, the command says so on stderr
   (`using identity acc://jason-dev.acme (context)`), and the confirmation card shows it.
   **Mainnet chains never come from a default.** A value-moving command on a mainnet chain needs
   `--chain` spelled out, or a profile explicitly marked `allow_mainnet_default: true`.
+  *(Phase 1: "mainnet" is implemented as "not a known testnet": the SDK catalogue holds testnets only, the registry cache
+  records each chain's `environment`, and a chain nobody can classify gets the same refusal. A chain the CLI would refuse
+  anyway keeps its sharper `UNSUPPORTED_CHAIN`. `call`, `tx create` and `fund` are the value-moving commands.)*
 
 ### W2. `certen setup`: one resumable onboarding command
 
@@ -360,7 +374,7 @@ ask the gateway for. Every CLI phase works without the asks; each ask removes a 
 |---|---|---|---|
 | G1 | **Testnet gas drip**: `POST /v1/identity/:id/chain-accounts/:chain/drip` (rate-limited, testnet-only, sponsor-funded) | The faucet / dev-wallet / transfer dance: the biggest remaining manual step | `certen gas` with faucet + EIP-681 + wait-for-funds |
 | G2 | **Default `fromAddress`** from the identity's linked chain account when the intent omits it | A required value the gateway already knows | CLI derives it (W1/W4) |
-| G3 | **`GET /v1/identities`** with UUIDs, plus lookup by `public_key_hash` | Context lost on a new machine; `identity list` printing `—` | Local record plus portfolio by ADI |
+| G3 | **`GET /v1/identities`** with UUIDs, plus lookup by `public_key_hash` | Context lost on a new machine; `identity list` printing `—` | Local record plus portfolio by ADI (*Phase 1: the portfolio now carries `id`, so the UUID half of this is delivered; lookup by `public_key_hash` is still open*) |
 | G4 | **`GET /v1/identity/:id/readiness?chain=&amount=`**: one aggregate of status, can_sign, credits, chain account deployed, native balance vs. estimated gas, org spendable | Five reads stitched together client-side | SDK `client.readiness()` aggregates (W3) |
 | G5 | **Intent quote/preflight**: `POST /v1/transaction/quote` (fee, estimated gas, chain/identity gates) with no side effects | "fee ≈" guesswork on the confirmation card; failures discovered after signing | Show the price book (`/v1/pricing`) estimate, labelled as an estimate |
 | G6 | **Credit top-up** for an existing key page, `POST /v1/identity/:id/credits` (billed) | A dead end when credits run out after the 500 granted at provisioning | Readiness names the shortfall and links the portal |
