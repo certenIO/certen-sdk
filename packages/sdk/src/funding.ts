@@ -1,6 +1,8 @@
 import { AxiosInstance } from 'axios';
 import { CertenError } from './errors.js';
-import { chainSlug, nativeSymbolFor, readNativeBalance, describeUnverifiable } from './chains.js';
+import {
+  chainInfo, chainSlug, nativeSymbolFor, readNativeBalance, describeUnverifiable, gasReserveFor, parseUnits, formatUnits,
+} from './chains.js';
 import type { NativeBalanceReading } from './chains.js';
 
 /**
@@ -18,6 +20,9 @@ import type { NativeBalanceReading } from './chains.js';
  * **What it refuses, and what it lets through.**
  *
  * - A positively observed zero gas balance is refused ({@link CertenUnfundedAccountError}).
+ * - A balance that is positive but cannot cover the amount being moved plus the gas to move it is
+ *   refused ({@link CertenUnderfundedAccountError}). Zero is the extreme case of this and keeps its
+ *   own error. The gas half is an ESTIMATE (see {@link assessGas}); the amount half is not.
  * - A gas balance that cannot be IDENTIFIED is refused by name
  *   ({@link CertenFundingUnverifiableError}): the chain's gas token is unknown to the catalogue,
  *   the gateway reported balances none of which is that token, or it reported the gas row as
@@ -56,7 +61,116 @@ export class CertenUnfundedAccountError extends CertenError {
   }
 }
 
+/**
+ * Thrown instead of submitting a value-moving intent from an account that holds some gas, but not enough: either less than the amount
+ * being moved, or too little left over once it is.
+ *
+ * `kind: 'amount'` is a fact (the account holds less than it is about to send). `kind: 'gas'` is judged against an ESTIMATE of what one
+ * execution costs, which is why it is overridable and says so.
+ */
+export class CertenUnderfundedAccountError extends CertenError {
+  readonly address: string;
+  readonly chain: string;
+  readonly kind: 'amount' | 'gas';
+  /** Whole native units, as strings, so nothing here is a float. */
+  readonly balance: string;
+  readonly needed: string;
+  readonly symbol: string;
+
+  constructor(address: string, chain: string, shortfall: Extract<GasAssessment, { state: 'short' }>) {
+    super(
+      shortfall.kind === 'amount'
+        ? `The abstract account ${address} on ${chain} holds ${shortfall.balance} ${shortfall.symbol}, less than the ${shortfall.amount} ${shortfall.symbol} this intent moves. `
+          + 'It would be accepted, signed and submitted, and then never execute. Fund it first, or pass skipFundingCheck: true to submit anyway.'
+        : `The abstract account ${address} on ${chain} holds ${shortfall.balance} ${shortfall.symbol}; moving ${shortfall.amount} ${shortfall.symbol} and paying for the execution needs about `
+          + `${shortfall.needed} ${shortfall.symbol}${shortfall.reserve === '0' ? ' (nothing would be left over for gas)' : ` (the gas share, ${shortfall.reserve} ${shortfall.symbol}, is an estimate, not a quote)`}. `
+          + 'Without gas the intent is accepted, signed and submitted, and then parks at "anchoring" forever. Fund it first, or pass skipFundingCheck: true to submit anyway.',
+      0,
+      'ABSTRACT_ACCOUNT_UNDERFUNDED',
+    );
+    this.name = 'CertenUnderfundedAccountError';
+    this.address = address;
+    this.chain = chain;
+    this.kind = shortfall.kind;
+    this.balance = shortfall.balance;
+    this.needed = shortfall.needed;
+    this.symbol = shortfall.symbol;
+  }
+
+  /** Never. Funding is a human act; retrying changes nothing. */
+  get isRetryable(): boolean {
+    return false;
+  }
+}
+
 export type FundingUnverifiableReason = 'unknown-native' | 'native-not-reported' | 'unreadable';
+
+/**
+ * What the native balance on an abstract account says about a value-moving intent.
+ *
+ * One function, used by the SDK's guard, the CLI's guard and `client.readiness()`: three copies of "is there enough" would drift, and the
+ * place they would drift is the amount of money at which a refusal starts.
+ *
+ * - `unknown`: the balance could not be read as a number (not reported yet, the wrong token, unreadable). **Never** a refusal on its own
+ *   authority: an unknown balance does not block a submission, and is never reported as funded.
+ * - `empty`: positively zero.
+ * - `short`: positive, but below what is needed. `kind: 'amount'` when it cannot even cover the amount; `kind: 'gas'` when it covers the
+ *   amount but not the amount plus the gas reserve (or leaves nothing at all for gas).
+ * - `sufficient`: enough. `estimated` says whether a gas reserve was part of the judgement; false means the chain has no estimate and only
+ *   the amount was checked.
+ *
+ * Every quantity is exact integer arithmetic in base units and reported in whole units.
+ */
+export type GasAssessment =
+  | { state: 'unknown'; reading: NativeBalanceReading }
+  | { state: 'empty'; symbol: string; balance: string; amount: string; reserve: string; needed: string }
+  | {
+    state: 'short'; kind: 'amount' | 'gas'; symbol: string; balance: string; amount: string; reserve: string; needed: string;
+    /** How much more would clear it, or null when only "something left over for gas" would (the whole balance was being moved). */
+    shortfall: string | null;
+  }
+  | { state: 'sufficient'; symbol: string; balance: string; amount: string; reserve: string; needed: string; estimated: boolean };
+
+export function assessGas(p: {
+  chain: string | number;
+  reading: NativeBalanceReading;
+  /** The native amount being moved, in whole units. Omit when nothing native moves (a token transfer, or only a readiness check). */
+  amount?: string;
+  /**
+   * The gas reserve in whole units. Undefined takes the catalogue's estimate for the chain; `null` means "no reserve", which is how a caller
+   * says it knows better than the catalogue.
+   */
+  reserve?: string | null;
+}): GasAssessment {
+  const reading = p.reading;
+  if (reading.state !== 'funded' && reading.state !== 'empty') return { state: 'unknown', reading };
+  const decimals = chainInfo(p.chain)?.nativeDecimals;
+  if (decimals === undefined) return { state: 'unknown', reading: { state: 'unknown-native', chain: chainSlug(p.chain) } };
+
+  const balance = parseUnits(reading.balance, decimals);
+  // A number that is not a plain decimal ("1e-7", "unavailable") is not something to do arithmetic on. Unreadable, not zero.
+  if (balance === undefined) return { state: 'unknown', reading: { state: 'unreadable', symbol: reading.symbol, balance: reading.balance } };
+
+  // An amount that is not a decimal cannot be compared; the reserve is still judged.
+  const amount = p.amount === undefined ? 0n : parseUnits(p.amount, decimals) ?? 0n;
+  const reserveText = p.reserve === undefined ? gasReserveFor(p.chain) : p.reserve ?? undefined;
+  const reserve = reserveText === undefined ? 0n : parseUnits(reserveText, decimals) ?? 0n;
+  const needed = amount + reserve;
+
+  const out = {
+    symbol: reading.symbol,
+    balance: formatUnits(balance, decimals),
+    amount: formatUnits(amount, decimals),
+    reserve: formatUnits(reserve, decimals),
+    needed: formatUnits(needed, decimals),
+  };
+  if (balance === 0n) return { state: 'empty', ...out };
+  const shortfall = needed > balance ? formatUnits(needed - balance, decimals) : null;
+  if (balance < amount) return { state: 'short', kind: 'amount', ...out, shortfall };
+  // Moving the whole balance leaves nothing to pay gas with, estimate or no estimate.
+  if (balance < needed || (amount > 0n && balance === amount)) return { state: 'short', kind: 'gas', ...out, shortfall };
+  return { state: 'sufficient', ...out, estimated: reserve > 0n };
+}
 
 /**
  * Thrown instead of submitting a value-moving intent whose gas balance could not be identified.
@@ -125,7 +239,20 @@ export function movesValue(amount: unknown): boolean {
  */
 export async function assertFundedForValue(
   http: AxiosInstance,
-  params: { identityId: string; chain: string | undefined; amount: unknown },
+  params: {
+    identityId: string;
+    chain: string | undefined;
+    amount: unknown;
+    /**
+     * What `amount` is measured in. `whole` (the default) is a transfer's `amount`: "0.0001" ETH. `base` is a contract call's `value`:
+     * wei. The same field name has carried both, which is why this is stated rather than guessed from the digits.
+     */
+    amountUnit?: 'whole' | 'base';
+    /** The token being moved. When it is not the chain's native token the amount is not native, and only the gas is judged. */
+    tokenSymbol?: string;
+    /** Override the catalogue's gas reserve (whole native units); `null` for none. See {@link assessGas}. */
+    gasReserve?: string | null;
+  },
 ): Promise<void> {
   if (!params.chain || !movesValue(params.amount)) return;
 
@@ -164,16 +291,43 @@ export async function assertFundedForValue(
   }
 
   if (address === undefined || reading === undefined) return;
-  switch (reading.state) {
-    case 'funded':
+  const assessment = assessGas({
+    chain: want,
+    reading,
+    amount: nativeAmountOf(want, params),
+    reserve: params.gasReserve,
+  });
+  switch (assessment.state) {
+    case 'sufficient':
       return;
     case 'empty':
       throw new CertenUnfundedAccountError(address, want);
-    case 'unknown-native':
-    case 'native-not-reported':
-    case 'unreadable':
-      throw new CertenFundingUnverifiableError(address, want, reading.state, describeUnverifiable(want, reading)!);
-    default:
+    case 'short':
+      throw new CertenUnderfundedAccountError(address, want, assessment);
+    case 'unknown': {
+      const r = assessment.reading;
+      if (r.state === 'unknown-native' || r.state === 'native-not-reported' || r.state === 'unreadable') {
+        throw new CertenFundingUnverifiableError(address, want, r.state, describeUnverifiable(want, r)!);
+      }
       return;
+    }
   }
+}
+
+/**
+ * The part of an intent's amount that is paid in the chain's native token, in whole units, or undefined when none of it is.
+ *
+ * A token transfer's amount is in the token and does not draw down the gas balance; counting it would refuse an account that holds the
+ * token and plenty of gas. A base-unit (wei) value is converted so one comparison serves both spellings.
+ */
+export function nativeAmountOf(
+  chain: string,
+  p: { amount: unknown; amountUnit?: 'whole' | 'base'; tokenSymbol?: string },
+): string | undefined {
+  const info = chainInfo(chain);
+  if (!info || p.amount === undefined || p.amount === null) return undefined;
+  if (p.tokenSymbol && p.tokenSymbol.toUpperCase() !== info.nativeSymbol.toUpperCase()) return undefined;
+  const text = String(p.amount).trim();
+  if (p.amountUnit === 'base') return /^\d+$/.test(text) ? formatUnits(BigInt(text), info.nativeDecimals) : undefined;
+  return text;
 }

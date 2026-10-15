@@ -2,6 +2,7 @@ import type { CertenClient } from './client.js';
 import { CertenError } from './errors.js';
 import { VENDORED_ERROR_CODES } from './error-codes.js';
 import { chainSlug, readNativeBalance, describeUnverifiable } from './chains.js';
+import type { ChainsListResponse } from './types.js';
 
 /**
  * Diagnose a setup and say what is blocking it.
@@ -39,6 +40,12 @@ export interface DoctorReport {
   /** True when the gateway could not be reached at all — nothing below it was evaluated. */
   unreachable: boolean;
   checks: DoctorCheck[];
+  /**
+   * The chain registry the first check read, when it could be read. Only present when asked for (`doctor({ includeRegistry: true })`), so the
+   * report every existing caller gets, and the MCP tool's output schema, are exactly what they were. Handed back so a caller that goes on to ask
+   * about one identity on one chain (`readiness({ registry })`) does not read the same public document a second time.
+   */
+  registry?: ChainsListResponse;
 }
 
 /**
@@ -164,15 +171,17 @@ function executionCheck(list: Awaited<ReturnType<CertenClient['transaction']['li
  * Never throws for a failed check — a diagnosis that cannot report a broken setup is useless. It
  * throws only if something outside the checks goes wrong.
  */
-export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
+export async function runDoctor(client: CertenClient, options: { includeRegistry?: boolean } = {}): Promise<DoctorReport> {
   const checks: DoctorCheck[] = [];
   let unreachable = false;
+  let registryRead: ChainsListResponse | undefined;
 
   // ── 1. Is the gateway there at all? ─────────────────────────────────────────────────────────
   // `GET /v1/chains` is public, so this distinguishes "wrong address / network down" from "bad
   // credential" before any credential is involved.
   try {
     const registry = await client.chains.list();
+    registryRead = registry;
     checks.push({
       name: 'gateway reachable',
       status: 'ok',
@@ -307,7 +316,7 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
     for (const name of CREDENTIALLED_CHECKS) {
       checks.push({ name, status: 'skipped', detail: 'needs a working API key' });
     }
-    return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
+    return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks, ...(options.includeRegistry && registryRead ? { registry: registryRead } : {}) };
   }
 
   // Everything still needed, fetched CONCURRENTLY.
@@ -412,7 +421,7 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
     checks.push({ name: 'billing balance', status: 'skipped', detail: 'balance unavailable' });
     checks.push({ name: 'credit / trial', status: 'skipped', detail: 'balance unavailable' });
     checks.push(executionCheck(recentIntents));
-    return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
+    return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks, ...(options.includeRegistry && registryRead ? { registry: registryRead } : {}) };
   }
 
   if (balance.status !== 'active') {
@@ -505,5 +514,5 @@ export async function runDoctor(client: CertenClient): Promise<DoctorReport> {
       });
   }
 
-  return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks };
+  return { ok: checks.every((c) => c.status !== 'fail'), unreachable, checks, ...(options.includeRegistry && registryRead ? { registry: registryRead } : {}) };
 }

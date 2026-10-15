@@ -10,6 +10,7 @@
 export { CertenClient, paginate, paginateWithTotal, DEFAULT_BASE_URL } from './client.js';
 export * from './types.js';
 export type { SignFn, ProofGatedCallParams, TransferParams, OpenedIntent, WaitUntil, IntentStateEvent } from './resources/execute.js';
+export { wholeUnitAmountProblem } from './resources/execute.js';
 export {
   CertenError,
   CertenAuthError,
@@ -38,6 +39,13 @@ export type { IntentStatusClass, KnownIntentStatus, IntentOutcome, IntentOutcome
 export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS } from './reason-codes.js';
 export type { PaymentResolution } from './errors.js';
 export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';
+// Readiness for one identity on one chain, and the Accumulate key page read behind it. See readiness.ts and key-page.ts.
+export { runReadiness, summarizeReadiness, READINESS_CHECKS, CONTEXT_CHECKS } from './readiness.js';
+export type {
+  Readiness, ReadinessCheck, ReadinessContext, ReadinessFix, ReadinessParams, ReadinessState, ReadinessStatus,
+} from './readiness.js';
+export { readKeyPage, verifyKeyPageHolds, keyHashesOf } from './key-page.js';
+export type { KeyPageReading, KeyPageHold, KeyPageReadOptions } from './key-page.js';
 // Splitting a share link into token and gateway is pure string work; fetching and decoding one (which gunzips) is Node-only. See
 // share-target.ts and shared-proof.ts.
 export { parseShareTarget } from './share-target.js';
@@ -60,13 +68,15 @@ export { redeemRegistrationToken } from './registration.js';
 // Keypair-proof self-service signup — no browser, no email, nobody at CERTEN. Standalone for the
 // same reason: the caller holds nothing yet. See self-signup.ts.
 export { selfSignup, requestSignupChallenge, completeSignup } from './self-signup.js';
-export { CertenUnfundedAccountError, CertenFundingUnverifiableError, movesValue, normalizeChainId } from './funding.js';
-export type { FundingUnverifiableReason } from './funding.js';
+export {
+  CertenUnfundedAccountError, CertenUnderfundedAccountError, CertenFundingUnverifiableError, movesValue, normalizeChainId, assessGas, nativeAmountOf,
+} from './funding.js';
+export type { FundingUnverifiableReason, GasAssessment } from './funding.js';
 // The chain catalogue: the single source the CLI and MCP derive every chain table from. See chains.ts.
 export {
   CHAIN_CATALOGUE, chainInfo, chainSlug, nativeSymbolFor, faucetForChain, defaultEnabledChains, enablableChains,
   parseEnabledChains, ChainConfigurationError, gatewayServes, chainAvailability, resolveEnabledChains,
-  readNativeBalance, describeUnverifiable,
+  readNativeBalance, describeUnverifiable, gasReserveFor, parseUnits, formatUnits,
 } from './chains.js';
 export type {
   ChainCatalogueEntry, ChainSupport, ServedChain, ChainAvailability, BalanceRow, NativeBalanceReading,
