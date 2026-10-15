@@ -135,6 +135,12 @@ describe('--journey refuses what would be unsafe or unclear', () => {
     expect(r.stderr).toContain('guide');
     expect(r.stderr).toContain('published');
   });
+
+  it('refuses a --fault it does not know, rather than running a clean journey and calling it a fault run', async () => {
+    const r = await measure(['--journey', 'guide', '--fault', 'cannot-sing']);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('cannot-sign');
+  });
 });
 
 describe('the baseline: the documented first-transaction journeys, as they are today', () => {

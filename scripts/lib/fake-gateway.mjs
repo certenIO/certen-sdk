@@ -40,6 +40,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PROOF_FIXTURES = join(ROOT, 'packages', 'verify', 'test', 'fixtures', 'proofv2');
 const EXEC_FIXTURE = join(ROOT, 'packages', 'sdk', 'test', 'fixtures', 'execution-proof-base-46437431.json');
 
+/** The ways this fake can be made to misbehave, for proving the harness goes red. */
+export const FAULTS = Object.freeze(['cannot-sign']);
+
 /** Fixed, so two runs of the same journey print the same transcript. */
 export const IDS = Object.freeze({
   identity: '396f863c-879c-4046-8591-3f0405c5f6bd',

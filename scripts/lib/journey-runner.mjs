@@ -18,7 +18,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startFakeGateway } from './fake-gateway.mjs';
+import { startFakeGateway, FAULTS } from './fake-gateway.mjs';
 import { JOURNEYS, GIVEN, copiedBy, assertJourneyIsContained } from './onboarding-journeys.mjs';
 
 const FAKE_API_KEY = 'ck_live_journey_probe_not_a_real_key';
@@ -46,7 +46,18 @@ function runCli(cli, args, env, stdin) {
 function childEnv(home, apiUrl) {
   const env = {};
   for (const [k, v] of Object.entries(process.env)) if (!k.startsWith('CERTEN_') && v !== undefined) env[k] = v;
-  return { ...env, HOME: home, USERPROFILE: home, CERTEN_API_URL: apiUrl, CERTEN_KEY_PASSPHRASE: PASSPHRASE };
+  return {
+    ...env,
+    HOME: home,
+    USERPROFILE: home,
+    CERTEN_API_URL: apiUrl,
+    CERTEN_KEY_PASSPHRASE: PASSPHRASE,
+    // The SDK talks through axios, which honours HTTP_PROXY: a proxy in the caller's environment would be
+    // handed requests for 127.0.0.1 that it cannot serve, and the run would fail for a reason that has
+    // nothing to do with the CLI. Loopback is never proxied.
+    NO_PROXY: '127.0.0.1,localhost',
+    no_proxy: '127.0.0.1,localhost',
+  };
 }
 
 /**
@@ -60,6 +71,10 @@ export async function runJourney({ name, cli, fault }) {
       exitCode: 2,
       report: { error: `unknown journey "${name}". Known: ${Object.keys(JOURNEYS).join(', ')}` },
     };
+  }
+  // A typo'd fault would run a clean journey and report it as a fault run: green for the wrong reason.
+  if (fault !== undefined && !FAULTS.includes(fault)) {
+    return { exitCode: 2, report: { error: `unknown fault "${fault}". Known: ${FAULTS.join(', ')}` } };
   }
   try {
     assertJourneyIsContained(name, journey);
