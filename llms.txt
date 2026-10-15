@@ -85,7 +85,7 @@ certen doctor                   # names the one thing blocking you
 ```
 - **Say it once.** `certen use identity|key|chain <value>` chooses them, `certen context` shows what the next command will use and why,
   and `--profile <name>` switches between setups (each with its own gateway and API key). After that `--identity`, `--chain` and
-  `--sign-with` (on `call`) can be left out. Whatever is taken from context is echoed on stderr, and a chain that is not a known
+  `--sign-with` (on `call` and `identity create`) can be left out. Whatever is taken from context is echoed on stderr, and a chain that is not a known
   testnet is never taken from a default by a command that moves value. `--identity` takes a UUID, an `acc://` ADI URL or a name.
 - `--timeout` takes units: `90s`, `6m`, `1h` (a bare number is minutes).
 - **`--json` emits exactly one envelope object on stdout**, nothing else. Human output goes to stderr.

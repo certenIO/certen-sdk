@@ -285,7 +285,7 @@ choice and always works; a profile may opt in with `certen use allow-mainnet-def
 be classified counts as "not a known testnet". A chain the CLI would refuse anyway keeps its own
 `UNSUPPORTED_CHAIN`, naming where it came from.
 
-**What is never defaulted.** A signing key is defaulted only by `call`, where leaving `--sign-with` out was
+**What is never defaulted.** A signing key is defaulted only by `call` and `identity create`, where leaving it out was
 always an error. `tx create`, `governance <operation>` and `pending sign` without `--sign-with` open the intent
 and return signing data for an external signer, and still do. `identity retire` always takes its identity
 explicitly, and `pending list` / `portfolio` `--identity` are filters: left out, they mean "all".

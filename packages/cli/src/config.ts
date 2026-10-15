@@ -187,7 +187,8 @@ export function assertProfileKnown(name: string): void {
   if (profileExists(name)) return;
   throw new UsageError(
     `There is no profile "${name}". Profiles: ${listProfiles().join(', ')}. `
-    + `Create it by setting something on it, for example: certen use chain base-sepolia --profile ${name}`,
+    + `Create it by setting something on it, for example: certen use chain base-sepolia --profile ${name}. `
+    + 'If it is your saved active profile and it has gone, switch back with: certen use profile default',
     'PROFILE_NOT_FOUND',
   );
 }

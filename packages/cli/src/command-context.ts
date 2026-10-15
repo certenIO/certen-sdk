@@ -1,6 +1,7 @@
 import type { CertenClient, Identity } from '@certen.io/sdk';
 import { UsageError } from './errors.js';
 import { normalizeChain } from './chains.js';
+import { keyExists } from './keystore.js';
 import {
   echoFromContext, requireIdentity, type Resolved, type ResolvedContext,
 } from './context.js';
@@ -49,6 +50,19 @@ export async function resolveCommandIdentity(
   }
   echoFromContext('identity', wanted, resolved.adi_url ?? resolved.id);
   return resolved;
+}
+
+/**
+ * A signing key that came from the environment or a profile must still be a key on this machine. A profile naming a key that was since
+ * deleted must not read as if the person had just typed it, so the error says where the name came from and how to change it.
+ */
+export function assertContextKeyExists(key: Resolved): void {
+  if (key.source === 'flag' || keyExists(key.value)) return;
+  throw new UsageError(
+    `There is no signing key named "${key.value}" on this machine (it came from ${key.detail}). `
+    + 'Pass --sign-with <key>, or choose another with: certen use key <name>. Yours: certen keys list',
+    'UNKNOWN_KEY',
+  );
 }
 
 /** The abstract account an identity has on a chain, from whichever spelling of `chain_id` the gateway used. */

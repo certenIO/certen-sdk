@@ -16,6 +16,9 @@ Nothing that works today changes. Every command and flag keeps its meaning; requ
 
 ### Changed
 - **`call`**: `--identity`, `--chain` and `--sign-with` are no longer required when the context supplies them. Leaving `--sign-with` out was always an error, so a context key (a profile's, `CERTEN_KEY`, or your only local key) cannot change what any working invocation does. Several local keys and none chosen is still `MISSING_SIGNING_KEY` (now listing them).
+- **`identity create`** takes the same context key when no key is given (leaving it out was always `MISSING_SIGNING_KEY`), says which key before the passphrase prompt, never chooses between several, and does not touch the context when `--public-key` / `--public-key-hash` is given. The key it picks owns the identity, and the identity is quota.
+- **`identity mnemonic <id> <token>`** accepts a UUID, an ADI URL or a name for the id, resolved before the one-time token is spent. A retrieval URL works exactly as before.
+- **`--timeout` / `--poll-interval` no longer accept hex or exponent spellings** (`0x10`, `1e3`). They were never documented and were read as surprising values. A decimal (`0.5`) and every documented form still work.
 - **`tx create`** derives `--from` from the identity's abstract account on `--to-chain`, as `call` does (`NO_ABSTRACT_ACCOUNT` names the fix when there is none). When it derives, one identity read serves the ADI, the account and the funding guard: **5 → 4 round trips** on the transfer path. With an explicit `--from` or an `--intent` it makes exactly the requests it made before. `--identity` and `--to-chain` come from the context when not given.
 - **`governance`** `--identity` is no longer required, and takes a UUID or a name as well as the ADI.
 - **`fund`** takes `--chain` from the context when not given (`CHAIN_REQUIRED` still says so when nothing supplies one). An identity's linked chain is not a default here: what is funded is the organization's balance.

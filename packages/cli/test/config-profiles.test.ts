@@ -102,6 +102,8 @@ describe('which profile is active', () => {
       expect(m).toContain('default');
       expect(m).toContain('testnet');
       expect(m).toContain('certen use');
+      // The saved active profile can be the one that vanished (a hand-edited config): the way back is named.
+      expect(m).toContain('certen use profile default');
     }
   });
 

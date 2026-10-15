@@ -11,7 +11,7 @@ import { UsageError } from '../errors.js';
 import { resolveWait, parseWaitBudget, waitForIdentity, IDENTITY_WAIT } from '../wait.js';
 import { faucetFor } from '../funding-guard.js';
 import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
-import { resolveCommandIdentity } from '../command-context.js';
+import { resolveCommandIdentity, assertContextKeyExists } from '../command-context.js';
 import { resolveIdentityRef } from '../identity-ref.js';
 
 async function getClient(): Promise<CertenClient> {
@@ -59,7 +59,7 @@ export function registerIdentityCommands(program: Command): void {
     .command('create')
     .description('Create a new identity')
     .requiredOption('--name <name>', 'Identity name')
-    .option('--sign-with <key>', 'Local key to own this identity (see `certen keys generate`)')
+    .option('--sign-with <key>', 'Local key to own this identity (default: your context key, or your only key; see `certen keys generate`)')
     .option('--public-key-hash <hash>', 'Public key hash (omit when using --sign-with)')
     .option('--public-key <key>', 'Public key (hex)')
     .option('--chains <chains>', 'Comma-separated chains, e.g. base-sepolia,arbitrum-sepolia')
@@ -88,14 +88,34 @@ export function registerIdentityCommands(program: Command): void {
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, IDENTITY_WAIT);
 
-      if (opts.signWith) {
+      // The key that owns the identity. Leaving it out was always MISSING_SIGNING_KEY, so a context key (a profile's, CERTEN_KEY, or the
+      // only key on this machine) can fill the gap without changing what any working invocation does. It is chosen only when the key
+      // material was not given explicitly, never between several keys, and it is said BEFORE the passphrase prompt: the key chosen
+      // here owns the identity, and the identity is quota.
+      let signWith: string | undefined = opts.signWith;
+      if (!signWith && !publicKeyHash && !publicKey) {
+        const ctx = resolveContext({}, { fields: ['key'] });
+        if (ctx.key) {
+          assertContextKeyExists(ctx.key);
+          echoFromContext('key', ctx.key);
+          signWith = ctx.key.value;
+        } else if (ctx.candidates.key.length > 1) {
+          throw new UsageError(
+            `Which key owns this identity? You have ${ctx.candidates.key.join(', ')}. Pass --sign-with <key>, set CERTEN_KEY, or choose one once `
+            + 'with: certen use key <name>',
+            'MISSING_SIGNING_KEY',
+          );
+        }
+      }
+
+      if (signWith) {
         if (publicKeyHash || publicKey) {
           throw new UsageError(
             'Pass either --sign-with or --public-key-hash/--public-key, not both.',
             'CONFLICTING_KEY_FLAGS',
           );
         }
-        const signer = await resolveSigner(opts.signWith);
+        const signer = await resolveSigner(signWith);
         publicKeyHash = signer.publicKeyHash;
         publicKey = signer.publicKey;
       }
@@ -338,12 +358,19 @@ export function registerIdentityCommands(program: Command): void {
 
   identity
     .command('mnemonic <id-or-url> [token]')
-    .description('Collect a provider-mode mnemonic — works exactly once')
+    .description('Collect a provider-mode mnemonic — works exactly once. With a token, the identity may be a UUID, an ADI URL or a name')
     .option('--out <file>', 'Where to write it. Defaults to ./<id>-mnemonic.txt, mode 0600.')
     .option('--print', 'Print it to the terminal instead of writing a file')
     .action(async (idOrUrl: string, token: string | undefined, opts: { out?: string; print?: boolean }) => {
       const client = await getClient();
-      const { mnemonic } = await client.identity.retrieveMnemonic(idOrUrl, token);
+
+      // With a token the first argument is an identity, in any spelling: resolved to the UUID the route wants BEFORE the one-time
+      // token is spent, so a name nobody has is refused here instead of being sent to a guess. A retrieval URL (no token) is left
+      // exactly as it was. (An ADI URL also contains "://", which is why this tests for an http(s) URL rather than for "://".)
+      const target = token && !/^https?:\/\//i.test(idOrUrl)
+        ? (await resolveIdentityRef(idOrUrl, { client, need: 'id' })).id!
+        : idOrUrl;
+      const { mnemonic } = await client.identity.retrieveMnemonic(target, token);
 
       // A machine consumer asked for the value in its output, so give it the value. Anything else
       // would mean a script has to go read a file the CLI chose the name of.
@@ -364,7 +391,7 @@ export function registerIdentityCommands(program: Command): void {
       // Writing beats printing by default. A seed phrase on stdout lands in scrollback, in CI
       // logs, and in whatever is recording the session — all places it outlives its usefulness by
       // years. `--print` is there for anyone who genuinely wants that.
-      const { id } = parseMnemonicTarget(idOrUrl, token);
+      const { id } = parseMnemonicTarget(target, token);
       const path = opts.out ?? `${id}-mnemonic.txt`;
       writeFileSync(path, `${mnemonic}\n`, { encoding: 'utf-8', mode: 0o600 });
       try {

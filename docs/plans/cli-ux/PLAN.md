@@ -166,7 +166,7 @@ Each one ships separately, is useful alone, and goes in the order given in §4.
   `/v1/identity` and `/v1/transaction`, ADI URL for `/v1/governance`, either for `/v1/portfolio`, `/v1/pending`, `/v1/sign`.)*
 - Relax `requiredOption('--identity')` and the mandatory `--sign-with` to optional-with-default.
   Relaxing a required flag doesn't break any working invocation.
-  *(Phase 1: the signing key defaults ONLY where leaving it out was an error, which is `call`. `tx create`, `governance
+  *(Phase 1: the signing key defaults ONLY where leaving it out was an error, which is `call` and `identity create`. `tx create`, `governance
   <op>` and `pending sign` without `--sign-with` are a supported external-signer mode, and silently signing there would
   start signing for people who rely on it. `send` (Phase 4) signs with the context key.)*
 - **Safety rule:** when a value came from context rather than a flag, the command says so on stderr

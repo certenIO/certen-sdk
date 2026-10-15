@@ -5,12 +5,11 @@ import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain, chainIdFor } from '../chains.js';
-import { keyExists } from '../keystore.js';
 import { parseSignature, checkArgs } from '../solidity-args.js';
 import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
 import { assertFundedForValue } from '../funding-guard.js';
 import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
-import { resolveCommandIdentity, abstractAccountFor } from '../command-context.js';
+import { resolveCommandIdentity, abstractAccountFor, assertContextKeyExists } from '../command-context.js';
 import {
   AUTHORITY_HELP, EXPIRES_IN_HELP, HEADER_FIELDS_HELP, collect, parseAuthorityFlags, parseExpiresIn,
   withOutcomeFields, emitOutcomeHints,
@@ -191,13 +190,7 @@ export function registerCallCommands(program: Command): void {
           'MISSING_SIGNING_KEY',
         );
       }
-      if (keyFrom.source !== 'flag' && !keyExists(keyFrom.value)) {
-        throw new UsageError(
-          `There is no signing key named "${keyFrom.value}" on this machine (it came from ${keyFrom.detail}). `
-          + 'Pass --sign-with <key>, or choose another with: certen use key <name>. Yours: certen keys list',
-          'UNKNOWN_KEY',
-        );
-      }
+      assertContextKeyExists(keyFrom);
       // Before the passphrase prompt and before the summary of what the signature authorises.
       echoFromContext('key', keyFrom);
 
