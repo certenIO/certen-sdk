@@ -1,17 +1,18 @@
 import { Command } from 'commander';
-import { CertenClient, CertenError, readNativeBalance, describeUnverifiable } from '@certen.io/sdk';
+import { CertenClient, readNativeBalance, describeUnverifiable } from '@certen.io/sdk';
 import {
-  getApiKey, getApiUrl, getPortalUrl, setApiKey, credentialInfo, rememberIdentity, lastIdentity,
+  getApiKey, getApiUrl, getPortalUrl, credentialInfo, rememberIdentity, lastIdentity,
 } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { listKeys, generateKey, keyExists } from '../keystore.js';
 import { resolveSigner } from '../signer.js';
-import { isInteractive, promptSecret, readSecretFromStdin, resolveNewPassphrase } from '../passphrase.js';
-import { assertChains, SUPPORTED_CHAINS, normalizeChain } from '../chains.js';
+import { isInteractive, resolveNewPassphrase } from '../passphrase.js';
+import { assertChains, normalizeChain } from '../chains.js';
 import { waitForIdentity, parseWaitBudget, IDENTITY_WAIT } from '../wait.js';
 import { faucetFor } from '../funding-guard.js';
-import { runDeviceFlow } from './signup.js';
+import { deviceFlowOrPaste, registerPayer } from '../credential-flow.js';
+import { suggestedName } from '../prompt.js';
 
 /**
  * `certen init` — the whole onboarding path as one command.
@@ -52,15 +53,10 @@ async function askLine(prompt: string, fallback: string): Promise<string> {
   return answer.length > 0 ? answer : fallback;
 }
 
-/** A default identity name that is valid (3-63 chars) and unlikely to collide on a retry. */
-function suggestedName(): string {
-  return `bot-${Math.floor(Date.now() / 1000) % 1_000_000}`;
-}
-
 export function registerInitCommands(program: Command): void {
   program
     .command('init')
-    .description('Set up everything: credential, signing key, identity — and check it works')
+    .description('Set up everything: credential, signing key, identity — and check it works. `certen setup` also waits for gas and exits 0 only when ready')
     .option('--name <name>', 'Identity name (prompted, or generated with --yes)')
     .option('--key <name>', 'Local signing key name to use or create', 'dev')
     .option('--chains <chains>', 'Chains to link', 'base-sepolia')
@@ -107,41 +103,16 @@ export function registerInitCommands(program: Command): void {
         // The device flow, not a paste prompt. This is the step that used to send people to a
         // browser to copy a secret back by hand; running it here is the whole point of Phase 5.
         // Falls back to a hidden paste prompt only when the gateway cannot do device auth.
-        try {
-          const granted = await runDeviceFlow({ browser: true, keyring: credentialInfo().storage === 'keyring' });
-          apiKey = await getApiKey();
-          steps.push({ step: 'api key', status: 'created', detail: `${granted.prefix}... authorized` });
-          say('                  authorized.');
-        } catch (err) {
-          const code = (err as { code?: string }).code;
-          if (code !== 'DEVICE_FLOW_UNSUPPORTED' && code !== 'SELF_SERVICE_DISABLED') throw err;
-
-          say(`                  this gateway cannot authorize devices. Mint a key at ${getPortalUrl()}`);
-          const entered = process.stdin.isTTY
-            ? await promptSecret('     Paste your API key (hidden): ')
-            : await readSecretFromStdin();
-          if (!entered) throw new UsageError('No API key entered.', 'NO_API_KEY');
-
-          // Verified before it is stored, exactly as `auth login` does — a key that does not work
-          // must not be written and then tripped over by every step below.
-          const probe = new CertenClient({ apiKey: entered, baseUrl: apiUrl });
-          try {
-            await probe.billing.balance();
-          } catch (probeErr) {
-            if (probeErr instanceof CertenError && probeErr.status === 401) {
-              throw new UsageError(
-                `That API key was rejected by ${apiUrl}. Nothing was saved.`,
-                'INVALID_API_KEY',
-              );
-            }
-            if (probeErr instanceof CertenError && probeErr.status === 0) throw probeErr;
-            // 403 and other statuses mean the credential is real; carry on.
-          }
-          await setApiKey(entered, credentialInfo().storage === 'keyring');
-          apiKey = entered;
-          steps.push({ step: 'api key', status: 'created', detail: `${entered.substring(0, 12)}... saved` });
-          say('     saved.');
-        }
+        // (Written once in credential-flow.ts: `setup` signs in the same way.)
+        const acquired = await deviceFlowOrPaste({
+          apiUrl,
+          keyring: credentialInfo().storage === 'keyring',
+          browser: true,
+          say: (message) => say(`                  ${message}`),
+        });
+        apiKey = acquired.apiKey;
+        steps.push({ step: 'api key', status: 'created', detail: acquired.detail });
+        say(acquired.via === 'device' ? '                  authorized.' : '     saved.');
       }
 
       const client = new CertenClient({ apiKey, baseUrl: apiUrl });
@@ -276,24 +247,10 @@ export function registerInitCommands(program: Command): void {
       // which nothing in the setup flow said. Folding it in here removes a step a user could only
       // take after learning it was available.
       if (opts.payer) {
-        if (!/^0x[0-9a-fA-F]{40}$/.test(opts.payer)) {
-          throw new UsageError(
-            `"${opts.payer}" is not an address. Expected 0x followed by 40 hex characters.`,
-            'INVALID_PAYER_ADDRESS',
-          );
-        }
-        const registered = await client.billing
-          .registerPayerAddress({ chain: chains[0], address: opts.payer })
-          .then(() => ({ ok: true as const }))
-          // A 409 means this address is already attributed — to this org, in which case there is
-          // nothing to do, or to another, which is a genuine conflict the user must resolve. Either
-          // way it must not fail the whole setup: everything above it already succeeded.
-          .catch((err: unknown) => ({
-            ok: false as const,
-            why: err instanceof CertenError && err.status === 409
-              ? 'already registered — to this organization, or to another one'
-              : err instanceof Error ? err.message : String(err),
-          }));
+        // A 409 means this address is already attributed — to this org, in which case there is
+        // nothing to do, or to another, which is a genuine conflict the user must resolve. Either
+        // way it must not fail the whole setup: everything above it already succeeded.
+        const registered = await registerPayer(client, chains[0], opts.payer);
 
         steps.push(registered.ok
           ? { step: 'payer', status: 'done', detail: `${opts.payer} on ${chains[0]}` }
