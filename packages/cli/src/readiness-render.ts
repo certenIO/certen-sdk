@@ -59,6 +59,13 @@ function commandFor(code: string, env: LocalizeEnv): string | undefined {
     case 'GATEWAY_BALANCE_EMPTY':
     case 'GATEWAY_ACCOUNT_INACTIVE':
       return `certen fund <amount> --chain ${env.chain}`;
+    // The abstract account's gas is NOT the gateway balance above: `gas` shows the address, the amount, the faucet and a wallet link, and
+    // `--wait` returns the moment it arrives.
+    case 'ABSTRACT_ACCOUNT_UNFUNDED':
+    case 'ABSTRACT_ACCOUNT_UNDERFUNDED':
+      return `certen gas --chain ${env.chain} --wait`;
+    case 'ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE':
+      return `certen gas --chain ${env.chain}`;
     case 'MISSING_SIGNING_KEY':
       return 'certen keys generate --name dev';
     case 'AMBIGUOUS_KEY':
@@ -177,4 +184,39 @@ export function withLocalChecks(r: Readiness, extra: ReadinessCheck[], afterName
   const checks = [...r.checks];
   checks.splice(at + 1, 0, ...extra);
   return { ...r, ...summarizeReadiness(checks), checks };
+}
+
+/** The SDK probed with a placeholder, so its verdict on a machine with no key at all is not the one to show. */
+export function noCredential(r: Readiness): Readiness {
+  const at = r.checks.findIndex((c) => c.name === 'credential');
+  if (at < 0 || r.checks[at]!.status === 'skipped') return r;
+  const checks = [...r.checks];
+  checks[at] = {
+    name: 'credential', status: 'fail', code: 'CREDENTIAL_REJECTED',
+    detail: 'No API key is configured on this machine.',
+    fix: { text: 'Sign this machine in.' },
+  };
+  for (let i = at + 1; i < checks.length; i++) {
+    if (checks[i]!.status !== 'skipped') checks[i] = { name: checks[i]!.name, status: 'skipped', detail: 'needs a working API key' };
+  }
+  return { ...r, ...summarizeReadiness(checks), checks };
+}
+
+/**
+ * The steps every command that shows a readiness takes after `client.readiness()` has answered, in one place so `status` and `setup` cannot
+ * show two different verdicts for the same facts:
+ *
+ * 1. a machine with no credential says so (the SDK was probed with a placeholder);
+ * 2. this machine's own check (is there a signing key to compare the key page with) is added;
+ * 3. each failing check gets the command that fixes it;
+ * 4. the verdict is recomputed from the final list by the SDK's rule, not restated here.
+ */
+export function finishReadiness(
+  readiness: Readiness,
+  opts: { missingCredential?: boolean; localChecks?: ReadinessCheck[]; env: LocalizeEnv },
+): Readiness {
+  let r = opts.missingCredential ? noCredential(readiness) : readiness;
+  if (opts.localChecks && opts.localChecks.length > 0) r = withLocalChecks(r, opts.localChecks);
+  r = { ...r, checks: localizeReadiness(r.checks, opts.env) };
+  return { ...r, ...summarizeReadiness(r.checks) };
 }

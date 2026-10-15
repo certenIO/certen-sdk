@@ -312,6 +312,8 @@ describe('certen doctor', () => {
       const funding = checks.find((c) => c.name === 'abstract accounts funded')!;
       expect(funding.status).toBe('warn');
       expect(funding.fix).toContain('faucet');
+      // The command first, because `gas` names the address, the amount and a wallet link, and waits for the funds.
+      expect(funding.fix).toMatch(/^certen gas --chain base-sepolia --wait/);
     } finally {
       await stub.close();
     }

@@ -70,7 +70,10 @@ function localizeFix(check: Check, chainHint: string, apiUrl: string): Check {
       // Name the faucets for the chains actually affected, rather than a generic instruction.
       const chains = [...check.detail.matchAll(/\b([a-z]+-[a-z]+)\b/g)].map((m) => normalizeChain(m[1]));
       const faucets = [...new Set(chains.map((c) => faucetFor(c)).filter(Boolean))];
-      return { ...check, fix: faucets.length > 0 ? faucets.join('  ') : check.fix };
+      // The command first: `gas` names the address, the amount and a wallet link, and waits for the funds. The faucets stay, for a reader who
+      // wants somewhere to go.
+      const command = `certen gas --chain ${chains[0] ?? chainHint} --wait`;
+      return { ...check, fix: faucets.length > 0 ? `${command}   (faucet: ${faucets.join('  ')})` : command };
     }
     case 'billing balance':
     case 'credit / trial':

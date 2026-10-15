@@ -331,3 +331,140 @@ export function nativeAmountOf(
   if (p.amountUnit === 'base') return /^\d+$/.test(text) ? formatUnits(BigInt(text), info.nativeDecimals) : undefined;
   return text;
 }
+
+// ── telling someone how to fund an account ──────────────────────────────────────────────────────────
+
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * An EIP-681 payment request for a NATIVE transfer: `ethereum:<address>@<chainId>?value=<wei>`.
+ *
+ * Opens a wallet with the recipient, the network and the amount already set, which is the only way to move a value from a terminal to a wallet
+ * without retyping it. A mistyped recipient is the one error in this product that loses money and cannot be undone, so this builds a link only
+ * when every part of it is certain, and says `undefined` otherwise:
+ *
+ * - the chain must be in the catalogue (a link for a guessed network sends value somewhere nobody chose);
+ * - the address must be 20 bytes of hex, and is used exactly as given (the gateway's checksum case is preserved, never re-derived);
+ * - the amount is whole units and becomes integer wei by BigInt arithmetic. More decimals than the token has is refused rather than rounded:
+ *   rounding would change what is paid.
+ *
+ * The value is a plain integer. EIP-681 also allows `1e15`, but a plain integer is read by more wallets.
+ */
+export function nativeTransferUri(p: { chain: string | number; address: string; amount?: string }): string | undefined {
+  const info = chainInfo(p.chain);
+  if (!info || !ADDRESS_RE.test(p.address)) return undefined;
+  const base = `ethereum:${p.address}@${info.chainId}`;
+  if (p.amount === undefined) return base;
+  const wei = parseUnits(p.amount, info.nativeDecimals);
+  return wei === undefined ? undefined : `${base}?value=${wei.toString()}`;
+}
+
+/**
+ * What to tell someone whose abstract account needs gas, and how to know when it has arrived.
+ *
+ * Funding was a faucet URL and a guess. This is the account, the least that lets a transaction run, how much to send so the next few do not
+ * each need another faucet visit, the faucet, a wallet link, and the alternative for a faucet that will not pay a contract address.
+ *
+ * **Both amounts are planning figures.** `minimum` is what the readiness gas check accepts: the catalogue's gas reserve (an ESTIMATE, there is
+ * no published per-execution cost) plus any amount about to be moved. `suggested` is ten executions' worth, enough to stop thinking about it.
+ * A chain with no reserve has neither: it says there is no estimate and asks for no number nobody measured, and any positive balance clears
+ * it (the check judges the amount alone there).
+ *
+ * `balance` is what the account holds now, in whole units. Anything that is not a plain decimal is unknown, and unknown is never satisfied.
+ *
+ * Words only: this module does not know it is being driven by a CLI, so it names no command. A CLI adds its own.
+ */
+export interface GasFundingPlan {
+  chain: string;
+  symbol: string;
+  address: string;
+  /** What the account holds now, whole units; null when unknown. */
+  balance: string | null;
+  /** The least that clears the readiness gas check, whole units; null when the chain has no estimate and no amount was given. */
+  minimum: string | null;
+  /** What is suggested the account holds: `max(10 x reserve, minimum)`; null when there is no estimate. */
+  suggested: string | null;
+  /** What to send now to reach `suggested`: the difference from `balance`, or all of it when the balance is unknown. Null when there is no figure. */
+  send: string | null;
+  /** The least to send now to clear `minimum` (`0` when it is already cleared). Null when there is no figure. */
+  least: string | null;
+  /** The balance already clears `minimum` (or, with no estimate, is positive). False when unknown. */
+  satisfied: boolean;
+  /** `minimum` and `suggested` rest on the catalogue's reserve. False when there was none to rest on. */
+  estimated: boolean;
+  faucet: string | null;
+  /** EIP-681 link to send `send` to `address`; the bare address link when there is no figure; null for a chain without an id. */
+  paymentUri: string | null;
+  /** The instructions, one line each, in words. */
+  steps: string[];
+  /** The alternative for a faucet that refuses a contract address: a wallet you control, then a transfer from it. Two lines. */
+  twoStep: string[];
+}
+
+export function gasFundingPlan(p: {
+  chain: string | number;
+  address: string;
+  /** Whole units as the gateway reports it. Omit, null or anything unreadable for unknown. */
+  balance?: string | null;
+  /** The native amount about to be moved, whole units. Added to the minimum. */
+  amount?: string;
+  /** Override the catalogue's gas reserve (whole native units); `null` for none. */
+  reserve?: string | null;
+}): GasFundingPlan | undefined {
+  const info = chainInfo(p.chain);
+  if (!info) return undefined;
+  const decimals = info.nativeDecimals;
+  const symbol = info.nativeSymbol;
+  const slug = info.slug;
+
+  const held = p.balance === undefined || p.balance === null ? undefined : parseUnits(p.balance, decimals);
+  const reserveText = p.reserve === undefined ? gasReserveFor(slug) : p.reserve ?? undefined;
+  const reserve = reserveText === undefined ? undefined : parseUnits(reserveText, decimals);
+  const amount = p.amount === undefined ? 0n : parseUnits(p.amount, decimals) ?? 0n;
+
+  const minimumWei = reserve === undefined ? (amount > 0n ? amount : undefined) : reserve + amount;
+  const suggestedWei = minimumWei === undefined ? undefined : (reserve !== undefined && reserve * 10n > minimumWei ? reserve * 10n : minimumWei);
+  const sendWei = suggestedWei === undefined ? undefined : (held !== undefined && held < suggestedWei ? suggestedWei - held : (held === undefined ? suggestedWei : 0n));
+  const leastWei = minimumWei === undefined ? undefined : (held !== undefined && held < minimumWei ? minimumWei - held : (held === undefined ? minimumWei : 0n));
+
+  // With nothing estimated, any positive balance clears it: the readiness check then judges the amount alone.
+  const satisfied = held === undefined ? false : minimumWei === undefined ? held > 0n : held >= minimumWei;
+  const fmt = (v: bigint | undefined): string | null => (v === undefined ? null : formatUnits(v, decimals));
+  const send = fmt(sendWei);
+  const faucet = info.faucet ?? null;
+  const paymentUri = nativeTransferUri({ chain: slug, address: p.address, amount: send && sendWei !== 0n ? send : undefined }) ?? null;
+
+  const where = `${p.address} on ${slug}`;
+  const estimated = reserve !== undefined;
+  const steps: string[] = [];
+  if (send && sendWei !== 0n && leastWei === 0n) {
+    // Already enough to act; this only tops it up.
+    steps.push(`${where} already holds ${fmt(held)} ${symbol}, enough to act. To top it up to ${fmt(suggestedWei)} ${symbol}, send ${send} ${symbol}.`);
+  } else if (send && sendWei !== 0n) {
+    // The suggestion is more than the minimum: say both, and which is which. "At least" would contradict "the least that works".
+    const split = leastWei !== undefined && sendWei !== undefined && leastWei < sendWei;
+    steps.push(split
+      ? `Send ${send} ${symbol} to ${where} (${fmt(leastWei)} ${symbol}${held !== undefined && held > 0n ? ' more' : ''} is the least that works; the rest saves a second trip).`
+      : `Send at least ${send} ${symbol} to ${where}.`);
+  } else if (send === null) {
+    steps.push(`Send some ${symbol} to ${where}. There is no estimate of what one execution costs on ${slug}, so there is no figure to give: any positive amount lets the account act, and an amount too small will fail at execution.`);
+  } else {
+    steps.push(`${where} already holds ${fmt(held)} ${symbol}.`);
+  }
+  if (faucet) steps.push(`Testnet gas is free from the faucet: ${faucet}`);
+  if (paymentUri) steps.push(`A wallet link with the network, the address${send && sendWei !== 0n ? ' and the amount' : ''} already set: ${paymentUri}`);
+  if (estimated) steps.push(`The amounts are planning figures, not a quote: the gas share of ${fmt(reserve)} ${symbol} is an estimate.`);
+
+  const twoStep = [
+    'Some faucets refuse a contract address, and this account is one. If yours does, send the gas to a wallet you control first.',
+    `Then, from that wallet, send ${send && sendWei !== 0n ? `${send} ${symbol}` : symbol} to ${p.address} on ${slug}${paymentUri ? ' (the wallet link opens that transfer pre-filled)' : ''}.`,
+  ];
+  steps.push(...twoStep);
+
+  return {
+    chain: slug, symbol, address: p.address,
+    balance: fmt(held),
+    minimum: fmt(minimumWei), suggested: fmt(suggestedWei), send, least: fmt(leastWei),
+    satisfied, estimated, faucet, paymentUri, steps, twoStep,
+  };
+}

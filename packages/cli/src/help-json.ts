@@ -102,6 +102,7 @@ export function commandTree(program: Command, version: string): string {
         3: 'gateway unreachable',
         4: 'proof verify: partial (a layer is not established)',
         5: 'proof verify: no evidence to check',
+        130: 'stopped with Ctrl-C while waiting (setup, gas); nothing was left half-done',
       },
     },
   });

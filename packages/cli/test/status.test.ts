@@ -224,6 +224,9 @@ describe('certen status: not ready', () => {
       expect(r.stdout).toMatch(/\[FAIL\] gas\s+0xabab.* holds 0 ETH/);
       expect(r.stdout).toMatch(/fix: Send at least 0\.0006 ETH to 0xabab/);
       expect(r.stdout).toMatch(/see: https:\/\/www\.alchemy\.com\/faucets\/base-sepolia/);
+      // The command that does it, now that one exists: not the gateway balance (`fund`), which is a different thing that has been called funding.
+      expect(r.stdout).toContain('run: certen gas --chain base-sepolia --wait');
+      expect(r.stdout).not.toContain('certen fund');
       expect(r.stderr).toMatch(/NOT_READY/);
     } finally { await x.close(); }
   });

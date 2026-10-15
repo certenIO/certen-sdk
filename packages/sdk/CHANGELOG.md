@@ -1,5 +1,15 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — funding a gas gap (CLI UX, Phase 3)
+
+Additive. Nothing that works today changes. A maintainer versions and publishes this.
+
+### Added
+- **`gasFundingPlan({ chain, address, balance?, amount?, reserve? })`**: what to tell someone whose abstract account needs gas. The least that lets a transaction run (`minimum`: the catalogue's gas reserve, an **estimate**, plus any `amount` about to be moved), how much to send so the next few sends do not each need a faucet visit (`suggested`: ten reserves), what to send now given what the account already holds (`send`), whether the balance already clears the minimum (`satisfied`: an unknown balance is never satisfied), the faucet, an EIP-681 link, and the instructions in words, including the two-step route for a faucet that refuses a contract address. A chain with no estimate gets no number and says so, rather than a figure nobody measured. Words only: it names no CLI command.
+- **`nativeTransferUri({ chain, address, amount? })`**: an EIP-681 request for a native transfer, `ethereum:<address>@<chainId>?value=<wei>`, with the amount as **integer wei computed with BigInt** (a float would print a value wallets refuse, and drop digits). `undefined`, never a guess, for a chain the catalogue does not know, an address that is not 20 bytes of hex, or an amount with more decimals than the token has. The address is used exactly as the gateway reported it.
+- **`checkGas(client, { identityId, chain, amount?, tokenSymbol?, gasReserve? })`**: the gas check of `readiness()` on its own, for a caller waiting for one number to change. The same function `readiness()` calls, so a wait and `status` cannot disagree about when an account counts as funded; one request per call (the identity read). Never throws for a read that failed: an `unknown` check with the HTTP status in `data.status`, so a poller can tell a rejected key from a gateway having a bad moment.
+
+
 ## Unreleased — readiness (CLI UX, Phase 2)
 
 Additive. Nothing that works today changes, except that the funding guard on `execute.contractCall` / `execute.transfer` now also refuses an account that is positively known to be short (below), which `skipFundingCheck: true` bypasses exactly as before. A maintainer versions and publishes this.

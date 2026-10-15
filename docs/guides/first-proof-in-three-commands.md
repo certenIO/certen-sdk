@@ -6,14 +6,17 @@ by hand, and nothing waits on you to notice it finished.
 ```bash
 npm install -g @certen.io/cli
 
-certen login          # approve this machine once, in the portal
-certen init           # signing key, identity, chains — created and checked
+certen setup          # signing key, account, identity, on-chain checks and gas, until it says "Ready"
 
-certen call --identity <id> --chain base-sepolia --to 0xYourContract \
-    --fn 'confirm(bytes32)' --arg 0x… --sign-with dev --wait
+certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait
 
 certen proof get <intent-id>
 ```
+
+`certen setup` is the whole front of this guide in one resumable command: sections 1 and 2 below (`login`, `init`) are what it does, in a
+different order (the signing key first, because a new account can be created *by* that key, with no browser) and with one addition: when the
+abstract account has no gas it shows the address, a faucet and a wallet link, and **waits for the funds to arrive** instead of ending on a URL.
+Run it again and it continues; it exits `0` only when you can act. `certen login` and `certen init` still work exactly as before.
 
 If anything below goes wrong, `certen doctor` names the one thing blocking you and the command that
 fixes it. It is worth running once before you start, just to see what a clean report looks like.
@@ -22,6 +25,9 @@ with *this* key, able to act? It reads your key page from Accumulate itself (the
 used to ask you to do with a hand-written `curl`) and says what it could not confirm.
 
 ---
+
+> **Doing it one step at a time.** The next two sections are what `certen setup` does for you. Use them to understand it, or if you want `login`
+> and `init` separately.
 
 ## 1. `certen login`
 

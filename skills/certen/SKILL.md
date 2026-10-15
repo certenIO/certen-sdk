@@ -48,6 +48,8 @@ certen keys generate --name agent --no-passphrase        # an Ed25519 key that n
 certen signup --with-key agent --org-name <owner>-<handle> --no-keyring --json
 certen doctor --json                                     # names the one thing blocking you, if any
 certen status --json                                     # is this identity, on this chain, with this key, ready? exit 0 only when it is
+certen setup --yes --json --existing-account --no-passphrase   # first time: key, account, identity, checks. Resumable; exit 0 only when ready
+certen gas --json                                        # the abstract account's gas: address, what to send, an EIP-681 link; exit 0 only when enough
 ```
 
 `signup` proves you hold the key and returns an organization with a $10 trial. It prints only the

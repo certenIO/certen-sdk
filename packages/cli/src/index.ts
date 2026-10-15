@@ -36,6 +36,8 @@ import { registerStatusCommands } from './commands/status.js';
 import { registerProofCommands } from './commands/proof.js';
 import { registerCallCommands } from './commands/call.js';
 import { registerInitCommands } from './commands/init.js';
+import { registerSetupCommands } from './commands/setup.js';
+import { registerGasCommands } from './commands/gas.js';
 import { registerContextCommands } from './commands/context.js';
 import { registerSignupCommands } from './commands/signup.js';
 import { registerWebhookCommands } from './commands/webhooks.js';
@@ -62,7 +64,9 @@ export function buildProgram(): Command {
     .option('--profile <name>', 'Run as this profile: its gateway, credential and context (default: CERTEN_PROFILE, the saved active profile, or "default")');
 
   registerSignupCommands(program);
+  registerSetupCommands(program);
   registerInitCommands(program);
+  registerGasCommands(program);
   registerContextCommands(program);
   registerChainsCommands(program);
   registerAuthCommands(program);

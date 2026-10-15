@@ -109,23 +109,23 @@ export async function runDeviceFlow(opts: {
   const approvalUrl = start.verification_uri_complete ?? start.verification_uri;
   const carriesCode = Boolean(start.verification_uri_complete);
 
-  if (!isJsonMode()) {
-    human('');
-    human(`  Your code:  ${start.user_code}`);
-    human('');
-    if (carriesCode) {
-      // The code is still shown above: it is what appears on the approval screen, and checking that
-      // the two match is how someone confirms they are approving THIS terminal and not another.
-      human('  Approve it here — the link carries the code:');
-      human(`  ${approvalUrl}`);
-    } else {
-      human(`  Open ${start.verification_uri} and enter it.`);
-    }
-    human('');
-    if (opts.browser) human('  Opening your browser. If nothing happens, use the link above.');
-    human('  Nothing is granted until you approve it there. Ctrl-C is safe.');
-    human('');
+  // Printed in --json mode too. `human()` sends it to stderr there, which is where the contract puts human text, and it is the only way the person
+  // (or the agent relaying to one) learns the code and the link to approve. Silent, a JSON-mode sign-in waited for an approval nobody was told to give.
+  human('');
+  human(`  Your code:  ${start.user_code}`);
+  human('');
+  if (carriesCode) {
+    // The code is still shown above: it is what appears on the approval screen, and checking that
+    // the two match is how someone confirms they are approving THIS terminal and not another.
+    human('  Approve it here — the link carries the code:');
+    human(`  ${approvalUrl}`);
+  } else {
+    human(`  Open ${start.verification_uri} and enter it.`);
   }
+  human('');
+  if (opts.browser) human('  Opening your browser. If nothing happens, use the link above.');
+  human('  Nothing is granted until you approve it there. Ctrl-C is safe.');
+  human('');
 
   if (opts.browser) openBrowser(approvalUrl);
 
@@ -149,7 +149,7 @@ export async function runDeviceFlow(opts: {
       .catch((err: unknown) => translate(err, `${apiUrl}/v1/portal/device`));
 
     if (poll.status === 'pending') {
-      if (!announced && !isJsonMode()) {
+      if (!announced) {
         human('  Waiting for approval...');
         announced = true;
       }

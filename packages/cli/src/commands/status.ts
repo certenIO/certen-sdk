@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { CertenClient, wholeUnitAmountProblem, summarizeReadiness, type Readiness } from '@certen.io/sdk';
+import { CertenClient, wholeUnitAmountProblem, type Readiness } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl, recordedIdentities } from '../config.js';
 import { printOutput, hint, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -7,7 +7,8 @@ import { assertChain, enabledChains } from '../chains.js';
 import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
 import { resolveCommandIdentity } from '../command-context.js';
 import { matchRecorded } from '../identity-ref.js';
-import { localizeReadiness, renderReadiness, signingKeyCheck, withLocalChecks } from '../readiness-render.js';
+import { parseGasReserve, parseRpc } from '../flag-parsers.js';
+import { finishReadiness, renderReadiness, signingKeyCheck } from '../readiness-render.js';
 
 /**
  * `certen status` - is the identity and chain I am about to use able to act, and if not, what is the first thing in the way?
@@ -34,44 +35,7 @@ async function credential(): Promise<{ apiKey: string; missing: boolean }> {
   }
 }
 
-/** The SDK probed with a placeholder, so its verdict on a machine with no key at all is not the one to show. */
-function noCredential(r: Readiness): Readiness {
-  const at = r.checks.findIndex((c) => c.name === 'credential');
-  if (at < 0 || r.checks[at]!.status === 'skipped') return r;
-  const checks = [...r.checks];
-  checks[at] = {
-    name: 'credential', status: 'fail', code: 'CREDENTIAL_REJECTED',
-    detail: 'No API key is configured on this machine.',
-    fix: { text: 'Sign this machine in.' },
-  };
-  for (let i = at + 1; i < checks.length; i++) {
-    if (checks[i]!.status !== 'skipped') checks[i] = { name: checks[i]!.name, status: 'skipped', detail: 'needs a working API key' };
-  }
-  return { ...r, ...summarizeReadiness(checks), checks };
-}
-
-function parseGasReserve(value: string | undefined): string | null | undefined {
-  if (value === undefined) return undefined;
-  if (value.toLowerCase() === 'none') return null;
-  if (!/^\d+(\.\d+)?$/.test(value)) {
-    throw new UsageError(`--gas-reserve "${value}" must be a decimal number of whole native units (e.g. 0.0002), or "none".`, 'INVALID_AMOUNT');
-  }
-  return value;
-}
-
-function parseRpc(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  let url: URL;
-  try { url = new URL(value); } catch {
-    throw new UsageError(`--accumulate-rpc "${value}" is not a URL. Give the Accumulate API endpoint, e.g. https://kermit.accumulatenetwork.io/v3`, 'INVALID_ACCUMULATE_RPC');
-  }
-  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username || url.password) {
-    throw new UsageError(`--accumulate-rpc "${value}" must be an http(s) URL with no username or password in it.`, 'INVALID_ACCUMULATE_RPC');
-  }
-  return value;
-}
-
-function verdictError(r: Readiness, chain: string): CliError {
+export function verdictError(r: Readiness, chain: string): CliError {
   const first = r.first_blocker;
   const down = first?.code === 'GATEWAY_UNREACHABLE';
   return new CliError(
@@ -131,14 +95,13 @@ export function registerStatusCommands(program: Command): void {
       echoFromContext('key', ctx.key);
 
       const key = signingKeyCheck({ name: ctx.key?.value, candidates: ctx.candidates.key });
-      let readiness = await client.readiness({
-        identityId: who.id!, chain, keyHash: key.keyHash, amount: opts.amount, tokenSymbol: opts.token,
-        gasReserve, accumulateRpc, configuredChains,
-      });
-      if (missing) readiness = noCredential(readiness);
-      readiness = withLocalChecks(readiness, [key.check]);
-      readiness = { ...readiness, checks: localizeReadiness(readiness.checks, { chain, identityId: who.id!, portalUrl, keyName: ctx.key?.value }) };
-      readiness = { ...readiness, ...summarizeReadiness(readiness.checks) };
+      const readiness = finishReadiness(
+        await client.readiness({
+          identityId: who.id!, chain, keyHash: key.keyHash, amount: opts.amount, tokenSymbol: opts.token,
+          gasReserve, accumulateRpc, configuredChains,
+        }),
+        { missingCredential: missing, localChecks: [key.check], env: { chain, identityId: who.id!, portalUrl, keyName: ctx.key?.value } },
+      );
 
       if (!isJsonMode()) renderReadiness(readiness, chain);
       if (!readiness.ready) throw verdictError(readiness, chain);
@@ -186,16 +149,19 @@ async function runAll(a: AllArgs): Promise<void> {
   const contexts: Array<{ identity_id: string; adi_url: string; chain: string; readiness: Readiness }> = [];
   for (const [index, { r, chain }] of pairs.entries()) {
     const own = r.id === contextId;
-    let readiness = await a.client.readiness({
-      identityId: r.id, chain, keyHash: own ? key.keyHash : undefined, amount: a.opts.amount, tokenSymbol: a.opts.token,
-      gasReserve: a.gasReserve, accumulateRpc: a.accumulateRpc, configuredChains: a.configuredChains,
-      scope: index === 0 ? 'full' : 'context',
-    });
-    if (a.missing && index === 0) readiness = noCredential(readiness);
     // The signing key is a fact about this machine and is reported once, with the first pair (and with whichever pair it is compared on).
-    if (index === 0) readiness = withLocalChecks(readiness, [key.check]);
-    readiness = { ...readiness, checks: localizeReadiness(readiness.checks, { chain, identityId: r.id, portalUrl: a.portalUrl, keyName: ctx.key?.value }) };
-    readiness = { ...readiness, ...summarizeReadiness(readiness.checks) };
+    const readiness = finishReadiness(
+      await a.client.readiness({
+        identityId: r.id, chain, keyHash: own ? key.keyHash : undefined, amount: a.opts.amount, tokenSymbol: a.opts.token,
+        gasReserve: a.gasReserve, accumulateRpc: a.accumulateRpc, configuredChains: a.configuredChains,
+        scope: index === 0 ? 'full' : 'context',
+      }),
+      {
+        missingCredential: a.missing && index === 0,
+        localChecks: index === 0 ? [key.check] : [],
+        env: { chain, identityId: r.id, portalUrl: a.portalUrl, keyName: ctx.key?.value },
+      },
+    );
     contexts.push({ identity_id: r.id, adi_url: r.adi_url, chain, readiness });
     if (!isJsonMode()) renderReadiness(readiness, chain, `${r.name ? `${r.name} ` : ''}${r.adi_url}`);
   }

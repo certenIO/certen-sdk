@@ -99,6 +99,7 @@ export async function runJourney({ name, cli, fault }) {
       for (const n of step.compares ?? []) if (!compared.includes(n)) compared.push(n);
 
       if (step.external) {
+        // `during`: the gas arrives WHILE the previous step waits for it (configured on that step), so there is nothing to do here.
         if (step.effect === 'fund') fake.fundAbstractAccount();
         steps.push({
           label: step.label, kind: 'external', description: step.description, ok: true,
@@ -130,6 +131,8 @@ export async function runJourney({ name, cli, fault }) {
         continue;
       }
 
+      // Gas that arrives while this step waits for it, as a faucet does.
+      if (step.fundsArrive) fake.fundAfterMoreReads(step.fundsArrive.afterReads);
       const t0 = Date.now();
       const { code, out, err } = await runCli(cli, step.noJson ? args : ['--json', ...args], env, step.stdin === 'API_KEY' ? FAKE_API_KEY : step.stdin);
       const ms = Date.now() - t0;
@@ -153,7 +156,8 @@ export async function runJourney({ name, cli, fault }) {
 
       if (step.capture && problems.length === 0) {
         let data;
-        try { data = JSON.parse(out.trim()).data; } catch { data = undefined; }
+        // `captureFrom: 'error'`: a step declared to fail still prints values worth carrying (the address `setup` says to fund).
+        try { const env = JSON.parse(out.trim()); data = step.captureFrom === 'error' ? env.error : env.data; } catch { data = undefined; }
         for (const [n, path] of Object.entries(step.capture)) {
           const v = data === undefined ? undefined : pathGet(data, path);
           if (typeof v === 'string' && v.length > 0) captured[n] = v;

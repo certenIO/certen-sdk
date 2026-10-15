@@ -16,12 +16,13 @@ become genuinely usable, and tells you what is still missing:
 
 ```bash
 npm install -g @certen.io/cli
-certen login    # device authorization — you never copy an API key
-certen init     # key, identity, chains, funding — created and checked
+certen setup    # key, account, identity, chains, on-chain checks and gas — until it says "Ready"
 ```
 
-`certen init` is idempotent: it creates only what is missing and reuses the identity it recorded on
-a previous run. Everything below is what it does on your behalf, and what to do instead if you are
+`certen setup` makes the signing key first, then the account it creates (`--new-account`, no browser) or signs you in to the one you have
+(`--existing-account`, device authorization: you never copy an API key), then the identity, and waits for gas if that is all that is missing. It
+is idempotent: it creates only what is missing and reuses the identity it recorded on a previous run, which matters because an organization
+made with a key may hold one identity until it is approved. `certen login` and `certen init` are the same steps one at a time, and unchanged. Everything below is what it does on your behalf, and what to do instead if you are
 building the same flow yourself.
 
 ```bash
