@@ -358,6 +358,119 @@ Each writes to the active profile and prints one envelope, `{ "profile": "…", 
 is `INVALID_TIMEOUT` / `INVALID_POLL_INTERVAL` (exit `2`) before any request. Waiting is never shortened by it:
 the defaults are unchanged.
 
+### 8. Readiness: `certen status`, and the checks `doctor` adds
+
+`certen status` answers the question asked just before sending: is **this identity, on this chain, with this key** able to act, and if
+not, what is the first thing in the way? It is `client.readiness()` from the SDK, rendered. Which identity, chain and key comes from the
+context (section 7), and every value taken from it is echoed on **stderr** first.
+
+```
+certen status [--identity <ref>] [--chain <chain>] [--sign-with <key>]
+              [--amount <whole units>] [--token <symbol>] [--accumulate-rpc <url>] [--gas-reserve <amount|none>] [--all]
+```
+
+**Exit codes.** `0` only when the state is `ready`. `1` when it is `blocked` **or** `unconfirmed` (the envelope says which). `3` when the
+gateway could not be reached. `2` for a mistake in the invocation, before any request.
+
+**Unknown is not ready.** A check that could not be answered is `unknown`; a check whose prerequisite failed is `skipped`. `ready` is true
+only when every check is `ok` or `warn`, so a key page that could not be read from Accumulate leaves the answer `unconfirmed` (exit `1`)
+whatever the other checks say. This is deliberately stricter than the funding guard on `call` / `tx create`, which never blocks on a
+balance it cannot read.
+
+On success (`ready`), one envelope:
+
+```json
+{ "ok": true, "data": { "readiness": {
+  "ready": true,
+  "state": "ready",
+  "first_blocker": null,
+  "context": {
+    "identity_id": "11111111-…", "adi_url": "acc://alpha.acme", "key_page_url": "acc://alpha.acme/book/1",
+    "chain": "base-sepolia", "abstract_account": "0xE293…cAcB",
+    "accumulate_rpc": "https://kermit.accumulatenetwork.io/v3", "key_hash": "9f2c…"
+  },
+  "checks": [
+    { "name": "gateway",            "status": "ok", "detail": "registry v2026-10-15, 3 chains" },
+    { "name": "credential",         "status": "ok", "detail": "accepted" },
+    { "name": "signing key",        "status": "ok", "detail": "dev (encrypted), hash 9f2c…41ab", "data": { "key": "dev", "public_key_hash": "9f2c…", "encrypted": true } },
+    { "name": "identity",           "status": "ok", "detail": "acc://alpha.acme is active" },
+    { "name": "chain",              "status": "ok", "detail": "base-sepolia is served and linked (abstract account 0xE293…cAcB)" },
+    { "name": "key page",           "status": "ok", "detail": "acc://alpha.acme/book/1 holds your key (9f2c…41ab), read from Accumulate (kermit.accumulatenetwork.io), not the gateway",
+      "data": { "independent": "holds", "gateway_can_sign": true, "keys_on_page": 1, "accept_threshold": 1, "version": 2 } },
+    { "name": "accumulate credits", "status": "ok", "detail": "1240 on the key page, as Accumulate reports it" },
+    { "name": "gateway balance",    "status": "ok", "detail": "$5.000000 spendable, $5.000000 left to commit" },
+    { "name": "gas",                "status": "ok", "detail": "0xE293…cAcB on base-sepolia holds 0.0021 ETH; about 0.0001 ETH is needed for gas (an estimate)",
+      "data": { "balance": "0.0021", "needed": "0.0001", "amount": "0", "gas_reserve": "0.0001", "gas_reserve_is_estimate": true } }
+  ]
+} } }
+```
+
+When it is not `ready`, the **same `readiness` object** is carried under `error.details` (the diagnosis ran; signalling the failure must
+not cost the caller it), exactly as `doctor` does:
+
+| `error.code` | Exit | When |
+|---|---|---|
+| `NOT_READY` | `1` | `state` is `blocked`: a check failed |
+| `NOT_CONFIRMED` | `1` | `state` is `unconfirmed`: nothing failed, but a check could not be answered (`unknown`) or was not evaluated (`skipped`) |
+| `NETWORK_ERROR` | `3` | the gateway could not be reached (every check after `gateway` is `skipped`) |
+
+**Fields.**
+
+- `checks` is ordered by dependency and **always the same length**: a check that was not evaluated is `skipped`, never omitted. Names, in order:
+  `gateway`, `credential`, `signing key`, `identity`, `chain`, `key page`, `accumulate credits`, `gateway balance`, `gas`.
+- `status` is `ok` | `warn` | `fail` | `unknown` | `skipped`. Every check that is not `ok` has a `code` (stable, upper snake case) and a `fix`:
+  `{ "text": "…", "command"?: "…", "url"?: "…" }`. `text` is plain words; `command` is the line to type, when the CLI has one; `url` is where to do it.
+- `first_blocker` is the first `fail`, else the first `unknown` / `skipped`; `null` when ready.
+- `data` carries the facts a verdict was drawn from, so a caller need not parse `detail`. Fields are only ever added.
+- `context.accumulate_rpc` is `null` when no independent read was made.
+
+**The key page is read twice**, from two parties. The gateway's `can_sign` is one party's word; the CLI also asks an **Accumulate node**
+(`--accumulate-rpc`, else the endpoint `GET /v1/chains` advertises) for the key page and compares its key hashes with the hash of the local
+key. No CERTEN credential is sent to that node, and no redirect is followed. It trusts the node it asked; it does not check a Merkle receipt.
+
+| `code` on `key page` | `status` | Meaning |
+|---|---|---|
+| (none) | `ok` | Accumulate lists the key and the gateway agrees (or cannot say) |
+| `KEY_PAGE_DISAGREES` | `fail` | the two reads disagree: Accumulate shows the key but the gateway says it cannot sign, or the gateway says it can and the page lacks the key. A blocker; neither read is preferred |
+| `KEY_PAGE_LACKS_KEY` | `fail` | the page was read and does not list the key, and the gateway agrees it cannot sign |
+| `IDENTITY_CANNOT_SIGN` | `fail` | the gateway says it cannot sign (and Accumulate could not be read, or no key was given) |
+| `KEY_PAGE_UNCONFIRMED` | `unknown` | Accumulate could not be read, or has no such account. The gateway's word alone is not enough |
+| `KEY_PAGE_NOT_INDEPENDENTLY_CHECKED` | `warn` | no key was given to compare |
+| `KEY_PAGE_MISSING` | `fail` | the identity has no key page on record |
+
+**Gas.** `gas` judges the abstract account's native balance (whole units, as the gateway reports it) against `--amount` plus a per-chain
+**estimate** of what one execution costs. The gateway publishes no per-execution gas figure, so the estimate is a planning figure held in
+the chain catalogue, labelled as an estimate in `detail` and in `data.gas_reserve_is_estimate`; `--gas-reserve <amount>` replaces it and
+`--gas-reserve none` removes it. A chain with no estimate is checked on the amount alone and says so (`GAS_NOT_ESTIMATED`, `warn`). Codes:
+`ABSTRACT_ACCOUNT_UNFUNDED` (a zero balance), `ABSTRACT_ACCOUNT_UNDERFUNDED` (positive, but below the amount, or below the amount plus the
+estimate; `data.shortfall_kind` is `amount` or `gas`), `ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE` (`unknown`: the balance was not reported,
+or could not be read). These are the same codes the submit-time funding guard uses, and the same comparison.
+
+**Credits.** `accumulate credits` fails only on zero (`ACCUMULATE_CREDITS_EMPTY`). The gateway publishes no per-intent credit cost, and the
+spec does not say whether `creditBalance` counts whole credits or hundredths of one, so a low-water mark would be a guess. The number is
+shown exactly as the key page reports it, and `data.source` says whether Accumulate or the gateway supplied it.
+
+**`certen status --all`** checks every identity recorded on this machine on each chain it is linked to. The organization-wide checks are
+made once, with the first context. One envelope: `{ "ok": true, "data": { "contexts": [ { "identity_id", "adi_url", "chain", "readiness" } ] } }`;
+when any context is not ready, the same `contexts` array is under `error.details` and the message says how many. The local record does not
+say which key an identity was created with, so the key page is compared with the local key only for the identity the context names; for
+the others it is `warn` (`KEY_PAGE_NOT_INDEPENDENTLY_CHECKED`).
+
+**`certen doctor`** keeps its organization-wide checks and its shape. When the context names an identity and a chain, five more checks are
+appended, always the same five, `skipped` (with the reason) when they cannot run: `identity`, `chain`, `key page`, `accumulate credits`,
+`gas`. In `doctor`'s vocabulary (`ok` | `warn` | `fail` | `skipped`) an `unknown` is a `warn` whose `detail` begins `could not confirm:`; it
+is never a pass. `doctor` takes `--identity`, `--chain` and `--sign-with` to name the pair explicitly. Where a fix needs a chain it names the
+context's, or the placeholder `<chain>`; it never names a chain nobody chose.
+
+#### Errors (exit `2`, raised before any request)
+
+| `error.code` | When |
+|---|---|
+| `INVALID_AMOUNT` | `--amount` is not a decimal in whole units, or looks like wei; `--gas-reserve` is not a decimal or `none` |
+| `INVALID_ACCUMULATE_RPC` | `--accumulate-rpc` is not an http(s) URL, or carries a username or password |
+| `NO_IDENTITIES`, `NO_CHAINS` | `--all` with nothing recorded, or no linked chain on record |
+| `MISSING_IDENTITY`, `AMBIGUOUS_IDENTITY`, `MISSING_CHAIN`, `AMBIGUOUS_CHAIN` | as in section 7 |
+
 ## Example: a correct retry loop
 
 ```bash

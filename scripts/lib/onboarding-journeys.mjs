@@ -28,6 +28,8 @@
  *   capture    { name: 'path.in.data' } values to remember from this step's `--json` output
  *   exit       exit codes that mean "behaved as declared" (default [0]); `proof verify` uses 0/4/5 because those
  *              are verdicts, not failures
+ *   expectError  { 'path.in.error': value } for a step declared to fail: the failure must be this one, not just any
+ *              non-zero exit (`status` before funding blocks on the gas, and on nothing else)
  *   uses       values consumed outside `args` (an external step has no args)
  *   compares   values checked by eye, not copied
  *   prompts    passphrase prompts when a person runs it
@@ -188,6 +190,69 @@ export const JOURNEYS = Object.freeze({
       },
       {
         // No --identity, no --from, no --to-chain: the identity is the only one recorded, its account on its only chain is derived.
+        label: 'Make the transaction',
+        args: ['tx', 'create', '--to', '{recipient}', '--amount', '0.0001', '--sign-with', 'dev', '--wait', '--timeout', '6m'],
+        capture: { intent_id: 'intent_id' },
+        prompts: 1,
+      },
+      { label: 'Read the outcome', args: ['tx', 'status', '{intent_id}'] },
+      { label: 'Fetch the proof', args: ['proof', 'get', '{intent_id}'] },
+      { label: 'Verify the proof', args: ['proof', 'verify', '{intent_id}'], exit: [0, 4, 5] },
+      { label: 'Verify against your own node', args: ['proof', 'verify', '{intent_id}', '--rpc', '{rpc_url}'], exit: [0, 4, 5] },
+      {
+        label: 'Check the effect by hand',
+        external: true,
+        description: 'compare the proved recipient, amount and chain with your own notes, and read the recipient\'s balance',
+      },
+    ],
+  },
+
+  /**
+   * The same transaction once `certen status` exists (Phase 2). `status` is the check the walkthrough spreads over six steps: finding the
+   * key page and the ADI (`identity get`, `portfolio`), reading the key hash (`keys show`), the hand-written curl that compares the two,
+   * `doctor`, and the gateway balance. It reads the key page from Accumulate itself, so nothing is copied to a terminal and compared by eye.
+   *
+   * It runs twice, as a person would: once to learn what is in the way (the abstract account has no gas, and it names the account to
+   * fund, so it exits 1 on purpose), and once after funding to see everything green. `chains --refresh` and `whoami` stay: `setup`
+   * (Phase 3) is what retires them. Funding stays a faucet and a wallet until `gas` (Phase 3).
+   */
+  readiness: {
+    source: 'PLAN.md section 1, with the Phase 2 CLI: `status` replaces the key-page curl, the by-eye key comparison, doctor and the balance check',
+    summary: 'the same transaction once status reads the key page for you',
+    steps: [
+      { label: 'Install the CLI', external: true, description: 'npm i -g @certen.io/cli' },
+      { label: 'Check the install', args: ['--version'], noJson: true },
+      { label: 'Check the gateway serves the chain', args: ['chains', '--refresh'] },
+      {
+        label: 'Sign this machine in',
+        args: ['auth', 'login', '--api-key', '-', '--no-keyring'],
+        stdin: 'API_KEY',
+        substitutes: 'certen login',
+      },
+      { label: 'Check the credential', args: ['whoami'] },
+      {
+        label: 'Create the key and the identity',
+        args: ['init', '--name', 'journey-probe', '--chains', 'base-sepolia', '--key', 'dev'],
+        capture: { abstract_account: 'abstract_accounts.0.address' },
+        prompts: 1,
+      },
+      // Exit 1 on purpose: a new account has no gas, and `status` says so and names the account to fund. Reading the key page from
+      // Accumulate (and the credits, and the balance) is in the same card, and is checked on the second run.
+      {
+        label: 'See what is in the way',
+        args: ['status', '--amount', '0.0001'],
+        exit: [1],
+        expectError: { code: 'NOT_READY', 'details.readiness.first_blocker.name': 'gas', 'details.readiness.first_blocker.code': 'ABSTRACT_ACCOUNT_UNFUNDED' },
+      },
+      {
+        label: 'Send gas to the abstract account',
+        external: true,
+        description: 'a faucet website, then a wallet transfer to the abstract account',
+        uses: ['abstract_account'],
+        effect: 'fund',
+      },
+      { label: 'Check it is ready', args: ['status', '--amount', '0.0001'] },
+      {
         label: 'Make the transaction',
         args: ['tx', 'create', '--to', '{recipient}', '--amount', '0.0001', '--sign-with', 'dev', '--wait', '--timeout', '6m'],
         capture: { intent_id: 'intent_id' },

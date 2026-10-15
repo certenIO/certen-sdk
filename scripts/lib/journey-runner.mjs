@@ -138,6 +138,16 @@ export async function runJourney({ name, cli, fault }) {
       const wanted = step.exit ?? [0];
       const problems = [];
       if (!wanted.includes(code)) problems.push(`exited ${code}, declared ${wanted.join('/')}${errorOf(out)}`);
+      // A step declared to fail has to fail FOR the declared reason: exiting 1 because the key page lacks the key is not "the account has
+      // no gas", and a journey that counted it would be green for the wrong reason.
+      if (step.expectError && wanted.includes(code)) {
+        let error;
+        try { error = JSON.parse(out.trim()).error; } catch { error = undefined; }
+        for (const [path, want] of Object.entries(step.expectError)) {
+          const got = error === undefined ? undefined : pathGet(error, path);
+          if (got !== want) problems.push(`expected the failure's ${path} to be ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
+        }
+      }
       const unrouted = seen.filter((r) => r.unrouted).map((r) => `${r.method} ${r.path}`);
       if (unrouted.length > 0) problems.push(`the fake gateway has no route for: ${[...new Set(unrouted)].join(', ')}`);
 

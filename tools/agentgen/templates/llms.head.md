@@ -74,6 +74,17 @@ It catches, in order: gateway unreachable · credential rejected (401) or merely
 identity · **an abstract account with no gas**, which makes a value transfer park at `anchoring` forever ·
 a balance entirely committed to pending intents · an expired trial.
 
+`client.readiness({ identityId, chain, keyHash?, amount? })` asks the narrower question asked just before sending: is *this* identity, on *this*
+chain, able to act? It returns ordered checks (`gateway`, `credential`, `identity`, `chain`, `key page`, `accumulate credits`, `gateway balance`,
+`gas`), each `ok` | `warn` | `fail` | `unknown` | `skipped`, with a stable `code` and a `fix`, plus `ready`, `state` and `first_blocker`. It never throws for
+a failed check and is **never `ready` over an `unknown`**. The key page is read from an Accumulate node as well as from the gateway, and when the two
+disagree that is a blocker (`KEY_PAGE_DISAGREES`). The gas check compares the abstract account's balance with the amount plus an *estimate* of the gas
+(labelled as one; the gateway publishes no per-execution figure).
+```ts
+const r = await certen.readiness({ identityId: identity.id, chain: 'base-sepolia', keyHash, amount: '0.001' });
+if (!r.ready) console.error(r.state, r.first_blocker);   // 'blocked' or 'unconfirmed'
+```
+
 ## CLI (no code required)
 ```
 npm install -g @certen.io/cli
@@ -82,6 +93,7 @@ certen init                     # signing key, identity, funding; idempotent
 certen call --identity <id> --chain base-sepolia --to 0x… --fn 'confirm(bytes32)' --arg 0x…     --sign-with dev --wait
 certen proof get <intent-id>
 certen doctor                   # names the one thing blocking you
+certen status                   # is this identity, on this chain, with this key ready? exit 0 only when it is
 ```
 - **Say it once.** `certen use identity|key|chain <value>` chooses them, `certen context` shows what the next command will use and why,
   and `--profile <name>` switches between setups (each with its own gateway and API key). After that `--identity`, `--chain` and

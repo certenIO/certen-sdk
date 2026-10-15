@@ -17,6 +17,9 @@ certen proof get <intent-id>
 
 If anything below goes wrong, `certen doctor` names the one thing blocking you and the command that
 fixes it. It is worth running once before you start, just to see what a clean report looks like.
+And before you send, `certen status` asks the narrower question: is *this* identity, on *this* chain,
+with *this* key, able to act? It reads your key page from Accumulate itself (the check this walkthrough
+used to ask you to do with a hand-written `curl`) and says what it could not confirm.
 
 ---
 
@@ -156,9 +159,12 @@ there, and they need different responses.
 reports success — and then parks forever, because the execution cannot pay for itself. Nothing in
 any API response says so.
 
-The CLI and the SDK both refuse before submitting, and name the faucet. `--force` (CLI) and
-`skipFundingCheck: true` (SDK) override it. `certen doctor` reports an empty account as a warning
-rather than a failure, because a call forwarding no value is unaffected.
+The CLI and the SDK both refuse before submitting, and name the faucet. They refuse a balance that is zero,
+and one that is positive but cannot cover the amount you are sending plus an *estimate* of the gas to send
+it (the gateway publishes no per-execution gas figure, so the gas half is a per-chain planning figure, and
+the message says it is an estimate). `--force` (CLI) and `skipFundingCheck: true` (SDK) override it.
+`certen doctor` reports an empty account as a warning rather than a failure, because a call forwarding no
+value is unaffected, and `certen status --amount <n>` shows the same comparison before you send.
 
 **2. Nothing is executing.** The authorization anchored correctly and no executor picked it up.
 Observed in practice on a deployment where the gateway was healthy and the cross-chain executor was
@@ -187,6 +193,7 @@ import { CertenClient } from '@certen.io/sdk';
 const certen = new CertenClient({ apiKey: process.env.CERTEN_API_KEY! });
 
 const report = await certen.doctor();          // same checks as `certen doctor`
+const ready = await certen.readiness({ identityId, chain: 'base-sepolia', keyHash });   // same checks as `certen status`
 if (!report.ok) throw new Error(JSON.stringify(report.checks.filter((c) => c.status === 'fail')));
 
 const identity = await certen.identity.createAndWait(   // waits for can_sign === true
