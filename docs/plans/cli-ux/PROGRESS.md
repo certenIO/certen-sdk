@@ -6,8 +6,8 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 
 | Phase | Title | Status | PR |
 |---|---|---|---|
-| 0 | Sync, baseline, AGENTS.md header | in-progress (branch `ux/phase-0-baseline` pushed; PR not opened, `gh` is not installed) | not opened |
-| 1 | Context (W1) | not-started | |
+| 0 | Sync, baseline, AGENTS.md header | merged | #27 (da4aeb4) |
+| 1 | Context (W1) | in-progress (branch `ux/phase-1-context`) | not opened |
 | 2 | Readiness (W3) | not-started | |
 | 3 | Setup + gas (W2, W6) | not-started | |
 | 4 | Send + receipt (W4, W5) | not-started | |
@@ -132,6 +132,80 @@ real provisioning and proof-cycle time (60–110 s), real gas funding, and the l
 Unverified live.
 
 ---
+
+---
+
+## Phase 1: Context (W1)
+
+Branch `ux/phase-1-context`, from `main` at `da4aeb4` (Phase 0 merged as #27). Acceptance (HARNESS-PROMPT §8):
+`certen context`, `certen use identity|key|chain`, profiles; one `resolveContext()`; identity ref accepts
+uuid / `acc://` URL / alias in every command incl. governance; `tx create` derives `--from`; `--timeout`
+accepts `90s|6m|1h`; mainnet-default refusal tested; context echo tested in both modes.
+
+### Baseline for this phase (before any change, 2026-10-15, `main` = `da4aeb4`)
+
+| Gate | Result |
+|---|---|
+| `npm install` | exit 0 (same 5 advisories as Phase 0) |
+| `node scripts/build-all.mjs` | exit 0 |
+| `node scripts/typecheck-all.mjs` | exit 0 |
+| `node scripts/test-all.mjs` | exit 0, **1429 passed in 97 files**, 0 failed, 0 skipped |
+| `npm run agentgen:check` | exit 0, 4 artifacts up to date (125 operations, 82 SDK methods) |
+
+Pre-existing failures: none.
+
+### Design decisions, from reading the code (the plan is silent or wrong on these)
+
+1. **The gateway's identity routes take a UUID only** (`/v1/identity/{id}` has a UUID pattern). An ADI URL or an
+   alias is therefore resolved CLIENT-side. ADI → UUID: local record first, then `GET /v1/portfolio?identity=<adi>`.
+   The portfolio now returns each identity's `id` (gateway 2026-08), so PLAN §1 root cause 3 ("the portfolio may
+   not return UUIDs") and ask G3 are outdated; an older gateway that omits `id` gives a named usage error, never a guess.
+2. **Which form each route wants**, from the vendored spec and the gateway source: `/v1/transaction` takes a UUID,
+   `/v1/governance` an ADI URL, `/v1/portfolio` and `/v1/pending` either, `/v1/sign` `pending_tx` either. The resolver
+   returns `{ id, adi_url }` and each command passes the form its route takes.
+3. **An alias is the name an identity was created with** (stored on the local record, new field `name`) **or the
+   label of its ADI** (`acc://jason-dev.acme` → `jason-dev`), matched case-insensitively among the identities recorded on
+   this machine. Two matches is an ambiguity error listing both.
+4. **The signing key defaults only where omitting it is an error today.** `call` without `--sign-with` fails
+   (`MISSING_SIGNING_KEY`), so a context key can fill it. `tx create`, `governance <op>` and `pending sign` without
+   `--sign-with` are a supported mode (open the intent, return signing data for an external signer or HSM); defaulting a
+   key there would start signing for people who rely on that. So no key default in those three. (`send` in Phase 4 signs with the context key.)
+5. **A profile is gateway URL + context + credential.** Sending one profile's API key to another profile's gateway
+   would leak a credential, so credentials are per profile: keyring account `api_key:<profile>` / `profiles.<name>.api_key` for
+   a named profile; the `default` profile keeps its credential at the top level exactly as before (no migration, no change
+   for existing users). A named profile never falls back to the default profile's key.
+6. **"Mainnet" means "not a known testnet".** The SDK catalogue holds testnets only; the registry cache is extended
+   (additive) with each chain's `environment`. A chain that is not a known testnet never comes from a default (env var,
+   profile or single-candidate) on a value-moving command (`call`, `tx create`, `fund`) unless the profile says
+   `allow_mainnet_default`; `--chain` on the command line always wins.
+7. **Not touched, with reasons:** `identity retire` keeps a required explicit argument (destructive: never from context);
+   `identity mnemonic <id-or-url>` takes a one-time retrieval target, not an identity reference; `pending list` and
+   `portfolio` `--identity` are filters, so absence must keep meaning "all", not "the context identity"; `doctor`'s hardcoded
+   chain hint is Phase 2 (PLAN W3); `init` writing the context is Phase 3 (`setup`).
+8. The confirmation **card** is Phase 4. Phase 1 echoes each context-derived value on stderr (both modes), before any
+   passphrase prompt and before the signing summary; Phase 4's card renders the same `ResolvedContext` sources.
+
+### Tasks (each with its acceptance check; checked off as completed)
+
+- [ ] 1. Profiles in config: active-profile selection (`--profile` > `CERTEN_PROFILE` > `config.profile` > `default`),
+  per-profile settings, per-profile credential and gateway URL, no migration for `default`. *Check: `config-profiles.test.ts`.*
+- [ ] 2. `--profile` as a global flag that may appear anywhere, like `--json`. *Check: conformance case + `--help --json` lists it.*
+- [ ] 3. `src/context.ts`: `resolveContext()`; precedence flag > env > profile > single candidate; ambiguity is a usage
+  error listing candidates; mainnet-default refusal; echo helper. *Check: `context.test.ts`.*
+- [ ] 4. `src/identity-ref.ts`: `resolveIdentityRef()` for UUID / ADI / alias, local record first, then gateway.
+  Local records gain `name`. *Check: `identity-ref.test.ts` against a fake client.*
+- [ ] 5. `--timeout` / `--poll-interval` accept `90s`, `6m`, `1h`; a bare number keeps its meaning (minutes / seconds), in all 7 places. *Check: `duration.test.ts` + a subprocess case per command family.*
+- [ ] 6. `certen context` and `certen use identity|key|chain|profile|gateway|allow-mainnet-default`. *Check: conformance cases + subprocess tests in both modes.*
+- [ ] 7. Wire the resolver into `call` (identity, chain, key), `tx create` (identity, `--to-chain`, derived `--from`),
+  `tx inspect`, `identity get|link-chain`, the six `governance` operations, `pending sign`, `pending list`, `portfolio`, `fund`. *Check: subprocess tests against the fake gateway (`context-commands.test.ts`).*
+- [ ] 8. `tx create` derives `--from` from the identity like `call`, and reuses the one identity read for the funding guard
+  and the ADI (5 → 4 round trips). *Check: `tx-create-derives-from.test.ts` + measure-onboarding.*
+- [ ] 9. Context echo on stderr for every non-flag value, in table and `--json` mode, before any passphrase prompt. *Check: `context-echo.test.ts`.*
+- [ ] 10. Docs: CHANGELOG (cli), `docs/CLI-CONTRACT.md` (`context` / `use` envelopes, `--profile`, new error codes), README /
+  CLI README, root help grouping, PLAN corrections. *Check: `git diff` lists them; conformance + readme tests green.*
+- [ ] 11. Measurement: a `context` journey in `scripts/lib/onboarding-journeys.mjs` (the same transaction on the Phase 1 CLI),
+  before/after against the pinned `published` baseline. *Check: `measure-onboarding.test.ts` pins it.*
+- [ ] 12. Gates, user-run transcript (offline), §5 self-review, push, PR body. *Check: outputs quoted.*
 
 ## Found, not fixed
 
