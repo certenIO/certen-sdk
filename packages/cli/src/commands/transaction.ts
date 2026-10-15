@@ -121,8 +121,8 @@ export function registerTransactionCommands(program: Command): void {
     .option('--sign-with <key>', 'Local key: sign the returned hash and submit it in one step')
     .option('--wait', 'Wait for the proof cycle to reach a terminal state (default off with --json)')
     .option('--no-wait', 'Return as soon as the signature is submitted')
-    .option('--timeout <minutes>', `How long to wait (default ${TX_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait (90s, 6m, 1h; a bare number is minutes. Default ${TX_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${TX_WAIT.intervalSec}s)`)
     .option('--force', 'Submit even if the abstract account has no gas to execute with')
     .option('--authority <acc-url>', AUTHORITY_HELP, collect)
     .option('--expires-in <duration>', EXPIRES_IN_HELP)
@@ -349,8 +349,8 @@ export function registerTransactionCommands(program: Command): void {
     // and asking "tell me when it is done" are different questions, and a status command that
     // silently blocked for seven minutes would be the wrong answer to the first one.
     .option('--wait', 'Poll until the intent reaches a terminal state')
-    .option('--timeout <minutes>', `How long to wait with --wait (default ${TX_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${TX_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait with --wait (90s, 6m, 1h; a bare number is minutes. Default ${TX_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${TX_WAIT.intervalSec}s)`)
     .action(async (id: string, opts: { wait?: boolean; timeout?: string; pollInterval?: string }) => {
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
       const client = await getClient();

@@ -8,6 +8,8 @@ import { CertenError } from '@certen.io/sdk';
 import { EXIT, type ExitCode } from './errors.js';
 import { setJsonMode, flushSuccess, emitFailure } from './output.js';
 import { commandTree } from './help-json.js';
+import { extractProfileFlag } from './global-flags.js';
+import { setProfileOverride } from './config.js';
 
 /** Read the version from package.json — dist/ sits one level below the manifest. */
 function readVersion(): string {
@@ -53,7 +55,9 @@ export function buildProgram(): Command {
     .version(VERSION)
     // Declared so it appears in --help. It is stripped from argv before parsing (see run()), because
     // a global flag that may appear after a subcommand is not something commander models.
-    .option('--json', 'Emit one JSON envelope on stdout; human output goes to stderr');
+    .option('--json', 'Emit one JSON envelope on stdout; human output goes to stderr')
+    // Also stripped from argv before parsing (see run()). Declared so it is listed in --help and --help --json.
+    .option('--profile <name>', 'Run as this profile: its gateway, credential and context (default: CERTEN_PROFILE, the saved active profile, or "default")');
 
   registerSignupCommands(program);
   registerInitCommands(program);
@@ -136,7 +140,18 @@ export async function run(argv: string[]): Promise<ExitCode> {
   // happen while resolving credentials — those must be reportable in the envelope too.
   const json = argv.includes('--json');
   setJsonMode(json);
-  const cleanArgv = argv.filter((a) => a !== '--json');
+  let cleanArgv = argv.filter((a) => a !== '--json');
+
+  // `--profile` is global like `--json`: taken out of argv here so it works before or after the subcommand. A bad one is a usage
+  // error raised BEFORE anything reads a credential, and it is reported in the envelope like any other failure.
+  try {
+    const global = extractProfileFlag(cleanArgv);
+    cleanArgv = global.argv;
+    setProfileOverride(global.profile);
+  } catch (err) {
+    setProfileOverride(undefined);
+    return handleError(err);
+  }
 
   const program = buildProgram();
 

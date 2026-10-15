@@ -6,6 +6,41 @@ import { UsageError } from './errors.js';
 const CONFIG_DIR = join(homedir(), '.certen');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
+/** The profile every config has always been: its credential and gateway stay at the top level of config.json. */
+export const DEFAULT_PROFILE = 'default';
+const PROFILE_ENV_VAR = 'CERTEN_PROFILE';
+/**
+ * Profile names become a JSON key, a keyring account (`api_key:<name>`) and an argument on a command line, so the alphabet is
+ * small on purpose. A name like `../x` or `a b` is refused before it can become any of them.
+ */
+const PROFILE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/;
+
+/**
+ * One named setup: a gateway, the context to use on it, and the credential for it.
+ *
+ * **The credential is per profile because the gateway is.** A profile names its own gateway URL, so a key shared across profiles
+ * would be sent to whichever host the active profile points at. A named profile therefore never falls back to the default
+ * profile's key; it has its own, or it has none.
+ *
+ * For the `default` profile only `identity`, `key`, `chain` and `allow_mainnet_default` live here. Its gateway URL and credential
+ * stay at the top level of the file, where every existing config already has them, so adding profiles migrates nothing.
+ */
+export interface ProfileSettings {
+  /** The identity commands act as when none is given: a UUID, an `acc://` ADI URL or an alias (`certen use identity` stores the UUID). */
+  identity?: string;
+  /** The local signing key a command that signs uses when none is named. */
+  key?: string;
+  /** The chain commands target when none is given. Never a mainnet unless `allow_mainnet_default` says so. */
+  chain?: string;
+  api_url?: string;
+  /** Permit a chain that is not a known testnet to come from this profile as a default on a value-moving command. */
+  allow_mainnet_default?: boolean;
+  /** Credential, named profiles only. */
+  api_key?: string;
+  storage?: 'file' | 'keyring';
+  key_prefix?: string;
+}
+
 export interface CliConfig {
   api_key?: string;
   api_url?: string;
@@ -28,8 +63,14 @@ export interface CliConfig {
    *
    * That is what made `init` unable to be idempotent in a useful way. It could see that
    * identities existed and still had nothing to put after `--identity`.
+   *
+   * `name` is the name the identity was created with. It is what `--identity <alias>` matches, together with the label of the ADI
+   * (`acc://jason-dev.acme` → `jason-dev`). Records written before it existed have none, and match on the ADI label alone.
    */
-  identities?: Array<{ id: string; adi_url: string; chains: string[]; created_at: string }>;
+  identities?: Array<{ id: string; adi_url: string; chains: string[]; created_at: string; name?: string }>;
+  /** The saved active profile. Absent means `default`. `--profile` and `CERTEN_PROFILE` override it. */
+  profile?: string;
+  profiles?: Record<string, ProfileSettings>;
 }
 
 /**
@@ -38,7 +79,7 @@ export interface CliConfig {
  * Deduplicated on id, and appended rather than replaced, so creating a second identity does not
  * make the first unfindable.
  */
-export function rememberIdentity(entry: { id: string; adi_url: string; chains: string[] }): void {
+export function rememberIdentity(entry: { id: string; adi_url: string; chains: string[]; name?: string }): void {
   const cfg = readConfig();
   const identities = (cfg.identities ?? []).filter((i) => i.id !== entry.id);
   identities.push({ ...entry, created_at: new Date().toISOString() });
@@ -50,6 +91,11 @@ export function rememberIdentity(entry: { id: string; adi_url: string; chains: s
 export function lastIdentity(): { id: string; adi_url: string; chains: string[] } | undefined {
   const all = readConfig().identities ?? [];
   return all.length > 0 ? all[all.length - 1] : undefined;
+}
+
+/** Every identity this machine has recorded, oldest first. */
+export function recordedIdentities(): NonNullable<CliConfig['identities']> {
+  return [...(readConfig().identities ?? [])];
 }
 
 /**
@@ -93,6 +139,162 @@ export function writeConfig(config: CliConfig): void {
   } catch {
     // Windows or non-permission-aware FS: best effort.
   }
+}
+
+// ── profiles ────────────────────────────────────────────────────────────────────────────────────
+
+let profileOverride: string | undefined;
+
+export function assertProfileName(name: string): string {
+  if (!PROFILE_NAME_RE.test(name)) {
+    throw new UsageError(
+      `"${name}" is not a valid profile name: use 1 to 32 letters, digits, "-" or "_", starting with a letter or a digit.`,
+      'INVALID_PROFILE_NAME',
+    );
+  }
+  return name;
+}
+
+/** The profile `--profile` named on this command line, or undefined to clear it. Validated here, once, before anything uses it. */
+export function setProfileOverride(name: string | undefined): void {
+  profileOverride = name === undefined ? undefined : assertProfileName(name);
+}
+
+/**
+ * The profile this invocation runs as: `--profile`, then `CERTEN_PROFILE`, then the saved active profile, then `default`.
+ *
+ * A name that arrives from the environment or the file is validated like one from the command line: it is about to become a
+ * keyring account.
+ */
+export function activeProfile(): string {
+  const fromEnv = process.env[PROFILE_ENV_VAR];
+  const name = profileOverride ?? (fromEnv ? fromEnv : undefined) ?? readConfig().profile ?? DEFAULT_PROFILE;
+  return assertProfileName(name);
+}
+
+export function profileExists(name: string): boolean {
+  return name === DEFAULT_PROFILE || Boolean(readConfig().profiles?.[name]);
+}
+
+/** `default` first, then the rest by name. */
+export function listProfiles(): string[] {
+  const named = Object.keys(readConfig().profiles ?? {}).filter((n) => n !== DEFAULT_PROFILE).sort();
+  return [DEFAULT_PROFILE, ...named];
+}
+
+function assertProfileKnown(name: string): void {
+  if (profileExists(name)) return;
+  throw new UsageError(
+    `There is no profile "${name}". Profiles: ${listProfiles().join(', ')}. `
+    + `Create it by setting something on it, for example: certen use chain base-sepolia --profile ${name}`,
+    'PROFILE_NOT_FOUND',
+  );
+}
+
+/** What a profile says about context and gateway (never its credential). Does not create the config file. */
+export function readProfile(name: string = activeProfile()): Pick<ProfileSettings, 'identity' | 'key' | 'chain' | 'api_url' | 'allow_mainnet_default'> {
+  const cfg = readConfig();
+  const p = cfg.profiles?.[name] ?? {};
+  return {
+    ...(p.identity !== undefined ? { identity: p.identity } : {}),
+    ...(p.key !== undefined ? { key: p.key } : {}),
+    ...(p.chain !== undefined ? { chain: p.chain } : {}),
+    ...(name === DEFAULT_PROFILE
+      ? (cfg.api_url !== undefined ? { api_url: cfg.api_url } : {})
+      : (p.api_url !== undefined ? { api_url: p.api_url } : {})),
+    ...(p.allow_mainnet_default !== undefined ? { allow_mainnet_default: p.allow_mainnet_default } : {}),
+  };
+}
+
+type ProfilePatch = {
+  [K in 'identity' | 'key' | 'chain' | 'api_url']?: string | null;
+} & { allow_mainnet_default?: boolean | null };
+
+/**
+ * Set (or, with `null`, unset) settings on a profile, creating it if it is new. `undefined` leaves a setting alone.
+ *
+ * The default profile's gateway URL is written where it has always lived, at the top level.
+ */
+export function updateProfile(name: string, patch: ProfilePatch): void {
+  assertProfileName(name);
+  if (typeof patch.api_url === 'string') validateGatewayUrl(patch.api_url);
+  const cfg = readConfig();
+  const profiles = { ...(cfg.profiles ?? {}) };
+  const current: ProfileSettings = { ...(profiles[name] ?? {}) };
+
+  for (const key of ['identity', 'key', 'chain', 'allow_mainnet_default'] as const) {
+    const v = patch[key];
+    if (v === undefined) continue;
+    if (v === null) delete current[key];
+    else (current as Record<string, unknown>)[key] = v;
+  }
+
+  if (patch.api_url !== undefined) {
+    if (name === DEFAULT_PROFILE) {
+      if (patch.api_url === null) delete cfg.api_url;
+      else cfg.api_url = patch.api_url;
+    } else if (patch.api_url === null) {
+      delete current.api_url;
+    } else {
+      current.api_url = patch.api_url;
+    }
+  }
+
+  profiles[name] = current;
+  cfg.profiles = profiles;
+  writeConfig(cfg);
+}
+
+function validateGatewayUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new UsageError(`"${url}" is not a URL. Give the gateway's address, for example https://gateway.kompendium.co`, 'INVALID_GATEWAY_URL');
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new UsageError(`"${url}" is not an http(s) URL. Give the gateway's address, for example https://gateway.kompendium.co`, 'INVALID_GATEWAY_URL');
+  }
+}
+
+/** Make `name` the saved active profile. It has to exist: switching to a typo would silently run as nobody. */
+export function setActiveProfile(name: string): void {
+  assertProfileName(name);
+  assertProfileKnown(name);
+  const cfg = readConfig();
+  if (name === DEFAULT_PROFILE) delete cfg.profile;
+  else cfg.profile = name;
+  writeConfig(cfg);
+}
+
+// ── credentials ─────────────────────────────────────────────────────────────────────────────────
+
+type Credential = { storage?: 'file' | 'keyring'; api_key?: string; key_prefix?: string };
+
+function credentialOf(cfg: CliConfig, profile: string): Credential {
+  if (profile === DEFAULT_PROFILE) return { storage: cfg.storage, api_key: cfg.api_key, key_prefix: cfg.key_prefix };
+  const p = cfg.profiles?.[profile] ?? {};
+  return { storage: p.storage, api_key: p.api_key, key_prefix: p.key_prefix };
+}
+
+/** Replace a profile's credential fields in `cfg` (in memory). A `null` field is removed. */
+function putCredential(cfg: CliConfig, profile: string, next: { [K in keyof Credential]?: Credential[K] | null }): void {
+  const target: Record<string, unknown> = profile === DEFAULT_PROFILE
+    ? (cfg as Record<string, unknown>)
+    : (((cfg.profiles ??= {})[profile] ??= {}) as Record<string, unknown>);
+  for (const [k, v] of Object.entries(next)) {
+    if (v === null) delete target[k];
+    else if (v !== undefined) target[k] = v;
+  }
+}
+
+/** What is stored for a profile, without ever reading the secret: for `auth status`, `whoami` and the device flow. */
+export function credentialInfo(profile: string = activeProfile()): { storage?: 'file' | 'keyring'; key_prefix?: string; has_file_key: boolean } {
+  const c = credentialOf(readConfig(), profile);
+  // A file credential written by hand, or by an older CLI, may carry no saved prefix: the first 12 characters of the key are
+  // what `auth status` has always shown, and they are a lookup field, not the secret.
+  const prefix = c.key_prefix ?? (c.api_key ? c.api_key.substring(0, 12) : undefined);
+  return { storage: c.storage, key_prefix: prefix, has_file_key: Boolean(c.api_key) };
 }
 
 /**
@@ -143,25 +345,31 @@ async function loadKeyring(): Promise<Keyring | null> {
 }
 
 const KEYRING_SERVICE = 'certen';
-const KEYRING_ACCOUNT = 'api_key';
+/** `api_key` for the default profile, exactly as before; `api_key:<profile>` for a named one. */
+const keyringAccount = (profile: string): string => (profile === DEFAULT_PROFILE ? 'api_key' : `api_key:${profile}`);
 
 /**
  * Read the API key with the following precedence:
  *   1. CERTEN_API_KEY env (always wins so CI never touches the keyring/file)
- *   2. OS keyring when storage='keyring'
+ *   2. OS keyring when the profile's storage='keyring'
  *   3. config.json (only if perms are 0600 or stricter)
+ *
+ * Of the PROFILE'S OWN credential: a named profile never reads the default profile's key, because that key belongs to another
+ * gateway.
  */
-export async function getApiKey(): Promise<string> {
+export async function getApiKey(profile: string = activeProfile()): Promise<string> {
   const envKey = process.env.CERTEN_API_KEY;
   if (envKey) return envKey;
 
+  assertProfileKnown(profile);
   const cfg = readConfig();
-  if (cfg.storage === 'keyring') {
+  const cred = credentialOf(cfg, profile);
+  if (cred.storage === 'keyring') {
     const kr = await loadKeyring();
     if (kr) {
       let v: string | null;
       try {
-        v = await kr.getPassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
+        v = await kr.getPassword(KEYRING_SERVICE, keyringAccount(profile));
       } catch (e) {
         throw new UsageError(
           `storage=keyring but the OS keyring could not be read (${e instanceof Error ? e.message : String(e)}); set CERTEN_API_KEY, or run "certen auth login --no-keyring".`,
@@ -177,7 +385,7 @@ export async function getApiKey(): Promise<string> {
     }
   }
 
-  if (cfg.api_key) {
+  if (cred.api_key) {
     if (!configFileIsSecure()) {
       throw new UsageError(
         'refusing to read ~/.certen/config.json — file permissions are not 0600. '
@@ -185,16 +393,24 @@ export async function getApiKey(): Promise<string> {
         'CONFIG_PERMISSIONS',
       );
     }
-    return cfg.api_key;
+    return cred.api_key;
   }
 
+  if (profile !== DEFAULT_PROFILE) {
+    throw new UsageError(
+      `No API key configured for profile "${profile}". Run "certen auth login --api-key <key> --profile ${profile}" or set CERTEN_API_KEY. `
+      + 'A profile does not use another profile\'s key: it belongs to a different gateway.',
+      'NO_API_KEY',
+    );
+  }
   throw new UsageError(
     'No API key configured. Run "certen auth login --api-key <key>" or set CERTEN_API_KEY.',
     'NO_API_KEY',
   );
 }
 
-export async function setApiKey(apiKey: string, useKeyring: boolean): Promise<void> {
+export async function setApiKey(apiKey: string, useKeyring: boolean, profile: string = activeProfile()): Promise<void> {
+  assertProfileName(profile);
   const prefix = apiKey.substring(0, 12);
   if (useKeyring) {
     const kr = await loadKeyring();
@@ -202,29 +418,26 @@ export async function setApiKey(apiKey: string, useKeyring: boolean): Promise<vo
       throw new Error('the OS keyring module (`@napi-rs/keyring`) could not be loaded; reinstall the CLI with its optional dependencies or pass --no-keyring');
     }
     try {
-      await kr.setPassword(KEYRING_SERVICE, KEYRING_ACCOUNT, apiKey);
+      await kr.setPassword(KEYRING_SERVICE, keyringAccount(profile), apiKey);
     } catch (e) {
       // A platform with no usable keyring (a headless Linux box with no secret service) says so here. The key is not written
       // anywhere else: a file is a different, weaker store and the user chooses it with --no-keyring.
       throw new Error(`the OS keyring refused the key (${e instanceof Error ? e.message : String(e)}); pass --no-keyring to store it in ~/.certen/config.json at 0600, or set CERTEN_API_KEY`);
     }
     const cfg = readConfig();
-    cfg.storage = 'keyring';
-    cfg.key_prefix = prefix;
-    delete cfg.api_key;
+    putCredential(cfg, profile, { storage: 'keyring', key_prefix: prefix, api_key: null });
     writeConfig(cfg);
     return;
   }
   const cfg = readConfig();
-  cfg.storage = 'file';
-  cfg.api_key = apiKey;
-  cfg.key_prefix = prefix;
+  putCredential(cfg, profile, { storage: 'file', api_key: apiKey, key_prefix: prefix });
   writeConfig(cfg);
 }
 
-export async function clearApiKey(): Promise<void> {
+export async function clearApiKey(profile: string = activeProfile()): Promise<void> {
+  assertProfileKnown(profile);
   const cfg = readConfig();
-  if (cfg.storage === 'keyring') {
+  if (credentialOf(cfg, profile).storage === 'keyring') {
     // The key lives in the OS keyring, so logging out means deleting it there. If the keyring cannot be reached, say so and leave the
     // configuration as it is rather than reporting a logout that left the key behind.
     const kr = await loadKeyring();
@@ -235,7 +448,7 @@ export async function clearApiKey(): Promise<void> {
       );
     }
     try {
-      await kr.deletePassword(KEYRING_SERVICE, KEYRING_ACCOUNT);
+      await kr.deletePassword(KEYRING_SERVICE, keyringAccount(profile));
     } catch (e) {
       throw new UsageError(
         `storage=keyring but the saved key could not be removed from the OS keyring (${e instanceof Error ? e.message : String(e)}); remove the "certen" credential yourself, then ~/.certen/config.json.`,
@@ -243,9 +456,7 @@ export async function clearApiKey(): Promise<void> {
       );
     }
   }
-  delete cfg.api_key;
-  delete cfg.key_prefix;
-  cfg.storage = 'file';
+  putCredential(cfg, profile, { api_key: null, key_prefix: null, storage: 'file' });
   writeConfig(cfg);
 }
 
@@ -258,12 +469,20 @@ export async function clearApiKey(): Promise<void> {
  */
 export const DEFAULT_API_URL = 'https://gateway.kompendium.co';
 
+/**
+ * `CERTEN_API_URL`, then the active profile's own URL, then the top-level URL, then the default.
+ *
+ * A named profile without a URL of its own uses the top-level one: that is a convenience for the address only. Its credential
+ * is its own (see {@link getApiKey}).
+ */
 export function getApiUrl(): string {
   const envUrl = process.env.CERTEN_API_URL;
   if (envUrl) return envUrl;
 
   const cfg = readConfig();
-  return cfg.api_url ?? DEFAULT_API_URL;
+  const profile = activeProfile();
+  const own = profile === DEFAULT_PROFILE ? undefined : cfg.profiles?.[profile]?.api_url;
+  return own ?? cfg.api_url ?? DEFAULT_API_URL;
 }
 
 /**

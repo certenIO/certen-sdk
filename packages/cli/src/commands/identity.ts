@@ -66,8 +66,8 @@ export function registerIdentityCommands(program: Command): void {
     // silently start blocking. See resolveWait().
     .option('--wait', 'Wait until the identity is provisioned AND can sign (default off --json)')
     .option('--no-wait', 'Return as soon as the gateway accepts the request')
-    .option('--timeout <minutes>', `How long to wait (default ${IDENTITY_WAIT.timeoutMin})`)
-    .option('--poll-interval <seconds>', `How often to check (default ${IDENTITY_WAIT.intervalSec})`)
+    .option('--timeout <duration>', `How long to wait (90s, 6m, 1h; a bare number is minutes. Default ${IDENTITY_WAIT.timeoutMin}m)`)
+    .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${IDENTITY_WAIT.intervalSec}s)`)
     .action(async (opts) => {
       // --public-key-hash was required, which is why the CLI could not create an identity on its
       // own: the hash is sha256 of the RAW 32-byte public key, and working that out was left to
