@@ -198,6 +198,9 @@ same flags). Steps, each with check → act → verify, skipped when already sat
    `curl` into code and means the user doesn't have to trust the gateway's flag. If the two
    disagree, that's a blocker. Put it in the SDK (`verifyKeyPageHolds(keyPageUrl, hash, {rpc})`), reusing
    `@certen.io/proof-verify`'s Accumulate encoding, so MCP and the SDK get the same check.
+   *(Phase 2: it is in the SDK, but it does not reuse `proof-verify`. The read is a JSON-RPC `query` and a hash match on the JSON the node returns, the same call the
+   gateway's `computeCanSign` makes; nothing is binary-encoded, and `proof-verify` would put `accumulate-sdk-opendlt` and `node:crypto` in the SDK's browser entry, which
+   `browser-entry.test.ts` forbids. It trusts the Accumulate node it asked and checks no Merkle receipt; it says so.)*
 6. **Accumulate credits (new)**: read `credit_balance` (live from the key page) and compare it with
    the per-intent cost. There is no top-up endpoint today (§6 G6), so the fix is a precise
    instruction plus a portal link.
@@ -214,7 +217,9 @@ blocker); `3` unreachable. If interrupted, rerun the same command; it picks up w
 
 - New SDK function `client.readiness({identity, chain, key?, amount?})` returns an ordered list of
   checks `{name, status: ok|fail|warn|unknown, detail, fix: {command?, url?, text}}` plus
-  `ready: boolean` and `first_blocker`. Checks: gateway, credential, identity provisioned,
+  `ready: boolean` and `first_blocker`.
+  *(Phase 2: the parameters are `identityId` (a UUID), `chain`, `keyHash`, `amount`; `skipped` is added to the statuses, for a check whose prerequisite failed, as `doctor` already
+  distinguishes it from "could not tell"; `state` is `ready | blocked | unconfirmed`; the SDK states a fix in words and a CLI adds `command`, as `doctor`'s `localizeFix` does.)* Checks: gateway, credential, identity provisioned,
   key page holds key (independent), Accumulate credits, gateway balance, gas ≥ amount + estimated
   gas, chain served.
 - `setup` runs it to drive its steps. **`certen status`** (new) prints it for the current context.
@@ -223,6 +228,11 @@ blocker); `3` unreachable. If interrupted, rerun the same command; it picks up w
 - MCP gets a read-tier `certen_readiness` tool built on the same function.
 - Replace the zero-only funding guard with the readiness gas check (amount + estimated gas).
   Keep the existing rule that an *unknown* balance doesn't block, and keep `--force`.
+  *(Phase 2: native balances from the gateway are whole-unit decimals (`ethers.formatEther`), not wei. There is no published per-execution gas figure, and `/v1/quote` prices the
+  platform's own legs in USD, so "estimated gas" is a per-chain **planning figure** in the chain catalogue, labelled an estimate wherever it is shown, overridable (`--gas-reserve`)
+  and bypassable (`--force`). The figures are not measurements; replacing them with measured ones, or with G5, is open. The credits check fails only on zero: no per-intent credit cost
+  is published and the spec does not say whether `creditBalance` is whole credits or hundredths, so a low-water mark would be a guess. The guard and the readiness check share one
+  comparison, `assessGas`.)*
 
 ### W4. Task verbs: `send`, and a context-aware `call`
 

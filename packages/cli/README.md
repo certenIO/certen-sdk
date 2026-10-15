@@ -36,7 +36,12 @@ Stuck at any point:
 
 ```bash
 certen doctor         # names the one thing blocking you, and the command that fixes it
+certen status         # is THIS identity, on THIS chain, with THIS key ready to act? the first thing in the way
+certen status --amount 0.001   # ...and is there enough gas to send that much
 ```
+
+`status` reads your key page from Accumulate itself, not only from the gateway (the check the walkthrough used to do with a hand-written `curl`), and
+reports anything it could not confirm as unconfirmed rather than ready. It exits `0` only when everything is ready.
 
 ### Say it once
 

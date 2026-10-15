@@ -32,6 +32,7 @@ import { registerBillingCommands } from './commands/billing.js';
 import { registerChainsCommands } from './commands/chains.js';
 import { registerWhoamiCommands } from './commands/whoami.js';
 import { registerDoctorCommands } from './commands/doctor.js';
+import { registerStatusCommands } from './commands/status.js';
 import { registerProofCommands } from './commands/proof.js';
 import { registerCallCommands } from './commands/call.js';
 import { registerInitCommands } from './commands/init.js';
@@ -67,6 +68,7 @@ export function buildProgram(): Command {
   registerAuthCommands(program);
   registerKeysCommands(program);
   registerDoctorCommands(program);
+  registerStatusCommands(program);
   registerWhoamiCommands(program);
   registerIdentityCommands(program);
   registerTransactionCommands(program);

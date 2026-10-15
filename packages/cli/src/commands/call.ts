@@ -198,8 +198,9 @@ export function registerCallCommands(program: Command): void {
       // same reason a transfer does.
       // The identity fetched above already carries per-chain balances, so this reuses them instead
       // of reading the same numbers again from /v1/portfolio.
+      // `--value` is wei, so it goes under `value` (base units), not `amount` (whole units): the guard compares it with the balance.
       await assertFundedForValue(
-        client, who.id!, chain, { amount: opts.value }, Boolean(opts.force),
+        client, who.id!, chain, { value: opts.value }, Boolean(opts.force),
         identity.balances,
       );
 

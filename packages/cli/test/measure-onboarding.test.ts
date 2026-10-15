@@ -28,6 +28,11 @@ import { fileURLToPath } from 'node:url';
 /**
  * The baseline, measured on origin/main 558608f (sdk/cli 0.10.0) before any change in the CLI UX plan.
  *
+ * **Phase 2 moved one line, on purpose: `doctor` costs 8 round trips, not 6.** It now also checks the identity and chain in the context
+ * (the same checks as `certen status`), which is two more reads: the identity (for the key page and the credits) and the key page itself
+ * from Accumulate. The chain registry it needs, it already read. That is what makes `published` 37 and `context` 36 (they were 35 and 34).
+ * Every other line is exactly as it was measured, which is the evidence that nothing else changed.
+ *
  * Round trips are what reached the fake gateway for each `certen` command, in journey order. When a phase
  * changes one, edit it here and quote before and after in the PR body. Anything that gets worse than a
  * line below needs a reason in the PR.
@@ -43,7 +48,7 @@ const BASELINE = {
     ],
   },
   published: {
-    round_trips: 35,
+    round_trips: 37,
     per_step: [
       ['certen --version', 0],
       ['certen chains --refresh', 1],
@@ -53,7 +58,7 @@ const BASELINE = {
       ['certen identity list', 1],
       ['certen identity get {identity_id}', 1],
       ['certen portfolio', 1],
-      ['certen doctor', 6],
+      ['certen doctor', 8],
       ['certen keys show dev', 0],
       ['certen balance', 1],
       ['certen tx create --identity {identity_id} --to-chain base-sepolia --from {abstract_account} --to {recipient} --amount 0.0001 --sign-with dev --wait --timeout 6', 5],
@@ -70,7 +75,7 @@ const BASELINE = {
    * become 4); the abstract account is still copied once, to fund it, which is Phase 3's.
    */
   context: {
-    round_trips: 34,
+    round_trips: 36,
     per_step: [
       ['certen --version', 0],
       ['certen chains --refresh', 1],
@@ -80,9 +85,31 @@ const BASELINE = {
       ['certen identity list', 1],
       ['certen identity get', 1],
       ['certen portfolio', 1],
-      ['certen doctor', 6],
+      ['certen doctor', 8],
       ['certen keys show dev', 0],
       ['certen balance', 1],
+      ['certen tx create --to {recipient} --amount 0.0001 --sign-with dev --wait --timeout 6m', 4],
+      ['certen tx status {intent_id}', 1],
+      ['certen proof get {intent_id}', 2],
+      ['certen proof verify {intent_id}', 4],
+      ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
+    ],
+  },
+  /**
+   * The same transaction once `certen status` exists. It replaces the six steps that find, copy and compare the key page (`identity list`,
+   * `identity get`, `portfolio`, `doctor`, `keys show`, the hand-written curl) and the balance check, and it runs twice: once to see what is in
+   * the way (the new account has no gas, so it exits 1 on purpose, for that reason and no other), and once to see everything green.
+   */
+  readiness: {
+    round_trips: 32,
+    per_step: [
+      ['certen --version', 0],
+      ['certen chains --refresh', 1],
+      ['certen auth login --api-key - --no-keyring', 1],
+      ['certen whoami', 2],
+      ['certen init --name journey-probe --chains base-sepolia --key dev', 4],
+      ['certen status --amount 0.0001', 4],
+      ['certen status --amount 0.0001', 4],
       ['certen tx create --to {recipient} --amount 0.0001 --sign-with dev --wait --timeout 6m', 4],
       ['certen tx status {intent_id}', 1],
       ['certen proof get {intent_id}', 2],
@@ -162,12 +189,14 @@ describe('--journey refuses what would be unsafe or unclear', () => {
     expect(r.stderr).toContain('guide');
     expect(r.stderr).toContain('published');
     expect(r.stderr).toContain('context');
+    expect(r.stderr).toContain('readiness');
   });
 
   it('refuses a --fault it does not know, rather than running a clean journey and calling it a fault run', async () => {
     const r = await measure(['--journey', 'guide', '--fault', 'cannot-sing']);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('cannot-sign');
+    expect(r.stderr).toContain('key-page-lacks-key');
   });
 });
 
@@ -240,6 +269,43 @@ describe('the baseline: the documented first-transaction journeys, as they are t
     expect(rep.totals.values_copied.length).toBe(published.totals.values_copied.length - 1);
   }, 290_000);
 
+  it('readiness: the same transaction once status reads the key page. No curl, no key compared by eye, two values copied', async () => {
+    const r = await measureOnce('--journey', 'readiness', '--json');
+    expect(r.code, r.stderr).toBe(0);
+    const rep = report(r);
+
+    expect(rep.journey).toBe('readiness');
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    for (const s of certenSteps(rep)) expect(s.ok, `${s.label}: ${s.command}`).toBe(true);
+
+    // 16 commands become 12: identity list, identity get, portfolio, doctor, keys show and balance are replaced by two runs of status, and
+    // the hand-written curl is gone from the outside-the-CLI steps (install, fund, the effect check remain).
+    expect(rep.totals.commands).toBe(12);
+    expect(rep.totals.external).toBe(3);
+    // The ADI and key page URL existed only to feed the curl, and the key hash only to be compared with it by eye.
+    expect(rep.totals.values_copied).toEqual(['abstract_account', 'intent_id']);
+    expect(rep.totals.compared_by_eye).toEqual([]);
+    expect(rep.totals.passphrase_prompts).toBe(2);
+    expect(rep.totals.round_trips).toBe(BASELINE.readiness.round_trips);
+    expect(certenSteps(rep).map((s) => [s.command, s.round_trips])).toEqual(BASELINE.readiness.per_step);
+
+    // Cheaper than the journey it improves on, in commands, copied values and round trips.
+    const context = report(await measureOnce('--journey', 'context', '--json'));
+    expect(rep.totals.commands).toBeLessThan(context.totals.commands);
+    expect(rep.totals.values_copied.length).toBeLessThan(context.totals.values_copied.length);
+    expect(rep.totals.round_trips).toBeLessThan(context.totals.round_trips);
+  }, 290_000);
+
+  it('status reads the key page from the Accumulate stand-in, with no CERTEN credential, and is blocked on the gas before funding and on nothing else', async () => {
+    const rep = report(await measureOnce('--journey', 'readiness', '--json'));
+    const statuses = certenSteps(rep).filter((s) => s.command!.startsWith('certen status'));
+    expect(statuses).toHaveLength(2);
+    // Before funding: exit 1, and the step is only "as declared" because the failure was the gas (the journey says so, not just the exit).
+    expect(statuses[0]!.exit).toBe(1);
+    expect(statuses[1]!.exit).toBe(0);
+    for (const s of statuses) expect(s.endpoints).toContain('POST /acc/v3');
+  }, 290_000);
+
   it('the proof steps checked real fixtures: an honest PARTIAL (exit 4), not a canned verdict', async () => {
     const rep = report(await measureOnce('--journey', 'published', '--json'));
     const verifies = certenSteps(rep).filter((s) => s.command!.startsWith('certen proof verify'));
@@ -279,6 +345,18 @@ describe('isolation', () => {
 });
 
 describe('the harness can go red', () => {
+  it('exits 1 and names the reason when the Accumulate node lists a different key than the identity was created with', async () => {
+    const r = await measureOnce('--journey', 'readiness', '--fault', 'key-page-lacks-key', '--json');
+    expect(r.code).toBe(1);
+    const rep = report(r);
+    expect(rep.totals.all_steps_as_declared).toBe(false);
+    const bad = certenSteps(rep).filter((s) => !s.ok);
+    expect(bad.map((s) => s.command)).toEqual(['certen status --amount 0.0001', 'certen status --amount 0.0001']);
+    // The first of the two was declared to fail, and did: but for the wrong reason, which is what is reported.
+    expect((bad[0] as unknown as { reason: string }).reason).toMatch(/first_blocker\.name to be "gas", got "key page"/);
+    expect((bad[1] as unknown as { reason: string }).reason).toMatch(/KEY_PAGE_DISAGREES|does not list your key/);
+  }, 290_000);
+
   it('exits 1 and names the step when an identity that cannot sign makes a step misbehave', async () => {
     const r = await measureOnce('--journey', 'guide', '--fault', 'cannot-sign', '--json');
     expect(r.code).toBe(1);

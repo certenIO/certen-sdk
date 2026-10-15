@@ -26,6 +26,7 @@
  * round trips are counted: what actually arrived, not what the SDK says it sent.
  */
 import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -41,7 +42,7 @@ const PROOF_FIXTURES = join(ROOT, 'packages', 'verify', 'test', 'fixtures', 'pro
 const EXEC_FIXTURE = join(ROOT, 'packages', 'sdk', 'test', 'fixtures', 'execution-proof-base-46437431.json');
 
 /** The ways this fake can be made to misbehave, for proving the harness goes red. */
-export const FAULTS = Object.freeze(['cannot-sign']);
+export const FAULTS = Object.freeze(['cannot-sign', 'key-page-lacks-key']);
 
 /** Fixed, so two runs of the same journey print the same transcript. */
 export const IDS = Object.freeze({
@@ -105,7 +106,12 @@ async function honestIntent(body, { adiUrl, keyPage, intentId }) {
   };
 }
 
-function chainRegistry() {
+/**
+ * @param {string} accumulateApi The Accumulate API endpoint the registry advertises. It is this fake's own `/acc/v3`, never the real
+ *   one: a CLI that reads the key page from Accumulate (`status`, `doctor`) must reach a stand-in here, because a measurement that
+ *   touched kermit would need the network and would not give the same numbers twice.
+ */
+function chainRegistry(accumulateApi) {
   const chain = (id, chainId, displayName, explorer) => ({
     id, chainId, family: 'evm', displayName, environment: 'testnet', status: 'live', explorer, enabled: true,
     contracts: { ledger: { address: `0x${'41'.repeat(20)}`, verified: true } },
@@ -113,7 +119,7 @@ function chainRegistry() {
   return {
     version: '2026-10-15',
     last_updated: '2026-10-15T00:00:00Z',
-    accumulate: { network: 'kermit', environment: 'testnet', api: 'https://kermit.accumulatenetwork.io/v3', explorer: 'https://explorer.accumulatenetwork.io' },
+    accumulate: { network: 'kermit', environment: 'testnet', api: accumulateApi, explorer: 'https://explorer.accumulatenetwork.io' },
     count: 3,
     chains: [
       chain('ethereum-sepolia', 11155111, 'Ethereum Sepolia', 'https://sepolia.etherscan.io'),
@@ -125,8 +131,9 @@ function chainRegistry() {
 
 /**
  * @param {object} [options]
- * @param {'cannot-sign'} [options.fault] A way for the gateway to be wrong, so a test can prove the
- *   harness goes red when a step does not behave as declared.
+ * @param {'cannot-sign'|'key-page-lacks-key'} [options.fault] A way for the gateway to be wrong, so a test can prove the
+ *   harness goes red when a step does not behave as declared. `cannot-sign`: the gateway says the identity cannot sign.
+ *   `key-page-lacks-key`: the Accumulate node lists a different key than the one the identity was created with.
  */
 export async function startFakeGateway(options = {}) {
   const exec = JSON.parse(readFileSync(EXEC_FIXTURE, 'utf8'));
@@ -139,7 +146,11 @@ export async function startFakeGateway(options = {}) {
     funded: false,
     intentOpened: false,
     publicKey: null,
+    /** SHA-256 of the key the identity was created with, as the key page on Accumulate lists it. */
+    keyHash: null,
   };
+  /** Filled in once the server is listening: the registry advertises this fake's own Accumulate endpoint. */
+  const self = { url: '' };
 
   const identityBody = () => ({
     id: IDS.identity,
@@ -152,7 +163,8 @@ export async function startFakeGateway(options = {}) {
     credit_balance: 500,
     // Numeric here, a slug in the portfolio: the live gateway does both.
     chain_accounts: [{ chain_id: String(BASE_SEPOLIA), address: IDS.abstractAccount, status: 'deployed' }],
-    balances: [{ chain_id: 'base-sepolia', address: IDS.abstractAccount, token: 'ETH', balance: state.funded ? '1000000000000000' : '0' }],
+    // Whole units, as the live gateway reports them (it formats the balance with ethers.formatEther).
+    balances: [{ chain_id: 'base-sepolia', address: IDS.abstractAccount, token: 'ETH', balance: state.funded ? '0.001' : '0' }],
     created_at: '2026-10-15T00:00:00Z',
   });
 
@@ -162,7 +174,7 @@ export async function startFakeGateway(options = {}) {
         adi_url: IDS.adi, status: 'active', credit_balance: 500, pending_actions: 0,
         chains: [{
           chain_id: 'base-sepolia', address: IDS.abstractAccount, deployed: true,
-          balances: [{ token: 'ETH', balance: state.funded ? '1000000000000000' : '0' }],
+          balances: [{ token: 'ETH', balance: state.funded ? '0.001' : '0' }],
         }],
       }]
       : [],
@@ -184,7 +196,7 @@ export async function startFakeGateway(options = {}) {
 
   /** [method, path pattern, handler(match, body) -> [status, body, extra headers?]] */
   const routes = [
-    ['GET', /^\/v1\/chains$/, () => [200, chainRegistry()]],
+    ['GET', /^\/v1\/chains$/, () => [200, chainRegistry(`${self.url}/acc/v3`)]],
     ['GET', /^\/v1\/health\/ready$/, () => [200, { status: 'ready', reasons: [] }]],
     ['GET', /^\/v1\/errors$/, () => [200, { errors: [] }]],
     ['GET', /^\/v1\/billing\/balance$/, () => [200, balanceBody()]],
@@ -194,7 +206,11 @@ export async function startFakeGateway(options = {}) {
     }]],
     ['GET', /^\/v1\/portfolio$/, () => [200, portfolioBody()]],
     ['GET', /^\/v1\/transactions$/, () => [200, { transactions: [], total: 0 }]],
-    ['POST', /^\/v1\/identity$/, () => {
+    ['POST', /^\/v1\/identity$/, (_m, body) => {
+      // The key page on Accumulate lists the key the identity was created with, which is what a real provisioning does.
+      const b = JSON.parse(body || '{}');
+      state.keyHash = b.public_key_hash
+        ?? (b.public_key ? createHash('sha256').update(Buffer.from(b.public_key, 'hex')).digest('hex') : null);
       state.identityCreated = true;
       return [202, { ...identityBody(), status: 'provisioning', can_sign: null }];
     }],
@@ -212,6 +228,18 @@ export async function startFakeGateway(options = {}) {
     ['GET', /^\/v1\/proof\/([^/]+)\/bundle$/, () => [200, exec, { 'content-type': 'application/octet-stream' }]],
     ['GET', /^\/v1\/proof\/([^/]+)\/v2$/, () => [200, portable]],
     ['GET', /^\/v1\/proof\/([^/]+)$/, (m) => [200, { proof_id: m[1], status: 'completed', anchored: true }]],
+    // The Accumulate node, for the key page read (`status`, `doctor`): the one account it knows, listing the key the identity was created with.
+    ['POST', /^\/acc\/v3$/, (_m, body) => {
+      const q = JSON.parse(body || '{}');
+      if (!state.identityCreated || q.params?.scope !== KEY_PAGE) {
+        return [200, { jsonrpc: '2.0', id: q.id ?? 1, error: { code: -33001, message: `${q.params?.scope ?? 'account'} not found` } }];
+      }
+      const keyHash = options.fault === 'key-page-lacks-key' ? 'ff'.repeat(32) : state.keyHash;
+      return [200, {
+        jsonrpc: '2.0', id: q.id ?? 1,
+        result: { recordType: 'account', account: { type: 'keyPage', url: KEY_PAGE, keys: [{ publicKeyHash: keyHash }], creditBalance: 500, version: 2, acceptThreshold: 1 } },
+      }];
+    }],
     // The execution chain's own node, for `proof verify --rpc`: answers with the header the bundle's receipts root is compared to.
     ['POST', /^\/rpc$/, () => [200, {
       jsonrpc: '2.0', id: 1,
@@ -251,6 +279,7 @@ export async function startFakeGateway(options = {}) {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const url = `http://127.0.0.1:${server.address().port}`;
+  self.url = url;
 
   return {
     url,

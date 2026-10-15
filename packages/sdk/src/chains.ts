@@ -45,6 +45,14 @@ export interface ChainCatalogueEntry {
   /** Where to get testnet gas. Absent rather than guessed. */
   readonly faucet?: string;
   /**
+   * The native balance, in whole units, an abstract account should hold on top of any amount it is about to move, for one execution
+   * to be plausible. **An estimate, never a quote**: the gateway publishes no per-execution gas figure (`/v1/quote` prices the
+   * platform's own legs in USD), so this is a planning figure chosen in the CLI UX Phase 2 work, not a measurement. Everything that
+   * shows it calls it an estimate, a caller can override it, and absent means "no estimate for this chain" - such a chain is checked on
+   * the amount alone and says so, rather than being given a number nobody has measured.
+   */
+  readonly gasReserve?: string;
+  /**
    * Names people type for this chain that are NOT its slug. They SUGGEST and never substitute: a
    * mainnet name mapped silently to a testnet would be the client deciding where money goes.
    */
@@ -72,6 +80,7 @@ export const CHAIN_CATALOGUE: readonly ChainCatalogueEntry[] = Object.freeze([
     blockSeconds: 12,
     blocksOnlyWithTraffic: false,
     faucet: 'https://sepoliafaucet.com',
+    gasReserve: '0.001',
     aliases: ['eth', 'ethereum', 'sepolia', 'eth-sepolia', 'mainnet'],
     support: 'live',
     enabledByDefault: true,
@@ -86,6 +95,7 @@ export const CHAIN_CATALOGUE: readonly ChainCatalogueEntry[] = Object.freeze([
     blockSeconds: 2,
     blocksOnlyWithTraffic: false,
     faucet: 'https://www.alchemy.com/faucets/base-sepolia',
+    gasReserve: '0.0001',
     aliases: ['base', 'basesepolia'],
     support: 'live',
     enabledByDefault: true,
@@ -100,6 +110,7 @@ export const CHAIN_CATALOGUE: readonly ChainCatalogueEntry[] = Object.freeze([
     blockSeconds: 0.25,
     blocksOnlyWithTraffic: false,
     faucet: 'https://www.alchemy.com/faucets/arbitrum-sepolia',
+    gasReserve: '0.0001',
     aliases: ['arb', 'arbitrum', 'arb-sepolia', 'arbsepolia'],
     support: 'live',
     enabledByDefault: true,
@@ -177,6 +188,37 @@ export function nativeSymbolFor(chain: string | number | null | undefined): stri
 
 export function faucetForChain(chain: string | number | null | undefined): string | undefined {
   return chainInfo(chain)?.faucet;
+}
+
+/** The gas reserve estimate for a chain, in whole native units, or undefined when the catalogue has none. See {@link ChainCatalogueEntry.gasReserve}. */
+export function gasReserveFor(chain: string | number | null | undefined): string | undefined {
+  return chainInfo(chain)?.gasReserve;
+}
+
+/**
+ * A non-negative decimal string ("0.0021", "3", "1.50") to base units, exactly, or undefined when it is not one.
+ *
+ * Returns undefined rather than throwing: a balance the gateway reported as "unavailable" or an amount typed with too many decimals is
+ * a fact to report as unknown, not an exception to unwind. Integer arithmetic only - `Number("0.1") * 10 ** 18` is wrong for values a
+ * wallet shows exactly.
+ */
+export function parseUnits(value: string | number | null | undefined, decimals: number): bigint | undefined {
+  if (value === null || value === undefined) return undefined;
+  const m = /^(\d+)(?:\.(\d+))?$/.exec(String(value).trim());
+  if (!m) return undefined;
+  const frac = m[2] ?? '';
+  if (frac.length > decimals) return undefined;
+  return BigInt(m[1]) * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, '0') || '0');
+}
+
+/** Base units to a whole-unit decimal string with no trailing zeros ("1500000000000000" at 18 decimals -> "0.0015"). */
+export function formatUnits(value: bigint, decimals: number): string {
+  const negative = value < 0n;
+  const abs = negative ? -value : value;
+  const digits = abs.toString().padStart(decimals + 1, '0');
+  const whole = digits.slice(0, digits.length - decimals);
+  const frac = digits.slice(digits.length - decimals).replace(/0+$/, '');
+  return `${negative ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`;
 }
 
 /** Slugs the catalogue enables when configuration says nothing: the live chains, in order. */

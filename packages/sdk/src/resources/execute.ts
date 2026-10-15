@@ -136,16 +136,26 @@ export function assertTransferParams(p: TransferParams): void {
   if (!p.adiUrl || !p.adiUrl.startsWith('acc://')) {
     throw new Error('transfer: adiUrl is required (the signing identity\'s ADI, e.g. acc://your-org.acme)');
   }
-  const amount = String(p.amount ?? '');
+  const problem = wholeUnitAmountProblem(p.amount);
+  if (problem) throw new Error(`transfer: ${problem}`);
+}
+
+/**
+ * What is wrong with an amount that is meant to be in WHOLE units, or undefined when nothing is.
+ *
+ * One rule for every place a person or a program writes such an amount - the transfer itself and anything that asks "could this be
+ * sent" (`certen status --amount`) - so they cannot disagree about what a mistake looks like.
+ */
+export function wholeUnitAmountProblem(value: unknown): string | undefined {
+  const amount = String(value ?? '');
   if (!/^\d+(\.\d+)?$/.test(amount)) {
-    throw new Error(`transfer: amount must be a decimal string in WHOLE units, e.g. "0.001" — got ${JSON.stringify(p.amount)}`);
+    return `amount must be a decimal string in WHOLE units, e.g. "0.001" — got ${JSON.stringify(value)}`;
   }
   if (/^\d{10,}$/.test(amount)) {
-    throw new Error(
-      `transfer: amount "${amount}" looks like wei. This field is WHOLE units — "0.001" for a thousandth of an ETH. `
-      + 'The bridge multiplies by the chain decimals, so wei here moves 10^18 times what you meant.',
-    );
+    return `amount "${amount}" looks like wei. This field is WHOLE units — "0.001" for a thousandth of an ETH. `
+      + 'The bridge multiplies by the chain decimals, so wei here moves 10^18 times what you meant.';
   }
+  return undefined;
 }
 
 /** See `ProofGatedCallParams.beforeSign`. */
@@ -209,6 +219,8 @@ export class ExecuteResource {
         identityId: p.identityId,
         chain: p.chain,
         amount: p.contractCall.value,
+        // A call's value is wei, unlike a transfer's whole-unit amount.
+        amountUnit: 'base',
       });
     }
 
@@ -254,6 +266,7 @@ export class ExecuteResource {
         // The abstract account that pays is the one on the chain the value lands on.
         chain: p.toChain,
         amount: p.amount,
+        tokenSymbol: p.tokenSymbol,
       });
     }
 

@@ -1,11 +1,16 @@
 import { Command } from 'commander';
-import { CertenClient, CREDENTIALLED_CHECKS, type DoctorCheck } from '@certen.io/sdk';
+import {
+  CertenClient, CREDENTIALLED_CHECKS, CONTEXT_CHECKS, type ChainsListResponse, type DoctorCheck, type ReadinessCheck,
+} from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, EXIT } from '../errors.js';
 import { listKeys } from '../keystore.js';
 import { faucetFor } from '../funding-guard.js';
-import { normalizeChain } from '../chains.js';
+import { normalizeChain, enabledChains } from '../chains.js';
+import { resolveContext, echoFromContext, type ResolvedContext } from '../context.js';
+import { resolveIdentityRef } from '../identity-ref.js';
+import { localizeReadiness, signingKeyCheck } from '../readiness-render.js';
 
 /**
  * `certen doctor` — the one command a stuck user runs.
@@ -22,6 +27,11 @@ import { normalizeChain } from '../chains.js';
  *
  * `--all` exists for when the whole picture genuinely is the question, and `--json` always returns
  * every check because a machine caller has no trouble reading seven of anything.
+ *
+ * **Scoped to the context.** The checks above are organization-wide. When the context names an identity and a chain (flag, environment,
+ * profile, or the only candidate), the five checks about THAT pair are added: the identity, the chain, the key page, its credits and the gas on
+ * the abstract account (see `certen status`, which shows the same ones as a card). Where a fix needs a chain it names the context's, or a
+ * placeholder; it never names one nobody chose.
  */
 
 type Check = DoctorCheck;
@@ -70,14 +80,104 @@ function localizeFix(check: Check, chainHint: string, apiUrl: string): Check {
   }
 }
 
+/**
+ * The context, if there is one that can be read. Never throws: `doctor` is what a stuck person runs, and a context that is ambiguous or
+ * unreadable is one of the things it is run to find out about, not a reason for it to fail before it starts.
+ */
+function readContext(flags: { identity?: string; chain?: string; signWith?: string }): ResolvedContext | undefined {
+  try {
+    return resolveContext({ identity: flags.identity, chain: flags.chain, key: flags.signWith });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * What a fix should say where it needs a chain: the context's, or a placeholder.
+ *
+ * This used to be one hardcoded testnet's slug, so a person on another chain was told to fund or link the wrong one, and a person on a
+ * mainnet context was told to pay on a testnet. Nothing here knows which chain someone means unless the context says.
+ */
+function chainHintOf(ctx: ResolvedContext | undefined): string {
+  return ctx?.chain?.value ?? '<chain>';
+}
+
+/** A readiness check in doctor's vocabulary. `unknown` has no place in it, and must not become a pass: it is a warning that says it could not confirm. */
+function asDoctorCheck(c: ReadinessCheck): Check {
+  // `doctor` has always reported an unfunded abstract account as a warning, not a failure: it is asked with no amount in mind, and a call that forwards
+  // no value is unaffected. `certen status` asks "ready to move value?" and fails it; the same facts, a different question.
+  const status = c.status === 'unknown' || (c.name === 'gas' && c.status === 'fail') ? 'warn' : c.status;
+  const detail = c.status === 'unknown' ? `could not confirm: ${c.detail}` : c.detail;
+  const fix = c.fix ? [c.fix.text, c.fix.command ? `(${c.fix.command})` : '', c.fix.url ?? ''].filter(Boolean).join('  ') : undefined;
+  return { name: c.name, status, detail, ...(fix ? { fix } : {}) };
+}
+
+/**
+ * The checks that are about the identity and chain in the context: the chain, the key page (read from Accumulate as well as from the
+ * gateway), the key page's credits and the gas on the abstract account. The same ones `certen status` shows, from the same SDK call.
+ *
+ * Always the same five when a context names an identity and a chain, so the list is the same length however far the run got: when they cannot
+ * be evaluated they are skipped, with the reason, not left out. (An identity that no longer resolves is one `context` warning instead.)
+ */
+async function contextChecks(args: {
+  client: CertenClient;
+  ctx: ResolvedContext | undefined;
+  skip?: string;
+  /** The registry `client.doctor()` already read, so it is not read twice. */
+  registry?: ChainsListResponse;
+}): Promise<Check[]> {
+  const { client, ctx, skip, registry } = args;
+  if (!ctx?.identity || !ctx.chain) {
+    // Several candidates and none chosen is a question, not an absence: say so, so a missing section is not read as a clean one.
+    if (ctx && !ctx.identity && ctx.candidates.identity.length > 1) {
+      hint(`Several identities are recorded and none is chosen, so the identity-and-chain checks were not made. Check one: certen status --identity <ref>   (or choose it once: certen use identity <ref>)`);
+    } else if (ctx?.identity && !ctx.chain && ctx.candidates.chain.length > 1) {
+      hint(`This identity is linked to ${ctx.candidates.chain.join(', ')} and none is chosen, so the identity-and-chain checks were not made. Check one: certen status --chain <chain>`);
+    }
+    return [];
+  }
+  const skipped = (why: string): Check[] => (CONTEXT_CHECKS as readonly string[]).map((name) => ({ name, status: 'skipped' as const, detail: why }));
+  if (skip) return skipped(skip);
+
+  let identityId: string;
+  let shown: string;
+  try {
+    const who = await resolveIdentityRef(ctx.identity.value, { client, need: 'id' });
+    identityId = who.id!;
+    shown = who.adi_url ?? identityId;
+  } catch (err) {
+    return [{
+      name: 'context', status: 'warn',
+      detail: `Could not resolve the identity from your context (${ctx.identity.value}): ${err instanceof Error ? err.message : String(err)}`,
+      fix: 'Choose one: certen use identity <ref>',
+    }];
+  }
+  // Said on stderr, as everywhere a default the person did not type is used.
+  echoFromContext('identity', ctx.identity, shown);
+  echoFromContext('chain', ctx.chain);
+
+  const key = signingKeyCheck({ name: ctx.key?.value, candidates: ctx.candidates.key });
+  // A misconfigured CERTEN_ENABLED_CHAINS is a usage error everywhere else; here it must not stop the diagnosis that exists to find such things.
+  let configuredChains: string[] | undefined;
+  try { configuredChains = enabledChains(); } catch { configuredChains = undefined; }
+  const r = await client.readiness({
+    identityId, chain: ctx.chain.value, keyHash: key.keyHash, scope: 'context', configuredChains, registry,
+  });
+  return localizeReadiness(r.checks, { chain: ctx.chain.value, identityId, portalUrl: getPortalUrl(), keyName: ctx.key?.value }).map(asDoctorCheck);
+}
+
 export function registerDoctorCommands(program: Command): void {
   program
     .command('doctor')
     .description('Diagnose the setup and name the one thing blocking you')
     .option('--all', 'Show every check, not just the first problem')
-    .action(async (opts: { all?: boolean }) => {
+    .option('--identity <ref>', 'Also check this identity: UUID, ADI URL or name (default: your context, see `certen context`)')
+    .option('--chain <chain>', 'Also check this chain (default: your context)')
+    .option('--sign-with <key>', 'Local key the key page must hold (default: your context key, or your only key)')
+    .action(async (opts: { all?: boolean; identity?: string; chain?: string; signWith?: string }) => {
       const apiUrl = getApiUrl();
-      const chainHint = 'base-sepolia';
+      const ctx = readContext(opts);
+      const chainHint = chainHintOf(ctx);
 
       // ── the credential, resolved from THIS machine ────────────────────────────────────────────
       // The SDK is handed a key; only the CLI knows whether one is configured at all, and "no key"
@@ -91,7 +191,7 @@ export function registerDoctorCommands(program: Command): void {
       }
 
       const client = new CertenClient({ apiKey: apiKey ?? 'public', baseUrl: apiUrl });
-      const report = await client.doctor();
+      const report = await client.doctor({ includeRegistry: true });
       const checks: Check[] = report.checks.map((c) => localizeFix(c, chainHint, apiUrl));
 
       // The SDK probed with a placeholder key, so its verdict on a machine with no key at all is
@@ -130,6 +230,17 @@ export function registerDoctorCommands(program: Command): void {
       // identity checks below are only meaningful once both do.
       const afterKey = checks.findIndex((c) => c.name === 'api key') + 1;
       checks.splice(afterKey, 0, localCheck);
+
+      // ── the identity and chain in the context ─────────────────────────────────────────────────
+      // Everything above is organization-wide ("some identity can sign"). This is the question asked just before sending: THIS identity,
+      // on THIS chain, with THIS key. Only when a context exists to name them; skipped, not omitted, when they cannot be evaluated.
+      const credentialFailed = checks.find((c) => c.name === 'api key')?.status === 'fail';
+      checks.push(...await contextChecks({
+        client,
+        ctx,
+        skip: report.unreachable ? 'gateway unreachable' : keyMissing || credentialFailed ? 'needs a working API key' : undefined,
+        registry: report.registry,
+      }));
 
       const failed = checks.filter((c) => c.status === 'fail');
       const warned = checks.filter((c) => c.status === 'warn');
@@ -177,7 +288,17 @@ export function registerDoctorCommands(program: Command): void {
           human('');
           human('  Everything checks out.');
           human('');
-          hint('Next: certen call --identity <id> --chain base-sepolia --to <addr> --fn \'f()\' --sign-with <key> --wait');
+          // Only what the context does not already supply is left for the person to type. The chain is always spelled out: a chain that
+          // came from a default is refused for a command that moves value unless it is a known testnet, and a hint must work as printed.
+          const parts = [
+            'certen call',
+            ctx?.identity ? '' : '--identity <id>',
+            `--chain ${chainHint}`,
+            '--to <addr> --fn \'f()\'',
+            ctx?.key ? '' : '--sign-with <key>',
+            '--wait',
+          ].filter(Boolean);
+          hint(`Next: ${parts.join(' ')}`);
         }
       }
 

@@ -23,6 +23,7 @@ import { OAuthClientsResource } from './resources/oauth-clients.js';
 import { RegistrationTokensResource } from './resources/registration-tokens.js';
 import { fetchOAuthToken } from './oauth.js';
 import { runDoctor, type DoctorReport } from './doctor.js';
+import { runReadiness, type Readiness, type ReadinessParams } from './readiness.js';
 import type { CertenClientOptions,
   MeResponse,
   OAuthTokens,
@@ -223,8 +224,22 @@ export class CertenClient {
     return this.minting;
   }
 
-  doctor(): Promise<DoctorReport> {
-    return runDoctor(this);
+  doctor(options: { includeRegistry?: boolean } = {}): Promise<DoctorReport> {
+    return runDoctor(this, options);
+  }
+
+  /**
+   * Is this identity, on this chain, able to act right now - and if not, what is the first thing in the way?
+   *
+   * Where `doctor()` answers organization-wide questions, this answers the one asked just before sending: the gateway, the credential, the
+   * identity, the chain, the key page (read from Accumulate as well as from the gateway), the key page's credits, the organization's
+   * balance, and the gas on the abstract account against the amount about to move. Ordered by dependency; `ready` only when every
+   * check is `ok` or `warn`. An answer that could not be had is `unknown`, never `ok`.
+   *
+   * Never throws for a failed check. See readiness.ts.
+   */
+  readiness(params: ReadinessParams): Promise<Readiness> {
+    return runReadiness(this, params);
   }
 
   constructor(options: CertenClientOptions & {

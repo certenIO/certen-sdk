@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
-import { CertenClient, CertenUnfundedAccountError, CertenFundingUnverifiableError } from '../src/index.js';
+import { CertenClient, CertenUnfundedAccountError, CertenUnderfundedAccountError, CertenFundingUnverifiableError } from '../src/index.js';
 import { honestIntent } from './helpers/honest-gateway.js';
 
 /**
@@ -112,7 +112,7 @@ describe('the funding guard refuses before anything is submitted', () => {
   });
 
   it('allows the transfer when the account has a balance', async () => {
-    const g = await gateway(opened((e) => (e.path === '/v1/portfolio' ? { body: portfolio('ethereum-sepolia', '1000') } : null)));
+    const g = await gateway(opened((e) => (e.path === '/v1/portfolio' ? { body: portfolio('ethereum-sepolia', '100000') } : null)));
     try {
       const out = await client(g.url).execute.transfer(TRANSFER);
       expect(out.intentId).toBe('intent-1');
@@ -314,7 +314,7 @@ describe('the funding guard reads each chain\'s OWN gas token (it used to look o
   });
 
   it('allows a funded TEL account on 2017', async () => {
-    const g = await gateway(onPortfolio(portfolioWith('telcoin-adiri', 'TEL', '2.5')));
+    const g = await gateway(onPortfolio(portfolioWith('telcoin-adiri', 'TEL', '100000')));
     try {
       expect((await client(g.url).execute.transfer(TO_ADIRI)).intentId).toBe('intent-1');
     } finally { g.close(); }
@@ -371,10 +371,88 @@ describe('the funding guard reads each chain\'s OWN gas token (it used to look o
       try {
         await expect(client(empty.url).execute.transfer({ ...TRANSFER, toChain })).rejects.toBeInstanceOf(CertenUnfundedAccountError);
       } finally { empty.close(); }
-      const funded = await gateway(onPortfolio(portfolioWith(chainId, 'ETH', '1')));
+      const funded = await gateway(onPortfolio(portfolioWith(chainId, 'ETH', '100000')));
       try {
         expect((await client(funded.url).execute.transfer({ ...TRANSFER, toChain })).intentId).toBe('intent-1');
       } finally { funded.close(); }
     }
+  });
+});
+
+// ── amount + gas, not only zero ─────────────────────────────────────────────────────────────────
+
+describe('the funding guard compares the balance with what is being moved', () => {
+  const ON_BASE = { ...TRANSFER, toChain: 'base-sepolia', amount: '0.001' };
+
+  it('refuses a positive balance that cannot cover the amount, as a fact, and opens no intent', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('base-sepolia', 'ETH', '0.0004')));
+    try {
+      const err = await client(g.url).execute.transfer(ON_BASE).catch((e: unknown) => e as CertenUnderfundedAccountError);
+      expect(err).toBeInstanceOf(CertenUnderfundedAccountError);
+      expect(err).toMatchObject({ code: 'ABSTRACT_ACCOUNT_UNDERFUNDED', kind: 'amount', balance: '0.0004', address: '0xAbs', chain: 'base-sepolia' });
+      expect(err.isRetryable).toBe(false);
+      expect(g.seen.some((e) => e.path === '/v1/transaction')).toBe(false);
+    } finally { g.close(); }
+  });
+
+  it('refuses a balance that covers the amount but not the amount plus the gas estimate, and says the gas share is an estimate', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('base-sepolia', 'ETH', '0.001')));
+    try {
+      const err = await client(g.url).execute.transfer(ON_BASE).catch((e: unknown) => e as CertenUnderfundedAccountError);
+      expect(err).toBeInstanceOf(CertenUnderfundedAccountError);
+      expect(err).toMatchObject({ kind: 'gas', needed: '0.0011' });
+      expect(err.message).toMatch(/estimate, not a quote/);
+    } finally { g.close(); }
+  });
+
+  it('allows a balance that covers both', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('base-sepolia', 'ETH', '0.0021')));
+    try {
+      expect((await client(g.url).execute.transfer(ON_BASE)).intentId).toBe('intent-1');
+    } finally { g.close(); }
+  });
+
+  it('does not count a token transfer\'s amount against the native balance: the guard lets it through to the gateway', async () => {
+    // The signing check refuses a token transfer (its contract and decimals are chosen downstream), so the request is stopped at the
+    // gateway here. What is pinned is that the FUNDING GUARD did not stop it first: 5000 USDC is not 5000 ETH.
+    const g = await gateway(opened((e) => {
+      if (e.path === '/v1/portfolio') return { body: portfolioWith('base-sepolia', 'ETH', '0.01') };
+      if (e.path === '/v1/transaction') return { status: 400, body: { code: 'BAD_REQUEST', error: 'stop here' } };
+      return null;
+    }));
+    try {
+      const err = await client(g.url).execute.transfer({ ...ON_BASE, amount: '5000', tokenSymbol: 'USDC' }).catch((e: unknown) => e);
+      expect(err).not.toBeInstanceOf(CertenUnderfundedAccountError);
+      expect(g.seen.some((e) => e.path === '/v1/transaction')).toBe(true);
+    } finally { g.close(); }
+  });
+
+  it('compares a contract call\'s value in wei, not as whole units', async () => {
+    const call = (value: string) => ({
+      identityId: 'id-1', adiUrl: 'acc://org.acme', fromAddress: '0xAbs', chain: 'base-sepolia', chainId: 84532,
+      contractCall: { target: `0x${'be'.repeat(20)}`, functionSignature: 'f()', args: [], value },
+      publicKey: PUBKEY, sign: (h: string) => `signed:${h}`,
+    });
+    const g = await gateway(onPortfolio(portfolioWith('base-sepolia', 'ETH', '0.001')));
+    try {
+      // 0.005 ETH in wei against a 0.001 ETH balance.
+      await expect(client(g.url).execute.contractCall(call('5000000000000000'))).rejects.toBeInstanceOf(CertenUnderfundedAccountError);
+      // A call that forwards nothing is not a value transfer and is not judged.
+      expect(g.seen.some((e) => e.path === '/v1/transaction')).toBe(false);
+    } finally { g.close(); }
+  });
+
+  it('skipFundingCheck still bypasses it, deliberately', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('base-sepolia', 'ETH', '0.0004')));
+    try {
+      expect((await client(g.url).execute.transfer({ ...ON_BASE, skipFundingCheck: true })).intentId).toBe('intent-1');
+    } finally { g.close(); }
+  });
+
+  it('is still not a gate on a balance it cannot read: unavailable is named, not treated as short', async () => {
+    const g = await gateway(onPortfolio(portfolioWith('base-sepolia', '', 'unavailable')));
+    try {
+      await expect(client(g.url).execute.transfer(ON_BASE)).rejects.toBeInstanceOf(CertenFundingUnverifiableError);
+    } finally { g.close(); }
   });
 });

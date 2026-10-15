@@ -47,6 +47,7 @@ Adiri testnet, whose gas is TEL rather than ETH; use it only when the owner asks
 certen keys generate --name agent --no-passphrase        # an Ed25519 key that never leaves this machine
 certen signup --with-key agent --org-name <owner>-<handle> --no-keyring --json
 certen doctor --json                                     # names the one thing blocking you, if any
+certen status --json                                     # is this identity, on this chain, with this key, ready? exit 0 only when it is
 ```
 
 `signup` proves you hold the key and returns an organization with a $10 trial. It prints only the
