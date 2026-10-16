@@ -284,15 +284,33 @@ function decryptPrivateKey(k: StoredKey, passphrase: string | null): Buffer {
  * once rather than in every caller.
  */
 export function signHash(name: string, passphrase: string | null, hashHex: string): string {
+  const bytes = hashBytes(hashHex);
+  const k = readKeyFile(name);
+  const pkcs8 = decryptPrivateKey(k, passphrase);
+  const privateKey = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
+  const sig = edSign(null, bytes, privateKey);
+  return sig.toString('hex');
+}
+
+function hashBytes(hashHex: string): Buffer {
   const clean = hashHex.trim().toLowerCase().replace(/^0x/, '');
   if (!/^[0-9a-f]+$/.test(clean) || clean.length % 2 !== 0) {
     throw new Error(`--hash must be an even-length hex string, got "${hashHex}".`);
   }
-  const k = readKeyFile(name);
-  const pkcs8 = decryptPrivateKey(k, passphrase);
-  const privateKey = createPrivateKey({ key: pkcs8, format: 'der', type: 'pkcs8' });
-  const sig = edSign(null, Buffer.from(clean, 'hex'), privateKey);
-  return sig.toString('hex');
+  return Buffer.from(clean, 'hex');
+}
+
+/**
+ * Unlock a key ONCE, now, and sign with it as often as needed.
+ *
+ * `signHash` derives the file key and decrypts on every call, which is ~1 second of scrypt each time and, worse, means a WRONG passphrase is
+ * only discovered at the moment of signing: after the intent has been opened and after a person has read the card and said yes. Unlocking
+ * when the key is opened puts that failure where it costs nothing (before any intent exists), and spares the second derivation. The
+ * decrypted key lives in this closure only, as the passphrase already did.
+ */
+export function unlockKey(name: string, passphrase: string | null): { sign: (hashHex: string) => string } {
+  const privateKey = createPrivateKey({ key: decryptPrivateKey(readKeyFile(name), passphrase), format: 'der', type: 'pkcs8' });
+  return { sign: (hashHex) => edSign(null, hashBytes(hashHex), privateKey).toString('hex') };
 }
 
 /**
