@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import type { Command } from 'commander';
-import { CertenClient, CertenError, fetchSharedProof, decodeSharedBundle, executionComponentOf, verifyExecutionProof, type ChainReceipt } from '@certen.io/sdk';
-import { verifyBundle, loadProofEvidence, bundleInputOf, type BundleVerification } from '@certen.io/sdk/verify';
+import { CertenClient, CertenError, fetchSharedProof, decodeSharedBundle, type ChainReceipt } from '@certen.io/sdk';
+import { verifyEvidence, loadProofEvidence, type BundleVerification } from '@certen.io/sdk/verify';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -116,25 +116,22 @@ export function registerProofVerify(proof: Command): void {
         ({ bundle, portable, notServed, gateway, bundleError } = loaded);
       }
 
-      // The outcome layer compares the receipts root with a header from the caller's own RPC, so the header is fetched first.
+      // The outcome layer compares the receipts root with a header from the caller's own RPC. Fetching it and comparing is the SDK's
+      // (`verifyEvidence`), the same code `send`, `watch` and `receipt` use, so they cannot disagree about what a header check means.
       let expect: { address?: string; topic0?: string; topic1?: string } | undefined;
       if (opts.expect) {
         const [address, topic0, topic1] = opts.expect.split(':');
         expect = { address: address || undefined, topic0: topic0 || undefined, topic1: topic1 || undefined };
       }
-      const component = bundle ? executionComponentOf(bundle) : null;
-      let header: { hash?: string; receiptsRoot?: string; number?: string } | undefined;
-      if (opts.rpc && component) {
-        const first = verifyExecutionProof(component, expect);
-        if (first.ok) {
-          const res = await fetch(opts.rpc, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBlockByNumber', params: ['0x' + first.blockNumber.toString(16), false] }) });
-          const j = (await res.json()) as { result?: { hash?: string; receiptsRoot?: string; number?: string } };
-          header = j.result ?? { number: '0x' + first.blockNumber.toString(16) }; // a missing block fails the comparison below
-        }
+      let v;
+      try {
+        v = await verifyEvidence({ bundle, portable }, { rpc: opts.rpc, expect, expectGovRoot: opts.govroot });
+      } catch (err) {
+        // A node that was named and cannot answer for this block (unreachable, or without the block) is not a verdict: an independent check
+        // that was asked for and not made must not come back looking like one that passed. The URL is never repeated, it can carry a key.
+        if (err instanceof CertenError && err.code.startsWith('EVM_RPC_')) throw new CliError(err.message.replace(/^certen: /, ''), err.code, EXIT.FAILED);
+        throw err;
       }
-
-      const input = bundleInputOf({ bundle, portable });
-      const v = verifyBundle(input, { expect, header, expectGovRoot: opts.govroot });
 
       if (isJsonMode()) {
         const { report: _report, ...rest } = v;

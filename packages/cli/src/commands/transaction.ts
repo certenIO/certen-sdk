@@ -1,9 +1,11 @@
 import { Command, Option } from 'commander';
-import { checkIntentSigning, inspectSigningData, type IdentityResponse } from '@certen.io/sdk';
+import { checkIntentSigning, inspectSigningData, estimateFee, type IdentityResponse } from '@certen.io/sdk';
 import { readFileSync } from 'node:fs';
 import { CertenClient, intentOutcome } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
+import { confirmBeforeSigning, contextValues } from '../card.js';
+import { commandPrompter } from '../prompt.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain } from '../chains.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -127,6 +129,7 @@ export function registerTransactionCommands(program: Command): void {
     .option('--timeout <duration>', `How long to wait (90s, 6m, 1h; a bare number is minutes. Default ${TX_WAIT.timeoutMin}m)`)
     .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${TX_WAIT.intervalSec}s)`)
     .option('--force', 'Submit even if the abstract account has no gas to execute with')
+    .option('--yes', 'Say yes to the confirmation in advance (it is only asked at a terminal, with --sign-with). The check of what is signed is never skipped')
     .option('--authority <acc-url>', AUTHORITY_HELP, collect)
     .option('--expires-in <duration>', EXPIRES_IN_HELP)
     .addHelpText('after', HEADER_FIELDS_HELP)
@@ -295,7 +298,27 @@ export function registerTransactionCommands(program: Command): void {
         additionalAuthorities,
         expiresAt: parseExpiresIn(opts.expiresIn),
       });
-      hint(summary.text.join('\n'));
+
+      // A person reads what was rebuilt, and says yes, before the signature. Piped, or with --yes or --json, the card is shown and it goes on.
+      const prompter = commandPrompter();
+      const asked = intent as { toAddress?: unknown; amount?: unknown; tokenSymbol?: unknown };
+      await confirmBeforeSigning({
+        headline: asked.toAddress !== undefined && asked.amount !== undefined
+          ? `Send ${String(asked.amount)} ${String(asked.tokenSymbol ?? '')} on ${executionChain ?? 'the destination chain'}`.replace(/ +/g, ' ')
+          : 'Open and sign this intent',
+        rows: [
+          ...(typeof asked.toAddress === 'string' ? [['to', asked.toAddress] as [string, string]] : []),
+          ...(fromAddress ? [['from', fromAddress] as [string, string]] : []),
+        ],
+        chain: executionChain,
+        fee: !opts.yes && !isJsonMode() && prompter.interactive && executionChain ? await estimateFee(client, executionChain) : undefined,
+        summary,
+        keyName: opts.signWith,
+        fromContext: contextValues([
+          { field: 'identity', resolved: ctx.identity, shown: adiUrl },
+          ...(chainFrom ? [{ field: 'chain' as const, resolved: chainFrom, shown: executionChain ?? chainFrom.value }] : []),
+        ]),
+      }, { yes: opts.yes, intentId });
 
       const signed = await client.transaction.submitSignature(intentId, {
         signature: signer.sign(hash),

@@ -1,7 +1,12 @@
 import { Command, Option } from 'commander';
-import { CertenClient } from '@certen.io/sdk';
+import { CertenClient, estimateFee, type TransactionResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
+import { confirmBeforeSigning, contextValues } from '../card.js';
+import { commandPrompter } from '../prompt.js';
+import { followIntent } from '../receipt-flow.js';
+import { parseExpectEvent } from '../flag-parsers.js';
+import { renderReceipt } from '../receipt-render.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain, chainIdFor } from '../chains.js';
@@ -62,6 +67,8 @@ export function registerCallCommands(program: Command): void {
     .option('--timeout <duration>', `How long to wait (90s, 6m, 1h; a bare number is minutes. Default ${TX_WAIT.timeoutMin}m)`)
     .option('--poll-interval <interval>', `How often to check (2s, 1m; a bare number is seconds. Default ${TX_WAIT.intervalSec}s)`)
     .option('--force', 'Submit even if the abstract account has no gas to execute with')
+    .option('--yes', 'Say yes to the confirmation in advance (it is only asked at a terminal). The check of what is signed is never skipped')
+    .option('--expect <address:topic0[:topic1]>', 'An event the execution receipt must contain, checked when the call completes (with --wait): contract address and event topic, optionally the first indexed argument. The exit code is then the receipt\'s')
     .option('--authority <acc-url>', AUTHORITY_HELP, collect)
     .option('--expires-in <duration>', EXPIRES_IN_HELP)
     .addHelpText('after', HEADER_FIELDS_HELP)
@@ -69,7 +76,7 @@ export function registerCallCommands(program: Command): void {
       identity?: string; chain?: string; to: string; fn: string; arg?: string[]; value: string;
       signWith?: string; signerKeyPage?: string; proofClass?: 'on_demand' | 'on_cadence';
       from?: string; adiUrl?: string; chainId?: number; idempotencyKey?: string;
-      dryRun?: boolean; timeout?: string; pollInterval?: string; force?: boolean;
+      dryRun?: boolean; timeout?: string; pollInterval?: string; force?: boolean; yes?: boolean; expect?: string;
       authority?: string[]; expiresIn?: string;
     }) => {
       // Everything checkable without the network is checked first, so a typo costs a message
@@ -90,6 +97,15 @@ export function registerCallCommands(program: Command): void {
       parseExpiresIn(opts.expiresIn);
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
+      // Checked now, before any request: a malformed event would otherwise be reported as an event missing from the receipt.
+      const expectEvent = parseExpectEvent(opts.expect);
+      if (expectEvent !== undefined && !wait) {
+        throw new UsageError(
+          '--expect is checked when the call completes, so it needs the wait: add --wait (it is on by default at a terminal, and off with --json or --no-wait). '
+          + 'Or check later: certen receipt <intent> --expect <address:topic0>',
+          'EXPECT_NEEDS_WAIT',
+        );
+      }
 
       if (!/^0x[0-9a-fA-F]{40}$/.test(opts.to)) {
         throw new UsageError(
@@ -206,6 +222,11 @@ export function registerCallCommands(program: Command): void {
 
       const signer = await resolveSigner(keyFrom.value);
 
+      // The fee is on the card only where a person will read it: it is one more request, and a script that has always run unattended does not
+      // pay for it. The card itself is always shown; it is the question that is only asked at a terminal.
+      const prompter = commandPrompter();
+      const fee = !opts.yes && !isJsonMode() && prompter.interactive ? await estimateFee(client, chain) : undefined;
+
       const opened = await client.execute.contractCall({
         identityId: who.id!,
         adiUrl,
@@ -223,8 +244,23 @@ export function registerCallCommands(program: Command): void {
         additionalAuthorities,
         // After the prompt and the funding check, so the deadline is now + duration at submission.
         expiresAt: parseExpiresIn(opts.expiresIn),
-        // The SDK has rebuilt the transaction and matched it to this request by the time this runs; a person reads it before the signature.
-        beforeSign: (summary) => { hint(summary.text.join('\n')); },
+        // The SDK has rebuilt the transaction and matched it to this request by the time this runs; a person reads it, and says yes, before the
+        // signature. Piped, or with --yes or --json, the card is shown and the call goes on, as it always has.
+        beforeSign: (summary) => confirmBeforeSigning({
+          headline: `Call ${contractCall.functionSignature} on ${chain}`,
+          rows: [
+            ['contract', opts.to],
+            ['args', args.length > 0 ? args.map(String).join(', ') : '(none)'],
+            ['value', `${opts.value} wei`],
+            ['from', `${adiUrl}  ->  ${fromAddress} (abstract account on ${chain})`],
+          ],
+          chain, fee, summary, keyName: keyFrom.value,
+          fromContext: contextValues([
+            { field: 'identity', resolved: ctx.identity, shown: adiUrl },
+            { field: 'chain', resolved: ctx.chain, shown: chain },
+            { field: 'key', resolved: ctx.key, shown: keyFrom.value },
+          ]),
+        }, { yes: opts.yes, intentId: summary.intentId }),
         sign: (hashHex) => signer.sign(hashHex),
         // The SDK runs the same guard. It is skipped here because the check above already ran and
         // produces the better refusal — it names the faucet for this chain and the --force flag —
@@ -240,14 +276,52 @@ export function registerCallCommands(program: Command): void {
       }
 
       const final = withOutcomeFields(await waitForTransaction(client, opened.intentId, budget));
-      printOutput(final);
 
-      if (isJsonMode()) return;
+      // The receipt: the ids to keep, whether the proof holds HERE, and what is not established, saved to ~/.certen/receipts.
+      //  - At a terminal it is always built, and a call that has always returned what it returned keeps doing so (a receipt is a second look).
+      //  - In `--json` it is built ONLY when `--expect` names an event the receipt must contain: asking for that check is asking for its answer,
+      //    so the envelope gains `receipt` and `receipt_path` (additive) and the exit code is the receipt's. Without `--expect`, `--json` is
+      //    exactly what it was (its envelope is the transaction; `certen receipt <id> --json` is the receipt).
+      let followed: Awaited<ReturnType<typeof followIntent>> | undefined;
+      let receiptError: string | undefined;
+      if (!isJsonMode() || expectEvent !== undefined) {
+        try {
+          followed = await followIntent({
+            client, intentId: opened.intentId, gateway: getApiUrl(), wait: false, budget, transaction: final as unknown as TransactionResponse,
+            request: {
+              kind: 'contract_call', chain, chain_id: chainId ?? null, identity_id: who.id!, adi_url: adiUrl, from: fromAddress, to: opts.to,
+              amount: null, asset: null,
+              contract_call: { target: opts.to, function_signature: contractCall.functionSignature, value_wei: opts.value },
+            },
+            signedWith: { key: keyFrom.value, public_key_hash: signer.publicKeyHash },
+            expect: expectEvent,
+            resumeCommand: `certen watch ${opened.intentId}`,
+          });
+        } catch (err) {
+          // Someone who asked for a check and did not get it must be told by the exit code; one who did not ask is told in a line.
+          if (expectEvent !== undefined) throw err;
+          receiptError = err instanceof Error ? err.message.replace(/^certen: /, '') : String(err);
+        }
+      }
+
+      printOutput(isJsonMode() && followed ? { ...final, receipt: followed.receipt, receipt_path: followed.path } : final);
+      if (isJsonMode()) {
+        if (followed) process.exitCode = followed.exitCode;
+        return;
+      }
       const status = String(final.status ?? '');
       human('');
       human(`  Intent ${opened.intentId} is ${status}.`);
       emitOutcomeHints(final);
       hint('');
       hint(`Next: certen proof get ${opened.intentId}`);
+
+      if (followed) {
+        renderReceipt(followed.receipt, { savedTo: followed.path ?? undefined });
+        if (expectEvent !== undefined) process.exitCode = followed.exitCode;
+      } else if (receiptError) {
+        // The call itself succeeded and was reported above. A receipt that could not be built is a second look that failed, not a failed call.
+        hint(`  The receipt could not be built (${receiptError}). The call is unaffected; try: certen receipt ${opened.intentId}`);
+      }
     });
 }

@@ -6,6 +6,7 @@ import { resolveSignature, resolveSigner } from '../signer.js';
 import { UsageError } from '../errors.js';
 import { resolveContext, requireIdentity, echoFromContext } from '../context.js';
 import { filterIdentity, resolveIdentityRef } from '../identity-ref.js';
+import { confirmBeforeSigning, contextValues } from '../card.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -88,6 +89,7 @@ export function registerPendingCommands(program: Command): void {
     // `abstain`; `accept` is rejected. The help text was sending people to a value that fails.
     .option('--vote <vote>', 'Vote: approve | reject | abstain')
     .option('--sign-with <key>', 'Local key (the one for --public-key): rebuild the transaction, check it, show it, then sign and submit in one step. Transaction hashes only')
+    .option('--yes', 'Say yes to the confirmation in advance (it is only asked at a terminal, with --sign-with). The check of what is signed is never skipped')
     .action(async (rawTarget: string, opts) => {
       // Inferred from the argument, not from a flag: an inbox id is a UUID and a transaction is a
       // 64-hex hash, so the two are disjoint and a --type flag would only be a new way to get it
@@ -181,7 +183,18 @@ export function registerPendingCommands(program: Command): void {
         unchecked = { code: err.code, message: err.message };
         hint(`WARNING: the signing data was NOT checked (${err.code}). Do not sign the hash below elsewhere: ${err.message}`);
       }
-      if (summary) hint(summary.text.join(String.fromCharCode(10)));
+      if (summary && signer) {
+        // A person reads what was rebuilt, and says yes, before the signature. Piped, or with --yes or --json, the card is shown and it goes on.
+        await confirmBeforeSigning({
+          headline: `Cast a vote (${opts.vote ?? 'approve'}) on pending transaction ${target.targetId}`,
+          rows: [['as', String(opts.signerUrl)]],
+          summary,
+          keyName: opts.signWith,
+          fromContext: contextValues([{ field: 'identity', resolved: ctx?.identity, shown: ctx?.identity?.value ?? '' }]),
+        }, { yes: opts.yes });
+      } else if (summary) {
+        hint(summary.text.join(String.fromCharCode(10)));
+      }
 
       if (signer) {
         const r = result as unknown as { sign_request_id: string; signing_data: { data_for_signature: string } };
