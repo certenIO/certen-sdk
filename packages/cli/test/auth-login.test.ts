@@ -214,7 +214,8 @@ describe('next step', () => {
     });
     try {
       const r = await certen(['auth', 'login', '--api-key', 'ck_live_good', '--no-keyring'], stub.url);
-      expect(r.stderr).toContain('certen keys generate');
+      // After a credential is saved the next thing is a key and an identity, and `setup` makes both (and skips the credential it just got).
+      expect(r.stderr).toContain('Next: certen setup');
     } finally {
       await stub.close();
     }

@@ -155,7 +155,7 @@ export function registerAuthCommands(program: Command): void {
         hint('Tip: `--api-key -` reads the key from stdin, which keeps it out of your shell history.');
       }
       hint('');
-      hint('Next: certen keys generate --name dev');
+      hint('Next: certen setup   (makes your signing key and identity, checks gas, and saves your defaults)');
     });
 
   auth

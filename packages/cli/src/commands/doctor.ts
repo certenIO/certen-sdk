@@ -293,13 +293,13 @@ export function registerDoctorCommands(program: Command): void {
           human('');
           // Only what the context does not already supply is left for the person to type. The chain is always spelled out: a chain that
           // came from a default is refused for a command that moves value unless it is a known testnet, and a hint must work as printed.
+          // `send` is the first thing to do with a working setup (a contract call is the second, and `certen call --help` is one command away).
           const parts = [
-            'certen call',
+            'certen send <amount> <asset>',
             ctx?.identity ? '' : '--identity <id>',
             `--chain ${chainHint}`,
-            '--to <addr> --fn \'f()\'',
+            '--to <addr>',
             ctx?.key ? '' : '--sign-with <key>',
-            '--wait',
           ].filter(Boolean);
           hint(`Next: ${parts.join(' ')}`);
         }

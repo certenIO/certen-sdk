@@ -218,7 +218,7 @@ export function registerIdentityCommands(program: Command): void {
       }
 
       hint('');
-      hint(`Next: certen tx create --identity ${identity.id} --to-chain <chain> --to <addr> --amount <n> --sign-with <key>`);
+      hint(`Next: certen status --identity ${identity.id}   (then: certen send <amount> <asset> --to <addr> --identity ${identity.id})`);
     });
 
   identity
@@ -286,7 +286,7 @@ export function registerIdentityCommands(program: Command): void {
       // of a printed blob is exactly the step people skip. State the conclusion.
       if (identity.can_sign === true) {
         hint('');
-        hint(`Ready. Next: certen tx create --identity ${identity.id} --to-chain <chain> --to <addr> --amount <n> --sign-with <key>`);
+        hint(`Ready to sign. Next: certen status --identity ${identity.id}   (checks gas and the key page too; then: certen send <amount> <asset> --to <addr> --identity ${identity.id})`);
       } else if (identity.can_sign === false) {
         hint('');
         hint('This identity CANNOT sign — its key page is not held by your key. It will fail at the');

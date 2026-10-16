@@ -250,7 +250,9 @@ describe('identity create --wait', () => {
       expect(all).toContain('0xAbstract');
       // The address alone is not the point — that it is msg.sender and starts empty is.
       expect(all).toContain('msg.sender');
-      expect(all).toContain('certen tx create');
+      // The way on is the readiness check and then `send`, which is what a first transaction is now.
+      expect(all).toContain('certen status --identity');
+      expect(all).toContain('certen send <amount> <asset>');
     } finally {
       await stub.close();
     }
