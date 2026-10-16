@@ -135,7 +135,9 @@ receipt.ids;      // intent, Accumulate tx, destination tx (from the verified pr
 ```
 
 `verified` needs the proof to verify **and** the value to have arrived. The proof's execution layer stays unchecked until the receipts root is compared with a header from a node you named, so without
-`rpc` a receipt is `partial` and says which layer. A proof that could not be fetched is `unavailable` (not "no evidence"), a recipient that could not be read is `unreadable`, and neither is ever turned
+`rpc` a receipt is `partial` and says which layer. When the process must not call a node itself (a server an agent drives), fetch the block header from your own node and pass it as `header:
+{ receiptsRoot, hash?, number? }` instead: it closes the same layer, cannot read the recipient (so a transfer stays `partial`), is refused with `INVALID_HEADER` if it has no `receiptsRoot` (a header
+with nothing to compare is not a comparison), and cannot be combined with `rpc`. `@certen.io/mcp`'s `certen_receipt` is this call. A proof that could not be fetched is `unavailable` (not "no evidence"), a recipient that could not be read is `unreadable`, and neither is ever turned
 into a pass. `rpc` is yours: no CERTEN credential is sent to it, no redirect is followed, and its URL (which can carry a key) is never put in a message or the receipt, only its host.
 
 ## What it does for you

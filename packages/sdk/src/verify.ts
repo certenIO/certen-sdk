@@ -231,7 +231,66 @@ export function bundleInputOf(e: Pick<LoadedEvidence, 'bundle' | 'portable'>): u
 
 // ── checking loaded evidence ────────────────────────────────────────────────────────────────────────
 
+/** A block header that is a real comparison: it carries the receipts root the proof commits to. */
+export interface ComparableHeader {
+  /** 0x-prefixed, 32 bytes. */
+  receiptsRoot: string;
+  /** 0x-prefixed, 32 bytes. */
+  hash?: string;
+  /** Hex (`0x2c4a0b7`) or decimal, as a string: the form a node sends it in, normalised so the verifier reads one type. */
+  number?: string;
+}
+
+const HEX32 = /^0x[0-9a-fA-F]{64}$/;
+const HEX_QUANTITY = /^0x[0-9a-fA-F]+$/;
+const DECIMAL = /^\d+$/;
+
+/**
+ * Check a block header a CALLER hands in (it fetched it from its own node), and keep only what is compared.
+ *
+ * `verifyBundle` compares whatever fields the header has and finds no disagreement in the ones it lacks, so `{}` - or a bare block number,
+ * which the bundle itself supplied - is "a comparison" that compared nothing, and the execution layer read VERIFIED. A header is a
+ * comparison only if it carries the receipts root the proof commits to; the hash and the number are checked too when present, and a
+ * malformed one is refused rather than ignored, because half a header is not something to trust the other half of.
+ *
+ * Throws `INVALID_HEADER` (status 0: nothing was sent). The message names the field, never the value.
+ */
+export function assertComparableHeader(header: unknown): ComparableHeader {
+  const bad = (why: string): never => {
+    throw new CertenError(`certen: the block header cannot be compared with the proof: ${why}`, 0, 'INVALID_HEADER');
+  };
+  if (header === null || typeof header !== 'object' || Array.isArray(header)) {
+    return bad('a header is an object { receiptsRoot, hash?, number? } fetched from your own node.');
+  }
+  const h = header as Record<string, unknown>;
+  if (h.receiptsRoot === undefined || h.receiptsRoot === null || h.receiptsRoot === '') {
+    return bad('it has no receiptsRoot, so nothing in it could disagree with the proof (a block number alone is something the bundle already states). Pass the block\'s receiptsRoot.');
+  }
+  if (typeof h.receiptsRoot !== 'string' || !HEX32.test(h.receiptsRoot)) {
+    return bad('receiptsRoot is not 32 bytes of 0x-prefixed hex.');
+  }
+  const out: ComparableHeader = { receiptsRoot: h.receiptsRoot };
+  if (h.hash !== undefined && h.hash !== null) {
+    if (typeof h.hash !== 'string' || !HEX32.test(h.hash)) return bad('hash is not 32 bytes of 0x-prefixed hex.');
+    out.hash = h.hash;
+  }
+  if (h.number !== undefined && h.number !== null) {
+    const n = h.number;
+    const text = typeof n === 'number' ? String(n) : n;
+    const ok = typeof text === 'string' && (HEX_QUANTITY.test(text) || DECIMAL.test(text)) && Number.isSafeInteger(Number(text));
+    if (!ok) return bad('number is not a non-negative block number (hex such as 0x2c4a0b7, or decimal).');
+    out.number = text as string;
+  }
+  return out;
+}
+
 export interface VerifyEvidenceOptions {
+  /**
+   * A block header you fetched yourself, from a node you trust: the bundle's receipts root and block hash are compared with it. The way to close
+   * the execution layer when this process must not call a node of its own (a server an agent drives). Checked by `assertComparableHeader`. Not
+   * together with `rpc`.
+   */
+  header?: { receiptsRoot?: string; hash?: string; number?: string | number };
   /** A JSON-RPC endpoint of the execution chain you trust: the bundle's receipts root and block hash are compared with the header it returns. */
   rpc?: string;
   /** An event the execution receipt must contain. */
@@ -259,8 +318,14 @@ export async function verifyEvidence(
   evidence: Pick<LoadedEvidence, 'bundle' | 'portable'>,
   options: VerifyEvidenceOptions = {},
 ): Promise<BundleVerification & { nodeConsulted: boolean }> {
+  if (options.header !== undefined && options.rpc) {
+    throw new CertenError('certen: give a block header or a node to fetch one from, not both: which one decided the execution layer would be a guess.', 0, 'CONFLICTING_OPTIONS');
+  }
   const component = evidence.bundle ? executionComponentOf(evidence.bundle) : null;
   let header: { hash?: string; receiptsRoot?: string; number?: string } | undefined;
+  // A header the caller fetched is checked before anything else, so a header that compares nothing fails loudly rather than passing quietly.
+  const supplied = options.header !== undefined ? assertComparableHeader(options.header) : undefined;
+  if (supplied) header = supplied;
   if (options.rpc && component) {
     const first = verifyExecutionProof(component, options.expect);
     if (first.ok) {
@@ -282,7 +347,8 @@ export async function verifyEvidence(
     }
   }
   const v = verifyBundle(bundleInputOf(evidence), { expect: options.expect, header, expectGovRoot: options.expectGovRoot });
-  return Object.assign(v, { nodeConsulted: header !== undefined });
+  // "Consulted" means a header was actually COMPARED: a header handed in for a proof with no execution component compared nothing.
+  return Object.assign(v, { nodeConsulted: header !== undefined && v.headerCheck !== null });
 }
 
 // ── the receipt ─────────────────────────────────────────────────────────────────────────────────────
@@ -301,6 +367,12 @@ export interface BuildReceiptOptions {
   registry?: ChainsListResponse | null;
   /** A node you trust on the execution chain: closes the proof's execution layer, and reads the recipient's balance. */
   rpc?: string;
+  /**
+   * A block header you fetched yourself from a node you trust: closes the proof's execution layer when this process must not call a node (a
+   * server an agent drives). It cannot read the recipient's balance, so a transfer's effect stays `unchecked`. Checked by `assertComparableHeader`;
+   * not together with `rpc`; both are refused before anything is requested.
+   */
+  header?: VerifyEvidenceOptions['header'];
   /** An event the execution receipt must contain. */
   expect?: { address?: string; topic0?: string; topic1?: string };
   /** The recipient's balance taken before signing. */
@@ -324,6 +396,14 @@ export interface BuildReceiptOptions {
  * It reads and verifies; it signs and sends nothing. A proof that cannot be fetched is `unavailable`, which is a gap and not a verdict.
  */
 export async function buildReceipt(client: CertenClient, intentId: string, options: BuildReceiptOptions = {}): Promise<Receipt> {
+  // A header handed in is judged before the first request: a header that compares nothing, or one given beside a node, is a mistake to be
+  // told about, and must not be turned into a "gap" that reads as the node having failed.
+  if (options.header !== undefined) {
+    if (options.rpc) {
+      throw new CertenError('certen: give a block header or a node to fetch one from, not both: which one decided the execution layer would be a guess.', 0, 'CONFLICTING_OPTIONS');
+    }
+    assertComparableHeader(options.header);
+  }
   const transaction = options.transaction ?? (await client.transaction.get(intentId));
   const outcome = intentOutcome(transaction);
   const request = options.request ?? options.previous?.request ?? null;
@@ -348,7 +428,7 @@ export async function buildReceipt(client: CertenClient, intentId: string, optio
     if (evidence) {
       let nodeError: string | null = null;
       try {
-        verification = await verifyEvidence(evidence, { rpc: options.rpc, expect: options.expect, fetch: options.fetch, timeoutMs: options.timeoutMs });
+        verification = await verifyEvidence(evidence, { rpc: options.rpc, header: options.header, expect: options.expect, fetch: options.fetch, timeoutMs: options.timeoutMs });
       } catch (err) {
         // The node was asked for and could not be used. The proof is still checked, without it, and the gap names why.
         if (!(err instanceof CertenError)) throw err;

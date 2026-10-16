@@ -1,5 +1,17 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — a block header you fetched yourself (CLI UX, Phase 6)
+
+Additive. Nothing that works today changes. A maintainer versions and publishes this; the MCP server's `certen_receipt` and the checked `header` of `certen_proof_verify` need it.
+
+### Added
+- **`header` on `verifyEvidence` and `buildReceipt` (`@certen.io/sdk/verify`)**: a block header you fetched from a node you trust, `{ receiptsRoot, hash?, number? }`, compared with the proof's execution layer. It is the way to close that layer when the process must not call a node of its own (a server an agent drives, which must not probe the network it sits in), where `rpc` has the SDK fetch the header itself. It cannot read the recipient's balance, so a transfer's effect stays `unchecked` and the receipt is not `verified`. `header` together with `rpc` is `CONFLICTING_OPTIONS`; in `buildReceipt` both this and a bad header are refused before the first request, so they are never turned into a "gap".
+- **`assertComparableHeader(header)`** and the `ComparableHeader` type: the one check of a header a caller hands in. A header is a comparison only if it carries the receipts root the proof commits to (`0x` + 32 bytes). `hash` and `number` are checked when present, and a malformed one is refused rather than ignored. Throws `INVALID_HEADER` (status 0) naming the field, never the value. Returns only the three fields that are compared, with `number` as a string.
+
+### Fixed
+- **A header with nothing to compare no longer reads as a comparison that passed.** `verifyBundle` compares the fields a header has and finds no disagreement in the ones it lacks, so `{}` (or a bare block number, which the bundle itself states) made the execution layer `verified` with `headerCheck.ok: true`. `verifyEvidence` and `buildReceipt` now refuse it with `INVALID_HEADER`; `verifyBundle` itself is unchanged (it takes whatever it is given: pass it a header through `assertComparableHeader`). This is the same hole the node fallback had before Phase 4 closed it.
+- `verifyEvidence`'s `nodeConsulted` is now true only when a header was actually compared: a header handed in for a proof with no execution component compared nothing and no longer says it did.
+
 ## Unreleased — the error codes the gateway publishes, as a constant (CLI UX, Phase 5)
 
 Additive. Nothing that works today changes. A maintainer versions and publishes this.
