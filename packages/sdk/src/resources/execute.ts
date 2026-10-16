@@ -7,7 +7,10 @@ import { classifyIntentStatus, intentOutcome, type IntentStatusClass } from '../
 import { assertOwnOrigin } from '../origin.js';
 import { headerFieldsBody } from '../header-fields.js';
 import { assertFundedForValue } from '../funding.js';
+import { chainInfo, chainSlug } from '../chains.js';
+import { evmAddressProblem } from '../address.js';
 import { SignResource } from './sign.js';
+import { IdentityResource } from './identity.js';
 import type { ContractAddresses, ContractCall, HeaderFields, ProofClass, TransactionIntent, TransactionResponse } from '../types.js';
 
 /**
@@ -119,6 +122,49 @@ export interface TransferParams extends HeaderFields {
   skipFundingCheck?: boolean;
   /** See ProofGatedCallParams. */
   beforeSign?: BeforeSign;
+}
+
+/**
+ * `send`: a native transfer from an identity, with everything the identity already knows filled in.
+ *
+ * `transfer` wants the ADI and the abstract account written out, and omitting either produced a bodyless 502. A caller holding an identity id
+ * should not have to look both up; `call` has always derived them and `send` is the same idea for a transfer. Everything else is a
+ * `transfer` parameter and means the same thing.
+ */
+export interface SendParams extends HeaderFields {
+  identityId: string;
+  /** The chain the value lands on, e.g. `base-sepolia`. */
+  chain: string;
+  /** The recipient: an EVM address. A mixed-case address whose EIP-55 checksum does not hold is refused. */
+  toAddress: string;
+  /** WHOLE UNITS as a decimal STRING (see `TransferParams.amount`). */
+  amount: string;
+  /**
+   * The asset, when the caller names one. Only the chain's native token can be sent this way: what a token transfer moves (its contract and
+   * decimals) is chosen downstream, so it cannot be checked before signing, and nothing is signed that cannot be checked. Anything else is
+   * refused by name rather than guessed ("ETH" on a chain whose gas is TEL is not sent as TEL).
+   */
+  asset?: string;
+  /** Skip the lookup of the ADI. */
+  adiUrl?: string;
+  /** Skip the lookup of the abstract account (`msg.sender` on the chain). */
+  fromAddress?: string;
+  fromChain?: string;
+  sign: SignFn;
+  publicKey: string;
+  signerPublicKey?: string;
+  signerKeyPage?: string;
+  proofClass?: ProofClass;
+  idempotencyKey?: string;
+  skipFundingCheck?: boolean;
+  beforeSign?: BeforeSign;
+}
+
+/** What `send` opened, with the two values it derived so the caller can show them. */
+export interface SentIntent extends OpenedIntent {
+  adiUrl: string;
+  fromAddress: string;
+  chain: string;
 }
 
 /**
@@ -302,6 +348,71 @@ export class ExecuteResource {
   }
 
   /**
+   * Authorize a native transfer from an identity, deriving the ADI and the abstract account from it.
+   *
+   * Every refusal below happens before the network is touched or, when the identity must be read, before anything is opened or signed:
+   * a recipient that is not an address (or whose checksum fails), an asset that is not the chain's native token, an amount that is zero or
+   * looks like wei, a chain the catalogue does not know. The signature check that follows (`transfer` → `checkIntentSigning`) is not optional.
+   */
+  async send(p: SendParams): Promise<SentIntent> {
+    const info = chainInfo(p.chain);
+    if (!info) {
+      throw new CertenError(`certen: send: "${p.chain}" is not a chain this client knows, so what a transfer there moves cannot be checked before signing.`, 0, 'UNSUPPORTED_CHAIN');
+    }
+    const addressProblem = evmAddressProblem(p.toAddress);
+    if (addressProblem) throw new CertenError(`certen: send: ${addressProblem}`, 0, 'INVALID_ADDRESS');
+    const asset = p.asset?.trim();
+    if (asset && asset.toUpperCase() !== info.nativeSymbol.toUpperCase()) {
+      throw new CertenError(
+        `certen: send: ${info.slug} moves ${info.nativeSymbol}, not ${asset}. Only a chain's native token can be sent this way: what a token transfer moves `
+        + '(the token contract and its decimals) is chosen downstream, so it cannot be checked before signing, and nothing is signed that cannot be checked.',
+        0, 'UNSUPPORTED_ASSET',
+      );
+    }
+    const amountProblem = wholeUnitAmountProblem(p.amount);
+    if (amountProblem) throw new CertenError(`certen: send: ${amountProblem}`, 0, 'INVALID_AMOUNT');
+    if (!/[1-9]/.test(p.amount)) throw new CertenError('certen: send: the amount must be greater than zero.', 0, 'INVALID_AMOUNT');
+
+    let adiUrl = p.adiUrl;
+    let fromAddress = p.fromAddress;
+    if (!adiUrl || !fromAddress) {
+      const identity = await new IdentityResource(this.http).get(p.identityId, { include: [] });
+      if (identity.can_sign === false) {
+        throw new CertenError(`certen: send: identity ${identity.adi_url} cannot sign - its key page is not held by your key. This would fail at the signing step.`, 0, 'IDENTITY_CANNOT_SIGN');
+      }
+      adiUrl ??= identity.adi_url;
+      fromAddress ??= (identity.chain_accounts ?? []).find((a) => chainSlug(a.chain_id) === info.slug && a.address)?.address;
+      if (!fromAddress) {
+        throw new CertenError(
+          `certen: send: identity ${identity.adi_url} has no abstract account on ${info.slug}, so it has no msg.sender there. Link the chain first.`,
+          0, 'NO_ABSTRACT_ACCOUNT',
+        );
+      }
+    }
+
+    const opened = await this.transfer({
+      identityId: p.identityId,
+      adiUrl: adiUrl!,
+      fromChain: p.fromChain ?? 'accumulate',
+      toChain: info.slug,
+      fromAddress,
+      toAddress: p.toAddress,
+      amount: p.amount,
+      sign: p.sign,
+      publicKey: p.publicKey,
+      signerPublicKey: p.signerPublicKey,
+      signerKeyPage: p.signerKeyPage,
+      proofClass: p.proofClass,
+      idempotencyKey: p.idempotencyKey,
+      skipFundingCheck: p.skipFundingCheck,
+      beforeSign: p.beforeSign,
+      additionalAuthorities: p.additionalAuthorities,
+      expiresAt: p.expiresAt,
+    });
+    return { ...opened, adiUrl: adiUrl!, fromAddress, chain: info.slug };
+  }
+
+  /**
    * Add a co-signature to a transaction another seat opened — the second half of an M-of-N panel.
    *
    * `vote` is a lowercase string: `approve`, `reject`, or `abstain`. Not `accept`, and not a number. The
@@ -365,7 +476,7 @@ export class ExecuteResource {
    */
   async wait(
     intentId: string,
-    { timeoutMs = 360_000, intervalMs = 8_000, onPoll, onState, until = 'terminal' }: {
+    { timeoutMs = 360_000, intervalMs = 8_000, onPoll, onState, until = 'terminal', signal }: {
       timeoutMs?: number;
       intervalMs?: number;
       /** Called with every poll's response. */
@@ -374,6 +485,11 @@ export class ExecuteResource {
       onState?: (event: IntentStateEvent) => void;
       /** Return at `executed` (the action ran; proof pending) instead of waiting for a final state. */
       until?: WaitUntil;
+      /**
+       * Stop waiting when this fires. Throws `CertenError` `WAIT_ABORTED`: the intent is NOT cancelled, it keeps running on the
+       * gateway, and the error carries its id and last status so the caller can say how to pick the wait back up.
+       */
+      signal?: AbortSignal;
     } = {},
   ): Promise<TransactionResponse> {
     if (until !== 'terminal' && until !== 'executed') {
@@ -382,15 +498,21 @@ export class ExecuteResource {
     const deadline = Date.now() + timeoutMs;
     let last: TransactionResponse | undefined;
     let lastStatus: string | undefined;
+    const aborted = (): CertenError => new CertenError(
+      `certen: stopped waiting for intent ${intentId}${lastStatus ? ` (last status ${lastStatus})` : ''}. The intent keeps running.`,
+      0, 'WAIT_ABORTED', { details: { intent_id: intentId, last_status: lastStatus ?? null } },
+    );
     while (Date.now() < deadline) {
+      if (signal?.aborted) throw aborted();
       // One poll that times out or meets a 5xx is not the end of the intent. The client already
       // retries such a request a few times; if it still fails, keep waiting for the deadline the
       // caller set rather than throwing away a wait that may be minutes in — a slow gateway answer
       // used to abort a proof-gated call that then completed on chain anyway.
       let data: unknown;
-      try { ({ data } = await this.http.get(apiPath`/v1/transaction/${intentId}`)); }
+      try { ({ data } = await this.http.get(apiPath`/v1/transaction/${intentId}`, signal ? { signal } : undefined)); }
       catch (err) {
-        if (err instanceof CertenError && err.isRetryable && Date.now() + intervalMs < deadline) { await sleep(intervalMs); continue; }
+        if (signal?.aborted) throw aborted();
+        if (err instanceof CertenError && err.isRetryable && Date.now() + intervalMs < deadline) { await sleepUnlessAborted(intervalMs, signal); continue; }
         throw err;
       }
       last = data as TransactionResponse;
@@ -421,8 +543,9 @@ export class ExecuteResource {
           break; // in_flight, or a status this client does not know: not terminal, keep waiting
       }
       // Never sleep past the caller's deadline: a 100ms budget with the default 8s interval used to take 8s to give up.
-      await sleep(Math.max(0, Math.min(intervalMs, deadline - Date.now())));
+      await sleepUnlessAborted(Math.max(0, Math.min(intervalMs, deadline - Date.now())), signal);
     }
+    if (signal?.aborted) throw aborted();
     // Deliberately neither success nor failure — the intent may still complete. Say which it is.
     const seen = lastStatus ?? null;
     const cls = seen === null ? null : classifyIntentStatus(seen);
@@ -539,4 +662,12 @@ async function confirm(beforeSign: BeforeSign | undefined, summary: SigningSumma
   }
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Sleep, but wake the moment the signal fires: a Ctrl-C should not wait out a poll interval. Resolves (never rejects); the caller checks the signal. */
+function sleepUnlessAborted(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = (): void => { clearTimeout(timer); signal?.removeEventListener('abort', done); resolve(); };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
+}

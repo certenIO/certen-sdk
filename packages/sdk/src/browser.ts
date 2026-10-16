@@ -9,8 +9,22 @@
  */
 export { CertenClient, paginate, paginateWithTotal, DEFAULT_BASE_URL } from './client.js';
 export * from './types.js';
-export type { SignFn, ProofGatedCallParams, TransferParams, OpenedIntent, WaitUntil, IntentStateEvent } from './resources/execute.js';
+export type { SignFn, ProofGatedCallParams, TransferParams, SendParams, SentIntent, OpenedIntent, WaitUntil, IntentStateEvent } from './resources/execute.js';
 export { wholeUnitAmountProblem } from './resources/execute.js';
+// EVM addresses (EIP-55), the caller's own node, and the receipt: what happened, whether the proof holds, whether the value arrived. The pure
+// assembly is here; reading and verifying (`buildReceipt`) needs the verifier and is in `@certen.io/sdk/verify`. See receipt.ts.
+export { toChecksumAddress, evmAddressProblem } from './address.js';
+export {
+  checkEvmRpcEndpoint, evmRpcCall, readEvmChainId, assertRpcChain, readEvmBalance, readEvmBlockHeader,
+} from './evm-rpc.js';
+export type { EvmRpcOptions } from './evm-rpc.js';
+export { snapshotRecipient, checkNativeTransferEffect, noEffectToCheck } from './effect.js';
+export type { EffectState, BalanceMove, ReceiptEffect, RecipientSnapshot, NativeEffectParams } from './effect.js';
+export { assembleReceipt, estimateFee, RECEIPT_VERSION, EXECUTION_SKU } from './receipt.js';
+export type {
+  Receipt, ReceiptVerdict, ReceiptRequest, ReceiptSigner, ReceiptStage, ReceiptProof, ReceiptProofLayer, ReceiptProofInput, ReceiptGap,
+  ProofVerdict, StageState, VerificationLike, AssembleReceiptInput, FeeEstimate,
+} from './receipt.js';
 export {
   CertenError,
   CertenAuthError,
