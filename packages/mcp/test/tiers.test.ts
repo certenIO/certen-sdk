@@ -114,7 +114,7 @@ describe('tool invariants', () => {
   it('a tool that calls more than one endpoint declares every one of them', () => {
     // Enforced by name for the composites that exist, because there is no way to derive the call
     // graph from a closure. If a new composite lands, it belongs in this list.
-    const composites: Record<string, number> = { certen_doctor: 4 };
+    const composites: Record<string, number> = { certen_doctor: 4, certen_readiness: 3, certen_receipt: 3 };
     for (const [name, count] of Object.entries(composites)) {
       const tool = ALL_TOOLS.find((t) => t.name === name);
       expect(tool, name).toBeDefined();
@@ -162,6 +162,33 @@ describe('tool invariants', () => {
     }
   });
 
+  it('no tool takes a JSON-RPC node to call', () => {
+    // A parameter that names a node would let a prompt-injected model make this server probe the network it sits in. Where a check needs a
+    // node's answer the CALLER fetches it and passes the answer in (`header`); where the server must call a node the OPERATOR configures it.
+    const node = /^(rpc|rpcUrl|rpc_url|evmRpc|jsonRpc|accumulateRpc|accumulate_rpc|node|nodeUrl|node_url)$/i;
+    for (const t of ALL_TOOLS) {
+      for (const param of Object.keys(t.inputSchema.properties)) expect(node.test(param), `${t.name}.${param}`).toBe(false);
+    }
+  });
+
+  it('names every parameter that looks like a URL, so a new one is a decision in review and not an accident', () => {
+    // Each of these is accounted for: `link` is a proof share link (its origin is the deployment that issued it and its path is fixed to
+    // /v1/proof/shared/<token>); `webhookUrl` is called by the GATEWAY, never by this server; `signerUrl` is an Accumulate key page identifier
+    // (acc://...), not something fetched. Add a tool that takes another and this fails until it is argued here.
+    const urlish = /url|uri|endpoint|rpc|host|^link$/i;
+    const found = ALL_TOOLS.flatMap((t) => Object.keys(t.inputSchema.properties).filter((p) => urlish.test(p)).map((p) => `${t.name}.${p}`)).sort();
+    expect(found).toEqual(['certen_identity_update.webhookUrl', 'certen_proof_open_shared.link', 'certen_sign_create.signerUrl']);
+  });
+
+  it('the agent tools say what they cannot establish, because a client reads the description to decide what to trust', () => {
+    const readiness = ALL_TOOLS.find((t) => t.name === 'certen_readiness')!.description;
+    expect(readiness).toMatch(/NOT ready/);
+    expect(readiness).toMatch(/never read as `ok`/);
+    const receipt = ALL_TOOLS.find((t) => t.name === 'certen_receipt')!.description;
+    expect(receipt).toMatch(/PARTIAL and NO EVIDENCE are NOT verified/);
+    expect(receipt).toMatch(/never calls a node you name/);
+  });
+
   it('every tool has a non-trivial description', () => {
     for (const t of ALL_TOOLS) {
       expect(t.description.length, t.name).toBeGreaterThan(40);
@@ -174,6 +201,7 @@ describe('tool invariants', () => {
     for (const name of [
       'certen_doctor', 'certen_chains_list', 'certen_whoami',
       'certen_proof_get', 'certen_proof_receipt', 'certen_proof_verify',
+      'certen_readiness', 'certen_receipt',
     ]) {
       const tool = ALL_TOOLS.find((t) => t.name === name);
       expect(tool, name).toBeDefined();

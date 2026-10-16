@@ -51,8 +51,8 @@ every tool is `openWorldHint: true`. Annotations are hints, not enforcement: the
 are what enforce.
 
 Every tool also declares an **`outputSchema`** and returns **`structuredContent`** that conforms to it, alongside the JSON text. Most
-schemas are generated from the gateway's own response schemas (`npm run agentgen`; CI fails if they are stale); the eight tools that
-build their own result have schemas written beside the server code, and a test runs all 48 tools and validates what each returns. A
+schemas are generated from the gateway's own response schemas (`npm run agentgen`; CI fails if they are stale); the ten tools that
+build their own result have schemas written beside the server code, and a test runs all 50 tools and validates what each returns. A
 `confirmation_required` stop and any failure are returned with `isError: true` and no `structuredContent`.
 
 ## It also serves the documentation
@@ -78,8 +78,8 @@ registered cannot be called by a confused model, a prompt injection, or a bug. A
 with "please don't call this" in its description can be called by all three.
 
 ```bash
-certen-mcp                              # 33 read tools
-CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 48 tools
+certen-mcp                              # 35 read tools
+CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 50 tools
 ```
 
 Every tool that changes something additionally requires `confirm: true`. Called without it, the tool
@@ -95,9 +95,10 @@ destructive one.
 | `CERTEN_MCP_ALLOW_WRITES` | Exactly `1` enables write tools. `true`, `yes` and `0` do not. |
 | `CERTEN_ENABLED_CHAINS` | Comma-separated chains this server accepts in tool calls. Unset means the three live testnets (`ethereum-sepolia`, `base-sepolia`, `arbitrum-sepolia`). Telcoin Adiri (`telcoin-adiri`, chain 2017) is **off by default**: add it here, and it is used only while the gateway also lists it as served. |
 | `CERTEN_ALLOW_ANY_CHAIN` | Exactly `1` skips chain-name checking, for a chain the gateway serves that this catalogue does not list. |
+| `CERTEN_ACCUMULATE_RPC` | An Accumulate JSON-RPC endpoint (e.g. `https://kermit.accumulatenetwork.io/v3`) for the independent key page read in `certen_readiness`. Unset, the endpoint the gateway's own chain registry advertises is used. It is **server configuration, never a tool argument**: no tool takes a node to call. |
 
 A chain name is checked against the SDK's catalogue before anything is sent (`certen_quote`, `certen_billing_register_payer`,
-`certen_identity_create`, and every chain named in an intent opened with `certen_transaction_open`). A typo or an unlisted chain
+`certen_identity_create`, `certen_readiness`, `certen_receipt`, and every chain named in an intent opened with `certen_transaction_open`). A typo or an unlisted chain
 comes back as `UNSUPPORTED_CHAIN` naming the alternatives; `certen_chains_enabled` lists what is usable now. The gateway's own
 answer for an opt-in chain is told apart: not listed at all is `unknown_chain`, listed but switched off is `chain_not_enabled`.
 
@@ -115,6 +116,30 @@ answer for an opt-in chain is told apart: not listed at all is `unknown_chain`, 
 | `certen_governance_get` | Status of a governance operation. |
 | `certen_proof_get` | The proof for a completed intent. |
 | `certen_execute_wait` | Poll to a terminal state — **takes 60–110 seconds**. |
+| `certen_readiness` | **Can this identity, on this chain, act right now?** One call: ordered checks, a `fix` in words for each, never `ready` over an `unknown`. |
+| `certen_receipt` | **What happened to this intent?** One call: the ids to keep, the proof verified here layer by layer, and what of the effect is established. |
+
+### Ready? and what happened?
+
+These two replace what an agent otherwise stitches together from five and four calls, and say what they could **not** establish.
+
+**`certen_readiness { identityId, chain, keyHash?, amount?, tokenSymbol? }`** returns the SDK's `client.readiness()`: `gateway`, `credential`, `identity`, `chain`,
+`key page`, `accumulate credits`, `gateway balance` and `gas`, in dependency order, each `ok` · `warn` · `fail` · `unknown` · `skipped` with a stable `code` and a
+`fix.text`. Gate on `state`: `ready`, `blocked` (read `first_blocker`) or `unconfirmed` (nothing failed, something could not be answered; **not** ready). Give `keyHash`
+(the SHA-256 of the signing key's *public* key, never the key) and the key page is read from an Accumulate node as well as from the gateway; two reads that disagree
+are a blocker. The gas check is an estimate and says so. A wei-looking `amount` is refused before any request.
+
+**`certen_receipt { intentId, header?, transfer?, call? }`** returns the receipt `certen receipt --json` returns (`docs/CLI-CONTRACT.md` section 10). `verdict` is
+`verified` · `partial` · `failed` · `pending` · `unproven`, and `gaps` names what is not established; PARTIAL and NO EVIDENCE are never verified, and a proof service that
+answers 5xx is `unavailable`, not "no evidence". The proof's execution layer stays `not_checked` until you pass `header` (`{ receiptsRoot, hash?, number? }`), the block header
+you fetched from **your own node**; a header with no `receiptsRoot` compares nothing and is refused. Say what the intent was and the receipt can say what of its effect is
+established: `transfer { chain, to, amount }` for a native transfer (the server cannot read a recipient, so its effect is `unchecked` and the receipt is not `verified` until you have),
+`call { chain, expect: { address, topic0 } }` for a contract call (the event is looked for in the proof's own execution receipt). It does not wait (`certen_execute_wait` first),
+and it writes nothing: the CLI keeps receipts in `~/.certen`, this server keeps no state.
+
+Neither takes a node to call. The server never connects to a JSON-RPC node a caller names, which is why there is a `header` argument and not an `rpc` one, and why an `rpc` (or `url`, `node`, …)
+passed anyway is refused by name (`NODE_ARGUMENT_REFUSED`) rather than silently ignored. (The one URL a
+caller may hand over is a proof *share link*, for `certen_proof_open_shared` and `certen_proof_verify`: its origin is the deployment that issued it, and its path is fixed.)
 
 **Write tier** (`CERTEN_MCP_ALLOW_WRITES=1`)
 

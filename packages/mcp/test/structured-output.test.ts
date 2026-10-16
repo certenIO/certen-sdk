@@ -65,7 +65,7 @@ const handlersFor = () => createHandlers({ env: { CERTEN_API_KEY: 'k', CERTEN_AP
 
 describe('every tool declares an outputSchema', () => {
   it('has one for each of the tools, generated for most and written for the rest', () => {
-    expect(ALL_TOOLS.length).toBe(48);
+    expect(ALL_TOOLS.length).toBe(50);
     for (const t of ALL_TOOLS) expect(outputSchemaFor(t.name), t.name).toBeDefined();
     expect(Object.keys(GENERATED_OUTPUT_SCHEMAS).length + Object.keys(CUSTOM_OUTPUT_SCHEMAS).length).toBe(ALL_TOOLS.length);
     expect(Object.keys(CUSTOM_OUTPUT_SCHEMAS).sort()).toEqual([...CUSTOM_TOOLS].sort());

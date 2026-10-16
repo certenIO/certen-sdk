@@ -25,6 +25,8 @@ export const CUSTOM_TOOLS = [
   'certen_identity_create',        // 202 with no documented body, or the identity once it can sign
   'certen_proof_get',              // execute.proof(): a proof or a receipt, tagged with `kind`
   'certen_proof_verify',           // a summary built from the receipt
+  'certen_readiness',              // client.readiness(): ordered checks from five reads and an Accumulate node
+  'certen_receipt',                // buildReceipt(): the intent, its proof verified here, and the effect, as one record
   'certen_whoami',                 // a reduced view of the balance
 ];
 

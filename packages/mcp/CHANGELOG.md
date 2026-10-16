@@ -1,5 +1,35 @@
 # Changelog — @certen.io/mcp
 
+## Unreleased — ready? and what happened? for an agent (CLI UX, Phase 6)
+
+Two read-tier tools, one fix to an existing one, and nothing else that works today changes: no tool is removed or renamed, no parameter becomes required, no write tool moves. The server still holds no key,
+still signs nothing, and still registers no write tool without `CERTEN_MCP_ALLOW_WRITES=1`. A maintainer versions and publishes this (it needs the `@certen.io/sdk` release that carries
+`client.readiness()`, `buildReceipt` and the `header` option, so the SDK goes out first).
+
+### Added
+- **`certen_readiness { identityId, chain, keyHash?, amount?, tokenSymbol? }`** (read). "Can this identity, on this chain, act right now?" in one call instead of five: the gateway, the credential, the identity, the chain, the key page,
+  the Accumulate credits, the organization's balance and the abstract account's gas, in dependency order, each `ok` | `warn` | `fail` | `unknown` | `skipped` with a stable `code` and a `fix` in words. It is `client.readiness()`, the same
+  judgement `certen status` renders. Gate on `state`: `ready`, `blocked` (read `first_blocker`) or `unconfirmed` (nothing failed, something could not be answered: **not** ready; an `unknown` is never read as `ok`).
+  - Give `keyHash` (the SHA-256 of the signing key's *public* key) and the key page is read from an Accumulate node as well as from the gateway; two reads that disagree are a blocker (`KEY_PAGE_DISAGREES`). Without it the check is a `warn`: the gateway's word alone.
+  - The Accumulate endpoint is the one the gateway's chain registry advertises, or **`CERTEN_ACCUMULATE_RPC`** (new, server configuration beside `CERTEN_ENABLED_CHAINS`). It is never an argument.
+  - Checked before a request is made: the identity is a UUID, the chain is one this server enables, the amount is whole units (a wei-looking one is refused), the key hash is 64 hex.
+  - **An argument it does not have is refused by name, not ignored** (`UNKNOWN_ARGUMENT`, listing the ones it takes; `NODE_ARGUMENT_REFUSED` for `rpc`, `accumulateRpc`, `url`, `endpoint`, `node` and the like, saying why and what to do instead). An agent that passes `rpc` and gets a normal result would believe the node was used. The same rule holds for both tools, and for the fields inside `transfer`, `call` and `call.expect`.
+- **`certen_receipt { intentId, header?, transfer?, call? }`** (read). "What happened to this intent?" in one call instead of four: the ids to keep (the intent, the Accumulate transaction, the destination transaction and a link to it), the proof
+  verified here layer by layer, and what of the effect is established. It is `buildReceipt()`, the document `certen receipt --json` returns (`docs/CLI-CONTRACT.md` section 10). `verdict` is `verified` · `partial` · `failed` · `pending` · `unproven`; `gaps`
+  names what is not established and is empty exactly when the verdict is `verified`; PARTIAL and NO EVIDENCE are never verified; a proof service answering 5xx is `unavailable`, not "no evidence".
+  - The execution layer stays `not_checked` until you pass **`header`**, the block header you fetched from your own node. This server never calls a node you name, so there is no `rpc` argument.
+  - It cannot read a recipient's balance. A `transfer { chain, to, amount }` has an `unchecked` effect and a receipt that is not `verified` until you have read the recipient yourself; `call { chain, expect }` looks for the event in the proof's own execution receipt.
+  - It writes nothing. The CLI keeps receipts in `~/.certen/receipts`; this server keeps no state.
+- `ToolDef.run` receives the server's `env` as a third argument, so a tool can read operator configuration without touching `process.env`. Existing tools ignore it.
+
+### Fixed
+- **`certen_proof_verify` no longer reads an empty header as a comparison that passed.** `header` went to the verifier as given, so `{}` or only the block number (which the bundle itself states) found nothing to disagree with and the execution layer
+  came back `verified` with `headerCheck.ok: true`, having compared nothing. A header now needs a `receiptsRoot` (and a malformed `hash` or `number` is refused rather than ignored): otherwise `INVALID_HEADER`, before the proof is fetched.
+  This is a behaviour change to an existing tool, in the direction "unknown is not ok". A caller that sent a complete header (`receiptsRoot`, `hash`, `number`, as the tool's own description asked) is unaffected.
+
+### Counts
+- 50 tools (was 48); 35 are read-tier (was 33). Ten tools build their own result and have a hand-written `outputSchema`.
+
 ## 0.5.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 **Breaking** changes are marked; the minor carries them (0.x).
