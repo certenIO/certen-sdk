@@ -1,5 +1,12 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — the error codes the gateway publishes, as a constant (CLI UX, Phase 5)
+
+Additive. Nothing that works today changes. A maintainer versions and publishes this.
+
+### Added
+- **`VENDORED_ERROR_CODES`**, exported from the default and browser entries: every error code this release knew the gateway to raise (the list `client.doctor()` already compares the live catalogue with, and which `packages/sdk/test/error-catalog.test.ts` holds equal to `spec/errors.json`). The CLI uses it to tell a code that `certen errors <CODE>` can explain from one it cannot, so that every failure can end with the one command to run next (`error.next`). A `readonly string[]`; it is a snapshot of this release, not the live catalogue (`client.admin.errors()` is that).
+
 ## Unreleased — the receipt, and sending from an identity (CLI UX, Phase 4)
 
 Additive, with one fix to a verifier that was too forgiving (below). Nothing else that works today changes. A maintainer versions and publishes this.

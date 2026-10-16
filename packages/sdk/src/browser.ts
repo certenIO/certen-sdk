@@ -53,6 +53,8 @@ export type { IntentStatusClass, KnownIntentStatus, IntentOutcome, IntentOutcome
 export { describeReasonCode, isTransactionReasonCode, REASON_CODE_DESCRIPTIONS } from './reason-codes.js';
 export type { PaymentResolution } from './errors.js';
 export { runDoctor, CREDENTIALLED_CHECKS } from './doctor.js';
+// Every error code this release knew the gateway to raise (the CLI uses it to tell a code `certen errors <CODE>` explains from one it cannot). See error-codes.ts.
+export { VENDORED_ERROR_CODES } from './error-codes.js';
 // Readiness for one identity on one chain, and the Accumulate key page read behind it. See readiness.ts and key-page.ts.
 export { runReadiness, checkGas, summarizeReadiness, READINESS_CHECKS, CONTEXT_CHECKS } from './readiness.js';
 export type {

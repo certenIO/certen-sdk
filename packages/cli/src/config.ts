@@ -326,7 +326,7 @@ function configFileIsSecure(): boolean {
   }
 }
 
-interface Keyring {
+export interface Keyring {
   setPassword(service: string, account: string, value: string): Promise<void>;
   getPassword(service: string, account: string): Promise<string | null>;
   deletePassword(service: string, account: string): Promise<boolean>;
@@ -337,7 +337,7 @@ interface Keyring {
  * (it replaced the archived keytar). A missing module, or one whose native binary does not load on this platform, is
  * null here, and callers refuse by name (KEYRING_UNAVAILABLE) rather than falling back to a file.
  */
-async function loadKeyring(): Promise<Keyring | null> {
+export async function loadKeyring(): Promise<Keyring | null> {
   try {
     const mod = await import('@napi-rs/keyring');
     return {
@@ -350,7 +350,7 @@ async function loadKeyring(): Promise<Keyring | null> {
   }
 }
 
-const KEYRING_SERVICE = 'certen';
+export const KEYRING_SERVICE = 'certen';
 /** `api_key` for the default profile, exactly as before; `api_key:<profile>` for a named one. */
 const keyringAccount = (profile: string): string => (profile === DEFAULT_PROFILE ? 'api_key' : `api_key:${profile}`);
 

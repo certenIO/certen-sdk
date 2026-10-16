@@ -3,6 +3,7 @@ import { CertenClient, checkGas, gasFundingPlan, wholeUnitAmountProblem, type Ga
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { chainArg, uuidArg } from '../next-step.js';
 import { assertChain } from '../chains.js';
 import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
 import { resolveCommandIdentity } from '../command-context.js';
@@ -87,7 +88,8 @@ export function registerGasCommands(program: Command): void {
       if (!address) {
         throw new CliError(
           `This identity has no abstract account on ${chain}, so there is nowhere to send gas. Link the chain: certen identity link-chain ${who.id} --chain ${chain}`,
-          'CHAIN_NOT_LINKED', EXIT.FAILED,
+          'CHAIN_NOT_LINKED', EXIT.FAILED, false, undefined,
+          `certen identity link-chain ${uuidArg(who.id)} --chain ${chainArg(chain)}`,
         );
       }
 
@@ -125,7 +127,10 @@ export function registerGasCommands(program: Command): void {
 
       if (!flags.wait || !gasGapIsFundable(check)) {
         if (gasGapIsFundable(check)) hint('Send the gas, then check again with: certen gas --wait   (it waits for the gas to arrive)');
-        throw new CliError(check.detail, check.code ?? 'ABSTRACT_ACCOUNT_UNFUNDED', EXIT.FAILED, false, envelope(check, current));
+        throw new CliError(
+          check.detail, check.code ?? 'ABSTRACT_ACCOUNT_UNFUNDED', EXIT.FAILED, false, envelope(check, current),
+          gasGapIsFundable(check) ? `certen gas --chain ${chainArg(chain)} --wait` : undefined,
+        );
       }
 
       human('  Waiting for funds... (Ctrl-C to stop; run `certen gas --wait` again to continue)');

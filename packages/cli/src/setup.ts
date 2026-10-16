@@ -7,6 +7,7 @@ import {
   updateProfile,
 } from './config.js';
 import { CliError, UsageError, EXIT } from './errors.js';
+import { uuidArg } from './next-step.js';
 import { assertChains, enabledChains, writeChainCache } from './chains.js';
 import { generateKey, getKeyInfo, isEncrypted, keyExists, signHash } from './keystore.js';
 import { passphraseFromEnv, resolveNewPassphrase, resolvePassphrase } from './passphrase.js';
@@ -572,7 +573,8 @@ async function identityStep(
           throw new CliError(
             `The identity ${identity.adi_url} failed to provision${why}. It holds this organization's identity slot until it is retired. `
             + `Retire it, then run setup again: certen identity retire ${identity.id} --yes`,
-            'IDENTITY_PROVISIONING_FAILED', EXIT.FAILED,
+            'IDENTITY_PROVISIONING_FAILED', EXIT.FAILED, false, undefined,
+            `certen identity retire ${uuidArg(identity.id)} --yes`,
           );
         }
         await client.identity.retire(identity.id);

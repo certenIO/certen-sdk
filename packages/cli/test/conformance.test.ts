@@ -648,3 +648,92 @@ describe('CLI contract: send, receipt and watch (docs/CLI-CONTRACT.md section 10
     expect(r.stdout).toMatch(/^\s+receipts\s+/m);
   });
 });
+
+describe('CLI contract: a failure ends with the command to run next (docs/CLI-CONTRACT.md section 11)', () => {
+  type Err = { code: string; message: string; retryable: boolean; next?: string };
+  const errorOf = (r: Run): Err => soleJson(r.stdout).error as Err;
+  const OFFLINE = { CERTEN_API_URL: 'http://127.0.0.1:9' };
+
+  it('1 — a usage error carries next: the help of the command that found it, and the exit code is still 2', () => {
+    const r = certen(['--json', 'tx', 'create', '--bogus']);
+    expect(r.code).toBe(2);
+    expect(errorOf(r)).toMatchObject({ code: 'USAGE_ERROR', retryable: false, next: 'certen tx create --help' });
+  });
+
+  it('1 — an unknown command points at the root help', () => {
+    const r = certen(['--json', 'nonesuch']);
+    expect(r.code).toBe(2);
+    expect(errorOf(r).next).toBe('certen --help');
+  });
+
+  it('2 — no API key points at setup', () => {
+    const r = certen(['--json', 'balance'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect(errorOf(r)).toMatchObject({ code: 'NO_API_KEY', next: 'certen setup' });
+  });
+
+  it('3 — an unreachable gateway points at doctor, and stays retryable with exit 3', () => {
+    const r = certen(['--json', 'balance'], { ...OFFLINE, CERTEN_API_KEY: 'ck_live_x' });
+    expect(r.code).toBe(3);
+    expect(errorOf(r)).toMatchObject({ code: 'NETWORK_ERROR', retryable: true, next: 'certen doctor' });
+  });
+
+  it('1 — next is exactly one plain `certen ...` line, with nothing in it a shell would act on outside a <placeholder>', () => {
+    for (const args of [['tx', 'create', '--bogus'], ['nonesuch'], ['balance'], ['keys', 'show', 'nosuchkey'], ['fund']]) {
+      const next = errorOf(certen(['--json', ...args], { ...OFFLINE, CERTEN_API_KEY: '' })).next!;
+      expect(next, args.join(' ')).toMatch(/^certen [^\r\n]+$/);
+      expect(next.replace(/<[^<>]*>/g, ''), args.join(' ')).toMatch(/^[A-Za-z0-9 _.,:=/@+-]*$/);
+    }
+  });
+
+  it('1 — an error with no better answer ends with its own command\'s help, never an empty next', () => {
+    // `keys show` on a missing key is an untyped failure inside the key store: no code to place it by, so the help of the command that failed.
+    const r = certen(['--json', 'keys', 'show', 'nosuchkey']);
+    expect(errorOf(r).next).toBe('certen keys show --help');
+  });
+
+  it('table — the human error ends with `  next: <command>` as its last line, and stdout stays empty', () => {
+    const r = certen(['balance'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect(r.stdout.trim()).toBe('');
+    const lines = r.stderr.split('\n').filter((l) => l.trim().length > 0);
+    expect(lines.at(-1)).toBe('  next: certen setup');
+    expect(lines.filter((l) => /^\s*next:/.test(l))).toHaveLength(1);
+  });
+
+  it('a success envelope has no next field', () => {
+    const r = certen(['--json', 'auth', 'status']);
+    expect(soleJson(r.stdout)).not.toHaveProperty('next');
+    expect((soleJson(r.stdout).data as Record<string, unknown>)).not.toHaveProperty('next');
+  });
+
+  it('--help --json lists keys unlock and keys lock, and the root help leads with the five commands', () => {
+    type Node = { name: string; options: Array<{ name: string }>; commands: Node[]; arguments: Array<{ name: string; required: boolean }> };
+    const data = soleJson(certen(['--json', '--help']).stdout).data as Node;
+    const keys = data.commands.find((c) => c.name === 'keys')!;
+    const unlock = keys.commands.find((c) => c.name === 'unlock');
+    const lock = keys.commands.find((c) => c.name === 'lock');
+    expect(unlock?.options.map((o) => o.name)).toEqual(expect.arrayContaining(['for']));
+    expect(unlock?.arguments).toEqual([expect.objectContaining({ name: 'name', required: true })]);
+    expect(lock?.options.map((o) => o.name)).toEqual(expect.arrayContaining(['all']));
+    const help = certen(['--help']).stdout;
+    expect(help.indexOf('Start here')).toBeGreaterThan(-1);
+    expect(help.indexOf('Start here')).toBeLessThan(help.indexOf('Follow it through'));
+    expect(help.indexOf('Advanced')).toBeGreaterThan(help.indexOf('Money'));
+  });
+
+  it('keys unlock is refused as a usage error until the review is signed (exit 2), and keys lock still works', () => {
+    const unlock = certen(['--json', 'keys', 'unlock', 'dev']);
+    expect(unlock.code).toBe(2);
+    expect(errorOf(unlock)).toMatchObject({ code: 'KEY_UNLOCK_NOT_ENABLED', next: 'certen keys --help' });
+    expect(errorOf(unlock).message).toContain('docs/security/keys-unlock-review.md');
+    // Wiping is always safe, so it needs no switch: with no keys on this machine there is nothing to wipe, and it says so (exit 0).
+    const lock = certen(['--json', 'keys', 'lock', '--all']);
+    expect(lock.code).toBe(0);
+    expect(soleJson(lock.stdout)).toMatchObject({ ok: true, data: { locked: [], not_unlocked: [] } });
+    // No name and no --all is a usage error that names the way on.
+    const bare = certen(['--json', 'keys', 'lock']);
+    expect(bare.code).toBe(2);
+    expect(errorOf(bare)).toMatchObject({ code: 'LOCK_TARGET_REQUIRED', next: 'certen keys list' });
+  });
+});

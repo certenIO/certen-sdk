@@ -313,6 +313,37 @@ export function unlockKey(name: string, passphrase: string | null): { sign: (has
   return { sign: (hashHex) => edSign(null, hashBytes(hashHex), privateKey).toString('hex') };
 }
 
+/** PKCS8 DER for an Ed25519 private key is this fixed 16-byte header followed by the 32-byte seed. */
+const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+/**
+ * The decrypted 32-byte Ed25519 seed of a key: the one secret that makes signatures. For an unlocked session (session-unlock.ts), which keeps
+ * THIS in the OS keyring for a while instead of making a person type the passphrase for every command.
+ *
+ * Returned as a Buffer so the caller can zero it. It is the key itself: never log it, never put it in an error, never leave it in a variable
+ * longer than the write that stores it.
+ */
+export function exportSeed(name: string, passphrase: string | null): Buffer {
+  const pkcs8 = decryptPrivateKey(readKeyFile(name), passphrase);
+  if (pkcs8.length !== PKCS8_ED25519_PREFIX.length + 32 || !pkcs8.subarray(0, PKCS8_ED25519_PREFIX.length).equals(PKCS8_ED25519_PREFIX)) {
+    throw new Error(`Key "${name}" is not a plain Ed25519 private key; it cannot be kept unlocked.`);
+  }
+  return Buffer.from(pkcs8.subarray(PKCS8_ED25519_PREFIX.length));
+}
+
+/**
+ * A signer from a seed, plus the public key the seed ACTUALLY derives (hex).
+ *
+ * The public key is returned so the caller can compare it with the key file's before trusting the seed: a seed that came out of a shared store
+ * (the OS keyring) is not trusted for being there, and one that derives a different public key than the key it claims to unlock must sign nothing.
+ */
+export function keyFromSeed(seed: Buffer): { publicKey: string; sign: (hashHex: string) => string } {
+  if (seed.length !== 32) throw new Error('An Ed25519 seed is 32 bytes.');
+  const privateKey = createPrivateKey({ key: Buffer.concat([PKCS8_ED25519_PREFIX, seed]), format: 'der', type: 'pkcs8' });
+  const publicKey = rawPublicKey(createPublicKey(privateKey)).toString('hex');
+  return { publicKey, sign: (hashHex) => edSign(null, hashBytes(hashHex), privateKey).toString('hex') };
+}
+
 /**
  * Verify a stored key can actually produce a signature its own public key accepts.
  *

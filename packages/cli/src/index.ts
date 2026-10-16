@@ -10,6 +10,7 @@ import { setJsonMode, flushSuccess, emitFailure } from './output.js';
 import { commandTree } from './help-json.js';
 import { extractProfileFlag } from './global-flags.js';
 import { setProfileOverride } from './config.js';
+import { setActiveCommand } from './next-step.js';
 
 /** Read the version from package.json — dist/ sits one level below the manifest. */
 function readVersion(): string {
@@ -98,6 +99,10 @@ export function buildProgram(): Command {
   // a failed request. Every nested command has to opt in explicitly.
   applyExitOverride(program);
 
+  // Which command is running, for the `next:` line of a failure (next-step.ts). An action's own throw is covered by this hook; commander's
+  // usage errors fire BEFORE any hook, and are covered by the per-command exit callback above.
+  program.hook('preAction', (_thisCommand, actionCommand) => setActiveCommand(commandPath(actionCommand as Command)));
+
   // Grouped by journey stage rather than alphabetically. Applied AFTER every command is
   // registered, so nothing can be missing from the listing it builds. Subcommand help is
   // untouched — see help-root.ts.
@@ -105,8 +110,20 @@ export function buildProgram(): Command {
   return program;
 }
 
+/** `['tx', 'create']` for `certen tx create`; empty for the program itself. */
+function commandPath(cmd: Command): string[] {
+  const path: string[] = [];
+  for (let c: Command | null = cmd; c !== null && c.parent !== null; c = c.parent) path.unshift(c.name());
+  return path;
+}
+
 function applyExitOverride(cmd: Command): void {
-  cmd.exitOverride();
+  // The callback must throw (commander falls through to process.exit when it returns). It also records WHICH command found the problem, so
+  // the failure can end `next: certen <that command> --help`: CommanderError does not say, and argv is not safe to re-parse for it.
+  cmd.exitOverride((err) => {
+    setActiveCommand(commandPath(cmd));
+    throw err;
+  });
   for (const sub of cmd.commands) applyExitOverride(sub as Command);
 }
 
@@ -152,6 +169,7 @@ export async function run(argv: string[]): Promise<ExitCode> {
   // happen while resolving credentials — those must be reportable in the envelope too.
   const json = argv.includes('--json');
   setJsonMode(json);
+  setActiveCommand([]);
   let cleanArgv = argv.filter((a) => a !== '--json');
 
   // `--profile` is global like `--json`: taken out of argv here so it works before or after the subcommand. A bad one is a usage
