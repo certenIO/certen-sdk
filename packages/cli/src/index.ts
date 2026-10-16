@@ -35,6 +35,8 @@ import { registerDoctorCommands } from './commands/doctor.js';
 import { registerStatusCommands } from './commands/status.js';
 import { registerProofCommands } from './commands/proof.js';
 import { registerCallCommands } from './commands/call.js';
+import { registerSendCommands } from './commands/send.js';
+import { registerReceiptCommands } from './commands/receipt.js';
 import { registerInitCommands } from './commands/init.js';
 import { registerSetupCommands } from './commands/setup.js';
 import { registerGasCommands } from './commands/gas.js';
@@ -76,7 +78,9 @@ export function buildProgram(): Command {
   registerWhoamiCommands(program);
   registerIdentityCommands(program);
   registerTransactionCommands(program);
+  registerSendCommands(program);
   registerCallCommands(program);
+  registerReceiptCommands(program);
   registerProofCommands(program);
   registerPendingCommands(program);
   registerGovernanceCommands(program);

@@ -16,7 +16,8 @@ become genuinely usable, and tells you what is still missing:
 
 ```bash
 npm install -g @certen.io/cli
-certen setup    # key, account, identity, chains, on-chain checks and gas — until it says "Ready"
+certen setup                              # key, account, identity, chains, on-chain checks and gas — until it says "Ready"
+certen send 0.0001 ETH --to 0xRecipient   # the first transfer; it ends in a receipt: what is verified, and what is not
 ```
 
 `certen setup` makes the signing key first, then the account it creates (`--new-account`, no browser) or signs you in to the one you have
@@ -24,6 +25,10 @@ certen setup    # key, account, identity, chains, on-chain checks and gas — un
 is idempotent: it creates only what is missing and reuses the identity it recorded on a previous run, which matters because an organization
 made with a key may hold one identity until it is approved. `certen login` and `certen init` are the same steps one at a time, and unchanged. Everything below is what it does on your behalf, and what to do instead if you are
 building the same flow yourself.
+
+When `setup` says **Ready**, `certen send` is the first thing to do with the identity: it checks readiness again before it asks for your passphrase, shows what the signature will authorise, signs, waits for
+the proof cycle (60–110 seconds), verifies the proof here and writes `~/.certen/receipts/<intent-id>.json`. Exit `0` there means **verified**, `4` means done but not fully verified (it names what is missing). See
+[first-proof-in-three-commands.md](first-proof-in-three-commands.md) for what each line of the receipt means; the contract-call route (`certen call`) is described there too.
 
 ```bash
 export CERTEN_API_URL="https://gateway.kompendium.co"

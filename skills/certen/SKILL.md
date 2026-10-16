@@ -90,6 +90,32 @@ One identity, many chains — no new identity, no new key:
 certen identity link-chain <id> --chain arbitrum-sepolia --json
 ```
 
+## Send value, and keep the receipt
+
+A plain transfer of the chain's native token (ETH on Base Sepolia) is one command, and it ends in a receipt:
+
+```bash
+certen send 0.0001 ETH --to <0xRecipient> --dry-run --json     # every check, nothing signed or sent. Look at it first
+certen send 0.0001 ETH --to <0xRecipient> --yes --wait --json  # after the owner's consent: sign, wait, verify the proof, write the receipt
+certen receipt <intent_id> --json                              # the same record, any time, re-verified here
+certen watch <intent_id> --json                                # pick a wait back up (the intent keeps running if you stop)
+```
+
+- **`--yes` is required when no one is at a terminal**, and it is your consent made in advance: pass it only after the consent steps above. Without it, `send` exits `2`
+  (`CONFIRMATION_REQUIRED`) before it reads a passphrase. `--yes` skips the question, never the check that the transaction the gateway returned is the one you asked for;
+  the same `--yes` exists on `call`, `tx create`, `governance` and `pending sign`, which print what the signature authorises and then sign.
+- The amount is **whole units** (`0.0001` is a ten-thousandth of an ETH, never wei). `send` moves the chain's **native** token only and refuses any other asset by name; for a token use `certen call` with
+  `transfer(address,uint256)`. A recipient with a bad EIP-55 checksum is refused (`INVALID_ADDRESS`): fix the address, do not retry.
+- It checks readiness before it unlocks anything. `NOT_READY` carries `error.details.readiness`: read `first_blocker` and its `fix`. Gas missing is `certen gas --json`; do not use `--force` to get past it
+  unless the owner asks, and do not treat `unknown` as ready.
+- **Report the receipt's `verdict`, never "it went through".** Exit `0` means **verified** (the proof checked here, and the value arrived); `4` means **partial** or still pending, and `data.receipt.gaps` says what is not
+  established; `5` means no proof evidence is served yet; `1` means failed (`TX_FAILED`, or a proof layer that does not hold); `130` means the wait was stopped and the intent is still running (`error.details.resume`).
+  Never describe a `partial` receipt as verified. If the owner gave you a node they trust on the chain, pass `--rpc <url>` (or set `CERTEN_RPC_URL`): without one the proof's execution layer is the validators' own
+  statement, and the verdict stays `partial` naming it. That is the honest answer, not an error to work around.
+- `--wait` is off by default with `--json`: pass it, or the command returns once the signature is in (`send` exits `0`, the receipt reads `pending`) and you follow with `certen watch <intent_id> --json`.
+  The proof cycle is 60 to 110 seconds of real work; do not shorten the wait.
+- The receipt is saved to `~/.certen/receipts/<intent_id>.json` (no secret in it). `certen receipt --share` makes a link a counterparty can verify with no key.
+
 ## Execute something, proof-gated
 
 Any contract call from the agent's account. The validators execute exactly this target, value and
@@ -142,7 +168,8 @@ the proof carries checked; `4` means a named layer is not established, `5` that 
 Never report a proof as verified because a bundle says `verified`; report the verdict this command prints.
 
 Every command that signs with `--sign-with` rebuilds the transaction the gateway returned and shows what the
-signature authorises first. If it refuses (`SIGNING_DATA_MISMATCH`, `SIGNING_DATA_ABSENT`), do not sign by another
+signature authorises first (the confirmation card: a person at a terminal is asked; where no one can be, `send` requires `--yes`, which is the consent you give in advance, and the older commands go ahead). If it refuses
+(`SIGNING_DATA_MISMATCH`, `SIGNING_DATA_ABSENT`), do not sign by another
 route and do not retry with a bare hash: tell the owner. The consent rules above are unchanged.
 
 ## Being regulated

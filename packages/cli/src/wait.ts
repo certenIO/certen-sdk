@@ -1,5 +1,5 @@
-import type { CertenClient, Identity, ReadinessCheck } from '@certen.io/sdk';
-import { CertenIntentFailedError, CertenWaitTimeoutError, checkGas, describeReasonCode, intentOutcome } from '@certen.io/sdk';
+import type { CertenClient, Identity, ReadinessCheck, TransactionResponse } from '@certen.io/sdk';
+import { CertenError, CertenIntentFailedError, CertenWaitTimeoutError, checkGas, describeReasonCode, intentOutcome } from '@certen.io/sdk';
 import { CliError, EXIT } from './errors.js';
 import { human, isJsonMode } from './output.js';
 import { parseSpanMs } from './duration.js';
@@ -207,11 +207,16 @@ export async function waitForIdentity(
  * `executed` is reported as progress and does not end the wait: the action ran on its chain and the proof bundle is still being
  * produced. `completed_unproven` ends it successfully (exit 0) but is announced as what it is, and the JSON keeps the status
  * `completed_unproven`: the action executed, and its proof can never be produced.
+ *
+ * `signal` stops the wait without stopping the intent (it keeps running on the gateway) and ends it as `INTERRUPTED` / exit 130, the
+ * shell's own convention for Ctrl-C; the caller says how to pick it back up. `onPoll` sees every reading, so a caller that has to save
+ * state when the wait ends any way at all (a failed intent, a timeout, Ctrl-C) holds the last thing the gateway said.
  */
 export async function waitForTransaction(
   client: CertenClient,
   intentId: string,
   budget: WaitBudget,
+  hooks: { signal?: AbortSignal; onPoll?: (tx: TransactionResponse) => void } = {},
 ): Promise<Record<string, unknown>> {
   const say = progress();
   say('Waiting for the proof cycle. This is 60-110 seconds of real validator work.');
@@ -220,6 +225,8 @@ export async function waitForTransaction(
     const result = await client.execute.wait(intentId, {
       timeoutMs: budget.timeoutMs,
       intervalMs: budget.intervalMs,
+      ...(hooks.signal ? { signal: hooks.signal } : {}),
+      ...(hooks.onPoll ? { onPoll: hooks.onPoll } : {}),
       onState: (event) => {
         if (event.class === 'executed') {
           say('Status: executed. The action ran on its chain; its proof is still being produced.');
@@ -236,6 +243,15 @@ export async function waitForTransaction(
     return result as unknown as Record<string, unknown>;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (err instanceof CertenError && err.code === 'WAIT_ABORTED') {
+      throw new CliError(
+        `${message.replace(/^certen: /, '')}`,
+        'INTERRUPTED',
+        EXIT.INTERRUPTED,
+        false,
+        { intent_id: intentId, ...((err.details as Record<string, unknown> | undefined) ?? {}) },
+      );
+    }
     if (err instanceof CertenIntentFailedError) {
       // The reason is the part a caller acts on — `expired` wants a new intent, `expectation_unmet`
       // wants the target investigated, `target_reverted` wants neither a retry nor a support ticket.

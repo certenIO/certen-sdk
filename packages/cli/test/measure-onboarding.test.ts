@@ -150,6 +150,20 @@ const BASELINE = {
       ['certen proof verify {intent_id} --rpc {rpc_url}', 5],
     ],
   },
+  /**
+   * Install, `setup`, `send`: the plan's three commands. `send` is the transaction, the outcome, the proof, its verification (twice, once against the
+   * person's own node) and the effect check, and it ends in a receipt. Its 18 round trips are not all the gateway's: some go to the person's own
+   * node (`--rpc`: the chain id and the recipient's balance before signing, then the chain id and the balance after, and the block header the proof
+   * is compared with), which is the independent check the plan asks for. The rest are the readiness read, the price book for the card, the intent
+   * (open, sign, read), the proof, the abstract account's balance after, and the chain registry for the explorer link.
+   */
+  send: {
+    round_trips: 34,
+    per_step: [
+      ['certen setup --yes --new-account --org-name journey --name journey-probe --chain base-sepolia --no-keyring --wait-for-funds --poll-interval 0.2 --funds-timeout 10s', 16],
+      ['certen send 0.0001 ETH --to {recipient} --yes --wait --timeout 6m --rpc {rpc_url}', 18],
+    ],
+  },
 } as const;
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -224,6 +238,7 @@ describe('--journey refuses what would be unsafe or unclear', () => {
     expect(r.stderr).toContain('context');
     expect(r.stderr).toContain('readiness');
     expect(r.stderr).toContain('setup-wait');
+    expect(r.stderr).toContain('send');
   });
 
   it('refuses a --fault it does not know, rather than running a clean journey and calling it a fault run', async () => {
@@ -383,6 +398,40 @@ describe('the baseline: the documented first-transaction journeys, as they are t
     expect(rep.totals.commands).toBe(setup.totals.commands - 1);
   }, 290_000);
 
+  it('send: install, setup, send. Two certen commands, one value copied by hand, and a receipt at the end', async () => {
+    const r = await measureOnce('--journey', 'send', '--json');
+    expect(r.code, r.stderr).toBe(0);
+    const rep = report(r);
+
+    expect(rep.journey).toBe('send');
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    for (const s of certenSteps(rep)) expect(s.ok, `${s.label}: ${s.command}`).toBe(true);
+
+    // The plan's target: install, setup, send. The faucet is the one thing a person still does, and setup waits for it.
+    expect(rep.totals.commands).toBe(2);
+    expect(rep.totals.external).toBe(2); // install, fund
+    // The address, pasted into a faucet. The intent id is gone: the receipt holds it.
+    expect(rep.totals.values_copied).toEqual(['abstract_account']);
+    expect(rep.totals.compared_by_eye).toEqual([]);
+    expect(rep.totals.passphrase_prompts).toBe(2);
+    expect(rep.totals.round_trips).toBe(BASELINE.send.round_trips);
+    expect(certenSteps(rep).map((s) => [s.command, s.round_trips])).toEqual(BASELINE.send.per_step);
+
+    // send exits 4, an honest PARTIAL: the repo's proof fixture has unbound page chains, the same verdict proof verify gives it. It is
+    // declared as a verdict (0, 4 or 5), not waved through as a success.
+    const send = certenSteps(rep).find((s) => s.command!.startsWith('certen send'))!;
+    expect(send.exit).toBe(4);
+    // The person's own node was asked (the proof is compared with its header), and the price book was read for the card.
+    expect(send.endpoints).toEqual(expect.arrayContaining(['POST /rpc', 'GET /v1/pricing', 'POST /v1/transaction']));
+
+    // Cheaper than the journey it improves on in commands and in values copied, and no more than a handful of round trips dearer: the
+    // checks it replaces (the proof, its verification, the effect) now happen in the one command.
+    const waiting = report(await measureOnce('--journey', 'setup-wait', '--json'));
+    expect(rep.totals.commands).toBeLessThan(waiting.totals.commands);
+    expect(rep.totals.values_copied.length).toBeLessThan(waiting.totals.values_copied.length);
+    expect(rep.totals.round_trips).toBeLessThanOrEqual(waiting.totals.round_trips + 4);
+  }, 290_000);
+
   it('status reads the key page from the Accumulate stand-in, with no CERTEN credential, and is blocked on the gas before funding and on nothing else', async () => {
     const rep = report(await measureOnce('--journey', 'readiness', '--json'));
     const statuses = certenSteps(rep).filter((s) => s.command!.startsWith('certen status'));
@@ -453,6 +502,16 @@ describe('the harness can go red', () => {
     // The setup step is the first to go wrong, for the declared reason: it waited, and the funds did not come.
     expect(bad[0]!.command).toMatch(/^certen setup .* --wait-for-funds/);
     expect((bad[0] as unknown as { reason: string }).reason).toMatch(/FUNDS_WAIT_TIMEOUT/);
+  }, 290_000);
+
+  it('exits 1 and names the send step when the intent ends failed: a failed send is never counted as a measured success', async () => {
+    const r = await measureOnce('--journey', 'send', '--fault', 'intent-fails', '--json');
+    expect(r.code).toBe(1);
+    const rep = report(r);
+    expect(rep.totals.all_steps_as_declared).toBe(false);
+    const bad = certenSteps(rep).filter((s) => !s.ok);
+    expect(bad.map((s) => s.command)).toEqual(['certen send 0.0001 ETH --to {recipient} --yes --wait --timeout 6m --rpc {rpc_url}']);
+    expect((bad[0] as unknown as { reason: string }).reason).toMatch(/exit/i);
   }, 290_000);
 
   it('exits 1 and names the step when an identity that cannot sign makes a step misbehave', async () => {

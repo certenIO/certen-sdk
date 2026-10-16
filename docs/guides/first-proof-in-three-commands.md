@@ -1,16 +1,16 @@
 # Guide — Your first proof, in three commands
 
-From `npm install` to a proof you can hand someone. No API key is copied by hand, no JSON is written
-by hand, and nothing waits on you to notice it finished.
+From `npm install` to a transfer you can prove. No API key is copied by hand, no JSON is written
+by hand, no id is copied between commands, and nothing waits on you to notice it finished.
 
 ```bash
 npm install -g @certen.io/cli
 
-certen setup          # signing key, account, identity, on-chain checks and gas, until it says "Ready"
+certen setup                              # signing key, account, identity, on-chain checks and gas, until it says "Ready"
 
-certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait
+certen send 0.0001 ETH --to 0xRecipient   # preview, confirm, sign, wait, verify the proof here, keep a receipt
 
-certen proof get <intent-id>
+certen receipt                            # the record again, whenever you want it
 ```
 
 `certen setup` is the whole front of this guide in one resumable command: sections 1 and 2 below (`login`, `init`) are what it does, in a
@@ -18,11 +18,54 @@ different order (the signing key first, because a new account can be created *by
 abstract account has no gas it shows the address, a faucet and a wallet link, and **waits for the funds to arrive** instead of ending on a URL.
 Run it again and it continues; it exits `0` only when you can act. `certen login` and `certen init` still work exactly as before.
 
+`certen send` is the transfer. The other route, a proof-gated **contract call**, is section 3 below: it is the same machinery with a contract
+in the middle, and it is still how you authorise anything that is not a plain transfer of the chain's native token.
+
 If anything below goes wrong, `certen doctor` names the one thing blocking you and the command that
 fixes it. It is worth running once before you start, just to see what a clean report looks like.
 And before you send, `certen status` asks the narrower question: is *this* identity, on *this* chain,
 with *this* key, able to act? It reads your key page from Accumulate itself (the check this walkthrough
-used to ask you to do with a hand-written `curl`) and says what it could not confirm.
+used to ask you to do with a hand-written `curl`) and says what it could not confirm. `send` runs the same
+checks for you, before it asks for your passphrase.
+
+## What just happened
+
+**`setup`** made your signing key on this machine, then the account that key creates, then an identity, which is *asynchronous*:
+`POST /v1/identity` answers `202` and provisioning continues for a minute or two, so it waited until the identity could actually sign (`can_sign`, below).
+It read your key page from Accumulate (not only from the gateway's word), checked the credits and the gateway balance, checked the gas on your abstract
+account, and saved identity, key and chain as your context, which is why the next command needed none of them.
+
+**`send`** did, in this order:
+
+1. checked what you typed with no network: the amount is whole units (`0.0001` ETH, never wei), the recipient is an address whose checksum holds, the asset is the chain's native token;
+2. checked readiness *before* asking for your passphrase, so a passphrase is never asked for in order to fail;
+3. showed the **confirmation card** and asked. The card says what the signature will authorise, *rebuilt from the gateway's bytes and matched to your request*; if the gateway had returned anything else, nothing would have been signed. `--yes` skips the question, never that check;
+4. signed, then waited for the **proof cycle**: 60–110 seconds of real validator work, not a hang and not a tunable delay (Ctrl-C stops the wait, not the intent; `certen watch <intent-id>` picks it back up);
+5. verified the proof **here**, from the proof's own bytes, and checked whether the value arrived;
+6. wrote the receipt to `~/.certen/receipts/<intent-id>.json` and printed it.
+
+**The receipt is the product.** It holds the ids you used to copy by hand (the intent, the Accumulate transaction, the destination transaction, the proof), the proof layer by layer, and one verdict:
+
+| Receipt | Meaning | Exit |
+|---|---|:--:|
+| `VERIFIED` | The action completed, every layer the proof carries checked here, and the value arrived. | `0` |
+| `PARTIAL` | It completed, and something is not established. The receipt names each thing (`Not established:`). | `4` |
+| `FAILED` | The intent failed, or a layer of the proof was checked and does not hold. Do not rely on it. | `1` |
+
+**Why exit `0` is not "everything verified" elsewhere, and is here.** `certen call --wait` and `tx create --wait` exit `0` when the intent completes, whether or not you have looked at its proof, so a
+script has to run `proof verify` too. `send` folds the check in: it exits `0` only for a VERIFIED receipt, and `4` for a PARTIAL one, so a script that reads `0` as verified is right.
+
+**Expect PARTIAL until you give it a node.** The proof's last layer, the execution on the destination chain, is the validators' own statement of the block until its receipts root is compared with a block header
+from **a node you trust**. Pass one and it is closed, and the recipient's balance is read from it too:
+
+```bash
+certen send 0.0001 ETH --to 0xRecipient --rpc https://sepolia.base.org     # or set CERTEN_RPC_URL
+certen receipt --rpc https://sepolia.base.org                               # add it afterwards
+```
+
+(Use a node you trust on that chain. Its URL is never printed or saved, since hosted nodes put a key in it.) A proof whose Accumulate page chains were not captured is PARTIAL too (`G1_chains`), so an
+honest PARTIAL naming those layers is a good result today, not a malfunction; a fully VERIFIED receipt end to end has not been run live. `certen receipt --explain` prints every layer with what it was checked
+against, and `certen receipt --share` makes a link a counterparty opens to verify the proof themselves.
 
 ---
 
@@ -82,7 +125,9 @@ the response says nothing about whether the identity works. The field that decid
 
 `init` returns only on `true`, and reports the other two as failures with different messages.
 
-## 3. `certen call`
+## 3. The contract-call route: `certen call`
+
+`certen send` moves the chain's native token. To authorise a call to a contract instead, this is the route (it also shows the confirmation card, and without `--json` ends with the same receipt):
 
 ```bash
 certen call --identity <id> --chain base-sepolia --to 0xYourContract \
@@ -111,6 +156,8 @@ a tunable delay, and not a hang. Drop `--wait` to return immediately and follow 
 multi-leg intent: edit it and pass it to `certen tx create --intent @file.json`.
 
 ## 4. `certen proof get`
+
+(After `send`, `certen receipt` is this and more. `proof get` is for when you want the proof document itself.)
 
 ```bash
 certen proof get <intent-id>       # also accepts a proof id or a transaction hash
@@ -153,6 +200,9 @@ both of those checks are *possible* — not that its API asserts the answer.
 
 Full detail: [verify-a-proof.md](verify-a-proof.md).
 
+`certen receipt` applies the same honesty to the whole transfer: its verdict is the weakest honest reading of the proof **and** of whether the value arrived, it never shows PARTIAL or NO EVIDENCE as verified, and
+it names what is not established instead of leaving you to notice. The recipient's balance is only ever read from a node you give it; the gateway cannot read another address.
+
 ---
 
 ## When an intent stalls at `anchoring`
@@ -165,7 +215,7 @@ there, and they need different responses.
 reports success — and then parks forever, because the execution cannot pay for itself. Nothing in
 any API response says so.
 
-The CLI and the SDK both refuse before submitting, and name the faucet. They refuse a balance that is zero,
+The CLI and the SDK both refuse before submitting, and name the faucet (`certen send` does it as part of its readiness check, before your passphrase). They refuse a balance that is zero,
 and one that is positive but cannot cover the amount you are sending plus an *estimate* of the gas to send
 it (the gateway publishes no per-execution gas figure, so the gas half is a per-chain planning figure, and
 the message says it is an estimate). `--force` (CLI) and `skipFundingCheck: true` (SDK) override it.
@@ -223,6 +273,22 @@ const proof = await certen.execute.proof(intentId);
 Your key never reaches the SDK. You pass a `sign` function; it receives bytes and returns a
 signature. Sign the **raw bytes** of the hex string — do not hash it again, and do not sign the
 ASCII of the hex.
+
+And the transfer `certen send` makes, with its receipt (`buildReceipt` is in `@certen.io/sdk/verify`, where the verifier is):
+
+```ts
+import { buildReceipt } from '@certen.io/sdk/verify';
+
+const sent = await certen.execute.send({          // derives the ADI and the abstract account from the identity
+  identityId, chain: 'base-sepolia', toAddress: '0x…', amount: '0.0001', asset: 'ETH',   // whole units, the chain's native token
+  publicKey, sign: (hashHex) => ed25519Sign(hashHex),
+  beforeSign: (summary) => confirm(summary.text.join('\n')),   // what the signature authorises; return false to decline
+});
+
+await certen.execute.wait(sent.intentId);
+const receipt = await buildReceipt(certen, sent.intentId, { rpc: process.env.CERTEN_RPC_URL });
+// receipt.verdict: 'verified' | 'partial' | 'failed' | 'pending' | 'unproven'; receipt.gaps names what is not established
+```
 
 Next: [onboard-an-identity.md](onboard-an-identity.md) for the raw API path ·
 [external-signing.md](external-signing.md) for HSMs and air-gapped signers ·

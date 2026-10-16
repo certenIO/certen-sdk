@@ -369,6 +369,47 @@ export const JOURNEYS = Object.freeze({
       },
     ],
   },
+
+  /**
+   * The headline of Phase 4: install, `setup`, `send`. `send` is the transaction (`tx create`), the outcome (`tx status`), the proof (`proof get`),
+   * the verification (`proof verify`, twice, once against your own node) and the effect check, in one command that ends in a receipt. The one
+   * thing still done by hand is the faucet, and `setup` waits for it.
+   *
+   * `send` exits 4 here, on purpose and for a reason: the fake serves the repo's own conformance capture, whose pages' chain histories were not
+   * captured, so the proof is an honest PARTIAL (the same verdict `proof verify` gives these fixtures). The step declares 0, 4 and 5 as verdicts, as
+   * the `proof verify` steps do. The proof's execution layer IS verified here, because the node of the person's own (`--rpc`) answers.
+   */
+  send: {
+    source: 'PLAN.md section 2, with the Phase 4 CLI: `send` replaces the transaction, the outcome, the proof and its verification, and the effect check',
+    summary: 'install, setup, send: the plan\'s three commands',
+    steps: [
+      { label: 'Install the CLI', external: true, description: 'npm i -g @certen.io/cli' },
+      {
+        label: 'Set everything up, and wait for gas',
+        args: [
+          'setup', '--yes', '--new-account', '--org-name', 'journey', '--name', 'journey-probe', '--chain', 'base-sepolia', '--no-keyring',
+          '--wait-for-funds', '--poll-interval', '0.2', '--funds-timeout', '10s',
+        ],
+        fundsArrive: { afterReads: 5 },
+        capture: { abstract_account: 'readiness.context.abstract_account' },
+        prompts: 1,
+      },
+      {
+        label: 'Send gas to the abstract account, while setup waits',
+        external: true,
+        description: 'a faucet website (or the wallet link setup printed), into the abstract account',
+        uses: ['abstract_account'],
+        effect: 'during',
+      },
+      {
+        // The recipient and the person's own node are theirs to choose, not output from an earlier step.
+        label: 'Send the transaction, and keep the receipt',
+        args: ['send', '0.0001', 'ETH', '--to', '{recipient}', '--yes', '--wait', '--timeout', '6m', '--rpc', '{rpc_url}'],
+        exit: [0, 4, 5],
+        prompts: 1,
+      },
+    ],
+  },
 });
 
 /** The `{name}` placeholders in a step's args, in order. */

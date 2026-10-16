@@ -146,9 +146,9 @@ parsing prose:
 | `1` | The gateway answered, and the operation did not succeed | Read `error.code`. Do not retry unless `retryable` is true. |
 | `2` | Usage error — bad invocation, unknown command, missing flag, no API key configured | Fix the invocation. Never retry. |
 | `3` | The gateway could not be reached | **Nothing was submitted.** Safe to retry. |
-| `4` | `proof verify` only: **partial** — the layers the proof carries were checked and one is not established | Read `data.layers`: every layer with `verdict: not_checked` names why. This is not a verified proof. |
-| `5` | `proof verify` only: **no evidence** — nothing the Accumulate side can be checked from (`data.evidence.code`: `PROOF_V2_EVIDENCE_NOT_SERVED`, or `PROOF_SERVICE_UNAVAILABLE`) | The gateway serves no proof v2 document for this proof (yet). Do not treat the gateway's own receipt as verification. |
-| `130` | `setup` and `gas` only: **stopped with Ctrl-C while waiting for funds** (`error.code` `INTERRUPTED`) | Nothing was left half-done. Run the same command again to continue. Never a failure of the operation. |
+| `4` | `proof verify`: **partial** — the layers the proof carries were checked and one is not established. `send`, `receipt` and `watch` (section 10): the receipt is **PARTIAL** (something is not established; `data.receipt.gaps` names each) or still **pending** | Read `data.layers` (`proof verify`) or `data.receipt.gaps` (section 10): every layer with `verdict: not_checked` names why. This is not a verified proof, and not a failure either. |
+| `5` | `proof verify`: **no evidence** — nothing the Accumulate side can be checked from (`data.evidence.code`: `PROOF_V2_EVIDENCE_NOT_SERVED`, or `PROOF_SERVICE_UNAVAILABLE`). `send`, `receipt` and `watch`: the same, as `data.receipt.proof.verdict: "no_evidence"` | The gateway serves no proof v2 document for this proof (yet). Do not treat the gateway's own receipt as verification. |
+| `130` | `setup`, `gas`, `send` and `watch`: **stopped with Ctrl-C while waiting** (`error.code` `INTERRUPTED`): for funds in `setup` and `gas`, for the proof cycle in `send` and `watch` | Nothing was left half-done. For `setup` and `gas`, run the same command again to continue. For `send` and `watch` **the intent keeps running** (nothing was cancelled): `error.details.resume` is the command that picks it back up, and the receipt so far is saved. Never a failure of the operation. |
 
 The distinction between `2` and `3` is the one that matters most: `3` guarantees no request was
 accepted, so a retry cannot double-execute.
@@ -160,10 +160,11 @@ intent again would be wrong. (Before, any status-0 error exited `3`.)
 
 ### Signing: `SIGNING_DATA_MISMATCH`, `BLIND_SIGNING_REFUSED`
 
-Every command that signs with a local key (`tx create --sign-with`, `call`, `governance <operation> --sign-with`, `pending sign --sign-with`) first rebuilds the unsigned transaction the gateway returned
+Every command that signs with a local key (`send`, `tx create --sign-with`, `call`, `governance <operation> --sign-with`, `pending sign --sign-with`) first rebuilds the unsigned transaction the gateway returned
 (`signing_data.transaction` and `signing_data.signature_metadata`), recomputes the transaction hash, the signature-metadata hash and the signing hash, requires them to equal what the gateway sent, and
 matches what the transaction authorises (principal, each leg's chain, target, value and calldata, expected events, deadline, additional authorities, the signing key, the vote, or the governance operation) to
-the request. It prints the result on stderr before signing (`You are about to sign: …`); `--json` output carries it as `signing`.
+the request. It prints the result on stderr before signing (`You are about to sign: …`, inside the confirmation card of section 10); `--json` output carries it as `signing`. `--yes` and `--json` skip the
+**question** the card asks, never this check.
 
 | `error.code` | Exit | Meaning |
 |---|:--:|---|
@@ -584,6 +585,282 @@ the check can read.
 
 **Not changed:** `certen init` exits `0` once its own steps are done, whether or not the account can act yet, and keeps its output. `setup` is the
 strict command; it shares the credential, key and identity steps with `init` rather than replacing it.
+
+### 10. Send, receipts and the confirmation card: `certen send`, `certen receipt`, `certen watch`
+
+Three commands, one document. **`send`** moves native value and ends in a **receipt**; **`receipt`** shows it again, refreshing whatever was
+pending; **`watch`** picks a wait back up. The receipt is the record the walkthrough always told people to keep (the intent, the Accumulate
+transaction, the destination transaction, the proof), assembled for them, with what is established kept apart from what is not.
+
+#### The confirmation card
+
+Every command that signs shows one card before the signature: `send`, `call`, `tx create --sign-with`, `governance <operation> --sign-with` and
+`pending sign --sign-with`. It is on **stderr in both modes** (it is never part of the envelope). It carries a headline in the person's own terms
+(`Send 0.0001 ETH on base-sepolia`), the recipient and the sender in full, a fee line, a `context` row naming every value the person did **not**
+type and where it came from, then the rebuilt summary (`You are about to sign: …`, verbatim, as in the Signing section above) and the line *The
+signature authorises exactly this: it was rebuilt from the gateway's bytes and matched to your request.* Under it, at a terminal, the question
+`Sign with "<key>"?`.
+
+- **The question is asked only of a person.** At a terminal, without `--yes` and without `--json`. The default answer is yes on a known testnet and **no
+  on anything else**, where the card also puts the chain name in capitals and says `NOT A KNOWN TESTNET: this moves real funds` (a chain nobody can
+  classify is treated the same way: unknown is not ok). A `no` ends the command with `SIGNING_DECLINED` (exit `1`; `error.details.intent_id` when an intent
+  had already been opened, which then expires unsigned). Nothing was signed, charged or moved.
+- **`--yes` skips the question, never the check.** The rebuild-and-match of the signing data (the Signing section above) runs inside the SDK before any
+  signature and has no switch. `--yes` is new on `call`, `tx create`, `governance <operation>` and `pending sign` (and on `send`).
+- **Where nobody can answer, the commands that have always signed unattended keep doing so.** `call`, `tx create --sign-with`, `governance` and
+  `pending sign --sign-with` print the card and sign when piped, exactly as before: refusing them would break scripts that work today. **`send` is new
+  and strict**: with no terminal, no `--yes` and no `--json` it exits `2` with `CONFIRMATION_REQUIRED` before it reads a passphrase or makes a request.
+  `--json` counts as an answer: the caller that asked for an envelope is a program.
+- **The fee line is an estimate, or it says it is not available.** It is the price book's `proof.execute` entry for the chain (`GET /v1/pricing`, platform
+  fee only; a `quoted` entry adds gas when it executes, up to a ceiling) plus the chain's gas reserve (the same planning figure as readiness, section 8).
+  A price book that cannot be read, or has no such entry, prints `Not available: …`, never a number. `send` always reads it; the other four commands read it
+  only when a person is going to see the question (a script does not pay for a request it will not read).
+
+#### `certen send`
+
+```
+certen send <amount> <asset> --to <address> [--chain <chain>] [--identity <ref>] [--sign-with <key>] [--yes] [--dry-run]
+            [--wait | --no-wait] [--timeout <duration>] [--poll-interval <interval>] [--rpc <url>] [--force]
+            [--gas-reserve <amount|none>] [--accumulate-rpc <url>] [--proof-class on_demand|on_cadence]
+            [--idempotency-key <key>] [--expires-in <duration>]
+```
+
+`certen send 0.0001 ETH --to 0xRecipient` is the whole transfer. Identity, chain and key come from the context (section 7), each echoed on stderr when it
+was not typed, and **a chain that is not a known testnet never comes from a default** (`MAINNET_DEFAULT_REFUSED`, exit `2`; spell it out with `--chain`). In this
+order:
+
+1. **The invocation, with no network.** `<amount>` is **whole units** as a decimal string (`INVALID_AMOUNT`, exit `2`, for a wei-looking integer of ten or more digits, a
+   non-decimal, or zero). `--to` must be an EVM address; **a mixed-case address whose EIP-55 checksum does not hold is refused** (`INVALID_ADDRESS`, exit `2`) and the
+   message names the correct capitalisation. An all-lower-case or all-upper-case address carries no checksum and is accepted. `<asset>` must be the chain's native
+   symbol: **`send` moves a chain's native token only** (`UNSUPPORTED_ASSET`, exit `2`, for anything else; `ETH` on a chain whose gas is TEL is refused, not sent as TEL). What
+   a token transfer moves (the token contract and its decimals) is chosen downstream, so it cannot be rebuilt and checked before signing, and nothing is signed that cannot
+   be checked; the message names `certen call` with `transfer(address,uint256)`. A chain the catalogue does not know is `UNSUPPORTED_CHAIN` (exit `2`).
+   `--rpc` (or `CERTEN_RPC_URL`) must be an http(s) URL with no username or password (`INVALID_RPC`, exit `2`; the message never repeats the URL, which can carry a key).
+   With no signing key, `MISSING_SIGNING_KEY` (exit `2`) unless `--dry-run`; with nobody to confirm, `CONFIRMATION_REQUIRED` (above).
+2. **Readiness, before anything is unlocked.** `client.readiness()` (section 8) for this identity, chain, key and amount, and the fee estimate, in parallel. **A passphrase is never
+   asked for in order to fail.** A *failing* check refuses with `NOT_READY` (exit `1`, `error.details.readiness` with `first_blocker` set to the one that stopped it; `NETWORK_ERROR`,
+   exit `3`, when the gateway is unreachable). An `unknown` check is **shown on stderr and does not block**: a balance the gateway has not reported yet is not evidence of zero, and the
+   funding guard has never blocked on one. `--force` excuses the gas checks (`ABSTRACT_ACCOUNT_UNFUNDED`, `ABSTRACT_ACCOUNT_UNDERFUNDED`) and nothing else, which is all it has ever meant.
+3. **`--dry-run` stops here.** A failing check refuses first, dry run or not (so a dry run that exits `0` is one that would go on). Otherwise it prints what would be sent and exits `0`; nothing is signed or sent. `data`:
+
+   ```json
+   { "dry_run": true,
+     "request": { "kind": "transfer", "chain": "base-sepolia", "chain_id": 84532, "identity_id": "396f863c-…", "adi_url": "acc://alpha.acme",
+                  "from": "0xE293…cAcB", "to": "0x2222…2222", "amount": "0.0001", "asset": "ETH", "contract_call": null },
+     "fee": { "state": "estimated", "sku": "proof.execute", "chain": "base-sepolia", "platform_fee_usd": "0.040000", "mode": "quoted", "max_charge_usd": "0.500000",
+              "gas_reserve": "0.0001", "gas_symbol": "ETH", "price_book_version": "2026-10-15", "note": "An estimate from the price book: the platform fee only. Gas is priced when it executes, up to a ceiling." },
+     "readiness": { "ready": true, "state": "ready", "first_blocker": null, "context": { }, "checks": [ ] } }
+   ```
+4. **The recipient's balance, if you gave a node.** With `--rpc`, the node's `eth_chainId` is checked against the chain (a node on another network is refused, `EVM_RPC_WRONG_CHAIN`) and the
+   recipient's balance is read **before** the value moves. A node that cannot be used stops the send here, with nothing signed (exit `1`, the `EVM_RPC_*` code): someone who asked for an
+   independent check should not discover it was not made after the value has gone.
+5. **Unlock, open, check, confirm, sign.** The passphrase is read now; the intent is opened; the SDK rebuilds and matches the signing data (`SIGNING_DATA_MISMATCH` and friends,
+   exit `1`); the card is shown; a person says yes (or `--yes` / `--json` did).
+6. **The outcome.** Unless `--no-wait` (and with `--json` the default is `--no-wait`, as for `tx create`; pass `--wait`), it waits for the proof cycle (60–110 seconds; the budget is
+   `--timeout`, default 7 minutes, never shortened), verifies the proof **here**, checks the value arrived, writes the receipt and prints it.
+
+**Exit codes of `send`, `receipt` and `watch` come from the receipt** (and are the same for all three):
+
+| Exit | When |
+|:--:|---|
+| `0` | `verdict: "verified"`, or `"unproven"` (the action executed and its proof can never be produced; nothing can be verified, and it says so). Also `send --no-wait`, after the signature is in (the receipt reads `pending`) |
+| `1` | `verdict: "failed"`: the intent failed (`TX_FAILED`, an `ok:false` envelope), or a layer of the proof was checked and does not hold (an `ok:true` envelope whose `receipt.verdict` is `failed`, like `proof verify`). Also `TX_WAIT_TIMEOUT` (the wait ran out; the intent may still complete), `NOT_READY`, `SIGNING_DECLINED` and the pre-signing refusals above |
+| `2` | a mistake in the invocation (codes above), raised before any request |
+| `3` | the gateway could not be reached (`NETWORK_ERROR`); nothing was signed |
+| `4` | `verdict: "partial"` (something is not established: `receipt.gaps` names each) or `"pending"` (not finished, or executed with its proof still being produced) |
+| `5` | `verdict: "partial"` and `receipt.proof.verdict: "no_evidence"`: nothing about the Accumulate side could be checked |
+| `130` | Ctrl-C while waiting (`INTERRUPTED`). **The intent keeps running**; nothing was cancelled |
+
+So `0` is "done **and** checked", never merely "done": a script that reads `0` as verified is right, and one that must tolerate "done, not yet checked" accepts `4`.
+
+On a finished wait, one envelope on stdout (the card, the progress and the human receipt are stderr in `--json` mode):
+
+```json
+{ "ok": true, "data": { "receipt": { }, "saved_to": "/home/me/.certen/receipts/7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13.json" } }
+```
+
+(`saved_to` is `null` only for `receipt` when a saved file this version cannot read is left alone; see below.) When the wait **ends in an error** the receipt is saved from the last
+thing the gateway said and travels in the error, so the ids are not lost with the terminal:
+
+```json
+{ "ok": false, "error": { "code": "TX_WAIT_TIMEOUT", "message": "…", "retryable": false, "details": {
+    "intent_id": "7c1e3b0a-…", "last_status": "anchoring", "last_class": "in_flight", "timeout_ms": 420000,
+    "receipt": { }, "receipt_path": "/home/me/.certen/receipts/7c1e3b0a-….json", "resume": "certen watch 7c1e3b0a-…" } } }
+```
+
+`TX_FAILED` (`reason_code`, `reason`) and `INTERRUPTED` (exit `130`; `last_status`) carry the same three additions. If Ctrl-C arrives before the first reading there is nothing to save and the
+error carries only what it already had. Ctrl-C stops the **wait**, not the intent: the handler exists for the length of the wait and no longer, and `resume` is the command that continues.
+
+#### `certen receipt` and `certen watch`
+
+```
+certen receipt [<intent>] [--list] [--explain] [--rpc <url>] [--expect <address:topic0[:topic1]>] [--share] [--offline] [--refresh]
+certen watch <intent> [--timeout <duration>] [--poll-interval <interval>] [--rpc <url>] [--expect <address:topic0[:topic1]>]
+```
+
+**`receipt`** with no argument shows the most recent saved receipt (it says which, on stderr; `NO_RECEIPTS`, exit `2`, when there is none). With an intent id it reads the intent,
+**re-verifies the proof here**, re-checks the effect (with `--rpc`), and rewrites the saved receipt, keeping its `created_at`, its `request` and its pre-signing snapshot. Any intent can be
+shown, not only one this machine sent; a receipt for one it did not send has no request on record, so there is no effect to check and its verdict rests on the proof alone. Options:
+
+- **`--list`**: `data` is `{ "receipts": [ { "intent_id", "updated_at", "verdict", "kind", "headline", "path" } ] }`, newest first. Asks the gateway nothing.
+- **`--offline`**: shows the saved receipt as it is and asks nothing (`refreshed: false`; `NO_SAVED_RECEIPT`, exit `2`, when none can be used). It cannot be combined with `--rpc`, `--share` or `--refresh` (`CONFLICTING_FLAGS`, exit `2`).
+- **`--refresh`**: read the gateway again and re-verify even when the saved receipt is **final**. A final receipt (`verified`, `failed` or `unproven`) has nothing pending, so a bare `receipt` shows it as saved without asking the gateway (`refreshed: false`, and a line on stderr says so): asking again could only make it weaker, because a bare `receipt` consults no node of yours. `--rpc`, `--expect` and `--share` are asking, so they read the gateway. A `partial` or `pending` receipt is always refreshed.
+- **`--explain`**: the human receipt also lists the proof layer by layer (stdout in table mode, stderr with `--json`). The envelope always carries the layers in `receipt.proof.layers`.
+- **`--rpc <url>`** (or `CERTEN_RPC_URL`): a node you trust on the execution chain. The bundle's receipts root and block hash are compared with the header it returns (closing the proof's execution layer), and the recipient's balance is read from it.
+  With no snapshot saved before signing, the balance at the block before the execution block is the baseline (a node that no longer holds that state makes the effect `unreadable`, not `not_observed`).
+- **`--expect <address:topic0[:topic1]>`**: an event the execution receipt must contain, as in `proof verify`. For a contract-call receipt it decides `effect.expected_event`.
+- **`--share`**: `proof.share` on the receipt's `ids.proof_id`: a link a counterparty opens to verify the proof with no CERTEN account. `data.share` is `{ "url", "expires_at" }`.
+  A receipt without a proof id is `NOTHING_TO_SHARE` (exit `1`).
+
+`data` is `{ "receipt", "saved_to", "refreshed": true }` (plus `share`, and `saved_receipt_kept`, below).
+
+**A saved receipt is never silently made weaker.** If this read establishes *less* than the saved receipt because less was asked, the saved receipt was compared with a node of yours (`proof.node_checked`) or had read the recipient's balance and this read did neither, the read is shown but the file is **left as it is**: `saved_to` is the existing file, `saved_receipt_kept` says why (`"it was compared with a node of yours and this read was not"`), and stderr says `The saved receipt was left as it is`. Run it again with `--rpc` to refresh that one. A *contradiction* (a proof layer that now fails) is news and is always saved. `watch` follows the same rule. **A saved receipt that this version cannot use** (not JSON, another intent's, or a `receipt_version` newer than this CLI reads) is reported on
+stderr, a fresh receipt is built from the gateway, and **the file is left as it is** (`saved_to: null`): it is never overwritten.
+
+**`watch <intent>`** waits (in `--json` mode too: `watch` exists to wait), then shows the receipt. It reads the intent once first, so one that has already finished is not waited for. It
+picks up where Ctrl-C or a timeout left off: `send`, `watch` and `receipt` share one implementation and cannot disagree about what they believe. `data` is `{ "receipt", "saved_to" }`; same exit codes and
+error details as above. `--timeout` and `--poll-interval` take `90s`, `6m`, `1h` (a bare number is minutes / seconds) and default to the proof-cycle budget used everywhere.
+
+#### The receipt document
+
+`receipt_version` is `1`. New fields are additive; a field never changes type or disappears. A version this CLI does not know is "unusable", never half-read.
+
+```json
+{ "receipt_version": 1,
+  "intent_id": "7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13",
+  "kind": "transfer",
+  "created_at": "2026-10-16T03:23:06.085Z", "updated_at": "2026-10-16T03:25:41.512Z",
+  "gateway": "https://gateway.kompendium.co",
+  "request": { "kind": "transfer", "chain": "base-sepolia", "chain_id": 84532, "identity_id": "396f863c-879c-4046-8591-3f0405c5f6bd", "adi_url": "acc://alpha.acme",
+               "from": "0xE293e95Ec1471155d977448B99B0922C2828cAcB", "to": "0x2222222222222222222222222222222222222222",
+               "amount": "0.0001", "asset": "ETH", "contract_call": null },
+  "signed_with": { "key": "dev", "public_key_hash": "90b1a11d61b6bb3039d5b46141af38a77c23c8c7c194223793f6a4f09a83c91c" },
+  "status": { "gateway_status": "completed", "class": "terminal_success", "outcome": "completed", "terminal": true,
+              "reason_code": null, "reason": null, "completion_basis": "proof_artifact", "validator_state": "settled" },
+  "ids": { "intent_id": "7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13",
+           "accumulate_tx": "acc://abababababababababababababababababababababababababababababababab@alpha.acme/data",
+           "accumulate_tx_hash": "abababababababababababababababababababababababababababababababab",
+           "destination_tx": "0x591707ddd9c0292196f0671b48f8ec71c696f5c7c97ca9d39a629ead652d5d48", "destination_tx_source": "proof",
+           "destination_chain": "base-sepolia", "destination_block": 46437431,
+           "proof_id": "11111111-2222-4333-8444-555555555555", "write_back_tx": null },
+  "links": { "destination_tx": "https://sepolia.basescan.org/tx/0x591707ddd9c0292196f0671b48f8ec71c696f5c7c97ca9d39a629ead652d5d48",
+             "accumulate_explorer": "https://explorer.accumulatenetwork.io" },
+  "stages": [ { "id": "signed", "label": "signed", "state": "done" },
+              { "id": "anchored", "label": "anchored on Accumulate", "state": "done", "detail": "abababab…" },
+              { "id": "executed", "label": "executed on base-sepolia", "state": "done", "detail": "0x591707dd…" },
+              { "id": "proof_verified", "label": "proof verified locally", "state": "done" } ],
+  "effect": { "kind": "native_transfer", "state": "confirmed", "amount": "0.0001", "symbol": "ETH",
+              "detail": "The recipient's balance rose by exactly 0.0001 ETH (at block 46437431 on the node at sepolia.base.org). The abstract account's balance fell by 0.0001 ETH (as the gateway reports it).",
+              "recipient": { "source": "rpc", "host": "sepolia.base.org", "address": "0x2222222222222222222222222222222222222222", "symbol": "ETH",
+                             "before": "0.2", "after": "0.2001", "delta": "0.0001", "at_block": 46437431 },
+              "sender": { "source": "gateway", "address": "0xE293e95Ec1471155d977448B99B0922C2828cAcB", "symbol": "ETH",
+                          "before": "0.001", "after": "0.0009", "delta": "-0.0001", "at_block": null } },
+  "proof": { "verdict": "verified", "detail": "11 of 11 layers carried, all checked here from the proof's own bytes.",
+             "checked_here": true, "node_checked": true,
+             "layers": [ { "id": "trust_base", "title": "Genesis network values are bound to the pinned incarnation", "verdict": "verified", "statement": "S2", "evidence": { } },
+                         { "id": "outcome", "title": "The execution on the destination chain", "verdict": "verified", "statement": "S6", "evidence": { } } ],
+             "layers_total": 11, "layers_verified": 11, "layers_not_carried": 3, "not_established": [],
+             "proof_id": "11111111-2222-4333-8444-555555555555", "evidence": { "found": true } },
+  "verdict": "verified",
+  "headline": "VERIFIED: 11 of 11 layers carried, checked here",
+  "gaps": [],
+  "recipient_snapshot": { "address": "0x2222222222222222222222222222222222222222", "wei": "200000000000000000", "host": "sepolia.base.org",
+                          "chain_id": 84532, "taken_at": "2026-10-16T03:23:01.204Z" } }
+```
+
+(`proof.layers[]` is shortened here: the real list is every layer of the proof document, as in `proof verify`.)
+
+| Field | Meaning |
+|---|---|
+| `kind` | `transfer` (from `send`), `contract_call` (from `call`), `intent`, or `unknown` for a receipt built from an intent id alone |
+| `request` | What was asked for, as the CLI sent it. `null` for an intent this machine did not send (kept from the saved receipt on a refresh). `amount` is whole units; `contract_call` is `{ target, function_signature, value_wei }` for a call |
+| `signed_with` | The local key's name and its public key hash. No secret is ever recorded |
+| `status` | The gateway's status verbatim (`gateway_status`), its class (`in_flight`, `executed`, `terminal_success`, `terminal_gas_only`, `terminal_failure`, `unknown`), the named `outcome` (`completed`, `completed_unproven`, `executed`, `failed`, `pending`, `unknown`), and the reason and completion basis when there are any |
+| `ids` | Everything worth keeping. **`destination_tx` is not a field of the intent**: it is the transaction of the **verified execution proof** (`destination_tx_source: "proof"`), else the validators' own `settlement_tx` (`"validators"`, not yet proved), else `null`. It is never guessed. `accumulate_tx_hash` is the 64-hex hash extracted from `accumulate_tx` |
+| `links` | `destination_tx` is an explorer link, only for an EVM chain whose explorer the gateway's registry names; `accumulate_explorer` is the Accumulate explorer's base (no path is guessed) |
+| `stages` | `signed`, `anchored`, `executed`, `proof_verified`, each `state` `done` · `pending` · `failed` · `unknown` · `skipped`, with a `detail` where there is one. `proof_verified` is `done` only for a verified proof; a PARTIAL proof is `unknown`, never `done` |
+| `effect` | Did the value arrive. `kind`: `native_transfer`, `contract_call` or `none`. `state`: **`confirmed`** (the recipient's balance rose by at least the amount, read from a node of yours; or the expected event is in the receipt) · **`not_observed`** (it did not; `detail` names why that can be benign, and the proof is what says what executed) · **`unchecked`** (no node was given, so the recipient was not read: the gateway cannot read another address) · **`unreadable`** (a node was given and could not be used, or there is no baseline) · `not_applicable` (nothing to compare: a call with no expected event, or no request on record). `recipient` is read from **your** node (`source: "rpc"`, `host` only, never the URL); `sender` is the abstract account as the gateway reports it, **supporting evidence that never decides the state**. `delta` is signed, `after` minus `before`. A balance difference is an observation between two moments, and `detail` says so |
+| `proof` | `verdict`: `verified` · `partial` · `failed` · `no_evidence` · `unavailable` (the proof could not be fetched: not the same as there being none) · `pending` · `not_applicable` (the intent failed, or its proof can never exist). `checked_here` is true only when a verifier ran in this process over bytes the gateway served; `node_checked` is true only when the bundle's receipts root and block hash were compared with a header from a node you gave. `layers[]` are the proof's layers (`verified` · `failed` · `not_checked` · `not_in_document`, with `reason`, `statement` and `evidence`); `not_established` lists the carried layers that are `not_checked`; `evidence` is `{ found, code?, reason?, bundle_error? }` as in `proof verify` |
+| `verdict` | The weakest honest reading: **`verified`** · **`partial`** · **`failed`** · **`pending`** · **`unproven`** |
+| `headline` | One line, in plain words, that a person can read instead of the rest. Not a contract; `verdict` is |
+| `gaps` | What is not established, one entry each: `{ code, text }` |
+| `recipient_snapshot` | The recipient's balance taken before signing (`address`, `wei`, `host`, `chain_id`, `taken_at`), so a later `receipt --rpc` can still measure the rise. `null` without `--rpc` |
+
+**How the verdict is reached.** A failed intent (`failed`, `expired`, `error`) is `failed`; `completed_unproven` is `unproven`; anything not finished, or `executed` with the proof still being
+produced, is `pending`. A `completed` intent is `verified` **only if** its proof is `verified` **and** the effect is `confirmed` (or `not_applicable`). A proof with a layer that was checked and does
+not hold is `failed`. Everything else is `partial`: a proof with a layer not established, no evidence, a proof that could not be fetched, or a verified proof whose value-arrival check was
+`not_observed`, `unchecked` or `unreadable` (the headline says which). **PARTIAL and NO EVIDENCE are never shown as verified, and unknown is never ok.**
+
+**`gaps`.** `verified` always has `gaps: []`, and a `partial` or `pending` receipt always has at least one (a `failed` receipt for an intent that failed, and `unproven`, have none: the status itself is the whole story). The codes:
+
+| `code` | Meaning |
+|---|---|
+| `INTENT_NOT_TERMINAL` | The intent has not finished |
+| `PROOF_PENDING` | It executed; its proof bundle is still being produced |
+| `PROOF_NOT_FETCHED` | The proof could not be fetched right now (a 5xx or a network failure: not the same as there being none) |
+| `PROOF_NO_EVIDENCE` | Nothing about the Accumulate side could be checked (`PROOF_V2_EVIDENCE_NOT_SERVED` and the like) |
+| `PROOF_LAYER_NOT_ESTABLISHED` | A layer the document carries is `not_checked`; `text` names it and why |
+| `PROOF_LAYER_FAILED` | A layer was checked and does not hold |
+| `NODE_NOT_CONSULTED` | The execution layer rests on the validators' own statement of the block until it is compared with a header from a node you trust (or the node you gave could not be used, and `text` says why) |
+| `EFFECT_UNCHECKED` · `EFFECT_UNREADABLE` · `EFFECT_NOT_OBSERVED` | The three non-confirming states of `effect`, with its `detail` |
+
+**What VERIFIED needs, plainly.** The proof's execution layer (S6) leaves `not_checked` only when the receipts root is compared with a block header from **a node of yours**
+(`--rpc` or `CERTEN_RPC_URL`), because until then it is the validators' statement about themselves. **Without one, a receipt is PARTIAL, naming that layer, however good the rest is**; that is the
+honest reading, not a gap in the CLI. Likewise a proof whose Accumulate page chains were not captured (`G1_chains` is `not_checked`, `g1_chain_uncaptured`) is PARTIAL: the
+repository's conformance capture is one, so **offline runs against the test fake end in PARTIAL (exit `4`) naming `G1_chains` and the execution layer, and a VERIFIED receipt end to end is
+unverified live** (it needs a live proof whose page chains are captured, and a node of yours). The `verified` rules above are pinned by tests over constructed inputs; the live path is for a human to run.
+
+**Your node.** `--rpc` / `CERTEN_RPC_URL` is the caller's: http(s) only, no username or password in the URL, no redirect followed, the reply bounded in size and time, and no CERTEN credential ever sent to it. **The URL is
+never printed, saved or returned**: hosted node providers put an API key in the path, so every message, the receipt and the envelope name only the host. The node's `eth_chainId` must equal the chain (a balance
+from another network would mean nothing). A flag is `INVALID_RPC` (exit `2`) if it is not usable; at run time:
+
+| `error.code` | Exit | Meaning |
+|---|:--:|---|
+| `EVM_RPC_INVALID` | 1 | The endpoint is not http(s), or carries a username or password |
+| `EVM_RPC_UNREADABLE` | 1 | No answer in time, a non-200, an oversize reply, a reply that is not JSON or has no result |
+| `EVM_RPC_ERROR` | 1 | The node returned a JSON-RPC `error` (its message, shortened) |
+| `EVM_RPC_WRONG_CHAIN` | 1 | The node is on another chain (`details`: `expected`, `actual`, `host`) |
+| `EVM_RPC_CHAIN_UNKNOWN` | 1 | The chain is not in the catalogue, so the node cannot be checked to be on it |
+| `EVM_RPC_NO_BLOCK` | 1 | The node has no such block (pruned, lagging or another network), or sends a header without a receipts root: **it compared nothing with the proof** |
+
+In `send` an unusable node stops the send before signing. In `receipt` and `watch` the proof is still checked **without** it and the gap `NODE_NOT_CONSULTED` names why. In `proof verify --rpc` it is an error.
+`proof verify --rpc` goes through the same SDK code as the receipt; **before this release a node that had no such block made the execution layer read `verified`** (a bare block number was compared with itself), and it
+is now `EVM_RPC_NO_BLOCK`.
+
+#### Where receipts live
+
+`~/.certen/receipts/<intent_id>.json`, mode `0600` in a `0700` directory, written **atomically** (beside its name, then renamed over it, so a Ctrl-C or a full disk leaves the previous receipt intact). A receipt holds ids, addresses,
+hashes, verdicts, the gateway's address and a node's **host**; it holds no key, no passphrase, no API key and no node URL, so it is safe to attach to a ticket. It is written once the intent id exists and **however the wait ends**
+(a failed intent, a timeout and Ctrl-C included; the first reading of a wait is saved at once). `RECEIPT_NOT_SAVED` (exit `1`) says the transaction is unaffected and names the intent id to keep. Tests and tools point `HOME` / `USERPROFILE` at a
+temporary directory.
+
+**`call` in table mode.** `call --wait` (not `--json`) ends with the same receipt after its usual output, and saves it; a receipt that cannot be built is a hint on stderr, never a failed call. Its `--json` envelope (the transaction) and its exit code are unchanged; `certen receipt <intent> --json` is the receipt.
+
+#### New error codes
+
+| `error.code` | Exit | Where |
+|---|:--:|---|
+| `CONFIRMATION_REQUIRED` | 2 | `send` with no terminal, no `--yes`, no `--json` |
+| `SIGNING_DECLINED` | 1 | a person answered no to the card (any signing command); `details.intent_id` when an intent was opened |
+| `INVALID_ADDRESS` | 2 | `send --to` is not an EVM address, or its EIP-55 checksum does not hold |
+| `UNSUPPORTED_ASSET` | 2 | `send`: the asset is not the chain's native token |
+| `UNSUPPORTED_CHAIN` | 2 | `send`: the chain is not one the CLI can state the native token of |
+| `INVALID_RPC` | 2 | `--rpc` / `CERTEN_RPC_URL` is not usable (never repeats the URL) |
+| `INVALID_INTENT_ID` | 2 | `receipt` / `watch` was given something that is not an intent id |
+| `NO_RECEIPTS` | 2 | `receipt` with no argument and none saved |
+| `NO_SAVED_RECEIPT` | 2 | `receipt --offline` with no usable saved receipt |
+| `CONFLICTING_FLAGS` | 2 | `receipt --offline` with `--rpc`, `--share` or `--refresh` |
+| `INVALID_EXPECT` | 2 | `--expect` is not `<address>:<topic>[:<topic>]` with 0x and the right number of hex characters (`call`, `receipt`, `watch`) |
+| `EXPECT_NEEDS_WAIT` | 2 | `call --expect` without the wait (`--no-wait`, or `--json` without `--wait`) |
+| `WRONG_PASSPHRASE` | 1 | any signing command: the key could not be decrypted. Raised when the key is opened, **before** any intent exists (it used to surface at signing time as an untyped error) |
+| `NOT_READY` | 1 | `send` pre-flight found a failing check (`details.readiness`) |
+| `NOTHING_TO_SHARE` | 1 | `receipt --share` on a receipt with no proof id |
+| `RECEIPT_NOT_SAVED` | 1 | the receipt could not be written; the transaction is unaffected |
+| `EVM_RPC_*` | 1 | your node (above) |
+| `INTERRUPTED` | 130 | `send` / `watch`: Ctrl-C while waiting (`details.resume`, `details.receipt`) |
+
+`WAIT_ABORTED` is the SDK's code for the same event (`execute.wait()` with an `AbortSignal`); the CLI reports it as `INTERRUPTED`. `TX_FAILED` and `TX_WAIT_TIMEOUT` are unchanged, and now also carry `receipt`, `receipt_path`
+and `resume` when raised by `send` or `watch`.
 
 ## Example: a correct retry loop
 

@@ -44,8 +44,16 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PROOF_FIXTURES = join(ROOT, 'packages', 'verify', 'test', 'fixtures', 'proofv2');
 const EXEC_FIXTURE = join(ROOT, 'packages', 'sdk', 'test', 'fixtures', 'execution-proof-base-46437431.json');
 
-/** The ways this fake can be made to misbehave, for proving the harness goes red. */
-export const FAULTS = Object.freeze(['cannot-sign', 'key-page-lacks-key', 'funds-never-arrive']);
+/**
+ * The ways this fake can be made to misbehave, for proving the harness goes red.
+ *
+ * The last four are about the outcome of a `send`: the intent ends `failed`; the proof service answers 503 for the bundle and the portable
+ * document; the caller's node says it is a different chain; the recipient's balance does not rise when the value is "delivered".
+ */
+export const FAULTS = Object.freeze([
+  'cannot-sign', 'key-page-lacks-key', 'funds-never-arrive', 'intent-fails', 'proof-service-down', 'rpc-wrong-chain', 'value-never-arrives',
+  'swapped-recipient',
+]);
 
 /** Fixed, so two runs of the same journey print the same transcript. */
 export const IDS = Object.freeze({
@@ -134,10 +142,17 @@ function chainRegistry(accumulateApi) {
 
 /**
  * @param {object} [options]
- * @param {'cannot-sign'|'key-page-lacks-key'} [options.fault] A way for the gateway to be wrong, so a test can prove the
+ * @param {string} [options.fault] A way for the gateway to be wrong, so a test can prove the
  *   harness goes red when a step does not behave as declared. `cannot-sign`: the gateway says the identity cannot sign.
  *   `key-page-lacks-key`: the Accumulate node lists a different key than the one the identity was created with.
  *   `funds-never-arrive`: gas that is supposed to arrive while `setup` waits never does.
+ *   `intent-fails`: the intent ends `failed` (`target_reverted`). `proof-service-down`: the bundle and the portable document answer 503.
+ *   `rpc-wrong-chain`: the caller's node reports another chain id. `value-never-arrives`: the recipient's balance does not rise.
+ * @param {string[]} [options.statuses] The statuses successive reads of the intent report; the last repeats. Default: `completed` at once.
+ * @param {boolean} [options.debitSender] The abstract account's balance falls by the amount when the intent completes. Default off, so the
+ *   measured journeys keep the numbers they were pinned at.
+ * @param {boolean} [options.accumulateDown] The Accumulate node answers 503, so the independent key page read is `unknown`, not a failure.
+ * @param {number} [options.portableStatus] The proof's portable document is refused with this HTTP status (a 403, say): the evidence cannot be fetched.
  */
 export async function startFakeGateway(options = {}) {
   const exec = JSON.parse(readFileSync(EXEC_FIXTURE, 'utf8'));
@@ -156,11 +171,42 @@ export async function startFakeGateway(options = {}) {
     publicKey: null,
     /** SHA-256 of the key the identity was created with, as the key page on Accumulate lists it. */
     keyHash: null,
+    /** Reads of the intent so far: which of `options.statuses` the next one reports. */
+    intentReads: 0,
+    /** The last body `POST /v1/transaction` received, and the transfer it asked for (recipient, wei), so a test can assert what was sent. */
+    lastIntentBody: null,
+    transfer: null,
+    /** The transfer has been delivered: the recipient is credited and, with `debitSender`, the abstract account is debited. */
+    credited: false,
+    /** Native balances on the caller's node, in wei, by lower-case address. */
+    nodeBalances: new Map(),
+    /** What the caller's node was asked, oldest first. */
+    nodeCalls: [],
+    /** Share links asked for (`POST /v1/proof/:id/share`), oldest first. */
+    shares: [],
   };
   /** Filled in once the server is listening: the registry advertises this fake's own Accumulate endpoint. */
   const self = { url: '' };
 
   const isFunded = () => state.funded || (state.fundAtRead !== null && state.identityReads >= state.fundAtRead);
+
+  const WEI = 10n ** 18n;
+  /** "0.0001" -> wei, exactly. */
+  const toWei = (text) => {
+    const [whole, frac = ''] = String(text).split('.');
+    return BigInt(whole || '0') * WEI + BigInt(frac.padEnd(18, '0').slice(0, 18) || '0');
+  };
+  /** wei -> "0.0009", no trailing zeros. */
+  const fromWei = (wei) => {
+    const digits = wei.toString().padStart(19, '0');
+    const frac = digits.slice(-18).replace(/0+$/, '');
+    return `${digits.slice(0, -18)}${frac ? `.${frac}` : ''}`;
+  };
+  /** The abstract account's native balance as the gateway reports it (whole units). */
+  const senderBalance = () => {
+    if (!isFunded()) return '0';
+    return options.debitSender && state.credited && state.transfer ? fromWei(toWei('0.001') - state.transfer.wei) : '0.001';
+  };
 
   const identityBody = () => ({
     id: IDS.identity,
@@ -174,7 +220,7 @@ export async function startFakeGateway(options = {}) {
     // Numeric here, a slug in the portfolio: the live gateway does both.
     chain_accounts: [{ chain_id: String(BASE_SEPOLIA), address: IDS.abstractAccount, status: 'deployed' }],
     // Whole units, as the live gateway reports them (it formats the balance with ethers.formatEther).
-    balances: [{ chain_id: 'base-sepolia', address: IDS.abstractAccount, token: 'ETH', balance: isFunded() ? '0.001' : '0' }],
+    balances: [{ chain_id: 'base-sepolia', address: IDS.abstractAccount, token: 'ETH', balance: senderBalance() }],
     created_at: '2026-10-15T00:00:00Z',
   });
 
@@ -184,7 +230,7 @@ export async function startFakeGateway(options = {}) {
         adi_url: IDS.adi, status: 'active', credit_balance: 500, pending_actions: 0,
         chains: [{
           chain_id: 'base-sepolia', address: IDS.abstractAccount, deployed: true,
-          balances: [{ token: 'ETH', balance: isFunded() ? '0.001' : '0' }],
+          balances: [{ token: 'ETH', balance: senderBalance() }],
         }],
       }]
       : [],
@@ -196,13 +242,45 @@ export async function startFakeGateway(options = {}) {
     spendable_usd: '5.000000', remaining_usd: '5.000000', pending_intents: 0, status: 'active',
   });
 
-  const transactionBody = () => ({
-    intent_id: IDS.intent,
-    status: 'completed',
-    proof_id: IDS.proof,
-    accum_tx_hash: `acc://${IDS.accumTx}@${IDS.adi}/data`,
-    reason_code: null,
-  });
+  /**
+   * The intent as the gateway reports it. Each read reports the next of `options.statuses` (the last repeats); by default the first read is
+   * already `completed`, which is what the measured journeys have always seen. A completed read delivers the transfer: the recipient is
+   * credited on the caller's node (unless `value-never-arrives`) and, with `debitSender`, the abstract account is debited.
+   */
+  const transactionBody = () => {
+    const statuses = options.statuses ?? ['completed'];
+    const index = Math.min(state.intentReads, statuses.length - 1);
+    state.intentReads += 1;
+    const last = index === statuses.length - 1;
+    const status = options.fault === 'intent-fails' && last ? 'failed' : statuses[index];
+    // The live shape: `acc://<64 hex>@<adi>/data`, where the ADI is written without its own scheme.
+    const accumTx = `acc://${IDS.accumTx}@${IDS.adi.replace(/^acc:\/\//, '')}/data`;
+    const member = (extra) => ({ chain_id: BASE_SEPOLIA, recorded: true, settlement: 'settled', settlement_tx: execution.tx_hash, ...extra });
+    const base = {
+      intent_id: IDS.intent, identity_id: IDS.identity, status, intent_type: 'transfer', created_at: '2026-10-15T00:00:00Z',
+      reason_code: null, proof_id: null, accum_tx_hash: ['created', 'signing_required'].includes(status) ? null : accumTx,
+    };
+    if (status === 'completed' || status === 'proven' || status === 'delivered') {
+      if (!state.credited && state.transfer) {
+        state.credited = true;
+        if (options.fault !== 'value-never-arrives') {
+          const key = state.transfer.to.toLowerCase();
+          state.nodeBalances.set(key, (state.nodeBalances.get(key) ?? 0n) + state.transfer.wei);
+        }
+      }
+      return {
+        ...base, proof_id: IDS.proof, completion_basis: 'proof_artifact', completed_at: '2026-10-15T00:02:00Z',
+        validator: { state: 'settled', members: [member({ proof_cycle: 'written', proof_id: IDS.proof })] },
+      };
+    }
+    if (status === 'executed') {
+      return { ...base, validator: { state: 'executed_proof_pending', members: [member({ proof_cycle: 'proof_pending' })] } };
+    }
+    if (status === 'failed') {
+      return { ...base, reason_code: 'target_reverted', error_message: 'the call reverted on the destination chain' };
+    }
+    return base;
+  };
 
   /** [method, path pattern, handler(match, body) -> [status, body, extra headers?]] */
   const routes = [
@@ -250,19 +328,57 @@ export async function startFakeGateway(options = {}) {
     }],
     ['POST', /^\/v1\/transaction$/, async (_m, body) => {
       state.intentOpened = true;
-      return [201, await honestIntent(JSON.parse(body), { adiUrl: IDS.adi, keyPage: KEY_PAGE, intentId: IDS.intent })];
+      const opened = JSON.parse(body);
+      state.lastIntentBody = opened;
+      const intent = opened.intent ?? {};
+      state.transfer = typeof intent.toAddress === 'string' && intent.amount !== undefined ? { to: intent.toAddress, wei: toWei(intent.amount) } : null;
+      state.credited = false;
+      state.intentReads = 0;
+      // `swapped-recipient`: the gateway builds an internally consistent transaction (every hash recomputes) for a recipient nobody named. Only
+      // matching what would be signed to the request catches it.
+      const built = options.fault === 'swapped-recipient' && typeof intent.toAddress === 'string'
+        ? { ...opened, intent: { ...intent, toAddress: `0x${'dd'.repeat(20)}` } }
+        : opened;
+      return [201, await honestIntent(built, { adiUrl: IDS.adi, keyPage: KEY_PAGE, intentId: IDS.intent })];
     }],
+    // The price book. `proof.execute` on base-sepolia is `quoted`, as the live gateway has it: the platform fee is fixed and gas is priced when it runs.
+    ['GET', /^\/v1\/pricing$/, () => [200, {
+      price_book_version: '2026-10-15', price_book_hash: 'ab'.repeat(16), currency: 'USD',
+      items: [
+        { sku: 'identity.provision', chain: '*', mode: 'flat', platform_fee_usd: '1.000000', gas_buffer_bps: 0, min_charge_usd: '1.000000', max_charge_usd: null },
+        { sku: 'proof.execute', chain: 'base-sepolia', mode: 'quoted', platform_fee_usd: '0.040000', gas_buffer_bps: 1000, min_charge_usd: '0.040000', max_charge_usd: '0.500000' },
+        { sku: 'proof.execute', chain: '*', mode: 'flat', platform_fee_usd: '0.100000', gas_buffer_bps: 0, min_charge_usd: '0.100000', max_charge_usd: null },
+      ],
+    }]],
     ['POST', /^\/v1\/transaction\/([^/]+)\/signature$/, () => [200, { ok: true }]],
     ['GET', /^\/v1\/transaction\/([^/]+)$/, (m) => (state.intentOpened && m[1] === IDS.intent ? [200, transactionBody()] : [404, { message: 'intent not found' }])],
     ['GET', /^\/v1\/proof\/tx\/([^/]+)\/receipt$/, (m) => [200, {
       tx_hash: m[1], status: 'delivered', anchored: true, tx_type: 'writeData', principal: `${IDS.adi}/data`,
       block_time: '2026-10-15T00:00:00Z', receipt: { anchor: 'ab'.repeat(32) },
     }]],
-    ['GET', /^\/v1\/proof\/([^/]+)\/bundle$/, () => [200, exec, { 'content-type': 'application/octet-stream' }]],
-    ['GET', /^\/v1\/proof\/([^/]+)\/v2$/, () => [200, portable]],
+    ['GET', /^\/v1\/proof\/([^/]+)\/bundle$/, () => (options.fault === 'proof-service-down'
+      ? [503, { message: 'the proof service is unavailable' }]
+      : [200, exec, { 'content-type': 'application/octet-stream' }])],
+    ['GET', /^\/v1\/proof\/([^/]+)\/v2$/, () => (options.fault === 'proof-service-down'
+      ? [503, { message: 'the proof service is unavailable' }]
+      // `portableStatus`: the document is refused with this status (403, say). Not a 5xx and not a 404, so it is neither "the proof service is
+      // down" nor "the gateway serves no document": the evidence could not be fetched at all, which a receipt reports as unavailable.
+      : options.portableStatus ? [options.portableStatus, { message: `the proof document was refused (${options.portableStatus})` }]
+        : [200, portable])],
+    // A share link for a proof: what `certen receipt --share` asks for. The token is made up; the URL points back at this fake.
+    ['POST', /^\/v1\/proof\/([^/]+)\/share$/, (m, body) => {
+      const b = JSON.parse(body || '{}');
+      state.shares.push({ proofId: m[1], label: b.label ?? null });
+      return [201, {
+        id: `share-${state.shares.length}`, proof_id: m[1], token: 'cps_test_not_a_real_token', url: `${self.url}/shared/cps_test_not_a_real_token`,
+        label: b.label ?? null, expires_at: '2026-10-23T00:00:00Z',
+      }];
+    }],
     ['GET', /^\/v1\/proof\/([^/]+)$/, (m) => [200, { proof_id: m[1], status: 'completed', anchored: true }]],
     // The Accumulate node, for the key page read (`status`, `doctor`): the one account it knows, listing the key the identity was created with.
     ['POST', /^\/acc\/v3$/, (_m, body) => {
+      // `accumulateDown`: the node cannot be asked, so the key page is `unknown` (and nothing else is wrong).
+      if (options.accumulateDown) return [503, { message: 'the Accumulate node is unavailable' }];
       const q = JSON.parse(body || '{}');
       if (!state.identityCreated || q.params?.scope !== KEY_PAGE) {
         return [200, { jsonrpc: '2.0', id: q.id ?? 1, error: { code: -33001, message: `${q.params?.scope ?? 'account'} not found` } }];
@@ -273,11 +389,27 @@ export async function startFakeGateway(options = {}) {
         result: { recordType: 'account', account: { type: 'keyPage', url: KEY_PAGE, keys: [{ publicKeyHash: keyHash }], creditBalance: 500, version: 2, acceptThreshold: 1 } },
       }];
     }],
-    // The execution chain's own node, for `proof verify --rpc`: answers with the header the bundle's receipts root is compared to.
-    ['POST', /^\/rpc$/, () => [200, {
-      jsonrpc: '2.0', id: 1,
-      result: { number: `0x${Number(execution.block_number).toString(16)}`, hash: execution.block_hash, receiptsRoot: execution.receipts_root },
-    }]],
+    // The execution chain's own node: `proof verify --rpc` and `send --rpc`. It answers what a node answers: the header the bundle's receipts
+    // root is compared to, the chain id, and the balance of any address (by default none; credited when the intent delivers a transfer).
+    // A balance at a block before the execution block is the balance before that delivery.
+    ['POST', /^\/rpc$/, (_m, body) => {
+      const call = JSON.parse(body || '{}');
+      const params = call.params ?? [];
+      state.nodeCalls.push({ method: call.method, params });
+      if (call.method === 'eth_chainId') return [200, { jsonrpc: '2.0', id: 1, result: options.fault === 'rpc-wrong-chain' ? '0x1' : `0x${BASE_SEPOLIA.toString(16)}` }];
+      if (call.method === 'eth_getBalance') {
+        const address = String(params[0] ?? '').toLowerCase();
+        const tag = params[1];
+        let wei = state.nodeBalances.get(address) ?? 0n;
+        const delivered = state.credited && state.transfer && state.transfer.to.toLowerCase() === address && options.fault !== 'value-never-arrives';
+        if (delivered && typeof tag === 'string' && /^0x[0-9a-f]+$/i.test(tag) && BigInt(tag) < BigInt(execution.block_number)) wei -= state.transfer.wei;
+        return [200, { jsonrpc: '2.0', id: 1, result: `0x${wei.toString(16)}` }];
+      }
+      return [200, {
+        jsonrpc: '2.0', id: 1,
+        result: { number: `0x${Number(execution.block_number).toString(16)}`, hash: execution.block_hash, receiptsRoot: execution.receipts_root },
+      }];
+    }],
   ];
 
   const seen = [];
@@ -320,6 +452,20 @@ export async function startFakeGateway(options = {}) {
     rpcUrl: `${url}/rpc`,
     /** Requests since the last call, oldest first. */
     take: () => seen.splice(0, seen.length),
+    /** What the caller's node was asked since the last call, oldest first. */
+    takeNodeCalls: () => state.nodeCalls.splice(0, state.nodeCalls.length),
+    /** The last body `POST /v1/transaction` received, and the transfer it asked for. */
+    lastIntent: () => ({ body: state.lastIntentBody, transfer: state.transfer }),
+    /** The share links asked for so far: the proof each was for and the label sent. */
+    shares: () => [...state.shares],
+    /** Reads of the intent so far. */
+    intentReads: () => state.intentReads,
+    /** Give an address a native balance on the caller's node, in wei. */
+    setNodeBalance: (address, wei) => { state.nodeBalances.set(String(address).toLowerCase(), BigInt(wei)); },
+    /** The block the proof says the action executed in, and its transaction. */
+    execution: { blockNumber: Number(execution.block_number), txHash: execution.tx_hash, chainId: BASE_SEPOLIA },
+    /** The identity already exists and its key page lists this key (SHA-256 of the public key, hex): a machine that has been through `setup`. */
+    adoptIdentity: (keyHash) => { state.identityCreated = true; state.keyHash = keyHash; },
     /** Somebody pays the abstract account: what the faucet and the wallet transfer do on a real chain. */
     fundAbstractAccount: () => { state.funded = true; },
     /** Gas arrives after this many MORE reads of the identity: what a faucet does while `setup` polls. Never, under the `funds-never-arrive` fault. */

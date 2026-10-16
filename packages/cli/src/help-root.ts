@@ -35,7 +35,7 @@ const GROUPS: Group[] = [
   {
     title: 'Build',
     blurb: 'identities, and the work they authorize',
-    commands: ['identity', 'call', 'tx', 'proof'],
+    commands: ['send', 'call', 'receipt', 'watch', 'identity', 'tx', 'proof'],
   },
   {
     title: 'Approve',

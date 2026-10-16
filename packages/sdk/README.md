@@ -32,6 +32,16 @@ await certen.execute.wait(intentId);                 // ~60-110s of real validat
 const proof = await certen.execute.proof(intentId);  // hand this to your counterparty
 ```
 
+`execute.send` is the same transfer with everything the identity already knows filled in: it derives the ADI and the abstract account from `identityId`, and refuses before the network is
+touched or anything is signed a recipient that is not an address (or whose EIP-55 checksum fails), an asset that is not the chain's native token, an amount that is zero or looks like wei,
+and a chain the catalogue does not know.
+
+```ts
+const { intentId, fromAddress } = await certen.execute.send({
+  identityId, chain: 'base-sepolia', toAddress: '0xBe00…9251', amount: '0.001', sign: (hashHex) => ed25519Sign(hashHex), publicKey,
+});
+```
+
 Prefer `execute.*` — it is the same flow every integration writes, with the details that are easy to
 get wrong already handled. The raw resources are there when you need to drive the steps yourself:
 
@@ -109,6 +119,24 @@ The Accumulate side is checked from the proof v2 portable document, the executio
 bundle is never read as a verdict (it comes back as `bundleStatements`), and neither is the gateway's own receipt. When the gateway serves no
 proof v2 document for a proof, `proof.portable()` throws `PROOF_V2_EVIDENCE_NOT_SERVED` and `loadProofEvidence` reports it as `notServed`: the result is
 `no_evidence`, never a pass.
+
+### The receipt
+
+`buildReceipt` is the whole answer to "what happened": it reads the intent, verifies its proof **here**, optionally reads the recipient's balance from **a node of yours**, and assembles one record
+(`assembleReceipt` is the pure half, in the main entry, and needs no verifier).
+
+```ts
+import { buildReceipt } from '@certen.io/sdk/verify';
+
+const receipt = await buildReceipt(client, intentId, { rpc: process.env.MY_NODE, request });
+receipt.verdict;  // 'verified' | 'partial' | 'failed' | 'pending' | 'unproven'
+receipt.gaps;     // what is not established, one entry each: empty exactly when verdict is 'verified'
+receipt.ids;      // intent, Accumulate tx, destination tx (from the verified proof), proof id
+```
+
+`verified` needs the proof to verify **and** the value to have arrived. The proof's execution layer stays unchecked until the receipts root is compared with a header from a node you named, so without
+`rpc` a receipt is `partial` and says which layer. A proof that could not be fetched is `unavailable` (not "no evidence"), a recipient that could not be read is `unreadable`, and neither is ever turned
+into a pass. `rpc` is yours: no CERTEN credential is sent to it, no redirect is followed, and its URL (which can carry a key) is never put in a message or the receipt, only its host.
 
 ## What it does for you
 

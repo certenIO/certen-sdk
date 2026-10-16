@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { CertenClient, checkGovernanceSigning, inspectSigningData, type ExpectedOperation } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint } from '../output.js';
+import { confirmBeforeSigning, contextValues } from '../card.js';
 import { resolveSigner } from '../signer.js';
 import { resolveContext, requireIdentity } from '../context.js';
 import { resolveCommandIdentity } from '../command-context.js';
@@ -29,7 +30,7 @@ async function getClient(): Promise<CertenClient> {
  */
 async function submitGovernance(
   build: (adiUrl: string) => Record<string, unknown>,
-  opts: { identity?: string; signWith?: string; signerKeyPage?: string },
+  opts: { identity?: string; signWith?: string; signerKeyPage?: string; yes?: boolean },
 ): Promise<void> {
   const ctx = resolveContext({ identity: opts.identity }, { fields: ['identity'] });
   requireIdentity(ctx);
@@ -61,7 +62,14 @@ async function submitGovernance(
     signerPublicKey: signer.publicKey,
     signerKeyPage: opts.signerKeyPage,
   });
-  hint(summary.text.join('\n'));
+  // A person reads what was rebuilt, and says yes, before the signature. Piped, or with --yes or --json, the card is shown and it goes on.
+  await confirmBeforeSigning({
+    headline: `Change who may sign for ${adiUrl}`,
+    rows: [['change', JSON.stringify(operation)]],
+    summary,
+    keyName: opts.signWith!,
+    fromContext: contextValues([{ field: 'identity', resolved: ctx.identity, shown: adiUrl }]),
+  }, { yes: opts.yes });
   const submitted = await client.governance.submitSignature(created.governance_op_id, {
     signature: signer.sign(hash),
     publicKey: signer.publicKey,
@@ -76,7 +84,8 @@ export function registerGovernanceCommands(program: Command): void {
 
   const signing = (cmd: Command) => cmd
     .option('--sign-with <key>', 'Local key on the page: sign the returned hash and submit it in one step')
-    .option('--signer-key-page <url>', 'Sign with a specific page of the book, e.g. acc://org.acme/book/2');
+    .option('--signer-key-page <url>', 'Sign with a specific page of the book, e.g. acc://org.acme/book/2')
+    .option('--yes', 'Say yes to the confirmation in advance (it is only asked at a terminal, with --sign-with). The check of what is signed is never skipped');
 
   signing(governance
     .command('add-key')

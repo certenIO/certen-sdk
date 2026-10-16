@@ -1,6 +1,6 @@
-import { getKeyInfo, signHash } from './keystore.js';
+import { getKeyInfo, unlockKey } from './keystore.js';
 import { resolvePassphrase } from './passphrase.js';
-import { UsageError } from './errors.js';
+import { CliError, EXIT, UsageError } from './errors.js';
 
 /**
  * Bridge a local key into the shape the rest of the CLI needs.
@@ -19,10 +19,18 @@ export interface ResolvedSigner {
 export async function resolveSigner(name: string): Promise<ResolvedSigner> {
   const info = getKeyInfo(name);
   const passphrase = await resolvePassphrase(info.encrypted, name);
+  // Unlocked NOW, not at the moment of signing. A wrong passphrase used to surface only when the signature was made: after the intent was
+  // opened and after a person had read the card and said yes, as an untyped error. Here it ends the command before anything exists.
+  let key: ReturnType<typeof unlockKey>;
+  try {
+    key = unlockKey(name, passphrase);
+  } catch (err) {
+    throw new CliError(err instanceof Error ? err.message : String(err), 'WRONG_PASSPHRASE', EXIT.FAILED);
+  }
   return {
     publicKey: info.publicKey,
     publicKeyHash: info.publicKeyHash,
-    sign: (hashHex: string) => signHash(name, passphrase, hashHex),
+    sign: (hashHex: string) => key.sign(hashHex),
   };
 }
 

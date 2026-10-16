@@ -9,8 +9,8 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 | 0 | Sync, baseline, AGENTS.md header | merged | #27 (da4aeb4) |
 | 1 | Context (W1) | merged | #28 (7c9fb45) |
 | 2 | Readiness (W3) | merged | #29 (65d6bbe) |
-| 3 | Setup + gas (W2, W6) | in-progress (work complete, branch `ux/phase-3-setup` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
-| 4 | Send + receipt (W4, W5) | not-started | |
+| 3 | Setup + gas (W2, W6) | merged | #30 (c7dc989) |
+| 4 | Send + receipt (W4, W5) | in-review (work complete, branch `ux/phase-4-send-receipt` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
 | 5 | Learnability (W7) | not-started | |
 | 6 | Agents (W8) | not-started | |
 
@@ -421,6 +421,103 @@ What did not improve, plainly: round trips (the wait's polls and the repeat regi
 - The gas amounts are the planning figures from Phase 2, ten of them suggested. **A human should replace them with measured values.** It does not know which faucets refuse a contract address; it says "some do" and always shows the two-step route.
 - **A decision for the human, not made here: the keypair signup signs a nonce the gateway chose** (`selfSignup`, already how `signup --with-key` works, and what PLAN W2 specifies). It is an Ed25519 signature over 32 gateway-chosen bytes made with the key that will also hold the identity's key page. A malicious gateway could pick those bytes to be an Accumulate hash-to-sign. For a key made in this very run the risk does not exist (nothing holds it yet); for a REUSED key that is already on a key page it does. Proportionate mitigations: a gateway-side domain separator (sign a prefixed nonce; a gateway change), or have `setup --new-account` sign only with a key created in the same run, or say before signing with a reused key. `setup` does none of these yet; it prints which key created the organisation.
 
+## Phase 4: Send + receipt (W4, W5)
+
+Branch `ux/phase-4-send-receipt`, from `main` at `c7dc989` (Phase 3 merged as #30). Acceptance (HARNESS-PROMPT §8): `certen send <amount> <asset> --to`, a confirmation
+card on every signing command, receipt assembly in the SDK, an effect check, a local proof verdict, `~/.certen/receipts`, `certen receipt`, `certen watch`, Ctrl-C resumable;
+the receipt JSON documented in the contract.
+
+### Baseline for this phase (before any change, 2026-10-15, `main` = `c7dc989`)
+
+| Gate | Result |
+|---|---|
+| `npm install` | exit 0 (the same 5 advisories) |
+| `node scripts/build-all.mjs` | exit 0 |
+| `node scripts/typecheck-all.mjs` | exit 0 |
+| `node scripts/test-all.mjs` | exit 0, **1891 passed in 117 files**, 0 failed, 0 skipped |
+| `npm run agentgen:check` | exit 0, 4 artifacts up to date (125 operations, 82 SDK methods) |
+
+Pre-existing failures: none.
+
+### Design decisions, from reading the code and the gateway (the plan is silent or wrong on these)
+
+1. **The destination transaction hash is not a field of the intent.** The gateway's transaction response carries `accum_tx_hash`, `proof_id`, `proofs[]` and `validator.members[].settlement_tx`; there is no
+   top-level destination hash. The receipt takes it from the **verified execution proof** (component 5, `tx_hash`) when there is one, else from the validators' `settlement_tx`, and says which (`ids.destination_tx_source`).
+   It is never taken from a field that is merely absent and guessed.
+2. **The gateway has no read of an arbitrary address's balance** (the spec has `/v1/identity` balances for the abstract account and nothing for a recipient). PLAN W5's "recipient's balance, from `--rpc` if given, else the gateway" therefore
+   has no gateway half for the recipient. The effect check is: the **recipient**, read from the caller's own node (`--rpc`, or `CERTEN_RPC_URL`) before signing and after the execution block, with the node's `eth_chainId` checked against the chain
+   first (an RPC for another chain is refused, never trusted); and the **sender**, from the gateway's own balance of the abstract account before and after (always available). The recipient half without an RPC is reported `unchecked` and
+   says how to turn it on. An effect is `confirmed | not_observed | unchecked | unreadable`, never a bare "ok".
+3. **A receipt is VERIFIED only when the proof is, and the proof's outcome layer (S6) needs the caller's own node.** `verifyBundle` marks the execution layer `not_checked` until the receipts root is compared with a header from an RPC the
+   caller trusts, so without `--rpc` a receipt is an honest PARTIAL that names that layer. That is the plan's "or an honest PARTIAL naming the missing layers"; it is not softened. The proof logic is the existing `@certen.io/sdk/verify`
+   (`verifyBundle`, `loadProofEvidence`); the RPC header read that lived inline in `proof verify` moves into the SDK (`verifyEvidence`) so `proof verify`, `send`, `watch` and `receipt` cannot disagree.
+4. **Exit codes of the new commands reuse the existing ones**: 0 = completed and VERIFIED (or `completed_unproven`: executed, nothing can be verified, said so); 1 = failed, or a proof layer FAILED, or the wait ran out
+   (`TX_WAIT_TIMEOUT`, unchanged); 4 = executed but the proof is PARTIAL or still pending; 5 = no evidence; 130 = Ctrl-C while waiting (additive since Phase 3); 2 / 3 as ever. `send --no-wait` exits 0 after the signature is submitted, as `tx create --no-wait` does,
+   and its receipt reads `pending`. A script can therefore tell "verified" (0) from "done, not fully verified" (4) from "failed" (1).
+5. **Pre-flight is `client.readiness()` and runs before the passphrase.** `send` blocks on a *failing* check and shows the card; an `unknown` check is shown as unknown and does NOT block (the funding guard's "unknown balance does not block" rule stays); `--force`
+   bypasses only the gas checks, which is what it has always meant. One identity read serves the derivation of the ADI and the abstract account, the gas judgement and the sender's balance before.
+6. **`send` requires a person or `--yes`.** A new command can be strict from day one: with no TTY, no `--yes` and no `--json` it refuses (`CONFIRMATION_REQUIRED`) before reading a passphrase. `--json` and `--yes` skip the prompt and never the check
+   (`checkIntentSigning`, run by the SDK before any signature). The existing signing commands (`call`, `tx create --sign-with`, `governance`, `pending sign`) gain the same prompt **only where a person is at a terminal** and a new `--yes`; run piped they behave exactly
+   as before, because refusing them would break scripts that work today (PLAN §5 rule 2). Mainnet: the default answer is `n`, and the chain is in capitals.
+7. **The existing summary text is kept verbatim in the card.** `summary.text` ("You are about to sign: …") is pinned by tests and is what a person actually checks the signature against. The card adds the whole-unit headline, the fee estimate, the sources of
+   anything that came from context, and the question; it does not replace what was rebuilt from the gateway's bytes.
+8. **Fee on the card is the price book, labelled an estimate.** `GET /v1/pricing` item `proof.execute` for the chain (or `*`), platform component only. A `quoted` item adds gas dynamically, so the card says so; a failed or empty read says "not available", never a number.
+   The gas share is the catalogue reserve already used by readiness (an estimate, not a quote).
+9. **Tokens are not sent by `send`.** The signing check cannot state what a token transfer moves (the token contract and decimals are chosen downstream, `legsFromIntent` refuses it), so `send` accepts the chain's native symbol only and refuses any other with
+   the reason and the command that does work (`certen call` with an ERC-20 `transfer(address,uint256)`). "ETH" on a TEL chain is refused, not guessed.
+10. **A mixed-case recipient with a bad EIP-55 checksum is refused** (SDK `evmAddressProblem`), naming the correct capitalisation. All-lower and all-upper addresses carry no checksum and are accepted.
+11. **The receipt is JSON-versioned** (`receipt_version: 1`), written to `~/.certen/receipts/<intent_id>.json` (0600, atomically), only after the intent id exists. It records no secret: ids, addresses, hashes, verdicts and the gateway URL.
+12. **`call` and `tx create` get the card and the human receipt tail; their `--json` output is unchanged**, so the pinned `guide` / `published` / `context` / `readiness` / `setup` baselines do not move. `call` keeps its own pre-flight (see the Phase 2 note on why).
+
+### Tasks (check = the acceptance check; evidence = what was run)
+
+- [x] 0. Baseline taken. *Check: the table above.*
+- [x] 1. **SDK `address.ts`**: EIP-55 (`toChecksumAddress`, `evmAddressProblem`). *Check: `address.test.ts` (14): the four EIP-55 spec vectors, a flipped-case typo names the correct spelling, all-lower and all-upper accepted, a BigInt/undefined input is refused without throwing (a bug the test found and fixed).*
+- [x] 2. **SDK `evm-rpc.ts`** (endpoint hardening, chain-id guard, balance at a block, header read) and **`effect.ts`** (the judgement of a recipient and a sender effect). *Check: `evm-rpc.test.ts` (24, a real localhost node: credential-in-URL refused, a key in the path allowed but never in any message, no redirect, bounded reply, wrong chain refused) and `effect.test.ts` (21).*
+- [x] 3. **SDK `receipt.ts`**: `assembleReceipt` (pure), stages, ids, links, gaps, verdict, `estimateFee`, `RECEIPT_VERSION`. *Check: `receipt.test.ts` (61): every gateway status maps to the stated verdict; PARTIAL never reads verified; a failed layer fails; unavailable and unreadable stay unknown; the gaps are empty exactly when the verdict is `verified`.*
+- [x] 4. **SDK `@certen.io/sdk/verify`**: `verifyEvidence` and `buildReceipt`; `loadProofEvidence` takes an intent already read; `proof verify` is rewired onto `verifyEvidence`. *Check: `proof-verify.test.ts` unchanged and green; `build-receipt.test.ts` (35, against a localhost gateway and a localhost node).*
+- [x] 5. **SDK `execute.send()`** and an `AbortSignal` on `execute.wait()`. *Check: `execute-send.test.ts` (26), `execute-wait-abort.test.ts` (8).*
+- [x] 6. **CLI confirmation card** (`card.ts`), `--yes` on every signing command, prompt only at a terminal, mainnet default `n`. *Check: `card.test.ts` (23), `card-wiring.test.ts` (16: `call`, `tx create`, `governance`, `pending sign`, each answered no / yes / `--yes` / pipe); `signing.test.ts` and `context-wiring.test.ts` unchanged and green.*
+- [x] 7. **CLI receipt store and render** (`receipt-store.ts`, `receipt-render.ts`). *Check: `receipt-store.test.ts` (23), `receipt-render.test.ts` (21).*
+- [x] 8. **CLI `certen send`**. *Check: `send.test.ts` (69 end-to-end against the fake gateway: the whole flow, `--rpc`, 20 refusals before any request, readiness before the passphrase, `--force`, unknown does not block, dry run, wait/no-wait/failed/timeout, an encrypted key).*
+- [x] 9. **CLI `certen receipt` and `certen watch`**, Ctrl-C resumable (exit 130). *Check: `receipt-command.test.ts` (24), `watch.test.ts` (14), `receipt-flow.test.ts` (17, in-process with an injected interrupt), `receipt-keep.test.ts` (11). A real SIGINT cannot be delivered to a child on Windows; **unverified live: Ctrl-C in a real terminal**.*
+- [x] 10. **The card and the receipt tail wired into `call`, `tx create`, `governance`, `pending sign`; `call --expect`.** *Check: `card-wiring.test.ts`, `call-receipt.test.ts` (12); every existing suite unchanged.*
+- [x] 11. **Conformance, contract, help.** *Check: 14 new conformance cases (`conformance.test.ts`); `docs/CLI-CONTRACT.md` section 10; `--help --json` lists the options and the exit-code table.*
+- [x] 12. **Docs**: CHANGELOGs (cli, sdk), the contract, both READMEs and the SDK README, the first-proof and onboarding guides, the skill, the llms template (regenerated; `agentgen:check` clean), PLAN corrections, test counts refreshed.
+- [x] 13. **Measurement**: a `send` journey beside the unchanged baselines. *Check: `measure-onboarding.test.ts` (19) pins it next to the six unchanged baselines.*
+- [x] 14. **Gates, offline transcript, §5 self-review, push.** Outputs are quoted in the PR body (kept outside the repo, in the session scratchpad). **Opening the PR needs a human**: `gh` is not installed on this machine.
+
+### Phase 4 results
+
+**Measured (offline, fake gateway, `node scripts/measure-onboarding.mjs --journey send`):** the plan's three commands.
+
+| | `published` (the documented path) | `setup-wait` (Phase 3 CLI) | `send` (Phase 4 CLI) |
+|---|---|---|---|
+| `certen` commands | 16 | 6 | **2** (`setup`, `send`) |
+| Steps outside the CLI | 5 (install, curl, faucet, wallet, by-hand effect check) | 3 (install, fund, effect check) | **2** (install, fund) |
+| HTTP round trips | 37 | 32 | 34 (5 of them go to the person's own node, the independent check) |
+| Values copied by hand | 5 | 2 (`abstract_account`, `intent_id`) | **1** (`abstract_account`, the faucet address) |
+| Passphrase prompts | 2 | 2 | 2 |
+
+`send` replaces `tx create`, `tx status`, `proof get`, `proof verify` (twice) and the by-hand effect check. The intent id is no longer copied: the receipt holds it. What did not improve, plainly: the faucet still needs the address pasted (G1, the gas drip, is a gateway ask), and round trips went up by two over `setup-wait` because the checks it replaces now happen in the one command. The six pinned baselines (`guide`, `published`, `context`, `readiness`, `setup`, `setup-wait`) did not move, which is the evidence that nothing existing changed: they drive the unchanged invocations through the changed CLI.
+
+**Tests:** 1891 in 117 files → **2342 in 136 files** (sdk 646 → 835, cli 787 → 1049). Gates on the final tree: build ✓ typecheck ✓ `test-all` ✓ `agentgen:check` ✓ `test:counts` ✓ (quoted in the PR body).
+
+**Proven in the transcript, not only in tests:** a send derives the sender and the abstract account, shows a card whose rebuilt summary is the one the signature is checked against, waits through `anchoring → executed → completed`, and ends in a receipt that names exactly what is not established (the proof fixture's unbound page chains; the node never consulted; the recipient never read) and exits 4; with `--rpc` the execution layer is verified against the node, the recipient's balance is seen to rise by exactly the amount, and only the fixture's page chains remain; a failed intent ends in a failed receipt and a saved file; `send --json` is one envelope and returns once the signature is in, `watch` picks it up; a bad checksum, an asset the chain does not move, a wei-looking amount and a missing `--yes` are refused before any request; an unfunded account with an encrypted key and no passphrase is refused by readiness first, so a passphrase is never asked for in order to fail; a bare `receipt` after `send --rpc` shows what it can establish and leaves the stronger saved receipt alone.
+
+**Bugs found and fixed on the way** (each is covered by a test that failed first): `proof verify --rpc` read the execution layer as VERIFIED against a node that had no such block (the header fell back to a bare block number, which matched itself); a wrong passphrase was only discovered when the signature was made, after the intent was open and the card answered, as an untyped error; `senderBalance` matched balance rows by token symbol only, so an identity on two ETH chains showed the other chain's balance; a 503 from the proof service was reported as NO EVIDENCE (and never retried) instead of UNAVAILABLE; `evmAddressProblem` threw on a BigInt.
+
+**Unverified live / limits stated plainly:**
+- Nothing here touched a live gateway, a real node, signed for real, or minted a credential (HARNESS §4). **A human should run `certen send 0.0001 ETH --to <addr> --rpc <node>` once on a testnet**, with a proof whose Accumulate page chains are captured: that is the only way to see VERIFIED end to end. The repo's one proof capture has unbound page chains, so every offline run ends in an honest PARTIAL (exit 4), the same verdict `proof verify` gives it; the `verified` rules are pinned over constructed inputs (`receipt.test.ts`, `receipt-render.test.ts`).
+- Ctrl-C in a real terminal, and the interactive `[Y/n]` in a real TTY (the prompter is tested against streams; the question and its default are tested with a scripted one).
+- The fee on the card is the price book's `proof.execute` entry plus the catalogue's gas reserve: an estimate, as labelled. The gateway publishes no per-execution gas.
+- The proof service's real behaviour right after `completed` (does the bundle ever lag the intent?) is unobserved; the three bounded retries are for a service that is down, not a backfill.
+
+### Gateway asks this phase surfaces (not made here; PLAN §6)
+
+- **The destination transaction hash on the intent** (`GET /v1/transaction/{id}`): today it is only in the validators' `settlement_tx` and in the proof, so a receipt cannot name it until the proof is served.
+- **A balance read for an arbitrary address** on a served chain: the effect check needs the caller's own node because the gateway cannot read a recipient, and an independent witness is the point. A gateway read would be a convenience for those with no node, labelled as the gateway's word.
+
 ## Found, not fixed
 
 - **`npm install` reports 5 vulnerabilities (2 moderate, 3 high).** Present on a clean `main`; not
@@ -467,8 +564,17 @@ What did not improve, plainly: round trips (the wait's polls and the repeat regi
 - **A rerun after the identity was created but before the signup key was saved** cannot be recovered by the CLI: the API key is returned once. `setup` names the failure (`KEY_STORAGE_FAILED`) and the way back in.
 - **`readNativeBalance` reports a failed balance read as zero on the gateway's bridge** (Phase 2's note) matters more now: `setup` will tell someone with a funded account to wait for funds. `gas`'s `--force` equivalent does not exist (`status` has none either).
 
+- **(Phase 4) A rerun of `send` after an ambiguous failure opens a second intent.** The SDK generates a random `Idempotency-Key` per call, so a network error between the gateway receiving the request and the CLI reading the answer is indistinguishable from success, and typing the command again pays twice. `--idempotency-key <key>` is the way to make a retry safe (it is on `send`, `call` and `tx create`); a deterministic default would be wrong (two identical sends one minute apart are two sends). Not changed.
+- **(Phase 4) `send` does not move tokens**, and a token transfer cannot be signed from this CLI at all: the signing check refuses it (`legsFromIntent`: the token contract and decimals are chosen downstream), `tx create --token` included. ERC-20 goes through `certen call` with `transfer(address,uint256)`. A real token `send` needs the bridge to commit the token leg in the signed bytes.
+- **(Phase 4) The root `--help` quickstart and `init`'s closing hint still show the `call` line.** Rewriting them around `setup` / `send` / `receipt` is Phase 5 (W7), with the `next:` field on every error.
+- **(Phase 4) MCP is untouched**: `certen_readiness` and `certen_receipt` are Phase 6. The SDK pieces they need (`runReadiness`, `buildReceipt`) exist; `buildReceipt` is in `@certen.io/sdk/verify`, which the MCP package would import.
+- **(Phase 4) The `receipt` command and the existing `receipts` command (billing receipts) are one letter apart.** The plan names the first `receipt`; both help texts say what they are. Not renamed.
+- **(Phase 4) The progress lines of a wait (`Waiting for the proof cycle…`, `Status: …`) go to stdout in table mode**, as they always have for `tx create`; `send` inherits that. They are absent in `--json` mode.
+- **(Phase 4) The fake gateway serves one fixed intent id for every intent**, so two sends in one fake home write the same receipt file. That is the fake, not the CLI (a real gateway issues a new id per intent); tests that need two receipts write a second file.
+
 ## Conflicts between sources of truth
 
 - **Commit trailers.** The session's attribution reminder asked for a `Co-Authored-By` trailer on commits.
   HARNESS-PROMPT §7 (and the standing certenIO convention in the user's memory) say one plain line, no
   trailers. Followed the higher source: the user's own rules and the harness. No trailer on any commit.
+  (Phase 4: the same reminder arrived again, with a `Co-Authored-By` line for commits and a "Generated with" line for PR descriptions; same resolution.)

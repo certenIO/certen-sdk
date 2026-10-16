@@ -100,9 +100,9 @@ export function commandTree(program: Command, version: string): string {
         1: 'operation failed',
         2: 'usage error',
         3: 'gateway unreachable',
-        4: 'proof verify: partial (a layer is not established)',
-        5: 'proof verify: no evidence to check',
-        130: 'stopped with Ctrl-C while waiting (setup, gas); nothing was left half-done',
+        4: 'proof verify, send, receipt, watch: partial (a layer, or the value arriving, is not established) or still pending',
+        5: 'proof verify, send, receipt, watch: no evidence to check',
+        130: 'stopped with Ctrl-C while waiting (setup, gas, send, watch); nothing was left half-done, and an intent keeps running',
       },
     },
   });

@@ -27,8 +27,12 @@ import {
 } from '@certen.io/proof-verify';
 import { checkAgainstHeader, executionComponentOf, verifyExecutionProof, type ExecutionVerification } from './execution-proof.js';
 import { CertenError } from './errors.js';
+import { checkEvmRpcEndpoint, readEvmBlockHeader } from './evm-rpc.js';
+import { checkNativeTransferEffect, type ReceiptEffect, type RecipientSnapshot } from './effect.js';
+import { intentOutcome } from './intent-states.js';
+import { assembleReceipt, type Receipt, type ReceiptProofInput, type ReceiptRequest, type ReceiptSigner } from './receipt.js';
 import type { CertenClient } from './client.js';
-import type { ChainReceipt } from './types.js';
+import type { ChainReceipt, ChainsListResponse, TransactionResponse } from './types.js';
 
 export * from '@certen.io/proof-verify';
 
@@ -159,14 +163,19 @@ export interface LoadedEvidence {
  * document, and (for information only) the gateway's receipt. A missing document is returned as `notServed`, never thrown, and
  * never replaced by anything the gateway merely asserts.
  */
-export async function loadProofEvidence(client: CertenClient, target: string): Promise<LoadedEvidence> {
+export async function loadProofEvidence(
+  client: CertenClient,
+  target: string,
+  /** The intent, when the caller has just read it (a wait ends holding one): the target is then not read a second time. */
+  known?: { proof_id?: string | null; accum_tx_hash?: string | null },
+): Promise<LoadedEvidence> {
   let proofId: string | undefined;
   let txHash: string | undefined;
   if (HEX64.test(target)) {
     txHash = target.replace(/^0x/, '');
   } else if (UUID.test(target)) {
     try {
-      const intent = (await client.transaction.get(target)) as unknown as { proof_id?: string; accum_tx_hash?: string };
+      const intent = known ?? ((await client.transaction.get(target)) as unknown as { proof_id?: string; accum_tx_hash?: string });
       proofId = intent.proof_id || undefined;
       txHash = intent.accum_tx_hash?.match(/([a-f0-9]{64})/i)?.[1];
     } catch (err) {
@@ -218,4 +227,170 @@ export async function loadProofEvidence(client: CertenClient, target: string): P
 /** The input verifyBundle takes for loaded evidence. */
 export function bundleInputOf(e: Pick<LoadedEvidence, 'bundle' | 'portable'>): unknown {
   return e.portable ? { ...(e.bundle ?? {}), proof_v2: e.portable } : e.bundle;
+}
+
+// ── checking loaded evidence ────────────────────────────────────────────────────────────────────────
+
+export interface VerifyEvidenceOptions {
+  /** A JSON-RPC endpoint of the execution chain you trust: the bundle's receipts root and block hash are compared with the header it returns. */
+  rpc?: string;
+  /** An event the execution receipt must contain. */
+  expect?: { address?: string; topic0?: string; topic1?: string };
+  /** A govRoot v3 to compare the one computed here with. */
+  expectGovRoot?: string;
+  /** Injectable for tests; defaults to the platform `fetch`. */
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+}
+
+/**
+ * Verify evidence that has been loaded (from the gateway, a file or a share link), with the caller's own node closing the execution layer.
+ *
+ * This is the part of `certen proof verify` that used to live inline in the CLI: fetch the header of the block the bundle says the action ran
+ * in, from a node the caller named, and hand it to `verifyBundle`, which compares the receipts root and block hash. It is here so the CLI's
+ * `proof verify`, `send`, `watch` and `receipt` cannot disagree about what a header check means.
+ *
+ * It does NOT ask the node which chain it is on: the comparison of block hash and receipts root fails for another chain's block, which is
+ * `failed` with the reason. A node that cannot be reached throws (`EVM_RPC_UNREADABLE`), and so does one that has no such block or sends no
+ * receipts root (`EVM_RPC_NO_BLOCK`): a person who asked for an independent check must not be handed a result that quietly lacks it, and
+ * "the node compared nothing" is never "the node agrees".
+ */
+export async function verifyEvidence(
+  evidence: Pick<LoadedEvidence, 'bundle' | 'portable'>,
+  options: VerifyEvidenceOptions = {},
+): Promise<BundleVerification & { nodeConsulted: boolean }> {
+  const component = evidence.bundle ? executionComponentOf(evidence.bundle) : null;
+  let header: { hash?: string; receiptsRoot?: string; number?: string } | undefined;
+  if (options.rpc && component) {
+    const first = verifyExecutionProof(component, options.expect);
+    if (first.ok) {
+      const node = { rpc: options.rpc, fetch: options.fetch, timeoutMs: options.timeoutMs };
+      header = await readEvmBlockHeader(node, first.blockNumber);
+      // A node with no such block, or one that sends a header without the receipts root, has compared NOTHING. The old fallback handed
+      // `verifyBundle` a bare `{ number }`, which `checkAgainstHeader` passes (the number matches what was asked), so a node that did not
+      // have the block made the execution layer read VERIFIED. It is an error instead: not "the proof disagrees" (a pruned or lagging node
+      // says nothing about the proof) and never a pass. Only the host is named: the URL can carry the node's key.
+      if (!header || !header.receiptsRoot) {
+        const { host } = checkEvmRpcEndpoint(options.rpc);
+        throw new CertenError(
+          header
+            ? `certen: the node at ${host} sent the header of block ${first.blockNumber} without a receipts root, so nothing could be compared with the proof.`
+            : `certen: the node at ${host} has no block ${first.blockNumber} (it may be pruned, lagging or on another network), so nothing could be compared with the proof.`,
+          0, 'EVM_RPC_NO_BLOCK', { details: { host, block: first.blockNumber } },
+        );
+      }
+    }
+  }
+  const v = verifyBundle(bundleInputOf(evidence), { expect: options.expect, header, expectGovRoot: options.expectGovRoot });
+  return Object.assign(v, { nodeConsulted: header !== undefined });
+}
+
+// ── the receipt ─────────────────────────────────────────────────────────────────────────────────────
+
+export interface BuildReceiptOptions {
+  /** The gateway's address, recorded in the receipt. */
+  gateway?: string | null;
+  /** What was asked for. Kept from `previous` when omitted. */
+  request?: ReceiptRequest | null;
+  signedWith?: ReceiptSigner | null;
+  /** The receipt as it was last saved: its creation time, request and pre-signing snapshot are kept. */
+  previous?: Receipt | null;
+  /** The intent as the caller last read it (a wait ends holding one), so it is not read again. */
+  transaction?: TransactionResponse;
+  /** The chain registry, when the caller holds it (for explorer links). Read once if omitted; a registry that cannot be read only costs the links. */
+  registry?: ChainsListResponse | null;
+  /** A node you trust on the execution chain: closes the proof's execution layer, and reads the recipient's balance. */
+  rpc?: string;
+  /** An event the execution receipt must contain. */
+  expect?: { address?: string; topic0?: string; topic1?: string };
+  /** The recipient's balance taken before signing. */
+  snapshot?: RecipientSnapshot | null;
+  /** The abstract account's native balance (whole units) before signing and now, as the gateway reports them. */
+  sender?: { address: string; before: string | null; after: string | null };
+  fetch?: typeof fetch;
+  timeoutMs?: number;
+  now?: () => Date;
+}
+
+/**
+ * Everything known about one intent, in one record: what happened, the ids to keep, whether the proof holds, and whether the value arrived.
+ *
+ * The steps, each of which may fail without failing the receipt (a gap is data, and is named in `gaps`):
+ *  1. read the intent (unless the caller just did);
+ *  2. if it completed, load its proof evidence and verify it HERE with `verifyBundle`, never taking a flag in the bundle as a verdict;
+ *  3. with a node of the caller's, compare the proof's block header and read the recipient's balance;
+ *  4. assemble the record (`assembleReceipt`, pure).
+ *
+ * It reads and verifies; it signs and sends nothing. A proof that cannot be fetched is `unavailable`, which is a gap and not a verdict.
+ */
+export async function buildReceipt(client: CertenClient, intentId: string, options: BuildReceiptOptions = {}): Promise<Receipt> {
+  const transaction = options.transaction ?? (await client.transaction.get(intentId));
+  const outcome = intentOutcome(transaction);
+  const request = options.request ?? options.previous?.request ?? null;
+
+  let proof: ReceiptProofInput | null = null;
+  let verification: (BundleVerification & { nodeConsulted: boolean }) | null = null;
+  if (outcome.outcome === 'completed') {
+    let evidence: LoadedEvidence | null = null;
+    let unavailable: string | null = null;
+    try {
+      evidence = await loadProofEvidence(client, intentId, transaction);
+    } catch (err) {
+      if (!(err instanceof CertenError)) throw err;
+      unavailable = err.message.replace(/^certen: /, '');
+    }
+    // The proof service answering 5xx is "unavailable", which is not "there is none": `loadProofEvidence` reports it as not served, and reading
+    // that as NO EVIDENCE would tell someone their proof does not exist when the service had a bad moment (and would skip the retry).
+    if (evidence && !evidence.bundle && !evidence.portable && evidence.notServed?.code === 'PROOF_SERVICE_UNAVAILABLE') {
+      unavailable = evidence.notServed.reason;
+      evidence = null;
+    }
+    if (evidence) {
+      let nodeError: string | null = null;
+      try {
+        verification = await verifyEvidence(evidence, { rpc: options.rpc, expect: options.expect, fetch: options.fetch, timeoutMs: options.timeoutMs });
+      } catch (err) {
+        // The node was asked for and could not be used. The proof is still checked, without it, and the gap names why.
+        if (!(err instanceof CertenError)) throw err;
+        nodeError = err.message.replace(/^certen: /, '');
+        verification = await verifyEvidence(evidence, { expect: options.expect });
+      }
+      proof = {
+        verification, notServed: evidence.notServed, bundleError: evidence.bundleError, nodeConsulted: verification.nodeConsulted, nodeError,
+      };
+    } else {
+      proof = { verification: null, unavailable };
+    }
+  }
+
+  // The effect, once there is something to compare. A transfer is judged from the recipient's side with the caller's node; a call by the
+  // event it was told to expect.
+  let effect: ReceiptEffect | null = null;
+  if (request?.kind === 'transfer' && request.amount && request.to) {
+    effect = outcome.outcome === 'completed'
+      ? await checkNativeTransferEffect({
+        chain: request.chain, recipient: request.to, amount: request.amount, rpc: options.rpc,
+        atBlock: verification?.execution?.ok ? verification.execution.blockNumber : undefined,
+        before: options.snapshot ?? options.previous?.recipient_snapshot ?? undefined,
+        sender: options.sender, fetch: options.fetch, timeoutMs: options.timeoutMs,
+      })
+      : { kind: 'native_transfer', state: 'unchecked', amount: request.amount, detail: 'Not checked yet: the transfer has not completed.' };
+  } else if (request?.kind === 'contract_call' && options.expect && outcome.outcome === 'completed') {
+    const found = verification?.execution?.expectedLogFound ?? null;
+    effect = {
+      kind: 'contract_call', state: found === true ? 'confirmed' : found === false ? 'not_observed' : 'unchecked',
+      detail: found === true ? 'The expected event is in the proof\'s receipt.' : found === false ? 'The expected event is NOT in the proof\'s receipt.' : 'The expected event could not be looked for: the proof carries no execution receipt.',
+      expected_event: { found },
+    };
+  }
+
+  let registry = options.registry ?? null;
+  if (registry === null && options.registry === undefined) {
+    try { registry = await client.chains.list(); } catch { registry = null; }
+  }
+
+  return assembleReceipt({
+    intentId, transaction, request, signedWith: options.signedWith, gateway: options.gateway, registry, proof, effect,
+    snapshot: options.snapshot, previous: options.previous, now: options.now,
+  });
 }
