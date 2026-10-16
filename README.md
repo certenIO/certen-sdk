@@ -47,6 +47,7 @@ Task-shaped guides, in the order most people need them:
 
 | | |
 |---|---|
+| [Your first transaction](docs/guides/first-proof-in-three-commands.md) | `certen setup`, `certen send`, `certen receipt`: from install to a transfer you can prove, and what to do when something is in the way. |
 | [Onboard an identity](docs/guides/onboard-an-identity.md) | Creating the ADI that signs and holds. Everything else needs one. |
 | [Sign while holding your own key](docs/guides/external-signing.md) | The pattern almost every integration uses. |
 | [Proof-gate a contract call](docs/guides/proof-gated-contract-call.md) | Arbitrary contract functions — escrow, settlement, anything past a transfer. |
@@ -78,7 +79,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->2342 tests in 136 files (sdk 835, cli 1049, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->2490 tests in 141 files (sdk 835, cli 1197, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 
@@ -134,7 +135,7 @@ node scripts/measure-onboarding.mjs --journey published         # offline: what 
 node scripts/e2e-onboarding.mjs --url https://staging.example   # the whole journey, from nothing
 ```
 
-**The journey measurement** (`--journey guide`, `published` or `context`) runs what the docs tell a new
+**The journey measurement** (`--journey guide`, `published`, `context`, `readiness`, `setup`, `setup-wait` or `send`) runs what the docs tell a new
 developer to do, in order, through the real built CLI against an in-process fake gateway, in a
 throwaway `HOME`. It reports the `certen` commands, the steps that are not commands (an install, a
 `curl`, a faucet), the HTTP round trips that reached the fake, and the values a person has to carry from
@@ -147,7 +148,19 @@ values are copied and which steps prompt for a passphrase are declared by the jo
 (`--fault cannot-sign`) when a step does not behave as declared. `guide` and `published` are the documented
 journeys as they stand; `context` is `published` written the way the CLI's context allows (the identity, chain
 and abstract account come from what `init` recorded), so the difference between the two is exactly what the
-context changed.
+context changed. Each later journey is the same transaction on a later CLI, so the lines below are the
+before and after of one change at a time:
+
+| Journey | `certen` commands | Not a command | Round trips | Values copied by hand |
+|---|:--:|:--:|:--:|---|
+| `published` (the 12-step walkthrough the plan started from) | 16 | 5 | 37 | 5 (`identity_id`, `adi_url`, `key_page_url`, `abstract_account`, `intent_id`) |
+| `readiness` (`status` replaces the by-hand key-page `curl`) | 12 | 3 | 32 | 2 (`abstract_account`, `intent_id`) |
+| `setup-wait` (one `setup` that waits for the gas) | 6 | 3 | 32 | 2 |
+| **`send`** (`setup`, then `send`: install, fund, done) | **2** | 2 (install, fund) | 34 | **1** (`abstract_account`, for the faucet) |
+
+Reproduce any row with `node scripts/measure-onboarding.mjs --journey <name>`. `send` replaces `tx create`, `tx status`, `proof get`, `proof verify`
+(twice) and the by-hand effect check; five of its round trips go to the person's own node, the independent check. What did not improve, plainly:
+the faucet still needs the address pasted (the gateway has no testnet drip), and the fake answers every wait on the first poll.
 
 Read the round trips as a **floor to compare across changes, not a forecast of live traffic**: the fake
 answers every wait on the first poll, so `init`, `call --wait` and `tx create --wait` each count one poll

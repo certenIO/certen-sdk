@@ -41,13 +41,15 @@ Success:
 Failure:
 
 ```json
-{ "ok": false, "error": { "code": "RATE_LIMIT_EXCEEDED", "message": "…", "retryable": true, "status": 429, "requestId": "…" } }
+{ "ok": false, "error": { "code": "RATE_LIMIT_EXCEEDED", "message": "…", "retryable": true, "next": "certen errors RATE_LIMIT_EXCEEDED", "status": 429, "requestId": "…" } }
 ```
 
 - Always exactly one top-level object, newline-terminated. A command that produces several payloads
   emits them as an array in `data`; a command that produces none emits `"data": null`. stdout is
   never empty and never contains two concatenated objects.
 - `status` and `requestId` appear only when the gateway supplied them.
+- `next` is the one command to run after this failure: a single `certen ...` line, present on every failure envelope. It is additive (a consumer
+  that ignores unknown keys is unaffected) and is described in section 11.
 - **Everything else goes to stderr** — confirmations, hints, warnings, commander's own parse errors.
   stderr is free-form and is not a contract.
 
@@ -64,7 +66,7 @@ So the failure envelope may carry an additive `details` object:
 ```json
 { "ok": false, "error": {
   "code": "DOCTOR_CHECKS_FAILED", "message": "2 check(s) failed: api key, local signing key",
-  "retryable": false,
+  "retryable": false, "next": "certen status",
   "details": { "checks": [ { "name": "gateway reachable", "status": "ok", "detail": "…" } ] }
 } }
 ```
@@ -116,7 +118,7 @@ parsing prose:
 
 ```json
 { "ok": false, "error": {
-  "code": "PAYMENT_REQUIRED", "message": "Payment required", "retryable": false, "status": 402,
+  "code": "PAYMENT_REQUIRED", "message": "Payment required", "retryable": false, "next": "certen fund <usd>", "status": 402,
   "shortfall_usd": "0.230000",
   "quote_id": "q-77",
   "resolve": {
@@ -137,6 +139,8 @@ parsing prose:
 - `retryable` is `false` and must be honoured: only money changes this outcome, so a retry loop
   is pure load.
 - Re-send with `quote_id` once funded to keep the price you were quoted, before it expires.
+- `error.next` for `PAYMENT_REQUIRED` is the fixed `certen fund <usd>` (and `certen errors COMMITMENT_EXCEEDED` for that code), **not** `resolve.cli_command`: `next` is
+  never built from gateway text (section 11). `resolve.cli_command` stays what it was, a field you may read; deciding to run it is yours.
 
 ### 3. Exit codes
 
@@ -235,6 +239,10 @@ certen --help --json
 Each command carries `path` (how to invoke it), `arguments`, `options` and nested `commands`. On an
 option, `required` means the flag must be present; `takesValue` means it accepts a value. They are
 different things, and conflating them is an easy mistake.
+
+The tree is the parser, so it lists every command and option. The *grouping* in `certen --help` for a person (the root help leads with `setup`, `send`, `call`,
+`status`, `receipt`, and puts plumbing under "Advanced"; `tx create --help` lists its key-page and contract-address options under "Advanced options") is a
+presentation of the same commands, not a different set: nothing is hidden from the tree or from the help, and the tree is unchanged by it.
 
 ### 6. `pending sign <target>` infers what it is signing
 
@@ -861,6 +869,102 @@ temporary directory.
 
 `WAIT_ABORTED` is the SDK's code for the same event (`execute.wait()` with an `AbortSignal`); the CLI reports it as `INTERRUPTED`. `TX_FAILED` and `TX_WAIT_TIMEOUT` are unchanged, and now also carry `receipt`, `receipt_path`
 and `resume` when raised by `send` or `watch`.
+
+### 11. Every failure ends with one command: `error.next`
+
+A failure that ends in prose leaves the reader to work out what to type. The CLI already knows: the code says what went wrong, the command
+that was running says where, and for nearly every failure there is a single command that moves forward. So **every failure, in both modes,
+ends with exactly one**:
+
+- `--json`: `error.next`, a string, on every failure envelope (additive: a consumer that ignores unknown keys is unaffected);
+- table mode: the **last line on stderr**, `  next: <command>`.
+
+```json
+{ "ok": false, "error": {
+  "code": "ABSTRACT_ACCOUNT_UNFUNDED",
+  "message": "The abstract account 0x7a3…c91 on base-sepolia holds no testnet gas. …",
+  "retryable": false,
+  "next": "certen gas --chain base-sepolia --wait"
+} }
+```
+
+```
+Error [IDENTITY_CANNOT_SIGN]: Identity acc://jason-dev.acme cannot sign — its key page is not held by your key. …
+  next: certen status
+```
+
+Rules, each of them held by a test:
+
+- **One plain command line.** `next` is a single line that starts with `certen ` and holds nothing a shell would act on. `<angle>` tokens
+  (`certen use chain <chain>`, `certen watch <intent-id>`, `certen fund <usd>`) are placeholders for a value **you** choose; a command
+  with no placeholder can be run as printed.
+- **It is a hint to run, not a promise.** `next` is the single most useful next command, not a guarantee that it fixes the cause. It is never
+  run for you, and a caller that runs it automatically is choosing to.
+- **Never built from gateway text.** `next` is a line a person may paste into a shell and an agent may run, so a gateway that said "run
+  `certen fund 99999`" must not be able to put that on it. The only values interpolated into it are ones the CLI checks against a strict pattern: a
+  UUID (an intent or identity id), a chain slug (lowercase letters, digits and hyphens), or a local key name. Anything else becomes the
+  placeholder (`<intent-id>`, `<chain>`, `<key>`). The payment target in a 402 (`resolve.cli_command`, section 2) is a field you may read, never a `next`.
+  Whatever is handed in is also checked at the end: a line that is not one plain `certen ...` command is replaced.
+- **Every failure has one.** That includes a usage error found by the parser, a failure of a code this CLI has never heard of, and an
+  untyped one. The answer comes from the first rung of this ladder that has one:
+
+  | | Where `next` comes from | Example |
+  |:--:|---|---|
+  | 1 | **The error itself**, when the code that raised it holds the chain, key or id | `NOT_READY` from `send`/`status` is the first failing check's own fix command; `CHAIN_NOT_LINKED` is `certen identity link-chain <that id> --chain <that chain>` |
+  | 2 | **The code's entry** in the CLI's table, one for every code the CLI itself raises, and for the SDK's client-side codes | `NO_API_KEY` → `certen setup`; `IDENTITY_CANNOT_SIGN` → `certen status`; `ABSTRACT_ACCOUNT_UNFUNDED` → `certen gas --chain <chain> --wait` |
+  | 3 | **The gateway's catalogue**, for a code it publishes that the table does not cover: `certen errors <CODE>` says what it means, whose side it is and whether retrying can help | `RATE_LIMIT_EXCEEDED` → `certen errors RATE_LIMIT_EXCEEDED` |
+  | 4 | **The HTTP class**, for a gateway code nobody has catalogued | 401 → `certen setup --existing-account`; 403 → `certen whoami`; 402 → `certen fund <usd>`; 5xx → `certen doctor`; other 4xx → the command's `--help` |
+  | 5 | **The failing command's help**, for a usage error or an untyped failure (`certen <command> --help`; `certen --help` at the root); **`certen doctor`** for a typed failure nobody classified | `USAGE_ERROR` from `tx create` → `certen tx create --help` |
+
+  The command that was running is known without parsing `argv`: it is recorded when an action starts, and by the parser for the errors it finds
+  before any action does.
+
+Some entries depend on which command raised the code, because the same code wants a different answer: `NO_API_KEY` raised by `setup` (which
+cannot ask which kind of account, with no terminal) is `certen setup --existing-account`, by `auth login` it is that command's help, and elsewhere
+`certen setup`; `FUNDS_WAIT_TIMEOUT` and `INTERRUPTED` are `certen setup` from `setup`, `certen gas --wait` from `gas`, and `certen watch <intent-id>`
+from a wait on an intent (`TX_WAIT_TIMEOUT` and a failed wait name the intent from `error.details.intent_id`: `TX_FAILED` → `certen receipt <intent-id>`);
+`NETWORK_ERROR` is `certen doctor`, except from `doctor` itself, where it is `certen context` (which shows the gateway it tried).
+
+**What guarantees it.** `packages/cli/test/next-step.test.ts` reads the CLI's source and fails if any code a `CliError` or `UsageError` is built
+with lacks an entry of its own (landing on the fallback does not count), so a new code cannot ship without a next step; it holds every line the table can
+produce to the real command tree (the command exists, every `--flag` is one it declares, it is given no more arguments than it takes), so advice cannot go
+stale when a flag is renamed; and `conformance.test.ts` pins the envelope and the last stderr line for the cases above, with exactly one `next:`.
+
+Nothing else moves: the exit codes, the one-envelope rule, `retryable`, `details`, and the verdict exits `4`/`5` of `proof verify`, `send`,
+`receipt` and `watch` are as before. A verdict is not a failure and carries no `error.next`; its own next step is the `Next:` line a receipt prints on stderr (section 10).
+
+### 12. Keys that stay unlocked for a while: `certen keys unlock`, `certen keys lock` (experimental)
+
+By default every command that signs asks for the key's passphrase, once. `certen keys unlock <name> --for <duration>` keeps the **decrypted key** in
+the OS keyring until an expiry, so commands in that window do not ask; `certen keys lock` wipes it. It is **inert unless `CERTEN_EXPERIMENTAL_KEY_UNLOCK=1`
+is set**: it ships behind a written security review (`docs/security/keys-unlock-review.md`), and with the switch off every command, output and prompt is
+exactly what it was. Nothing below is a stable interface until that review is signed off.
+
+```bash
+CERTEN_EXPERIMENTAL_KEY_UNLOCK=1 certen --json keys unlock dev --for 15m
+# {"ok":true,"data":{"name":"dev","public_key_hash":"…","unlocked_until":"2026-10-16T08:15:00.000Z","for_seconds":900}}
+certen keys lock dev            # or --all
+# {"ok":true,"data":{"locked":["dev"],"not_unlocked":[],"keyring":"ok"}}
+```
+
+- **What is stored is the decrypted key, never the passphrase** (a passphrase is a human secret that is reused elsewhere), with an absolute expiry. The default is
+  `15m` and the longest is `8h` (`90s`, `15m`, `1h`; a bare number is minutes).
+- **The expiry is checked every time the key is used**, and a stale, malformed or tampered entry is removed and ignored. There is no background process: bytes can remain in
+  the keyring after the expiry until the next CLI run or `keys lock`.
+- **A session replaces only the passphrase.** The confirmation card, the rebuild-and-match of what is signed and the question all still run; `--yes` still skips only the question.
+- **It never falls back to a file.** With no usable OS keyring it refuses (`KEYRING_UNAVAILABLE`). A key stored without a passphrase has nothing to unlock (`KEY_NOT_ENCRYPTED`).
+- `keys lock` always works, with the switch off too. `data.keyring` is `"unavailable"` when no OS keyring can be loaded at all (so nothing can have been unlocked, and nothing is wiped: that is not
+  a failure). A keyring that loads and then will not confirm a removal is a failure (`KEYRING_UNAVAILABLE`, exit 2, naming the entries to remove by hand): a person told "locked" must be right.
+- With the switch on, `keys list` gains `unlocked_until` (an ISO time, or `null`) per key; with it off the listing is unchanged.
+
+| `error.code` | Exit | |
+|---|:--:|---|
+| `KEY_UNLOCK_NOT_ENABLED` | 2 | `keys unlock` without the switch |
+| `UNLOCK_DURATION_INVALID` | 2 | `--for` is zero, not a duration, or longer than 8 hours |
+| `KEY_NOT_ENCRYPTED` | 2 | the key has no passphrase |
+| `KEYRING_UNAVAILABLE` | 2 | no OS keyring can be used |
+| `WRONG_PASSPHRASE` | 1 | the passphrase did not open the key; nothing is stored |
+| `LOCK_TARGET_REQUIRED` | 2 | `keys lock` with neither a name nor `--all` |
 
 ## Example: a correct retry loop
 

@@ -9,7 +9,7 @@ Code that assumes a synchronous `201` will race.
 
 ---
 
-## The short version
+## The short version: `certen setup`
 
 If you are not integrating against the raw API, the CLI does all of this, waits for the identity to
 become genuinely usable, and tells you what is still missing:
@@ -18,24 +18,38 @@ become genuinely usable, and tells you what is still missing:
 npm install -g @certen.io/cli
 certen setup                              # key, account, identity, chains, on-chain checks and gas — until it says "Ready"
 certen send 0.0001 ETH --to 0xRecipient   # the first transfer; it ends in a receipt: what is verified, and what is not
+certen receipt                            # the record again, whenever you want it
 ```
 
 `certen setup` makes the signing key first, then the account it creates (`--new-account`, no browser) or signs you in to the one you have
 (`--existing-account`, device authorization: you never copy an API key), then the identity, and waits for gas if that is all that is missing. It
 is idempotent: it creates only what is missing and reuses the identity it recorded on a previous run, which matters because an organization
-made with a key may hold one identity until it is approved. `certen login` and `certen init` are the same steps one at a time, and unchanged. Everything below is what it does on your behalf, and what to do instead if you are
-building the same flow yourself.
+made with a key may hold one identity until it is approved. It reads the key page from Accumulate itself, so there is no `curl` to run and no
+`can_sign` to interpret by hand (the three-valued field below is still what it waits on). It exits `0` only when you can act, and saves the identity,
+key and chain as your context so the commands after it need none of them. If it stops, it says why and ends with `next: <command>`.
+
+```bash
+certen status                  # is THIS identity, on THIS chain, with THIS key able to act? names the first thing in the way
+certen identity list           # the identities of your organization (UUID, ADI, status)
+certen identity retire <id> --yes   # free the quota slot of an identity you no longer need (it never touches the on-chain ADI)
+```
 
 When `setup` says **Ready**, `certen send` is the first thing to do with the identity: it checks readiness again before it asks for your passphrase, shows what the signature will authorise, signs, waits for
 the proof cycle (60–110 seconds), verifies the proof here and writes `~/.certen/receipts/<intent-id>.json`. Exit `0` there means **verified**, `4` means done but not fully verified (it names what is missing). See
 [first-proof-in-three-commands.md](first-proof-in-three-commands.md) for what each line of the receipt means; the contract-call route (`certen call`) is described there too.
 
+`certen login` and `certen init` are the same steps one at a time, and unchanged.
+
+---
+
+## The raw API path (advanced)
+
+Everything below is what `setup` does on your behalf, for when you are building the same flow yourself, against the API or with the SDK.
+
 ```bash
 export CERTEN_API_URL="https://gateway.kompendium.co"
 export API_KEY="ck_live_..."
 ```
-
----
 
 ## 1. Generate a key — locally, and keep it
 
