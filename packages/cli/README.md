@@ -14,12 +14,16 @@ Requires **Node 22 or 24** (`engines.node >=22`).
 ## From nothing to a proof
 
 ```bash
-certen setup          # key, account, identity, on-chain checks and gas, until it says "Ready"
+certen setup                              # key, account, identity, on-chain checks and gas, until it says "Ready"
 
-certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait
+certen send 0.0001 ETH --to 0xRecipient   # preview, confirm, sign, wait, verify the proof here, keep a receipt
 
-certen proof get <intent-id>   # the evidence, to hand to a counterparty
+certen receipt                            # the record again: what is verified, what is not, and the ids to keep
 ```
+
+That is the whole path: install, `setup`, `send`. `send` ends with a **receipt** (see [Send, and the receipt](#send-and-the-receipt)); to hand a counterparty
+the evidence itself, `certen proof get <intent-id>` or `certen receipt <intent-id> --share`. The other route, a proof-gated **contract call**, is
+[further down](#proof-gated-contract-calls): `certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait`.
 
 `certen setup` is one resumable command. It makes (or reuses) your signing key, **then** the account the key creates (or signs you in to the one
 you have), then the identity, waits until the identity can sign, reads your key page from Accumulate, checks the credits, the gateway balance and the
@@ -72,6 +76,7 @@ certen use identity jason-dev        # a name, an acc:// ADI URL or a UUID
 certen use key dev
 certen use chain base-sepolia
 
+certen send 0.0001 ETH --to 0xRecipient
 certen call --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x… --wait
 ```
 
@@ -118,12 +123,70 @@ nobody can see.
 requires the signature metadata to name this key, prints what the signature would authorise, and signs the recomputed hash.
 A bare `--hash` is refused (`BLIND_SIGNING_REFUSED`): there is no way to sign a hash blind.
 
+## Send, and the receipt
+
+```bash
+certen send 0.0001 ETH --to 0xRecipient          # identity, chain and key come from your context
+certen send 0.0001 ETH --to 0xRecipient --rpc https://sepolia.base.org   # ...and a node of yours closes the proof's last layer
+certen send 0.0001 ETH --to 0xRecipient --dry-run   # every check, nothing signed
+certen receipt            # the most recent receipt, refreshed
+certen watch <intent-id>  # pick a wait back up after Ctrl-C or a timeout
+```
+
+`send` takes what you know (how much, of what, to whom) and does the rest in the order that keeps you safe:
+
+1. **It checks the invocation without the network.** The amount is **whole units** (`0.0001` is a ten-thousandth of an ETH; a wei-looking integer is refused). The recipient must be an EVM
+   address, and **a mixed-case one whose EIP-55 checksum does not hold is refused** with the correct capitalisation named: that is a mistyped address, and nothing downstream can correct it. The
+   asset must be the chain's **native token** (`ETH` on Base Sepolia). What a token transfer moves is chosen downstream and cannot be checked before signing, so a token is refused by name; use
+   `certen call` with `transfer(address,uint256)`, which shows exactly what it will call. A chain that is not a known testnet is never taken from a default: spell it out with `--chain`.
+2. **It checks readiness before it asks for a passphrase** (the same checks as `certen status`, for this amount), so a passphrase is never asked for in order to fail. A failing check refuses
+   and says what to do. A check that could not be answered is shown and does not block. `--force` excuses the gas checks only.
+3. **It shows the confirmation card and asks.** What is about to happen in your own terms, the recipient in full, the fee (an estimate from the price book, or "not available"), every value you did not
+   type and where it came from, then what the signature will authorise, **rebuilt from the gateway's bytes and matched to your request**. At a terminal it asks `Sign with "dev"? [Y/n]`; on
+   anything that is not a known testnet the chain name is in capitals and the default is **no**. `--yes` says yes in advance (it is required when nobody is at a terminal, or `send` refuses before
+   reading a passphrase). `--yes` and `--json` skip the question; **nothing skips the check of what is signed**.
+4. **It signs, waits for the proof cycle (60–110 seconds, never shortened), verifies the proof here, checks the value arrived, and writes the receipt.** Ctrl-C stops the wait, not the
+   intent: it prints `certen watch <intent-id>`, exits `130`, and the receipt so far is already saved.
+
+The same card, with the same question, now precedes the signature in `call`, `tx create --sign-with`, `governance <operation> --sign-with` and `pending sign --sign-with` (each takes `--yes`). Piped,
+those commands behave as they always have: the card is shown and they sign, so a script that works today keeps working.
+
+### The receipt
+
+The record the docs have always told you to keep (the intent, the Accumulate transaction, the destination transaction, the proof) used to take four commands and a hand comparison. It is saved to
+`~/.certen/receipts/<intent-id>.json` (`0600`; it holds no key, passphrase, API key or node URL) and says what is **established and what is not** (values shortened here; the real one prints them in full):
+
+```
+  [done] signed  [done] anchored on Accumulate  [done] executed on base-sepolia  [ ?? ] proof verified locally
+
+  Receipt   intent          7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13
+            accumulate tx   acc://ab…ab@alpha.acme/data
+            base-sepolia tx 0x5917…5d48   (from the verified proof)
+  Effect    The recipient's balance was not checked: no node of yours was given…
+  Proof     PARTIAL: 9 of 11 layers carried are established; G1_chains, outcome are not.
+  Not established:
+    - The execution layer rests on the validators' own statement of the block until it is compared with a header from a node you trust.
+```
+
+- **Exit `0` means done *and* checked.** `send`, `receipt` and `watch` exit `0` for **VERIFIED** (or for an action whose proof can never exist, which says so), `1` for a failed intent or a proof layer that does
+  not hold, **`4` for PARTIAL or still pending**, `5` for no evidence, `130` for Ctrl-C. A script that reads `0` as verified is right. (`send --no-wait` returns `0` once the signature is in; the receipt reads `pending`.)
+- **PARTIAL and NO EVIDENCE are never shown as verified.** The proof's execution layer is only checked when its receipts root is compared with a block header from **a node you trust**, so without `--rpc` (or `CERTEN_RPC_URL`) a receipt
+  is an honest PARTIAL that names that layer. With one, the recipient's balance is also read from it before signing and after the execution block (the gateway cannot read another address, and is not counted as a witness).
+  The node's chain id is checked first, and its URL is never printed or saved: hosted nodes put a key in the path.
+- **A proof whose Accumulate page chains were not captured is PARTIAL too** (`G1_chains`). A fully VERIFIED receipt needs a live proof that carries them: not yet run live, so treat PARTIAL naming those layers as the expected honest result today.
+- `certen receipt [intent]` shows it again, **re-verifying the proof here** and refreshing whatever was pending (`--list` lists the saved ones, `--offline` asks nothing, `--explain` prints the layers, `--share` makes a link a
+  counterparty opens with no CERTEN account). `certen watch <intent>` waits for an intent to finish and shows it. Both work for any intent, not only ones this machine sent. (`certen receipts` is something else: your billing receipts.)
+
+`--json` is one envelope with `data.receipt` and `data.saved_to`; the shape is versioned and documented in [docs/CLI-CONTRACT.md](../../docs/CLI-CONTRACT.md) section 10.
+
 ## Proof-gated contract calls
 
 ```bash
 certen call --identity <uuid> --chain base-sepolia --to 0xTarget \
     --fn 'confirm(bytes32)' --arg 0x… --sign-with dev --wait
 ```
+
+`call` shows the same confirmation card before it signs (asking at a terminal), and `call --wait` ends with the same receipt after its usual output (its `--json` output is unchanged).
 
 `--fn` takes a Solidity signature and `--arg` repeats positionally. Arguments are checked against
 the signature **before** anything is sent — on a proof-gated call, a valid proof of the *wrong*
@@ -194,6 +257,8 @@ intent from an empty abstract account is accepted, signed and submitted — ever
 success — and then parks at `anchoring` forever, because the execution leg cannot run on chain.
 `--force` overrides it.
 
+`certen send` is this transfer without the plumbing: it derives `--from`, checks readiness first and ends in a receipt. `tx create` stays for when you want the steps (it takes `--yes` too).
+
 Or drive the steps yourself — useful when the signer is an HSM, another machine, or your own
 policy engine:
 
@@ -213,6 +278,7 @@ certen proof get <intent-id>        # also accepts a proof id or a transaction h
 certen proof bundle <proof-id>      # the artifact to hand over
 certen proof share <proof-id>       # a link a counterparty opens without a key of yours
 certen proof verify <intent-id>     # verified layer by layer, locally; exit 0 only if every layer checks
+certen receipt <intent-id>          # the same verdict, with the ids to keep and whether the value arrived
 ```
 
 `proof verify` checks the proof itself, here, and prints one verdict per layer with the evidence it was
@@ -222,7 +288,8 @@ never reads a `verified` flag from a bundle and never counts the gateway's say-s
 they are. A layer it cannot establish is named, and the verdict is then `partial` (exit 4), not verified.
 `failed` (exit 1) names the layer a tamper is in; `no_evidence` (exit 5, `PROOF_V2_EVIDENCE_NOT_SERVED`)
 means the gateway serves no proof v2 document for this proof. Pass `--rpc` with your own node so the
-execution receipt is compared with a block header you fetched. A valid proof of the WRONG call is still a
+execution receipt is compared with a block header you fetched; a node that has no such block is an error
+(`EVM_RPC_NO_BLOCK`), never a pass. A valid proof of the WRONG call is still a
 valid proof: compare the operation with your own record of what was agreed.
 
 ## What the CLI verifies here, and what it reports from the validators
@@ -242,7 +309,7 @@ A 5xx from the proof-service means that service is down, **not** that your proof
 ```bash
 certen pending list
 certen pending sign <id> --identity <adi> --vote approve
-certen pending sign <id> --identity <adi> --vote approve --sign-with dev   # rebuilds and shows the transaction first
+certen pending sign <id> --identity <adi> --vote approve --sign-with dev   # rebuilds and shows the transaction first, then asks (at a terminal)
 ```
 
 `--vote` takes `approve`, `reject`, or `abstain` — lowercase strings. Not `accept`, and not a
@@ -305,7 +372,8 @@ certen --json portfolio
 - **Exactly one JSON object on stdout**, nothing else. Every human-facing line goes to stderr.
 - **Exit codes:** `0` ok · `1` operation failed · `2` usage error · `3` gateway unreachable. Branch on
   these instead of parsing text. `3` guarantees nothing was submitted, so a retry cannot
-  double-execute.
+  double-execute. `4` and `5` are the verdicts of `proof verify`, `send`, `receipt` and `watch` (partial or
+  pending; no evidence), and `130` is Ctrl-C while `setup`, `gas`, `send` or `watch` was waiting.
 - **`error.retryable`** comes from the SDK's own `CertenError.isRetryable`, so the CLI and the SDK
   give an identical retry decision.
 - **`certen --help --json`** returns the entire command tree — every command, flag and exit code — in
@@ -320,6 +388,7 @@ Without `--json`, output is the human table format as before. Do not parse it.
 | `CERTEN_API_KEY` | API key. Always wins, so CI never touches the keyring or config file. |
 | `CERTEN_API_URL` | Gateway base URL. Defaults to `https://gateway.kompendium.co`. |
 | `CERTEN_KEY_PASSPHRASE` | Passphrase for local signing keys. |
+| `CERTEN_RPC_URL` | A JSON-RPC node you trust on the execution chain, used by `send`, `receipt` and `watch` when `--rpc` is not given. Never printed or saved (it can carry a key). |
 
 `certen auth login` stores the API key in your OS keyring by default (through the optional
 `@napi-rs/keyring` dependency, which ships prebuilt binaries for Windows, macOS and Linux), or in

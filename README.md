@@ -8,7 +8,7 @@ cross-chain execution on Accumulate.
 | Package | |
 |---|---|
 | [`@certen.io/sdk`](packages/sdk) | TypeScript client. Typed errors, automatic retries, auto-idempotency, and the proof-gated execution flow as one call. |
-| [`@certen.io/cli`](packages/cli) | The `certen` command line. Add `--json` for a machine contract. |
+| [`@certen.io/cli`](packages/cli) | The `certen` command line: `certen setup`, then `certen send 0.0001 ETH --to 0x…`, then a `certen receipt` that says what is verified and what is not. Add `--json` for a machine contract. |
 | [`@certen.io/mcp`](packages/mcp) | MCP server for AI agents. Read-only by default; holds no signing key. |
 
 ```bash
@@ -78,7 +78,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->1891 tests in 117 files (sdk 646, cli 787, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->2342 tests in 136 files (sdk 835, cli 1049, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 
@@ -250,7 +250,7 @@ obvious here.
 | [AGENTS.md](AGENTS.md) | Working **on** this repo: setup, build, test, layout, gotchas, and which commands need a human first. |
 | [llms.txt](llms.txt) | Building **on** CERTEN: quickstart and the rules that decide whether your code works. |
 | [llms-full.txt](llms-full.txt) | Building **on** CERTEN: the full API digest, generated from the spec. |
-| [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) | The `certen --json` machine contract: envelope shape and exit codes. |
+| [docs/CLI-CONTRACT.md](docs/CLI-CONTRACT.md) | The `certen --json` machine contract: envelope shape, exit codes, and the receipt `send` ends with. |
 
 `llms.txt` and `llms-full.txt` are generated — edit the prose in
 `tools/agentgen/templates/llms.head.md` and regenerate, rather than editing them directly.

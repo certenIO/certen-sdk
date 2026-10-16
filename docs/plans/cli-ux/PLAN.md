@@ -268,6 +268,10 @@ gateway balance is money, so they end the run as blockers with their fix.)*
   capitals.
 - `tx create` stays as the plumbing command, but derives `--from` when it's missing (the same
   `abstractAccountFor` as `call`), so the existing README invocation gets shorter without breaking.
+  *(Phase 4, what the code settled. **`send` signs only the chain's native token**: the signing check cannot state what a token transfer moves (the token contract and decimals are chosen downstream, `legsFromIntent` refuses it), and nothing is signed that cannot be checked, so any other asset is refused by name with the command that does work.
+  **A mixed-case recipient with a bad EIP-55 checksum is refused.** **`send` runs `client.readiness()` before the passphrase** and blocks on a failing check only; an `unknown` check is shown and does not block (the funding guard's rule), and `--force` excuses the gas checks only. `call` keeps its own pre-flight (the identity read, `can_sign`, the funding guard on amount + gas): giving it the full readiness read would add three requests to the flagship command and to every stub that tests it, and PLAN §5 rule 2 says nothing existing breaks.
+  **The card prompts only where a person is at a terminal**, on the existing signing commands (`call`, `tx create --sign-with`, `governance`, `pending sign`; each gained `--yes`), so a script that signs unattended today keeps working; `send`, being new, refuses with no `--yes`, no `--json` and no terminal (`CONFIRMATION_REQUIRED`). The rebuilt summary (`You are about to sign: …`) is kept verbatim inside the card.
+  **The fee on the card is the price book's `proof.execute` entry plus the catalogue's gas reserve**, labelled an estimate, or "not available"; never a number the gateway did not publish. `execute.send()` is in the SDK.)*
 
 ### W5. Outcome: the receipt is the product
 
@@ -290,6 +294,10 @@ gateway balance is money, so they end the run as blockers with their fix.)*
   minutes, for compatibility.
 - The receipt's JSON shape is a new, documented part of the `--json` contract
   (`docs/CLI-CONTRACT.md`) with conformance tests.
+  *(Phase 4, what the code and the gateway settled. **The destination transaction hash is not a field of the intent**: it comes from the verified execution proof, else from the validators' own `settlement_tx`, and the receipt says which (`ids.destination_tx_source`).
+  **The gateway cannot read an arbitrary address's balance**, so "the recipient's balance, from `--rpc` if given, else the gateway" has no gateway half: the recipient is read from the caller's own node (`--rpc` or `CERTEN_RPC_URL`, with `eth_chainId` checked first and the URL never echoed, because hosted nodes put a key in it) before signing and after the execution block; the sender's side (the abstract account) is read from the gateway as supporting evidence. Without a node the recipient is `unchecked`, never `confirmed`.
+  **A receipt is VERIFIED only when the proof is and the value arrived**: the proof's execution layer (S6) needs a header from the caller's own node to leave `not_checked`, so without `--rpc` a receipt is an honest PARTIAL naming it (the plan's "or an honest PARTIAL naming the missing layers"). A proof whose page chains are not captured (the repo's fixture) is PARTIAL too. A verified proof with the recipient unchecked or unreadable is PARTIAL, so the receipt's `gaps` are empty exactly when its verdict is `verified`.
+  **Exit codes reuse the existing ones**: 0 verified (or `unproven`: executed, nothing can be verified), 1 failed or a proof layer FAILED, 4 partial or pending, 5 no evidence, 130 Ctrl-C while waiting. **Ctrl-C stops the wait, not the intent**, and a receipt is saved however the wait ends. `call --wait` ends with the receipt at a terminal only; its `--json` envelope and exit code are unchanged. `--share` is `proof.share` on the receipt's proof id.)*
 
 ### W6. Funding without the guesswork
 
