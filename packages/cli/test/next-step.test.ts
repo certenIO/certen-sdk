@@ -120,6 +120,19 @@ describe('next-step: the ladder', () => {
     expect(nextStepFor('a string', ['status'])).toBe('certen status --help');
   });
 
+  it('the key store\'s typed answers each end in one command that helps: look at the keys, find the file, or re-check the passphrase', () => {
+    expect(nextStepFor({ code: 'UNKNOWN_KEY' }, ['keys', 'show'])).toBe('certen keys list');
+    expect(nextStepFor({ code: 'KEY_EXISTS' }, ['keys', 'generate'])).toBe('certen keys list');
+    expect(nextStepFor({ code: 'KEY_FILE_CORRUPT' }, ['keys', 'show'])).toBe('certen keys path');
+    expect(nextStepFor({ code: 'KEY_FILE_INSECURE' }, ['send'])).toBe('certen keys path');
+    expect(nextStepFor({ code: 'KEY_FILE_UNSUPPORTED' }, ['send'])).toBe('certen keys path');
+    expect(nextStepFor({ code: 'WRONG_PASSPHRASE', details: { key: 'dev' } }, ['send'])).toBe('certen keys verify dev');
+    // A mistake in what was typed is answered by the help of the command it was typed to.
+    for (const code of ['INVALID_KEY_NAME', 'INVALID_HASH', 'PASSPHRASE_MISMATCH', 'NO_TTY']) {
+      expect(nextStepFor({ code }, ['keys', 'generate']), code).toBe('certen keys generate --help');
+    }
+  });
+
   it('a typed failure nobody classified falls through to doctor', () => {
     expect(nextStepFor({ code: 'SOMETHING_ELSE' }, ['send'])).toBe('certen doctor');
   });

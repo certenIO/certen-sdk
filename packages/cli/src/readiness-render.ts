@@ -32,7 +32,7 @@ function commandFor(code: string, env: LocalizeEnv): string | undefined {
     case 'CREDENTIAL_UNCONFIRMED':
       return 'certen login';
     case 'IDENTITY_NOT_FOUND':
-      return 'certen init';
+      return 'certen setup';
     case 'IDENTITY_PROVISIONING':
     case 'IDENTITY_NOT_ACTIVE':
       return `certen identity get ${env.identityId}`;

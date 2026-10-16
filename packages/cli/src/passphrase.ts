@@ -183,7 +183,7 @@ export async function resolveNewPassphrase(noPassphrase: boolean): Promise<strin
   const first = await readHidden('Passphrase for the new key (empty to store unencrypted): ');
   if (first.length === 0) return null;
   const second = await readHidden('Confirm passphrase: ');
-  if (first !== second) throw new Error('Passphrases did not match. Nothing was written.');
+  if (first !== second) throw new UsageError('Passphrases did not match. Nothing was written.', 'PASSPHRASE_MISMATCH');
   return first;
 }
 
@@ -196,7 +196,7 @@ export async function resolveNewPassphrase(noPassphrase: boolean): Promise<strin
  */
 export async function promptSecret(prompt: string): Promise<string> {
   if (!isInteractive()) {
-    throw new Error('No TTY to prompt on.');
+    throw new UsageError('No TTY to prompt on: pass the value another way (its flag, or `-` to read it from stdin).', 'NO_TTY');
   }
   return readHidden(prompt);
 }

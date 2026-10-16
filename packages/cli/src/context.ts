@@ -174,7 +174,7 @@ export function requireIdentity(ctx: ResolvedContext, flag = '--identity'): Reso
   }
   throw new UsageError(
     `No identity to act as. Pass ${flag} <uuid | acc://adi | name>, set CERTEN_IDENTITY, or choose one once with: certen use identity <ref>. `
-    + (ctx.candidates.identity.length === 0 ? 'None is recorded on this machine yet: create one with: certen init' : ''),
+    + (ctx.candidates.identity.length === 0 ? 'None is recorded on this machine yet: create one with: certen setup' : ''),
     'MISSING_IDENTITY',
   );
 }

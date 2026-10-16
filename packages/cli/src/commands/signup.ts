@@ -226,7 +226,9 @@ export function registerSignupCommands(program: Command): void {
         // already holds and we never see: `certen keys` made it, the private half stays here, and
         // the only thing that crosses the wire is a signature over a nonce.
         if (opts.withKey) {
-          const signer = await resolveSigner(opts.withKey);
+          // Never from an unlocked session (`keys unlock`): the bytes signed below are a nonce the GATEWAY chose, which no card can describe, so the passphrase
+          // prompt is the one moment a person is made to notice a key is being used. `setup` signs its signup nonce the same way.
+          const signer = await resolveSigner(opts.withKey, { session: false });
           const redeemed = await selfSignup({
             publicKey: signer.publicKey,
             // The nonce arrives as hex and must be signed as BYTES. `signHash` does exactly that,
@@ -256,7 +258,7 @@ export function registerSignupCommands(program: Command): void {
             human('  and that key is the only thing that could have created this organization.');
             human('');
             human('  The API key is stored here and was returned once.');
-            hint(`certen init --key ${opts.withKey}   # identity, chains, and a check that it works`);
+            hint(`certen setup --key ${opts.withKey}   # identity, chains, gas, and a check that it all works`);
           }
           return;
         }
@@ -289,7 +291,7 @@ export function registerSignupCommands(program: Command): void {
             // fall back on if the key is lost between here and the next command.
             human('  The key is stored on this machine. It was returned once, and the token that');
             human('  produced it is now spent.');
-            hint('certen init   # signing key, identity, and a check that it all works');
+            hint('certen setup   # signing key, identity, gas, and a check that it all works');
           }
           return;
         }

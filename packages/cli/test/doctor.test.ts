@@ -284,6 +284,36 @@ describe('certen doctor', () => {
     }
   });
 
+  it('table mode, failing: the diagnosis is on stdout, the failure and `next:` are on stderr, and the exit code is the verdict', async () => {
+    // The rule for a command whose product is a REPORT (`doctor`, `status`, `gas`): like `diff` and `grep`, it prints what it found on stdout and exits 1
+    // when what it found is a problem. A non-zero exit here is a finding, not a malfunction, so `certen doctor | tee report.txt` and `certen gas > send.txt` keep
+    // working when the news is bad. The failure line, and the one command to run next, are what stderr is for. (docs/CLI-CONTRACT.md, "Where a report goes".)
+    const stub = await stubGateway(healthy());
+    try {
+      const r = await certen(['doctor'], stub.url); // no API key: the credential check fails
+      expect(r.code).toBe(1);
+      expect(r.stdout).toMatch(/api key: No API key configured/);
+      expect(r.stdout).toMatch(/Fix: /);
+      expect(r.stderr).toContain('Error [DOCTOR_CHECKS_FAILED]');
+      expect(r.stderr).not.toMatch(/Fix: /); // the report is not repeated on the other stream
+      expect(r.stderr.trimEnd().split('\n').pop()).toMatch(/^ {2}next: certen /);
+    } finally {
+      await stub.close();
+    }
+  });
+
+  it('table mode, healthy: the confirmation is on stdout and stderr carries no error', async () => {
+    const stub = await stubGateway(healthy());
+    try {
+      const r = await certen(['doctor'], stub.url, 'ck_live_test', { withLocalKey: true });
+      expect(r.code).toBe(0);
+      expect(r.stdout).toMatch(/Everything checks out|Everything essential is working/);
+      expect(r.stderr).not.toMatch(/Error/);
+    } finally {
+      await stub.close();
+    }
+  });
+
   it('exits 3 when the gateway is unreachable — not 1', async () => {
     // Discard port: refuses immediately, no network needed. Nothing was submitted, and a retry is
     // worth attempting; that is what 3 promises and 1 does not.

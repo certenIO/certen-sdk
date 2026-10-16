@@ -153,6 +153,8 @@ export async function unlockSession(
   try {
     seed = exportSeed(name, passphrase);
   } catch (err) {
+    // Typed key-store errors (WRONG_PASSPHRASE, PASSPHRASE_REQUIRED, KEY_FILE_*) pass through as they are; see signer.ts.
+    if (err instanceof CliError) throw err;
     throw new CliError(
       err instanceof Error ? err.message : String(err), 'WRONG_PASSPHRASE', EXIT.FAILED, false, undefined, `certen keys verify ${keyArg(name)}`,
     );

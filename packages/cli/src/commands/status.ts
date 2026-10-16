@@ -133,7 +133,7 @@ interface AllArgs {
 async function runAll(a: AllArgs): Promise<void> {
   const recorded = recordedIdentities();
   if (recorded.length === 0) {
-    throw new UsageError('No identity is recorded on this machine, so there is nothing to check. Create one with: certen init', 'NO_IDENTITIES');
+    throw new UsageError('No identity is recorded on this machine, so there is nothing to check. Create one with: certen setup', 'NO_IDENTITIES');
   }
 
   const ctx = resolveContext({ identity: a.opts.identity, key: a.opts.signWith }, { fields: ['identity', 'key'] });

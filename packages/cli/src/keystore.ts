@@ -6,6 +6,8 @@ import {
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, statSync, readdirSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { CliError, EXIT, UsageError } from './errors.js';
+import { keyArg } from './next-step.js';
 
 const KEYS_DIR = join(homedir(), '.certen', 'keys');
 
@@ -75,8 +77,9 @@ const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 export function assertValidName(name: string): void {
   if (!NAME_RE.test(name)) {
-    throw new Error(
+    throw new UsageError(
       `Invalid key name "${name}". Use 1-64 characters: letters, digits, hyphen, underscore; must start with a letter or digit.`,
+      'INVALID_KEY_NAME',
     );
   }
 }
@@ -124,12 +127,13 @@ function assertFileSecure(path: string): void {
   try {
     const mode = statSync(path).mode & 0o077;
     if (mode !== 0) {
-      throw new Error(
+      throw new CliError(
         `Refusing to read ${path} — permissions are not 0600. Run: chmod 600 "${path}"`,
+        'KEY_FILE_INSECURE',
       );
     }
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith('Refusing')) throw err;
+    if (err instanceof CliError) throw err;
     // stat failed for a reason other than our own check (missing file): let the caller's
     // existence check produce the clearer message.
   }
@@ -158,7 +162,7 @@ export function keyExists(name: string): boolean {
 export function generateKey(name: string, passphrase: string | null): KeyInfo {
   assertValidName(name);
   if (keyExists(name)) {
-    throw new Error(`Key "${name}" already exists at ${keyPath(name)}. Choose another name or delete it first.`);
+    throw new UsageError(`Key "${name}" already exists at ${keyPath(name)}. Choose another name or delete it first.`, 'KEY_EXISTS');
   }
 
   const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -211,17 +215,34 @@ function toInfo(k: StoredKey): KeyInfo {
 export function readKeyFile(name: string): StoredKey {
   const path = keyPath(name);
   if (!existsSync(path)) {
-    throw new Error(`No key named "${name}". Run \`certen keys list\` to see what you have, or \`certen keys generate --name ${name}\`.`);
+    throw unknownKey(`No key named "${name}". Run \`certen keys list\` to see what you have, or \`certen keys generate --name ${name}\`.`);
   }
   assertFileSecure(path);
-  const parsed = JSON.parse(readFileSync(path, 'utf-8')) as StoredKey;
+  let parsed: StoredKey;
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf-8')) as StoredKey;
+  } catch {
+    // Not the parser's own words ("Unexpected token ... in JSON at position 1") and never the file's contents: a key file holds a private key.
+    throw new CliError(`Key "${name}" cannot be read: ${path} is not a valid key file (it is not JSON). Restore it from a backup, or delete it and generate a new key.`, 'KEY_FILE_CORRUPT', EXIT.FAILED, false, { key: name });
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new CliError(`Key "${name}" cannot be read: ${path} is not a valid key file (it does not hold a key). Restore it from a backup, or delete it and generate a new key.`, 'KEY_FILE_CORRUPT', EXIT.FAILED, false, { key: name });
+  }
   if (parsed.version !== VERSION) {
-    throw new Error(`Key "${name}" has unsupported version ${parsed.version} (this CLI understands ${VERSION}).`);
+    throw new CliError(`Key "${name}" has unsupported version ${parsed.version} (this CLI understands ${VERSION}).`, 'KEY_FILE_UNSUPPORTED', EXIT.FAILED, false, { key: name });
   }
   if (parsed.algorithm !== 'ed25519') {
-    throw new Error(`Key "${name}" uses unsupported algorithm "${parsed.algorithm}".`);
+    throw new CliError(`Key "${name}" uses unsupported algorithm "${parsed.algorithm}".`, 'KEY_FILE_UNSUPPORTED', EXIT.FAILED, false, { key: name });
   }
   return parsed;
+}
+
+/**
+ * A key that is not there: a wrong invocation (exit 2), the code `certen use key nope` has always used. The same answer from every door, so `keys show nope`,
+ * `--sign-with nope` and `use key nope` cannot disagree about whether naming a key that does not exist is a mistake in the invocation.
+ */
+function unknownKey(message: string): UsageError {
+  return new UsageError(message, 'UNKNOWN_KEY');
 }
 
 /** Metadata only — never decrypts, so it never needs a passphrase. */
@@ -249,7 +270,7 @@ export function listKeys(): KeyInfo[] {
 
 export function deleteKey(name: string): void {
   const path = keyPath(name);
-  if (!existsSync(path)) throw new Error(`No key named "${name}".`);
+  if (!existsSync(path)) throw unknownKey(`No key named "${name}".`);
   unlinkSync(path);
 }
 
@@ -260,7 +281,8 @@ export function isEncrypted(name: string): boolean {
 function decryptPrivateKey(k: StoredKey, passphrase: string | null): Buffer {
   if (k.encryption === null) return Buffer.from(k.privateKey, 'hex');
   if (passphrase === null) {
-    throw new Error(`Key "${k.name}" is encrypted — a passphrase is required.`);
+    // The caller did not supply one: an invocation that cannot work as given (exit 2), and NOT a wrong passphrase, which the wrappers used to call it.
+    throw new CliError(`Key "${k.name}" is encrypted — a passphrase is required.`, 'PASSPHRASE_REQUIRED', EXIT.USAGE, false, { key: k.name });
   }
   const enc = k.encryption;
   const fileKey = deriveFileKey(passphrase, Buffer.from(enc.salt, 'hex'));
@@ -271,7 +293,12 @@ function decryptPrivateKey(k: StoredKey, passphrase: string | null): Buffer {
   } catch {
     // GCM auth failure is indistinguishable from a wrong passphrase, and saying "wrong
     // passphrase" for a corrupted file sends people down the wrong path. Say both.
-    throw new Error(`Could not decrypt key "${k.name}" — wrong passphrase, or the file has been modified.`);
+    // Exit 1: the invocation was well-formed and the key did not open. It carries the key, and names `keys verify` as its next step itself, so it reads the same
+    // whichever door it came through. (`keyArg` only lets a name the key store itself accepts onto a line someone may paste.)
+    throw new CliError(
+      `Could not decrypt key "${k.name}" — wrong passphrase, or the file has been modified.`,
+      'WRONG_PASSPHRASE', EXIT.FAILED, false, { key: k.name }, `certen keys verify ${keyArg(k.name)}`,
+    );
   }
 }
 
@@ -295,7 +322,7 @@ export function signHash(name: string, passphrase: string | null, hashHex: strin
 function hashBytes(hashHex: string): Buffer {
   const clean = hashHex.trim().toLowerCase().replace(/^0x/, '');
   if (!/^[0-9a-f]+$/.test(clean) || clean.length % 2 !== 0) {
-    throw new Error(`--hash must be an even-length hex string, got "${hashHex}".`);
+    throw new UsageError(`--hash must be an even-length hex string, got "${hashHex}".`, 'INVALID_HASH');
   }
   return Buffer.from(clean, 'hex');
 }
@@ -326,7 +353,7 @@ const PKCS8_ED25519_PREFIX = Buffer.from('302e020100300506032b657004220420', 'he
 export function exportSeed(name: string, passphrase: string | null): Buffer {
   const pkcs8 = decryptPrivateKey(readKeyFile(name), passphrase);
   if (pkcs8.length !== PKCS8_ED25519_PREFIX.length + 32 || !pkcs8.subarray(0, PKCS8_ED25519_PREFIX.length).equals(PKCS8_ED25519_PREFIX)) {
-    throw new Error(`Key "${name}" is not a plain Ed25519 private key; it cannot be kept unlocked.`);
+    throw new CliError(`Key "${name}" is not a plain Ed25519 private key; it cannot be kept unlocked.`, 'KEY_FILE_UNSUPPORTED', EXIT.FAILED, false, { key: name });
   }
   return Buffer.from(pkcs8.subarray(PKCS8_ED25519_PREFIX.length));
 }

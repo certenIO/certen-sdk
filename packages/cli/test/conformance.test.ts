@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execFileSync, execFileSync as _e } from 'node:child_process';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -125,9 +125,22 @@ describe('CLI contract: exit codes', () => {
   });
 
   it('1 — the operation failed', () => {
-    const r = certen(['--json', 'keys', 'show', 'nosuchkey']);
+    // The invocation is well-formed and the thing it names exists, but it cannot be used: a key file that is not a key. (This case used to name a key that
+    // does not exist, which is a mistake in the invocation and exits 2 like `use key nosuchkey`; see the next case and CLI-CONTRACT section 14.)
+    mkdirSync(join(HOME, '.certen', 'keys'), { recursive: true });
+    writeFileSync(join(HOME, '.certen', 'keys', 'damaged.json'), '{ this is not a key file', 'utf8');
+    const r = certen(['--json', 'keys', 'show', 'damaged']);
     expect(r.code).toBe(1);
-    expect(soleJson(r.stdout).ok).toBe(false);
+    const env = soleJson(r.stdout);
+    expect(env.ok).toBe(false);
+    expect((env.error as { code: string }).code).toBe('KEY_FILE_CORRUPT');
+  });
+
+  it('2 — naming a key that does not exist is a usage error, the same exit as `use key nosuchkey`', () => {
+    const r = certen(['--json', 'keys', 'show', 'nosuchkey']);
+    expect(r.code).toBe(2);
+    expect((soleJson(r.stdout).error as { code: string }).code).toBe('UNKNOWN_KEY');
+    expect(certen(['--json', 'use', 'key', 'nosuchkey']).code).toBe(2);
   });
 
   it('2 — unknown command is a usage error, not an operation failure', () => {
@@ -453,7 +466,7 @@ describe('CLI contract: table mode is unchanged for humans', () => {
 
   it('reports failures as a human line on stderr and still exits non-zero', () => {
     const r = certen(['keys', 'show', 'nosuchkey']);
-    expect(r.code).toBe(1);
+    expect(r.code).toBe(2);
     expect(r.stdout.trim()).toBe('');
     expect(r.stderr).toContain('Error');
   });
@@ -687,9 +700,11 @@ describe('CLI contract: a failure ends with the command to run next (docs/CLI-CO
   });
 
   it('1 — an error with no better answer ends with its own command\'s help, never an empty next', () => {
-    // `keys show` on a missing key is an untyped failure inside the key store: no code to place it by, so the help of the command that failed.
-    const r = certen(['--json', 'keys', 'show', 'nosuchkey']);
-    expect(errorOf(r).next).toBe('certen keys show --help');
+    // `orgs invite --expires nope` is still an untyped failure (a bare Error before any request): no code to place it by, so the help of the command that failed.
+    // (`keys show nosuchkey` used to be this example; the key store is typed now and answers `certen keys list`.)
+    const r = certen(['--json', 'orgs', 'invite', '--expires', 'nope']);
+    expect(errorOf(r)).toMatchObject({ code: 'UNKNOWN_ERROR', next: 'certen orgs invite --help' });
+    expect(certen(['--json', 'keys', 'show', 'nosuchkey']).stdout).toContain('"next":"certen keys list"');
   });
 
   it('table — the human error ends with `  next: <command>` as its last line, and stdout stays empty', () => {

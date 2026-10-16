@@ -144,7 +144,8 @@ describe('a single candidate is a default; several are a question, never a guess
     expect(() => m.ctx.requireIdentity(c)).toThrowError(/No identity/);
     try { m.ctx.requireIdentity(c); } catch (e) {
       expect(e).toMatchObject({ code: 'MISSING_IDENTITY', exitCode: 2 });
-      expect((e as Error).message).toContain('certen init');
+      expect((e as Error).message).toContain('create one with: certen setup');
+      expect((e as Error).message).not.toContain('certen init');
     }
   });
 

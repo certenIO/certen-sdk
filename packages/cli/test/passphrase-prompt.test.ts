@@ -174,6 +174,21 @@ describe('resolveNewPassphrase, the path `keys generate` takes', () => {
       stdin.emit('data', CR);
     }));
     await expect(p).rejects.toThrow(/did not match/i);
+    // Typed: two passphrases that differ are a mistake in what was typed (exit 2), not a failed operation, and not an untyped Error.
+    const again = fakeTty();
+    const q = resolveNewPassphrase(false);
+    type(again, 'first', CR);
+    queueMicrotask(() => queueMicrotask(() => {
+      again.emit('data', Buffer.from('second', 'utf8'));
+      again.emit('data', CR);
+    }));
+    await expect(q).rejects.toMatchObject({ name: 'UsageError', code: 'PASSPHRASE_MISMATCH', exitCode: 2, message: 'Passphrases did not match. Nothing was written.' });
+  });
+
+  it('refuses to prompt where nothing can answer, as a usage error that says how else to hand the value over', async () => {
+    Object.defineProperty(process, 'stdin', { value: new EventEmitter(), configurable: true }); // not a TTY
+    await expect(promptSecret('API key: ')).rejects.toMatchObject({ name: 'UsageError', code: 'NO_TTY', exitCode: 2 });
+    await expect(promptSecret('API key: ')).rejects.toThrow(/^No TTY to prompt on/);
   });
 
   it('never prompts with --no-passphrase, or when the env var is set', async () => {
