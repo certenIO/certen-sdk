@@ -1,6 +1,11 @@
 # Changelog — @certen.io/mcp
 
-## Unreleased — a confirmed transfer over MCP, and no tool lets a caller choose a host (CLI UX, Phase 6 follow-ups)
+## 0.6.0 — ready? and what happened? for an agent, and a confirmed transfer (CLI UX plan, 2026-10-16)
+
+Additive: two read-tier tools (ready? and what happened?), a fix to an existing one, two operator settings (`CERTEN_RPC_URL_<CHAIN>`, `CERTEN_SHARE_ORIGINS`) and one added field (`receiptNode` on
+`certen_chains_enabled`). No tool is removed or renamed, no parameter becomes required, no write tool moves, and the server still holds no key. Needs `@certen.io/sdk` 0.11.0, so the SDK goes out first.
+
+### Included — a confirmed transfer over MCP, and no tool lets a caller choose a host (CLI UX, Phase 6 follow-ups)
 
 Two operator settings, one tightening of an existing tool, one added field. No tool is removed or renamed and no parameter becomes required. Needs the `@certen.io/sdk` release that carries `effectRpc` and the redirect guard, so the SDK goes out first.
 
@@ -20,7 +25,7 @@ Two operator settings, one tightening of an existing tool, one added field. No t
 ### Corrected
 - Earlier notes (Phase 6 ledger, `AGENTS.md`, this README) said `certen_proof_open_shared` also fetched from the link's origin. It never did: it takes only the token from a link and asks the server's own gateway. Only `certen_proof_verify` named a host.
 
-## Unreleased — ready? and what happened? for an agent (CLI UX, Phase 6)
+### Included — ready? and what happened? for an agent (CLI UX, Phase 6)
 
 Two read-tier tools, one fix to an existing one, and nothing else that works today changes: no tool is removed or renamed, no parameter becomes required, no write tool moves. The server still holds no key,
 still signs nothing, and still registers no write tool without `CERTEN_MCP_ALLOW_WRITES=1`. A maintainer versions and publishes this (it needs the `@certen.io/sdk` release that carries

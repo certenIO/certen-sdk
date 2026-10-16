@@ -1,6 +1,13 @@
 # Changelog — @certen.io/sdk
 
-## Unreleased — a node for the recipient, and a share fetch that stays on its origin (CLI UX, Phase 6 follow-ups)
+## 0.11.0 — readiness, gas, receipts and sending from an identity (CLI UX plan, 2026-10-16)
+
+Additive: every item is described in the sections that follow, and nothing that works today is removed or renamed. Three behaviours get stricter, and each is a fix or can be bypassed:
+the funding guard on `execute.contractCall` / `execute.transfer` now also refuses an account that is positively known to be short (`skipFundingCheck: true` bypasses it exactly as before);
+`verifyEvidence` and `verifyBundle` no longer read a missing or empty block header as agreement; and `fetchSharedProof` refuses to be redirected off the origin it was pointed at.
+`@certen.io/cli` 0.11.0 and `@certen.io/mcp` 0.6.0 need this release, so it goes out first.
+
+### Included — a node for the recipient, and a share fetch that stays on its origin (CLI UX, Phase 6 follow-ups)
 
 Additive, plus one hardening. A maintainer versions and publishes this; the MCP server's operator-configured node and share-origin rule need it.
 
@@ -10,7 +17,7 @@ Additive, plus one hardening. A maintainer versions and publishes this; the MCP 
 ### Changed
 - **`fetchSharedProof` refuses to be redirected off the origin it was pointed at** (`FOREIGN_ORIGIN_URL`, `source: 'redirect'`, not retryable). It sends no credential, so nothing could leak, but a host that was allowed (by a server's operator, or by a person typing a link) must not be able to send the request somewhere nobody chose by answering `302`. The authenticated client has refused this since RB7b; the standalone redeemer follows the same rule now. A redirect within the origin (a moved path) still works. A caller that relied on a share link redirecting to another host will now get that error.
 
-## Unreleased — a block header you fetched yourself (CLI UX, Phase 6)
+### Included — a block header you fetched yourself (CLI UX, Phase 6)
 
 Additive. Nothing that works today changes. A maintainer versions and publishes this; the MCP server's `certen_receipt` and the checked `header` of `certen_proof_verify` need it.
 
@@ -22,14 +29,14 @@ Additive. Nothing that works today changes. A maintainer versions and publishes 
 - **A header with nothing to compare no longer reads as a comparison that passed.** `verifyBundle` compares the fields a header has and finds no disagreement in the ones it lacks, so `{}` (or a bare block number, which the bundle itself states) made the execution layer `verified` with `headerCheck.ok: true`. `verifyEvidence` and `buildReceipt` now refuse it with `INVALID_HEADER`; `verifyBundle` itself is unchanged (it takes whatever it is given: pass it a header through `assertComparableHeader`). This is the same hole the node fallback had before Phase 4 closed it.
 - `verifyEvidence`'s `nodeConsulted` is now true only when a header was actually compared: a header handed in for a proof with no execution component compared nothing and no longer says it did.
 
-## Unreleased — the error codes the gateway publishes, as a constant (CLI UX, Phase 5)
+### Included — the error codes the gateway publishes, as a constant (CLI UX, Phase 5)
 
 Additive. Nothing that works today changes. A maintainer versions and publishes this.
 
 ### Added
 - **`VENDORED_ERROR_CODES`**, exported from the default and browser entries: every error code this release knew the gateway to raise (the list `client.doctor()` already compares the live catalogue with, and which `packages/sdk/test/error-catalog.test.ts` holds equal to `spec/errors.json`). The CLI uses it to tell a code that `certen errors <CODE>` can explain from one it cannot, so that every failure can end with the one command to run next (`error.next`). A `readonly string[]`; it is a snapshot of this release, not the live catalogue (`client.admin.errors()` is that).
 
-## Unreleased — the receipt, and sending from an identity (CLI UX, Phase 4)
+### Included — the receipt, and sending from an identity (CLI UX, Phase 4)
 
 Additive, with one fix to a verifier that was too forgiving (below). Nothing else that works today changes. A maintainer versions and publishes this.
 
@@ -47,7 +54,7 @@ Additive, with one fix to a verifier that was too forgiving (below). Nothing els
 ### Fixed
 - **`verifyEvidence` (the code behind `proof verify --rpc`) no longer reads a node that has no such block as agreement.** When the node returned no block (pruned, lagging, or on another network), the header handed to the verifier was a bare block number, which `checkAgainstHeader` compared with itself, so the execution layer read `verified` against a node that never had the block. It now throws `EVM_RPC_NO_BLOCK`, and does the same for a header that carries no receipts root. In `buildReceipt` the node is then reported as not consulted (the gap `NODE_NOT_CONSULTED`, naming why) and the proof is checked without it.
 
-## Unreleased — funding a gas gap (CLI UX, Phase 3)
+### Included — funding a gas gap (CLI UX, Phase 3)
 
 Additive. Nothing that works today changes. A maintainer versions and publishes this.
 
@@ -57,7 +64,7 @@ Additive. Nothing that works today changes. A maintainer versions and publishes 
 - **`checkGas(client, { identityId, chain, amount?, tokenSymbol?, gasReserve? })`**: the gas check of `readiness()` on its own, for a caller waiting for one number to change. The same function `readiness()` calls, so a wait and `status` cannot disagree about when an account counts as funded; one request per call (the identity read). Never throws for a read that failed: an `unknown` check with the HTTP status in `data.status`, so a poller can tell a rejected key from a gateway having a bad moment.
 
 
-## Unreleased — readiness (CLI UX, Phase 2)
+### Included — readiness (CLI UX, Phase 2)
 
 Additive. Nothing that works today changes, except that the funding guard on `execute.contractCall` / `execute.transfer` now also refuses an account that is positively known to be short (below), which `skipFundingCheck: true` bypasses exactly as before. A maintainer versions and publishes this.
 
