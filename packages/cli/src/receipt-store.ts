@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RECEIPT_VERSION, type Receipt } from '@certen.io/sdk';
 import { CliError, UsageError, EXIT } from './errors.js';
+import { uuidArg } from './next-step.js';
 
 /**
  * `~/.certen/receipts/<intent>.json`: the record the docs have always told people to keep, kept.
@@ -48,6 +49,9 @@ export function saveReceipt(receipt: Receipt): string {
       `Could not save the receipt to ${path}: ${err instanceof Error ? err.message : String(err)}. The transaction itself is unaffected; keep the intent id ${receipt.intent_id}.`,
       'RECEIPT_NOT_SAVED',
       EXIT.FAILED,
+      false,
+      undefined,
+      `certen receipt ${uuidArg(receipt.intent_id, '<intent-id>')}`,
     );
   }
   return path;

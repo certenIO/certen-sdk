@@ -5,6 +5,7 @@ import { registerProofVerify } from './proof-verify.js';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { uuidArg } from '../next-step.js';
 
 /**
  * `certen proof` — the evidence the whole product exists to produce.
@@ -184,6 +185,9 @@ export function registerProofCommands(program: Command): void {
             : `Nothing found for ${id}.`,
           'NO_PROOF_AVAILABLE',
           EXIT.FAILED,
+          false,
+          undefined,
+          target.intentId ? `certen tx status ${uuidArg(target.intentId, '<intent-id>')} --wait` : undefined,
         );
       }
 

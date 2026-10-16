@@ -137,11 +137,11 @@ describe('certen doctor: no fix or hint names a chain nobody chose', () => {
     try {
       const r = await certen(withCtx.home, ['doctor'], w.gateway.url);
       expect(r.code, r.stderr).toBe(0);
-      expect(r.stderr).toContain('Next: certen call --chain base-sepolia --to <addr> --fn \'f()\' --wait');
+      expect(r.stderr).toContain('Next: certen send <amount> <asset> --chain base-sepolia --to <addr>');
       // Two keys and no choice made: nothing in the context names one, so the key is left for the person to type.
       const none = await homeWith({ recorded: false, keys: ['dev', 'ops'] });
       const r2 = await certen(none.home, ['doctor'], w.gateway.url);
-      expect(r2.stderr).toContain('Next: certen call --identity <id> --chain <chain> --to <addr> --fn \'f()\' --sign-with <key> --wait');
+      expect(r2.stderr).toContain('Next: certen send <amount> <asset> --identity <id> --chain <chain> --to <addr> --sign-with <key>');
     } finally { await w.close(); }
   });
 

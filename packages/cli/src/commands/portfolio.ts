@@ -25,7 +25,7 @@ export function registerPortfolioCommands(program: Command): void {
 
       if ((result.identities ?? []).length === 0) {
         hint('');
-        hint('No identities yet. Next: certen identity create --name <name> --sign-with <key>');
+        hint('No identities yet. Next: certen setup   (makes a key and an identity, and waits for them)');
         return;
       }
 

@@ -53,6 +53,14 @@ export class CliError extends Error {
    * unaffected, which is the same property the 402 payment fields rely on.
    */
   readonly details?: Record<string, unknown>;
+  /**
+   * The ONE command to run next, when the thrower knows it better than the code does (it has the chain, the key or the intent id in hand).
+   *
+   * Most errors leave this unset and `next-step.ts` answers from the code. It must be a command line this CLI accepts, with `<angle>` tokens only
+   * where the person has to choose; build the parts with `chainArg`, `uuidArg` and `keyArg` so a value that came from the gateway can never put
+   * anything but a plain token on a line someone may paste into a shell (or an agent may run).
+   */
+  readonly next?: string;
 
   constructor(
     message: string,
@@ -60,6 +68,7 @@ export class CliError extends Error {
     exitCode: ExitCode = EXIT.FAILED,
     retryable = false,
     details?: Record<string, unknown>,
+    next?: string,
   ) {
     super(message);
     this.name = 'CliError';
@@ -67,13 +76,14 @@ export class CliError extends Error {
     this.exitCode = exitCode;
     this.retryable = retryable;
     this.details = details;
+    this.next = next;
   }
 }
 
 /** A wrong invocation: exits 2, never retryable. */
 export class UsageError extends CliError {
-  constructor(message: string, code = 'USAGE_ERROR') {
-    super(message, code, EXIT.USAGE, false);
+  constructor(message: string, code = 'USAGE_ERROR', next?: string) {
+    super(message, code, EXIT.USAGE, false, undefined, next);
     this.name = 'UsageError';
   }
 }

@@ -46,6 +46,8 @@ export function verdictError(r: Readiness, chain: string): CliError {
     down ? EXIT.UNREACHABLE : EXIT.FAILED,
     down,
     { readiness: r },
+    // The first blocker's own fix command, the one the card prints under it. Unreachable falls to the table (`doctor`).
+    down ? undefined : first?.fix?.command,
   );
 }
 

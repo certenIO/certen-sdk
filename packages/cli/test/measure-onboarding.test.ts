@@ -524,3 +524,33 @@ describe('the harness can go red', () => {
     expect(bad[0]!.command).toMatch(/init/);
   }, 290_000);
 });
+
+describe('Phase 5: a failure on the journey ends with the command to run next', () => {
+  interface Failure { command: string; next: string }
+  const failuresOf = (rep: Report): Failure[] => (rep.totals as unknown as { failures: Failure[] }).failures;
+
+  it('readiness: `status` before funding is blocked on the gas, and ends by naming the command that fixes exactly that', async () => {
+    const rep = report(await measureOnce('--journey', 'readiness', '--json'));
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    expect(failuresOf(rep)).toEqual([{ command: 'certen status --amount 0.0001', next: 'certen gas --chain base-sepolia --wait' }]);
+  }, 290_000);
+
+  it('setup: the first run stops on the gas and ends with the same command; the second run, which succeeds, has none', async () => {
+    const rep = report(await measureOnce('--journey', 'setup', '--json'));
+    expect(rep.totals.all_steps_as_declared).toBe(true);
+    const failures = failuresOf(rep);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]!.next).toBe('certen gas --chain base-sepolia --wait');
+    expect(failures[0]!.command).toMatch(/^certen setup /);
+  }, 290_000);
+
+  it('a journey that fails nowhere reports no failures', async () => {
+    const rep = report(await measureOnce('--journey', 'send', '--json'));
+    expect(failuresOf(rep)).toEqual([]);
+  }, 290_000);
+
+  it('the human report says it', async () => {
+    const r = await measureOnce('--journey', 'readiness');
+    expect(r.stdout).toMatch(/a declared failure ends: next: certen gas --chain base-sepolia --wait/);
+  }, 290_000);
+});

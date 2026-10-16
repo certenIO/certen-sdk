@@ -1,6 +1,8 @@
 import { getKeyInfo, unlockKey } from './keystore.js';
 import { resolvePassphrase } from './passphrase.js';
 import { CliError, EXIT, UsageError } from './errors.js';
+import { keyArg } from './next-step.js';
+import { sessionSigner } from './session-unlock.js';
 
 /**
  * Bridge a local key into the shape the rest of the CLI needs.
@@ -18,6 +20,11 @@ export interface ResolvedSigner {
 
 export async function resolveSigner(name: string): Promise<ResolvedSigner> {
   const info = getKeyInfo(name);
+  // A key the person has unlocked for a while signs without a prompt, and without reading CERTEN_KEY_PASSPHRASE: the session replaces ONLY the
+  // passphrase. The card, `checkIntentSigning` and the confirmation all still run in the callers. Inert unless the experimental switch is on
+  // (session-unlock.ts), and a session that does not check out is removed and falls through to the prompt.
+  const session = await sessionSigner(name, info);
+  if (session) return { publicKey: info.publicKey, publicKeyHash: info.publicKeyHash, sign: session.sign };
   const passphrase = await resolvePassphrase(info.encrypted, name);
   // Unlocked NOW, not at the moment of signing. A wrong passphrase used to surface only when the signature was made: after the intent was
   // opened and after a person had read the card and said yes, as an untyped error. Here it ends the command before anything exists.
@@ -25,7 +32,8 @@ export async function resolveSigner(name: string): Promise<ResolvedSigner> {
   try {
     key = unlockKey(name, passphrase);
   } catch (err) {
-    throw new CliError(err instanceof Error ? err.message : String(err), 'WRONG_PASSPHRASE', EXIT.FAILED);
+    // `keys verify` is the command that asks for the passphrase and says whether it opens the key, so a person can sort it out without an intent in play.
+    throw new CliError(err instanceof Error ? err.message : String(err), 'WRONG_PASSPHRASE', EXIT.FAILED, false, undefined, `certen keys verify ${keyArg(name)}`);
   }
   return {
     publicKey: info.publicKey,

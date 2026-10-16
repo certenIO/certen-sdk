@@ -1,6 +1,7 @@
 import type { CertenClient, Identity, ReadinessCheck, TransactionResponse } from '@certen.io/sdk';
 import { CertenError, CertenIntentFailedError, CertenWaitTimeoutError, checkGas, describeReasonCode, intentOutcome } from '@certen.io/sdk';
 import { CliError, EXIT } from './errors.js';
+import { uuidArg } from './next-step.js';
 import { human, isJsonMode } from './output.js';
 import { parseSpanMs } from './duration.js';
 
@@ -275,7 +276,7 @@ export async function waitForTransaction(
         { intent_id: intentId, last_status: err.lastStatus, last_class: err.lastClass, timeout_ms: err.timeoutMs },
       );
     }
-    throw new CliError(message.replace(/^certen: /, ''), 'TX_FAILED', EXIT.FAILED);
+    throw new CliError(message.replace(/^certen: /, ''), 'TX_FAILED', EXIT.FAILED, false, undefined, `certen receipt ${uuidArg(intentId, '<intent-id>')}`);
   }
 }
 

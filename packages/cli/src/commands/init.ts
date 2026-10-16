@@ -320,14 +320,14 @@ export function registerInitCommands(program: Command): void {
         human('');
       }
 
+      // `init` stays exactly as it was (it exits 0 once its steps are done, ready or not), so the way on is the command that finishes the job: `setup`
+      // skips everything already satisfied, saves the identity, key and chain as your defaults, and says plainly whether you can send yet. After it,
+      // `send` needs only an amount, an asset and a recipient.
       human('  Done. Your next command:');
       human('');
-      human(identityId
-        ? `    certen call --identity ${identityId} --chain ${chains[0]} \\`
-        : '    certen call --identity <id> --chain ' + chains[0] + ' \\');
-      human(`        --to 0xYourContract --fn 'confirm(bytes32)' --arg 0x${'00'.repeat(32)} \\`);
-      human(`        --sign-with ${keyName} --wait`);
+      human('    certen setup                                   # checks the rest, saves your defaults, says when you are ready');
+      human('    certen send 0.0001 ETH --to 0xRecipient        # then: preview, sign, wait, verify, receipt');
       human('');
-      hint('Check everything at any time: certen doctor');
+      hint('Check everything at any time: certen status   (or certen doctor for the whole organization)');
     });
 }

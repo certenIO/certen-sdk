@@ -10,8 +10,8 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 | 1 | Context (W1) | merged | #28 (7c9fb45) |
 | 2 | Readiness (W3) | merged | #29 (65d6bbe) |
 | 3 | Setup + gas (W2, W6) | merged | #30 (c7dc989) |
-| 4 | Send + receipt (W4, W5) | in-review (work complete, branch `ux/phase-4-send-receipt` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
-| 5 | Learnability (W7) | not-started | |
+| 4 | Send + receipt (W4, W5) | merged | #31 (9537081) |
+| 5 | Learnability (W7) | in-review (work complete, branch `ux/phase-5-learnability` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
 | 6 | Agents (W8) | not-started | |
 
 ---
@@ -518,7 +518,96 @@ Pre-existing failures: none.
 - **The destination transaction hash on the intent** (`GET /v1/transaction/{id}`): today it is only in the validators' `settlement_tx` and in the proof, so a receipt cannot name it until the proof is served.
 - **A balance read for an arbitrary address** on a served chain: the effect check needs the caller's own node because the gateway cannot read a recipient, and an independent witness is the point. A gateway read would be a convenience for those with no node, labelled as the gateway's word.
 
+## Phase 5: Learnability (W7)
+
+Branch `ux/phase-5-learnability`, from `main` at `9537081` (Phase 4 merged as #31). Acceptance (HARNESS-PROMPT §8): grouped root help led by setup / send / call / status / receipt; `next` on every
+error; the docs and the first-transaction guide rewritten; `keys unlock` only behind a security review.
+
+### Baseline for this phase (before any change, 2026-10-16, `main` = `9537081`)
+
+| Gate | Result |
+|---|---|
+| `npm install` | exit 0 (the same 5 advisories) |
+| `node scripts/build-all.mjs` | exit 0 |
+| `node scripts/typecheck-all.mjs` | exit 0 |
+| `node scripts/test-all.mjs` | exit 0, **2342 passed in 136 files**, 0 failed, 0 skipped (245s) |
+| `npm run agentgen:check` | exit 0, 4 artifacts up to date (125 operations, 82 SDK methods) |
+
+Pre-existing failures: none.
+
+### Design decisions, from reading the code (the plan is silent or wrong on these)
+
+1. **`next` is one command, always.** PLAN W7: "every failure envelope and human error ends with exactly one `next:` command". The CLI can raise 111 distinct codes from 216 sites, plus every gateway and SDK code, so a hand-written
+   hint at each site would rot. One module (`next-step.ts`) owns the table. Order: an explicit `next` on the error (a thrower that knows better, e.g. `status` naming the first blocker's own fix) > the code table > the
+   gateway's catalogue (`certen errors <CODE>`, which exists for exactly this) > the HTTP status class > `certen doctor`. The last rung is what makes "every" true at run time; a test makes it true in the table too.
+2. **A drift gate, not a promise.** A test reads the CLI source with the TypeScript compiler API and collects every code literal passed to `CliError` / `UsageError`; each must have an EXPLICIT table entry (landing on the `doctor` fallback does not count),
+   so a new code added without thinking about its next step fails the build. The SDK's vendored catalogue codes and its local codes are held to the same rule.
+3. **A `next` must be a command that parses.** A second test parses every table entry against the real built command tree: the command path exists and every `--flag` is declared on it (or is a global). `<angle>` tokens are the only placeholders, and mean "you choose".
+   Stale advice (a renamed flag) fails the build.
+4. **The failing command is known without parsing argv.** The active command is recorded by a `preAction` hook (for a throw from an action) and by a per-command `exitOverride` callback (for commander's own usage errors, which fire before any hook).
+   Generic usage errors then end `next: certen <that command> --help`.
+5. **The envelope gains `error.next`; nothing else moves.** Additive, optional in the contract's words, always present in practice. Human mode prints `  next: <command>` as the LAST line on stderr. `--json` still has one envelope on stdout.
+6. **Existing message text is not rewritten.** Many messages already say "Run: certen init" (older advice). §5 rule 2 and the pinned tests keep them; `next` is the up-to-date, single answer beside them.
+7. **Root help**: the first group is the five verbs (`setup`, `send`, `call`, `status`, `receipt`), the quickstart is `setup` → `send` → `receipt`, plumbing is an "Advanced" group, and nothing is hidden or removed (a test asserts every registered command is listed).
+   `tx create`'s `--from-chain`, `--contract-address` and `--signer-public-key` move to an "Advanced options" help group (commander 14 `helpGroup`); they still work and still appear.
+8. **`keys unlock` ships behind its review.** HARNESS §4: never turn it on without a human. It is built completely and tested against an in-memory keyring, but INERT unless `CERTEN_EXPERIMENTAL_KEY_UNLOCK=1`, and the written review
+   (`docs/security/keys-unlock-review.md`: assets, trust boundaries, attacker table, residual risks, sign-off block) is part of the PR. Flipping the default is a one-line change a human makes after reading it. Design: the DECRYPTED SEED goes in the OS keyring
+   (not the passphrase, which a person reuses), with an absolute expiry; expiry is checked on every read and a stale entry is deleted; the unlocked key's public key is re-derived and compared with the key file before it is trusted (a planted entry signs nothing);
+   a duration cap; refused when there is no keyring and never a file fallback; an unencrypted key has nothing to unlock; `keys lock` always works.
+9. **Docs**: the repo's guide is `docs/guides/first-proof-in-three-commands.md` (PROGRESS Phase 0 note 1: the "published" page is not in this repo). It is rewritten around `setup` → `send` → `receipt` with a short "What just happened" section
+   that keeps the substance of the old walk (async provisioning, three resources, layer verdicts, why exit 0 is not everything verified).
+
+### Tasks (check = the acceptance check; evidence = what was run)
+
+- [x] 0. Baseline taken. *Check: the table above.*
+- [x] 1. **`next-step.ts`** + wiring (`CliError.next`, `UsageError` third argument, `emitFailure`, `index.ts` hooks, explicit `next` at the 18 throw sites that hold the chain, key or intent id). *Check: `next-step.test.ts` (33: the ladder, hostile values, the drift gate over the source, the tree gate over the built command tree).
+  Mutation-checked: a new `UsageError` code with no entry turned the drift gate red; a metacharacter outside a placeholder (`>`) was caught by the guard (it found a real hole: the first guard was a deny-list and let `> /etc/passwd` through; it is an allow-list now).*
+- [x] 2. **Conformance and wiring**: `next` in the JSON envelope and as the last human line, exactly one, stdout still one object, for usage / no key / unreachable / each gateway status / a 402 whose own `cli_command` is hostile / blocked (`send`, `status`, `tx create`) / a failed and a timed-out intent. *Check: `next-wiring.test.ts` (25, the built binary in both modes) and 10 new `conformance.test.ts` cases (section 11).*
+- [x] 3. **Root help regrouped**, quickstart rewritten, `tx create` advanced options grouped, and the hints that led with the old first action rewritten (`init`, `doctor`, `auth login`, `signup`, `portfolio`, `identity create|get`, `keys generate|list`). *Check: `help-root.test.ts` (13: the five lead, nothing hidden, one home each, Advanced last, the options still accepted with their default); `doctor-context`, `auth-login` and `identity-wait` assertions moved with the hints they pin.*
+- [x] 4. **`keys unlock` / `keys lock`** behind the experimental switch, with the review (`docs/security/keys-unlock-review.md`). *Check: `key-unlock.test.ts` (40) and `key-unlock-commands.test.ts` (23), in-process against an in-memory keyring and an injected clock. Mutation-checked by the author: skipping the public-key re-derivation (3 red), skipping the expiry check (4 red), reading a session with the switch off (2 red).*
+- [x] 5. **Docs**: the first-transaction guide rewritten (setup, send, receipt, "What just happened", "When something is in the way", the by-hand route kept as an appendix), `onboard-an-identity.md`, both READMEs, the skill, the llms template (regenerated, `agentgen:check` clean), `docs/CLI-CONTRACT.md` sections 11 and 12, CHANGELOGs, PLAN corrections.
+- [x] 6. **Measurement**: the journey runner now records the `next` of every failing step and goes red if a failure lacks a plain `certen ...` one (`totals.failures`, and a line in the report). An `unlock` journey is NOT possible offline and is said so below. *Check: `measure-onboarding.test.ts` (4 new cases); the six pinned baselines did not move.*
+- [x] 7. **Gates, offline transcript, §5 self-review, push.** Outputs are quoted in the PR body (kept outside the repo, in the session scratchpad). **Opening the PR needs a human**: `gh` is not installed on this machine.
+
+### Phase 5 results
+
+**Measured (offline, fake gateway, `node scripts/measure-onboarding.mjs --journey <name>`):** nothing on the golden path moved, on purpose. W7 is about what a person is told, not what they run.
+
+| | `send` (Phase 4) | `send` (Phase 5) |
+|---|---|---|
+| `certen` commands | 2 (`setup`, `send`) | 2 |
+| HTTP round trips | 34 | 34 |
+| Values copied by hand | 1 (the faucet address) | 1 |
+| Passphrase prompts | 2 | 2 (declared) |
+
+The six pinned baselines (`guide`, `published`, `context`, `readiness`, `setup`, `setup-wait`) and `send` are exactly as they were: the evidence that adding `next`, regrouping the help and rewriting the hints changed no request. What is new is that
+the runner now requires every failing step to end in a plain `certen ...` command and reports it: `readiness` and `setup` each meet one declared failure (blocked on the gas) and each ends `next: certen gas --chain base-sepolia --wait`. The passphrase line is **not**
+improved by anything measurable offline: `keys unlock` needs the OS keyring, which is per-user and not per-HOME, so a journey cannot run it without writing the developer's real keyring (the same reason a login step must pass `--no-keyring`). It is covered by 63
+in-process tests against an in-memory keyring instead, and by the review.
+
+**Tests:** 2342 → **2490** in 136 → 141 files (sdk 835 → 835, cli 1049 → 1197: `next-step` 33, `next-wiring` 25, `help-root` 13, `key-unlock` 40 + `key-unlock-commands` 23, `conformance` +10, `measure-onboarding` +4). Gates on the final tree: build ✓ typecheck ✓ `test-counts` ✓
+(it runs the whole suite) `agentgen:check` ✓. Four existing assertions moved with the hints they pin (`doctor-context` ×2, `auth-login`, `identity-wait`); no other existing assertion was changed.
+
+**Proven in the transcript, not only in tests:** an unknown command, a missing argument, an unreachable gateway, a wei-looking amount, an unfunded `status` and an unfunded `send` each end `next: <command>` (human) and `error.next` (`--json`, one envelope on stdout, exit codes unchanged); the unfunded
+cases name the gas command with the chain; `certen --help` leads with the five commands and the setup, send, receipt quickstart; `tx create --help` shows the plumbing options under their own heading; a 402 whose `cli_command` is hostile prints it for the person and never lets it become `next`.
+
+**Bugs found and fixed on the way** (each covered by a test that failed first): the first version of the `next` guard was a deny-list of shell characters and let `certen status > /etc/passwd` through (it is an allow-list now); `setup` rebuilt a blocked-readiness error and dropped its `next` (found by the docs
+review; `setup` now ends in the first blocker's own fix, as `status` and `send` do); the `EVM_RPC_*` codes had no entry and fell to `doctor` (their remedy is the command's help).
+
+**Unverified live / limits stated plainly:**
+- Nothing here touched a live gateway, signed for real, or minted a credential (HARNESS §4). Every `next` was exercised against fakes; a human should read a few real failures once (an expired key, an unfunded account) and judge whether the advice is the right one.
+- **`keys unlock` has never touched a real credential store** (Windows Credential Manager, macOS Keychain, libsecret). Whether `@napi-rs/keyring` entries roam or sync between machines is unverified, and the review lists it. It is inert unless `CERTEN_EXPERIMENTAL_KEY_UNLOCK=1`.
+- **A decision for the human, not made here: turning `keys unlock` on.** The review (`docs/security/keys-unlock-review.md`) asks five open questions (expiry without a daemon, mainnet, binding a session to a profile, the 8h ceiling, `signup --with-key`) and has a blank sign-off block. The change that makes it default-on is one line in `keyUnlockEnabled()`.
+- The first-transaction guide's receipt sample is labelled illustrative; a fully VERIFIED receipt end to end is still unverified live (Phase 4's note).
+
 ## Found, not fixed
+
+- **(Phase 5) Untyped throws in the key store.** `keys show nope`, an invalid key name and "passphrases did not match" are bare `Error`s, so they exit 1 with `UNKNOWN_ERROR` and end `next: certen <command> --help`. Typing them (`UsageError`) would be the better answer and would change an exit code from 1 to 2, which the contract
+  forbids doing quietly. Not changed.
+- **(Phase 5) Many messages still carry advice from before `setup`** ("Run: certen init", "certen auth login", "Check with: certen tx status"). They are pinned by tests and valid; `next:` is the current, single answer beside them. Not rewritten.
+- **(Phase 5) `doctor` prints its report on stdout and then fails** (table mode), so a failed `doctor` is the one failure with output on stdout. Pre-existing, and the report is its result.
+- **(Phase 5) `signup --with-key` signs a gateway-chosen nonce through `resolveSigner`, so with `keys unlock` on, a session would sign it without a prompt.** `setup` deliberately never uses a session. Review question Q5.
+- **(Phase 5) The `init` command still exists as its own command** with its own closing hint (now `setup` then `send`); it is not an alias (Phase 3 decision 1). Unchanged.
 
 - **`npm install` reports 5 vulnerabilities (2 moderate, 3 high).** Present on a clean `main`; not
   examined. `scripts/audit-residuals.json` and `scripts/check-audit.mjs` exist, so this may already be

@@ -3,6 +3,7 @@ import {
   type CertenClient, type NativeBalanceReading,
 } from '@certen.io/sdk';
 import { CliError, EXIT } from './errors.js';
+import { chainArg } from './next-step.js';
 import { normalizeChain } from './chains.js';
 
 /**
@@ -195,6 +196,9 @@ export async function assertFundedForValue(
         + fundIt,
         'ABSTRACT_ACCOUNT_UNFUNDED',
         EXIT.FAILED,
+        false,
+        undefined,
+        `certen gas --chain ${chainArg(named)} --wait`,
       );
     case 'short':
       throw new CliError(
@@ -210,6 +214,9 @@ export async function assertFundedForValue(
         + fundIt,
         'ABSTRACT_ACCOUNT_UNDERFUNDED',
         EXIT.FAILED,
+        false,
+        undefined,
+        `certen gas --chain ${chainArg(named)} --wait`,
       );
   }
 }
@@ -222,5 +229,8 @@ function unverifiable(address: string | undefined, chain: string, reading: Nativ
     + '  Check the account\'s gas yourself, then pass --force to submit anyway.',
     'ABSTRACT_ACCOUNT_FUNDING_UNVERIFIABLE',
     EXIT.FAILED,
+    false,
+    undefined,
+    `certen status --chain ${chainArg(chain)}`,
   );
 }

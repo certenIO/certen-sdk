@@ -134,7 +134,8 @@ function report(o: SetupOutcome): void {
     }
     hint(`Your setup is saved (identity ${o.context.adi_url}, key ${o.context.key}, chain ${o.context.chain}); running \`certen setup\` again continues from here.`);
     const base = verdictError(o.readiness, o.chain);
-    throw new CliError(base.message, base.code, base.exitCode, base.retryable, details());
+    // The first blocker's own fix, as `status` and `send` name it, so the three commands end in the same line for the same problem.
+    throw new CliError(base.message, base.code, base.exitCode, base.retryable, details(), base.next);
   }
 
   human(`  Saved as your default context: identity ${o.context.adi_url}, key ${o.context.key}, chain ${o.context.chain}.`);

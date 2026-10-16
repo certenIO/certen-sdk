@@ -109,6 +109,7 @@ export function registerSendCommands(program: Command): void {
             ? `Which key signs this? You have ${local.join(', ')}. Pass --sign-with <key>, set CERTEN_KEY, or choose one once with: certen use key <name>. Or --dry-run to see what would be sent.`
             : 'Nothing would sign this. Pass --sign-with <key>, or --dry-run to see what would be sent. To make a key: certen keys generate --name dev',
           'MISSING_SIGNING_KEY',
+          local.length > 1 ? 'certen use key <name>' : 'certen setup',
         );
       }
       if (keyFrom) assertContextKeyExists(keyFrom);
@@ -150,6 +151,8 @@ export function registerSendCommands(program: Command): void {
           down ? EXIT.UNREACHABLE : EXIT.FAILED,
           down,
           { readiness: { ...readiness, first_blocker: first } },
+          // The failing check's own fix, so the line a person is told to run is the line `status` would have shown beside it.
+          down ? undefined : first.fix?.command,
         );
       }
       for (const c of failing) hint(`  --force: sending although ${c.name} is failing. ${c.detail}`);

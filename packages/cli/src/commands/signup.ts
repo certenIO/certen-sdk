@@ -318,7 +318,7 @@ export function registerSignupCommands(program: Command): void {
         human('');
         human('  Authorized. The key was written straight to this machine — it was never displayed.');
         human('');
-        hint('Next: certen init');
+        hint('Next: certen setup');
       });
   };
 

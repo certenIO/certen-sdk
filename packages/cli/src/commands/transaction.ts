@@ -9,6 +9,7 @@ import { commandPrompter } from '../prompt.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain } from '../chains.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { chainArg, uuidArg } from '../next-step.js';
 import { resolveWait, parseWaitBudget, waitForTransaction, TX_WAIT } from '../wait.js';
 import { assertFundedForValue } from '../funding-guard.js';
 import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
@@ -90,6 +91,9 @@ function emitTerminalHints(result: Record<string, unknown>, intentId: string): v
   }
 }
 
+/** The heading `tx create --help` puts plumbing options under. */
+const ADVANCED_OPTIONS = 'Advanced options (key pages, contract addresses, another source chain):';
+
 export function registerTransactionCommands(program: Command): void {
   const tx = program.command('tx').description('Transaction lifecycle');
 
@@ -101,7 +105,9 @@ export function registerTransactionCommands(program: Command): void {
     // intents, which have no sensible flag representation.
     .option('--identity <ref>', 'Identity: UUID, ADI URL or name (default: your context, see `certen context`)')
     .option('--intent <json>', 'Intent as JSON, or @path/to/intent.json. Overrides the flags below.')
-    .option('--from-chain <chain>', 'Source chain', 'accumulate')
+    // The plumbing options are listed under their own heading (commander's help groups), not hidden or removed: they work as they always
+    // did, and a person typing `tx create --help` for the first time meets the flags a transfer needs before the ones a key page needs.
+    .addOption(new Option('--from-chain <chain>', 'Source chain').default('accumulate').helpGroup(ADVANCED_OPTIONS))
     .option('--to-chain <chain>', 'Destination chain, e.g. ethereum-sepolia (default: your context)')
     .option('--from <address>', "Source address (default: the identity's abstract account on --to-chain)")
     .option('--to <address>', 'Destination address')
@@ -111,9 +117,9 @@ export function registerTransactionCommands(program: Command): void {
     // account succeeds silently.
     .option('--amount <amount>', 'Amount in whole units — "1" = 1 ETH, "0.5" = half. Pass as a string')
     .option('--token <symbol>', 'Token symbol')
-    .option('--contract-address <addr...>', 'Contract addresses this intent touches')
-    .option('--signer-key-page <url>', 'Which key page signs, e.g. acc://org.acme/book/2')
-    .option('--signer-public-key <hex>', 'Which seat on the page signs (64 hex)')
+    .addOption(new Option('--contract-address <addr...>', 'Contract addresses this intent touches').helpGroup(ADVANCED_OPTIONS))
+    .addOption(new Option('--signer-key-page <url>', 'Which key page signs, e.g. acc://org.acme/book/2').helpGroup(ADVANCED_OPTIONS))
+    .addOption(new Option('--signer-public-key <hex>', 'Which seat on the page signs (64 hex)').helpGroup(ADVANCED_OPTIONS))
     // Validated here so a typo is caught before a request goes out, rather than surfacing from the
     // proof service later with no obvious connection to the flag that caused it.
     .addOption(
@@ -202,6 +208,9 @@ export function registerTransactionCommands(program: Command): void {
             + `  certen identity link-chain ${identityRead.id} --chain ${toChain}`,
             'NO_ABSTRACT_ACCOUNT',
             EXIT.FAILED,
+            false,
+            undefined,
+            `certen identity link-chain ${uuidArg(identityRead.id)} --chain ${chainArg(toChain)}`,
           );
         }
         hint(`using from ${fromAddress} (derived: the abstract account of ${identityRead.adi_url} on ${toChain})`);

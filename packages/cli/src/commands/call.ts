@@ -8,6 +8,7 @@ import { followIntent } from '../receipt-flow.js';
 import { parseExpectEvent } from '../flag-parsers.js';
 import { renderReceipt } from '../receipt-render.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { chainArg, uuidArg } from '../next-step.js';
 import { resolveSigner } from '../signer.js';
 import { assertChain, chainIdFor } from '../chains.js';
 import { parseSignature, checkArgs } from '../solidity-args.js';
@@ -161,6 +162,9 @@ export function registerCallCommands(program: Command): void {
           + `  certen identity link-chain ${identity.id} --chain ${chain}`,
           'NO_ABSTRACT_ACCOUNT',
           EXIT.FAILED,
+          false,
+          undefined,
+          `certen identity link-chain ${uuidArg(identity.id)} --chain ${chainArg(chain)}`,
         );
       }
 
@@ -204,6 +208,8 @@ export function registerCallCommands(program: Command): void {
             : 'Nothing would sign this call. Pass --sign-with <key>, or --dry-run to see the intent. '
               + 'To make a key: certen keys generate --name dev',
           'MISSING_SIGNING_KEY',
+          // Several keys and none chosen: choose. No key at all: `setup` makes the key, the account and the identity in one go.
+          local.length > 1 ? 'certen use key <name>' : 'certen setup',
         );
       }
       assertContextKeyExists(keyFrom);

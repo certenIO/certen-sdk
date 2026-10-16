@@ -321,13 +321,29 @@ gateway balance is money, so they end the run as blockers with their fix.)*
 - Root help leads with **setup · send · call · status · receipt**. Everything else goes in groups,
   and plumbing (`tx create/sign/inspect`, `keys sign`, `pending submit`, `admin`, `oauth-clients`,
   `orgs`) goes under an "Advanced" group. Nothing is hidden or removed.
+  *(Phase 5: the first group is "Start here" (setup, send, call, status, receipt), then "Follow it through", "Your account", "Approve", "Money", and "Advanced" last (tx, admin, scopes, webhooks, oauth-clients, orgs,
+  errors). The quickstart is `setup` → `send` → `receipt`. `tx create`'s `--from-chain`, `--contract-address`, `--signer-key-page` and `--signer-public-key` sit under an "Advanced options" help group (commander's `helpGroup`):
+  still listed, still accepted. `init`'s closing hint, `doctor`'s success hint, and the hints after `auth login`, `signup`, `portfolio` and `identity create|get` now lead with `setup` / `send` / `status`.)*
 - Every failure envelope and human error ends with exactly one `next:` command (e.g.
   `IDENTITY_CANNOT_SIGN` → `certen status`; `ABSTRACT_ACCOUNT_UNFUNDED` → `certen gas --wait`).
   Add `next` as an optional field in the JSON error envelope; adding a field doesn't break the contract.
+  *(Phase 5, what the code settled. **One module owns the answers** (`next-step.ts`): an explicit `next` on the error > the code table > `certen errors <CODE>` for a code the gateway publishes > the HTTP class (401 sign in, 403 `whoami`,
+  402 `fund`, 5xx `doctor`) > the failing command's own `--help`, or `certen doctor` for a typed failure nobody classified. **It is never built from gateway text**: `next` is a line a person may paste and an agent may run, so the only
+  values interpolated are a UUID, a chain slug or a key name checked against a strict pattern; everything else is a `<placeholder>`, and a final guard drops any line that is not one plain `certen ...` command (a 402's own `cli_command` is shown
+  to the person as before, and never becomes `next`). **Two tests hold it**: every code a `CliError`/`UsageError` is built with (read from the source with the TypeScript compiler API) needs an explicit entry, and every line the table can
+  produce must name a command that exists in the built tree and flags it declares. The plan's `ABSTRACT_ACCOUNT_UNFUNDED` → `certen gas --wait` is `certen gas --chain <chain> --wait` (the chain is named when known). The failing command is
+  recorded by a `preAction` hook, and by a per-command `exitOverride` callback for commander's own usage errors, which fire before any hook. The envelope field is always present in practice; human mode prints `  next: <command>` as the last stderr line.)*
 - **Passphrase friction**: (a) one prompt per command, as today; (b) opt-in
   `certen keys unlock dev --for 15m`, which keeps the decrypted key in the OS keyring with an expiry
   (`@napi-rs/keyring`, already a dependency) and wipes it on expiry or `keys lock`. Never on by
   default, and refused when the keyring is unavailable. This needs a security review before release.
+  *(Phase 5, what the code settled. **It is built and tested, and shipped INERT**: HARNESS §4 forbids turning it on without a human, so every part of it (creating a session AND reading one) is gated by one function, `keyUnlockEnabled()`, true only when
+  `CERTEN_EXPERIMENTAL_KEY_UNLOCK=1`; with the switch off nothing reads the keyring and every output is byte-identical. `keys lock` always works. The written review is `docs/security/keys-unlock-review.md` (threat table, residual risks,
+  a checklist that names the tests, open questions, a blank sign-off); making it default-on is a one-line change to `keyUnlockEnabled()` that a human makes after reading it. **What is kept is the decrypted seed, not the passphrase** (a person reuses a
+  passphrase; a seed unlocks one key), with absolute times. **An entry is a claim, checked on every use**: version, key hash, a window `unlock` could have made, no clock that has gone backwards, not expired, and finally that the seed DERIVES the public
+  key in the key file, so a planted entry can make a command ask for the passphrase and can never make one sign with the wrong key. Default 15m, ceiling 8h (the plan names none). **Expiry is enforced on use, not by a daemon**: bytes can sit in the keyring after
+  expiry until the next command that looks, or `keys lock`; the review says so and asks whether that is acceptable. A refused keyring is a refusal, never a file. `keys delete` also wipes the key's session. `setup`'s signup nonce deliberately never uses a
+  session. An unencrypted key has nothing to unlock.)*
 - Docs: rewrite "Run a first CERTEN transaction" around `setup` → `send` → `receipt`, with a
   short "What just happened" section that keeps the substance of the current page (async
   provisioning, three resources, layer verdicts, why exit 0 ≠ everything verified) as explanation,

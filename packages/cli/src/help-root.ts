@@ -22,20 +22,27 @@ interface Group {
 }
 
 /**
- * The order here is the order of the journey, not of importance. Anything not listed still
- * appears, under "Other" — a command must never become invisible because someone added it
- * without touching this file.
+ * The first group is the five commands a person types: the journey, in order (get ready, move value, move value through a contract, ask what is in
+ * the way, read what happened). Everything else follows in the order a person needs it, and the plumbing is last, under "Advanced".
+ *
+ * Anything not listed still appears, under "Other" — a command must never become invisible because someone added it without touching this file
+ * (`help-root.test.ts` asserts every registered command has a home, so "Other" stays empty).
  */
 const GROUPS: Group[] = [
   {
-    title: 'Get started',
-    blurb: 'from nothing to a working setup',
-    commands: ['setup', 'login', 'signup', 'init', 'context', 'use', 'chains', 'auth', 'keys', 'status', 'gas', 'doctor', 'whoami'],
+    title: 'Start here',
+    blurb: 'the whole journey, in five commands',
+    commands: ['setup', 'send', 'call', 'status', 'receipt'],
   },
   {
-    title: 'Build',
-    blurb: 'identities, and the work they authorize',
-    commands: ['send', 'call', 'receipt', 'watch', 'identity', 'tx', 'proof'],
+    title: 'Follow it through',
+    blurb: 'see an intent finish, and check it yourself',
+    commands: ['watch', 'proof', 'gas', 'doctor'],
+  },
+  {
+    title: 'Your account',
+    blurb: 'who you are, and what the other commands default to',
+    commands: ['whoami', 'context', 'use', 'identity', 'keys', 'chains', 'portfolio', 'login', 'signup', 'auth', 'init'],
   },
   {
     title: 'Approve',
@@ -44,29 +51,26 @@ const GROUPS: Group[] = [
   },
   {
     title: 'Money',
-    blurb: 'what it costs and how to pay',
-    commands: ['pricing', 'balance', 'quote', 'fund', 'payers'],
+    blurb: 'what it costs, how to pay, and what you were charged',
+    commands: ['balance', 'fund', 'pricing', 'quote', 'payers', 'ledger', 'receipts', 'verify'],
   },
   {
-    title: 'Audit',
-    blurb: 'what you were charged, and proof of it',
-    commands: ['ledger', 'receipts', 'verify'],
-  },
-  {
-    title: 'Operate',
-    blurb: 'across every identity and key',
-    commands: ['portfolio', 'webhooks', 'oauth-clients', 'orgs', 'admin', 'scopes', 'errors'],
+    title: 'Advanced',
+    blurb: 'plumbing and administration; everything above is built from these',
+    commands: ['tx', 'admin', 'scopes', 'webhooks', 'oauth-clients', 'orgs', 'errors'],
   },
 ];
 
 const QUICKSTART = `
-  From nothing to a proof:
+  From nothing to a verified transfer:
 
-    certen setup                               # key, account, identity, checks, gas — resumable, ready or it says why
-    certen call --to 0xContract --fn 'confirm(bytes32)' --arg 0x... --wait
-    certen proof get <intent-id>               # the evidence, to hand over
+    certen setup                                # sign in, key, identity, checks, gas: resumable, ready or it says why
+    certen send 0.0001 ETH --to 0xRecipient     # preview, confirm, sign, wait, verify, receipt
+    certen receipt                              # the record again: what happened, and what was checked
 
-  Stuck? Run: certen doctor
+  Calling a contract instead: certen call --to 0xContract --fn 'confirm(bytes32)' --arg 0x... --wait
+  Something in the way? \`certen status\` names the first thing and the command that fixes it.
+  Every error ends with \`next:\` and the one command to run.
 `;
 
 export function formatRootHelp(cmd: Command, helper: Help): string {

@@ -3,6 +3,7 @@ import { CertenClient, intentOutcome, type Receipt } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
+import { uuidArg } from '../next-step.js';
 import { parseWaitBudget, TX_WAIT } from '../wait.js';
 import { parseNodeRpc, parseExpectEvent } from '../flag-parsers.js';
 import { listReceipts, loadReceipt, receiptPath, type LoadedReceipt } from '../receipt-store.js';
@@ -94,7 +95,7 @@ export function registerReceiptCommands(program: Command): void {
       const showSaved = opts.offline || (final && !opts.refresh && !rpc && !expect && !opts.share);
       if (showSaved) {
         if (!previous || loaded.state !== 'ok') {
-          throw new UsageError(`No usable receipt is saved for ${intentId}, and --offline asks the gateway nothing. Run: certen receipt ${intentId}`, 'NO_SAVED_RECEIPT');
+          throw new UsageError(`No usable receipt is saved for ${intentId}, and --offline asks the gateway nothing. Run: certen receipt ${intentId}`, 'NO_SAVED_RECEIPT', `certen receipt ${uuidArg(intentId, '<intent-id>')}`);
         }
         if (!opts.offline) hint(`  The saved receipt is final (${previous.verdict}): nothing is pending, so the gateway was not asked. --refresh reads it again; --rpc <node> checks it against your node.`);
         renderReceipt(previous, { savedTo: loaded.path, explain: opts.explain });
@@ -121,7 +122,8 @@ export function registerReceiptCommands(program: Command): void {
         if (!proofId) {
           throw new CliError(
             `Nothing to share yet: intent ${intentId} has no proof id (${followed.receipt.headline}). Run certen receipt ${intentId} again once it completes.`,
-            'NOTHING_TO_SHARE', EXIT.FAILED,
+            'NOTHING_TO_SHARE', EXIT.FAILED, false, undefined,
+            `certen receipt ${uuidArg(intentId, '<intent-id>')}`,
           );
         }
         const made = await client.proof.share(proofId, { label: `receipt ${intentId}` });

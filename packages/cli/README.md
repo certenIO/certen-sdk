@@ -66,6 +66,31 @@ certen status --amount 0.001   # ...and is there enough gas to send that much
 `status` reads your key page from Accumulate itself, not only from the gateway (the check the walkthrough used to do with a hand-written `curl`), and
 reports anything it could not confirm as unconfirmed rather than ready. It exits `0` only when everything is ready.
 
+**Every failure ends with one line, `next: <command>`**: the command to run. It is the last line on stderr, and `error.next` in the `--json` envelope.
+
+```
+Error [ABSTRACT_ACCOUNT_UNFUNDED]: The abstract account 0x7a3…c91 on base-sepolia holds no testnet gas. …
+  next: certen gas --chain base-sepolia --wait
+```
+
+A wrong flag ends `next: certen <command> --help`; no API key, `certen setup`; an identity that cannot sign, `certen status`; a wait that ran out,
+`certen watch <intent-id>`; a rate limit, `certen errors RATE_LIMIT_EXCEEDED` (what it means, and whether retrying can help). Angle brackets are for you to
+fill. It is a hint to run, never run for you, and never copied from the gateway. See `docs/CLI-CONTRACT.md` section 11.
+
+### Finding your way around
+
+`certen --help` leads with the five commands a person types, in order, and puts plumbing last. Nothing is hidden, and `certen <command> --help` is
+unchanged for every command (`tx create` lists its key-page and contract-address options under "Advanced options").
+
+| Group | Commands |
+|---|---|
+| **Start here** | `setup` · `send` · `call` · `status` · `receipt` |
+| Follow it through | `watch` · `proof` · `gas` · `doctor` |
+| Your account | `whoami` · `context` · `use` · `identity` · `keys` · `chains` · `portfolio` · `login` · `signup` · `auth` · `init` |
+| Approve | `pending` · `governance` |
+| Money | `balance` · `fund` · `pricing` · `quote` · `payers` · `ledger` · `receipts` · `verify` |
+| Advanced | `tx` · `admin` · `scopes` · `webhooks` · `oauth-clients` · `orgs` · `errors` |
+
 ### Say it once
 
 The CLI records the identity it made, so it stops asking for it. Choose the identity, key and chain once and leave the flags out:
@@ -116,7 +141,16 @@ certen keys path
 
 Set `CERTEN_KEY_PASSPHRASE` to skip the prompt in CI. When it is set and there is no TTY, the CLI
 uses it; when neither is available it fails with an explanation rather than hanging on a prompt
-nobody can see.
+nobody can see. Each signing command asks once, after its readiness checks, and a wrong passphrase ends the
+command (`WRONG_PASSPHRASE`) before any intent exists.
+
+**Typing it less (experimental).** `certen keys unlock dev --for 15m` keeps the *decrypted key* (never the passphrase) in your OS keyring
+until it expires, so signing commands in that window do not ask; `certen keys lock dev` (or `--all`) wipes it. The default is 15 minutes and the
+longest 8 hours; it is refused where there is no OS keyring (it never falls back to a file) and for a key stored without a passphrase. It
+replaces the passphrase and nothing else: the confirmation card and the check of what is signed still run. **It is inert unless you set
+`CERTEN_EXPERIMENTAL_KEY_UNLOCK=1`**, because it ships behind a written security review
+([`docs/security/keys-unlock-review.md`](../../docs/security/keys-unlock-review.md)); read that first. `keys lock` works either way, and
+`keys list` shows `unlocked_until` only while the switch is on.
 
 **`certen keys sign` sends nothing anywhere.** It is the air-gapped path: generate on one machine, carry the gateway's
 `signing_data` to it, carry the signature back. It rebuilds the transaction from that data offline, recomputes every hash,
@@ -366,7 +400,7 @@ certen --json tx status <id>
 # {"ok":true,"data":{"intent_id":"…","status":"completed"}}
 
 certen --json portfolio
-# {"ok":false,"error":{"code":"NETWORK_ERROR","message":"connect ECONNREFUSED","retryable":true,"status":0}}
+# {"ok":false,"error":{"code":"NETWORK_ERROR","message":"connect ECONNREFUSED","retryable":true,"next":"certen doctor","status":0}}
 ```
 
 - **Exactly one JSON object on stdout**, nothing else. Every human-facing line goes to stderr.
@@ -376,6 +410,8 @@ certen --json portfolio
   pending; no evidence), and `130` is Ctrl-C while `setup`, `gas`, `send` or `watch` was waiting.
 - **`error.retryable`** comes from the SDK's own `CertenError.isRetryable`, so the CLI and the SDK
   give an identical retry decision.
+- **`error.next`** is on every failure: the one command to run, as a single `certen ...` line (angle brackets are placeholders you fill). Branch on the
+  `code`, show a person the `next`. It is never built from gateway text.
 - **`certen --help --json`** returns the entire command tree — every command, flag and exit code — in
   one call.
 
@@ -388,6 +424,7 @@ Without `--json`, output is the human table format as before. Do not parse it.
 | `CERTEN_API_KEY` | API key. Always wins, so CI never touches the keyring or config file. |
 | `CERTEN_API_URL` | Gateway base URL. Defaults to `https://gateway.kompendium.co`. |
 | `CERTEN_KEY_PASSPHRASE` | Passphrase for local signing keys. |
+| `CERTEN_EXPERIMENTAL_KEY_UNLOCK` | Set to `1` to enable `certen keys unlock` (experimental; ships behind a security review). Unset, it does nothing and nothing changes. |
 | `CERTEN_RPC_URL` | A JSON-RPC node you trust on the execution chain, used by `send`, `receipt` and `watch` when `--rpc` is not given. Never printed or saved (it can carry a key). |
 
 `certen auth login` stores the API key in your OS keyring by default (through the optional

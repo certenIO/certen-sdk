@@ -5,6 +5,9 @@ import { printOutput, human, hint } from '../output.js';
 import { UsageError } from '../errors.js';
 import { resolvePassphrase, resolveNewPassphrase, PASSPHRASE_ENV_VAR } from '../passphrase.js';
 import {
+  assertUnlockEnabled, keyUnlockEnabled, lockSessions, sessionSigner, unlockedUntil, unlockSession, unlockSpanMs,
+} from '../session-unlock.js';
+import {
   generateKey, listKeys, getKeyInfo, deleteKey, signHash, selfTest, keyPath, KEYS_DIR,
 } from '../keystore.js';
 
@@ -46,26 +49,34 @@ export function registerKeysCommands(program: Command): void {
       // The hash is what `identity create` needs, and it is not obvious that it is sha256 of the
       // raw public key rather than the key itself. Show the next command instead of explaining.
       console.error('');
-      console.error(`Next: certen identity create --name <adi-name> --sign-with ${info.name}`);
+      console.error(`Next: certen setup --key ${info.name}   (makes the account and identity this key owns, checks gas, and saves your defaults)`);
     });
 
   keys
     .command('list')
     .description('List local signing keys (metadata only — never decrypts)')
-    .action(() => {
+    .action(async () => {
       const all = listKeys();
       if (all.length === 0) {
         human(`(no keys in ${KEYS_DIR})`);
         console.error('');
-        console.error('Next: certen keys generate --name dev');
+        console.error('Next: certen setup   (makes a key, an identity, and everything after)');
         return;
       }
-      printOutput(all.map((k) => ({
-        name: k.name,
-        public_key_hash: k.publicKeyHash,
-        encrypted: k.encrypted,
-        created_at: k.createdAt,
-      })));
+      // `unlocked_until` exists only while the experimental unlock switch is on: with it off this listing is exactly what it always was.
+      const withSessions = keyUnlockEnabled();
+      const rows = [];
+      for (const k of all) {
+        const until = withSessions ? await unlockedUntil(k.name, k) : null;
+        rows.push({
+          name: k.name,
+          public_key_hash: k.publicKeyHash,
+          encrypted: k.encrypted,
+          created_at: k.createdAt,
+          ...(withSessions ? { unlocked_until: until === null ? null : new Date(until).toISOString() } : {}),
+        });
+      }
+      printOutput(rows);
     });
 
   keys
@@ -113,8 +124,11 @@ export function registerKeysCommands(program: Command): void {
       // summary says what the signature would authorise. Whether that is what you meant is for the person reading it.
       const summary = await inspectSigningData(sd, { signerPublicKey: info.publicKey, ...(opts.existing ? { existing: true } : {}) });
       hint(summary.text.join(String.fromCharCode(10)));
-      const passphrase = await resolvePassphrase(info.encrypted, opts.name);
-      const signature = signHash(opts.name, passphrase, summary.hashes.toSign);
+      // A key unlocked for a while signs without a prompt (only with the experimental switch on); the summary above was shown either way.
+      const session = await sessionSigner(opts.name, info);
+      const signature = session
+        ? session.sign(summary.hashes.toSign)
+        : signHash(opts.name, await resolvePassphrase(info.encrypted, opts.name), summary.hashes.toSign);
       printOutput({ signature, public_key: info.publicKey, hash_signed: summary.hashes.toSign, signing: summary } as unknown as Record<string, unknown>);
     });
 
@@ -130,13 +144,65 @@ export function registerKeysCommands(program: Command): void {
     });
 
   keys
+    .command('unlock <name>')
+    .description('Keep a key unlocked for a while so signing does not ask for its passphrase (experimental: ships behind a security review)')
+    .option('--for <duration>', 'How long: 90s, 15m, 1h (a bare number is minutes). Default 15m, at most 8h')
+    .action(async (name: string, opts: { for?: string }) => {
+      // Every refusal comes before the passphrase is read (session-unlock.ts): the switch, then the length, then the key, then the keyring.
+      assertUnlockEnabled();
+      const ttl = unlockSpanMs(opts.for);
+      const done = await unlockSession(name, ttl, (info) => resolvePassphrase(info.encrypted, name));
+      printOutput({
+        name: done.name,
+        public_key_hash: done.public_key_hash,
+        unlocked_until: new Date(done.expires_at).toISOString(),
+        for_seconds: Math.round((done.expires_at - done.unlocked_at) / 1000),
+      });
+      console.error('');
+      console.error(`The decrypted key is held in your OS keyring until then. Wipe it sooner with: certen keys lock ${done.name}`);
+    });
+
+  keys
+    .command('lock [name]')
+    .description('Wipe the unlocked session of a key (or of every key with --all). Always safe to run')
+    .option('--all', 'Wipe the sessions of every local key')
+    .action(async (name: string | undefined, opts: { all?: boolean }) => {
+      if (name !== undefined && opts.all) {
+        throw new UsageError('Give a key name or --all, not both.', 'CONFLICTING_OPTIONS');
+      }
+      if (name === undefined && !opts.all) {
+        throw new UsageError('Which key? Give its name, or --all to lock every key: certen keys lock <name> | certen keys lock --all', 'LOCK_TARGET_REQUIRED');
+      }
+      const names = opts.all ? listKeys().map((k) => k.name) : [name!];
+      const done = await lockSessions(names);
+      printOutput({ locked: done.wiped, not_unlocked: done.not_unlocked, keyring: done.keyring });
+      if (done.keyring === 'unavailable') {
+        console.error('No OS keyring can be loaded here, so no key can have been unlocked: there was nothing to wipe.');
+      } else if (done.wiped.length === 0) {
+        console.error(names.length === 0 ? 'There are no local keys.' : `Nothing was unlocked: ${names.join(', ')}.`);
+      } else {
+        console.error(`Locked: ${done.wiped.join(', ')}. Signing asks for the passphrase again.`);
+      }
+    });
+
+  keys
     .command('delete <name>')
     .description('Delete a local key file (irreversible)')
     .requiredOption('--yes', 'Confirm deletion')
-    .action((name: string) => {
+    .action(async (name: string) => {
       // No prompt: the required --yes is the confirmation. A key that controls a live key page
       // should not be deletable by an accidental Enter on a y/N prompt.
       const path = keyPath(name);
+      // A deleted key must not stay usable from the OS keyring for the rest of its session. Only when the experimental unlock switch is on, so with it
+      // off this command is exactly what it was (a headless machine's keyring would otherwise be asked about a feature nobody turned on).
+      if (keyUnlockEnabled()) {
+        try {
+          const locked = await lockSessions([name]);
+          if (locked.wiped.length > 0) console.error(`Also locked the unlocked session for "${name}".`);
+        } catch (err) {
+          console.error(`Warning: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       deleteKey(name);
       human(`Deleted ${path}`);
       console.error('If this key was on a key page, it is still on that page — remove it there too.');

@@ -24,7 +24,13 @@ Base, about $1 to $4 on Ethereum) and takes 60 to 110 seconds. Putting that in f
 makes everything slow and proves nothing anyone needs proved.
 
 Every command below prints JSON with `--json`, wrapped as `{"ok": true, "data": ...}` on success
-and `{"ok": false, "error": {"code": ..., "message": ...}}` on failure. Read `data`, never the prose.
+and `{"ok": false, "error": {"code": ..., "message": ..., "retryable": ..., "next": ...}}` on failure. Read `data`, never the prose.
+
+**The path is three commands: `certen setup`, `certen send`, `certen receipt`** (and `certen status` whenever you want to know what is in the way).
+On a failure, branch on `error.code`, and read **`error.next`**: the one command that moves forward (`certen status`, `certen gas --chain base-sepolia --wait`,
+`certen setup`, `certen watch <intent-id>`, `certen <command> --help`). It is a single `certen ...` line built by the CLI itself, never copied from the gateway,
+and `<angle>` tokens are values for the owner to choose. It is a hint, not a licence: **a `next` that creates, spends or signs (`setup`, `fund`, `send`, `call`) still needs the
+owner's yes, exactly as the consent rules below say**; one that only reads (`status`, `watch`, `receipt`, `errors <CODE>`, `--help`) you may run.
 
 ## Consent, before anything else
 
@@ -33,7 +39,7 @@ An identity costs money. Every proof-gated action costs money and moves the owne
 1. Quote first: `certen quote --chain <chain> --json` and `certen balance --json`.
 2. Show the owner the cost and the balance.
 3. Ask, in plain words, whether to proceed. Do not proceed on silence.
-4. Only then run the action. Never run `identity create`, `call`, `tx create`, or `governance
+4. Only then run the action. Never run `setup`, `send`, `identity create`, `call`, `tx create`, or `governance
    *` without an explicit yes for that specific action.
 
 If the owner has not told you which chain, use `base-sepolia` on testnet. It is the cheapest
@@ -44,17 +50,21 @@ Adiri testnet, whose gas is TEL rather than ETH; use it only when the owner asks
 ## One-time setup (owner runs this, or you run it with consent)
 
 ```bash
-certen keys generate --name agent --no-passphrase        # an Ed25519 key that never leaves this machine
-certen signup --with-key agent --org-name <owner>-<handle> --no-keyring --json
-certen doctor --json                                     # names the one thing blocking you, if any
-certen status --json                                     # is this identity, on this chain, with this key, ready? exit 0 only when it is
-certen setup --yes --json --existing-account --no-passphrase   # first time: key, account, identity, checks. Resumable; exit 0 only when ready
-certen gas --json                                        # the abstract account's gas: address, what to send, an EIP-681 link; exit 0 only when enough
+certen setup --yes --json --new-account --org-name <owner>-<handle> --name <handle> --key agent --no-passphrase --no-keyring --chain base-sepolia
+certen status --json      # is this identity, on this chain, with this key, ready? exit 0 only when it is
+certen gas --json         # the abstract account's gas: address, what to send, an EIP-681 link; exit 0 only when enough
 ```
 
-`signup` proves you hold the key and returns an organization with a $10 trial. It prints only the
-API key's prefix; the key is stored in `~/.certen/config.json`. Nothing goes into this skill's
-environment, and nothing needs to.
+`setup` is one resumable command: the signing key first (an Ed25519 key that never leaves this machine), then an organization created **by that key** (`--new-account`: it
+proves you hold the key, with a $10 trial; no browser, nothing to copy), then the identity, then the on-chain checks and the gas. Run the same line again and it continues. It
+exits `0` only when the identity can act; otherwise the envelope carries `error.details.readiness` with the first blocker, and `error.next` is the command to run (`certen status`, or the
+blocker's own fix; for missing gas that is `certen gas --chain base-sepolia --wait`, which needs testnet gas sent to the address it prints: the owner's step, or yours with consent). With `--json` it never waits for funds.
+An owner who already has an organization uses `--existing-account` instead (a person approves this machine in the portal), or `--token <registration token>`.
+`--no-passphrase` stores the key unencrypted (file permissions only), which an unattended agent needs; a person with a passphrase should say so instead. The API key is stored in
+`~/.certen/config.json`, and only its prefix is printed. Nothing goes into this skill's environment, and nothing needs to.
+
+The older steps are still there one at a time: `certen keys generate --name agent --no-passphrase`, `certen signup --with-key agent --org-name <owner>-<handle> --no-keyring`,
+`certen init`, and `certen doctor --json` (names the one thing blocking you, across the whole setup).
 
 **Sandboxed hosts:** if this agent runs in a container whose home directory is wiped between
 sessions, `~/.certen` vanishes with it. Persist `~/.certen/keys/agent.json` and
@@ -69,6 +79,7 @@ Run `scripts/where-am-i.sh` (bundled) or the three commands inside it:
 certen whoami --json          # org, key prefix, gateway, standing
 certen identity list --json   # identities and their accounts per chain
 certen balance --json         # spendable, held, and whether a shortfall is refused or only recorded
+certen status --json          # ready to act on this chain with this key? the first thing in the way, and its fix (exit 0 only when ready)
 ```
 
 `balance.enforcing` is the fact that matters: `false` means the gateway meters and records
@@ -195,6 +206,8 @@ error. `certen pending list --json` shows what is waiting.
 - `402` / `INSUFFICIENT_BALANCE`: only when `enforcing` is true. `certen fund <usd> --chain
   <chain> --json` prints where to send testnet USDC.
 - `no proof artifact yet`: normal for about two minutes after a leg completes. Wait.
+- Anything else: read `error.code`, then `error.next` (for a code the gateway publishes it is `certen errors <CODE>`, which says whose side it is and whether retrying can help).
+  Retry only when `error.retryable` is true.
 
 Never work around a refusal by changing amounts, retrying in a loop, or using another identity.
 Report it to the owner with the code and the exact message.

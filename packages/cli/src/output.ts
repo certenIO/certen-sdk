@@ -6,6 +6,7 @@ import {
 } from '@certen.io/sdk';
 import { getOutputFormat } from './config.js';
 import { CliError, EXIT, type ExitCode } from './errors.js';
+import { nextStepFor } from './next-step.js';
 
 /**
  * Two output modes with different audiences and different guarantees.
@@ -155,6 +156,8 @@ export function emitFailure(err: unknown): ExitCode {
   const code = e.code ?? 'UNKNOWN_ERROR';
   const retryable = e instanceof CliError ? e.retryable : Boolean(e.isRetryable);
   const exitCode = resolveExitCode(e);
+  // Exactly one command to run next, for every failure (next-step.ts says where it comes from). Never taken from gateway text.
+  const next = nextStepFor(err);
 
   // A refusal for lack of funds is the one failure that carries its own fix, so it
   // is rendered rather than reduced to a code and a message. The developer is
@@ -179,6 +182,8 @@ export function emitFailure(err: unknown): ExitCode {
           code,
           message,
           retryable,
+          // Additive, and always present: the one command that moves forward from here. A consumer that ignores unknown keys is unaffected.
+          next,
           ...(e.status !== undefined ? { status: e.status } : {}),
           ...(e.requestId ? { requestId: e.requestId } : {}),
           // A failure that still produced a result carries it, rather than throwing the result
@@ -205,6 +210,8 @@ export function emitFailure(err: unknown): ExitCode {
       console.error(`  ${guidance}`);
       console.error('  Nothing was opened, signed or charged.');
     }
+    // The LAST line, whatever else was said above it: the thing to type.
+    console.error(`  next: ${next}`);
   }
 
   return exitCode;

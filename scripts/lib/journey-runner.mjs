@@ -151,6 +151,17 @@ export async function runJourney({ name, cli, fault }) {
           if (got !== want) problems.push(`expected the failure's ${path} to be ${JSON.stringify(want)}, got ${JSON.stringify(got)}`);
         }
       }
+      // Every failure ends with one command to run next (PLAN W7). A step that fails, as declared or not, has to carry it and it has to be a plain
+      // `certen ...` line: this is the journey-level proof that a person who stops here is told what to type.
+      let next;
+      if (code !== 0) {
+        let error;
+        try { error = JSON.parse(out.trim()).error; } catch { error = undefined; }
+        if (error !== undefined) {
+          next = typeof error.next === 'string' ? error.next : null;
+          if (next === null || !/^certen [^\r\n]+$/.test(next)) problems.push(`the failure (${error.code}) did not end with a next command (got ${JSON.stringify(next)})`);
+        }
+      }
       const unrouted = seen.filter((r) => r.unrouted).map((r) => `${r.method} ${r.path}`);
       if (unrouted.length > 0) problems.push(`the fake gateway has no route for: ${[...new Set(unrouted)].join(', ')}`);
 
@@ -172,6 +183,7 @@ export async function runJourney({ name, cli, fault }) {
         round_trips: seen.length,
         endpoints: [...new Set(seen.map((r) => `${r.method} ${r.path}`))],
         ok: problems.length === 0,
+        ...(next !== undefined ? { next } : {}),
         ...(problems.length ? { reason: problems.join('; '), stderr: err.trim().split('\n').slice(-3).join(' | ') } : {}),
       });
     }
@@ -192,6 +204,8 @@ export async function runJourney({ name, cli, fault }) {
         values_copied: copied,
         compared_by_eye: compared,
         passphrase_prompts: promptTotal,
+        // Failures this journey meets on purpose, and the command each one ended with.
+        failures: certenSteps.filter((s) => s.next !== undefined).map((s) => ({ command: s.command, next: s.next })),
         all_steps_as_declared: steps.every((s) => s.ok),
       },
     };
@@ -241,6 +255,7 @@ export function renderJourney(report) {
   lines.push(`  values copied by hand ${t.values_copied.length}${t.values_copied.length ? ` (${t.values_copied.join(', ')})` : ''}`
     + `${t.compared_by_eye.length ? ` · compared by eye: ${t.compared_by_eye.join(', ')}` : ''}`);
   lines.push(`  passphrase prompts ${t.passphrase_prompts} (declared by the journey, not observed)`);
+  for (const f of t.failures) lines.push(`  a declared failure ends: next: ${f.next}   (${f.command})`);
   lines.push(t.all_steps_as_declared ? '  every step behaved as declared' : '  ! a step did not behave as declared (marked above)');
   lines.push('');
   return lines.join('\n');
