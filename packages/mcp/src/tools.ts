@@ -1,7 +1,7 @@
 import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, type SigningSummary } from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
-import { runReadinessTool, runReceiptTool } from './agent-tools.js';
+import { runReadinessTool, runReceiptTool, shareSource } from './agent-tools.js';
 
 /**
  * Tool definitions, split into two tiers.
@@ -24,10 +24,12 @@ import { runReadinessTool, runReceiptTool } from './agent-tools.js';
  *      prompt-injected model make this server probe whatever network it sits in. Where a check needs a
  *      node's answer (the execution chain's block header), the CALLER fetches it and passes the answer
  *      in; where the server must call one (Accumulate, for the independent key page read), the operator
- *      configures it (`CERTEN_ACCUMULATE_RPC`) or the gateway's own registry advertises it. The one URL a
- *      caller may hand over is a proof SHARE link (`certen_proof_open_shared`, and `certen_proof_verify`
- *      given a link): its origin is the deployment that issued it, which a counterparty cannot be asked
- *      to configure, and its path is fixed to `/v1/proof/shared/<token>`. The test names every
+ *      configures it (`CERTEN_ACCUMULATE_RPC`) or the gateway's own registry advertises it. A proof SHARE
+ *      link is the only URL-shaped thing a caller hands over, and it does not choose a host either:
+ *      `certen_proof_open_shared` takes only its token and asks this server's own gateway;
+ *      `certen_proof_verify` opens a link only on this server's gateway or an origin its operator listed
+ *      (`CERTEN_SHARE_ORIGINS`), refuses a redirect off it, and sends a bare token to this server's
+ *      gateway. So no tool lets a caller choose what the server connects to. The test names every
  *      parameter that looks like a URL, so a new one is a visible decision.
  *
  * There is deliberately NO funding tool, in either tier. Balance and obligations are readable so an
@@ -751,11 +753,13 @@ const READ_TOOLS: ToolDef[] = [
       + 'nothing about the Accumulate side could be checked. independent is true only for verified. A valid proof of the WRONG call '
       + 'is still a valid proof: authorization (does the operation match what was agreed) is never established by this tool, and '
       + 'asking the gateway is not independent verification. To close the outcome layer, fetch the block header of the execution chain '
-      + 'yourself and pass it as header.',
+      + 'yourself and pass it as header. A proof SHARE link is opened only if it is on this server\'s own gateway or on an origin its operator '
+      + 'listed in CERTEN_SHARE_ORIGINS; a link anywhere else is refused (SHARE_ORIGIN_NOT_ALLOWED) before any request, and a bare cps_ token '
+      + 'is this gateway\'s.',
     inputSchema: {
       type: 'object',
       properties: {
-        target: str('An intent id, a proof id, an Accumulate transaction hash (64 hex), or a proof share link'),
+        target: str('An intent id, a proof id, an Accumulate transaction hash (64 hex), or a proof share link (on this server\'s gateway, or an origin its operator allows)'),
         header: {
           type: 'object',
           description:
@@ -776,8 +780,8 @@ const READ_TOOLS: ToolDef[] = [
       required: ['target'],
       additionalProperties: false,
     },
-    run: async (c, a) => {
-      // Loaded on first use: the verifier brings the Accumulate encoder with it, which the other 47 tools never need.
+    run: async (c, a, env = process.env) => {
+      // Loaded on first use: the verifier brings the Accumulate encoder with it, which the other 49 tools never need.
       const { verifyEvidence, loadProofEvidence, assertComparableHeader } = await import('@certen.io/sdk/verify');
       const target = s(a, 'target');
       // A header is a comparison only if it carries the receipts root the proof commits to. `{}` or a bare block number used to be handed to the
@@ -785,7 +789,9 @@ const READ_TOOLS: ToolDef[] = [
       const header = a.header === undefined || a.header === null ? undefined : assertComparableHeader(a.header);
       let evidence;
       if (/^https?:\/\//i.test(target) || /^cps_/.test(target)) {
-        const shared = await fetchSharedProof(target);
+        // The host is decided by this server's configuration, never by the link: the gateway it is set up for, or an origin its operator listed. The fetch also
+        // refuses to be redirected off that origin (the SDK's rule), so an allowed host cannot send it elsewhere.
+        const shared = await fetchSharedProof(target, { baseUrl: shareSource(target, env).baseUrl });
         evidence = { bundle: decodeSharedBundle(shared.bundle), bundleError: null as string | null, portable: null as unknown, notServed: null as { code: string; reason: string } | null, gateway: null };
         if (!evidence.bundle) throw new CertenError('The shared bundle is not JSON this tool can read.', 0, 'UNREADABLE_BUNDLE');
       } else {

@@ -80,6 +80,59 @@ function amountOf(value: unknown, where: string): string {
   return value;
 }
 
+// ── share links ───────────────────────────────────────────────────────────────────────────────────────
+
+/** Other deployments whose proof share links this server may open, set by whoever runs it (comma-separated origins). Never an argument. */
+export const SHARE_ORIGINS_ENV_VAR = 'CERTEN_SHARE_ORIGINS';
+
+const originOf = (value: string): string | undefined => {
+  try {
+    const u = new URL(value.trim());
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.origin : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The origins the operator listed. A setting that does not parse is refused by name, never skipped: a typo that quietly narrowed the list would look like a
+ * counterparty's link being broken, and one that quietly widened it would be worse. (The same rule `CERTEN_ENABLED_CHAINS` follows.)
+ */
+function listedShareOrigins(env: Env): string[] {
+  const out: string[] = [];
+  for (const entry of (env[SHARE_ORIGINS_ENV_VAR] ?? '').split(',').map((e) => e.trim()).filter(Boolean)) {
+    const origin = originOf(entry);
+    if (!origin) {
+      throw refuse(`${SHARE_ORIGINS_ENV_VAR} names "${entry}", which is not an http(s) origin (e.g. https://gateway.example). Fix the setting; no share link is opened until it parses.`, 'SHARE_ORIGINS_INVALID');
+    }
+    out.push(origin);
+  }
+  return out;
+}
+
+/**
+ * Where a proof SHARE link may be fetched from, or a refusal before any request.
+ *
+ * The SDK's `fetchSharedProof` takes a link's own origin, so the host fetched from was whichever one a caller wrote into the link, and a bare `cps_` token
+ * went to the DEFAULT gateway rather than the one this server is configured for. A server that connects wherever a prompt says is a way to make it probe the
+ * network it sits in. So: the gateway this server is configured for, or an origin its operator listed, and nothing else. A bare token is this gateway's.
+ */
+export function shareSource(target: string, env: Env): { baseUrl: string } {
+  const configured = env.CERTEN_API_URL || DEFAULT_BASE_URL;
+  const listed = listedShareOrigins(env);
+  const text = target.trim();
+  if (!/^https?:\/\//i.test(text)) return { baseUrl: configured.replace(/\/+$/, '') };
+  let origin: string;
+  try { origin = new URL(text).origin; } catch { throw refuse(`"${target}" is not a share link (expected https://<gateway>/v1/proof/shared/<token>).`, 'INVALID_SHARE_LINK'); }
+  const own = originOf(configured);
+  if (origin === own || listed.includes(origin)) return { baseUrl: origin };
+  throw refuse(
+    `The share link is on ${origin}, which this server does not open links from. It opens links on its own gateway${own ? ` (${own})` : ''} and on origins its operator lists in `
+    + `${SHARE_ORIGINS_ENV_VAR} (comma-separated, e.g. ${SHARE_ORIGINS_ENV_VAR}=${origin}). Nothing was requested.`,
+    'SHARE_ORIGIN_NOT_ALLOWED',
+  );
+}
+
 // ── certen_readiness ──────────────────────────────────────────────────────────────────────────────────
 
 /** Is this identity, on this chain, able to act right now? One call, ordered checks, never ready over an unknown. */

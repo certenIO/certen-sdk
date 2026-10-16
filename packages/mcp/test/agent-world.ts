@@ -86,7 +86,12 @@ export const keyPageReply = (res: http.ServerResponse, account: Record<string, u
   res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { account: { type: 'keyPage', url: PAGE, keys: [{ publicKeyHash: KEY }], creditBalance: 1240, version: 2, acceptThreshold: 1, ...account } } }));
 };
 
+/** What a gateway answers for a redeemed share link: the repo's real execution bundle, as the gateway stores it. */
+export const sharedProof = () => ({ proof_id: PROOF, shared: true, expires_at: '2026-12-01T00:00:00Z', view_count: 1, bundle: execBundle });
+
 export interface World {
+  /** `/v1/proof/shared/redirect-out` answers 302 to this URL. */
+  redirectShareTo?: string;
   /** Status and body for GET /v1/identity/:id. */
   identity?: [number, unknown];
   /** Status and body for GET /v1/billing/balance. */
@@ -147,6 +152,12 @@ export async function startWorld(w: World = {}): Promise<AgentWorld> {
       return send(res, 200, portable);
     }
     if (path.startsWith('/v1/proof/tx/') && path.endsWith('/receipt')) return send(res, 200, { tx_hash: ACCUM, status: 'delivered', anchored: true });
+    const shared = /^\/v1\/proof\/shared\/([^/]+)$/.exec(path);
+    if (shared) {
+      // A redirect out of the origin, for the case where an allowed host tries to send the fetch somewhere it was never allowed to go.
+      if (shared[1] === 'redirect-out' && w.redirectShareTo) { res.statusCode = 302; res.setHeader('location', w.redirectShareTo); return void res.end(); }
+      return send(res, 200, sharedProof());
+    }
     return send(res, 404, { message: `no route ${path}` });
   });
 
