@@ -373,6 +373,13 @@ export interface BuildReceiptOptions {
    * not together with `rpc`; both are refused before anything is requested.
    */
   header?: VerifyEvidenceOptions['header'];
+  /**
+   * A node used ONLY to read the recipient's balance (before the execution block and at it). It never closes the proof's execution layer: that is `header`'s job
+   * (or `rpc`'s). It exists for a process that takes the block header from its caller but has its own node for the one thing a caller's header cannot say, whether
+   * the value arrived: a server whose operator configured a node per chain. Where `rpc` is also given, the recipient is read from this one and the proof layer
+   * from `rpc`. Checked, hardened and reported exactly as `rpc` is (the chain id first, no credential, no redirect, only the host ever shown).
+   */
+  effectRpc?: string;
   /** An event the execution receipt must contain. */
   expect?: { address?: string; topic0?: string; topic1?: string };
   /** The recipient's balance taken before signing. */
@@ -449,7 +456,7 @@ export async function buildReceipt(client: CertenClient, intentId: string, optio
   if (request?.kind === 'transfer' && request.amount && request.to) {
     effect = outcome.outcome === 'completed'
       ? await checkNativeTransferEffect({
-        chain: request.chain, recipient: request.to, amount: request.amount, rpc: options.rpc,
+        chain: request.chain, recipient: request.to, amount: request.amount, rpc: options.effectRpc ?? options.rpc,
         atBlock: verification?.execution?.ok ? verification.execution.blockNumber : undefined,
         before: options.snapshot ?? options.previous?.recipient_snapshot ?? undefined,
         sender: options.sender, fetch: options.fetch, timeoutMs: options.timeoutMs,

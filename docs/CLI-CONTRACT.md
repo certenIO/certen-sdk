@@ -983,9 +983,20 @@ Where it differs, and why (each is a rule of the MCP server, tested in `packages
   `{ receiptsRoot, hash?, number? }`. **`receiptsRoot` is required**: a header with no receipts root (`{}`, or only the block number the bundle itself states) compares nothing, and is refused
   with `INVALID_HEADER` (status `0`, nothing was requested) rather than read as a comparison that passed. `certen_proof_verify` takes the same header under the same rule: before this it
   passed such a header to the verifier, where it found no disagreement and the execution layer read `verified` having compared nothing. A header together with a node is `CONFLICTING_OPTIONS` in the SDK.
-- **The recipient's balance cannot be read here**, so a receipt for a `transfer { chain, to, amount }` has `effect.state: "unchecked"`, carries the `EFFECT_UNCHECKED` gap, and is never `verified`
-  until the caller has read the recipient from its own node. `call { chain, expect: { address, topic0, topic1? } }` is judged from the proof's own execution receipt, as `--expect` is.
+- **The recipient's balance is read from a node the OPERATOR configured, or not at all.** `CERTEN_RPC_URL_<CHAIN>` (the slug upper-cased, anything else an underscore: `CERTEN_RPC_URL_BASE_SEPOLIA`) is server
+  configuration beside `CERTEN_ENABLED_CHAINS`, never an argument; `certen_chains_enabled` reports `receiptNode: true|false` per chain. For the chain the caller described (`transfer.chain` / `call.chain`, else the one the
+  validators' record says the intent ran on) the server reads the recipient's balance before the execution block and at it (the node's chain id is checked first), and, if the caller passed no `header`, compares the
+  proof's block header with the same node: so a transfer can reach `effect.state: "confirmed"` and the receipt `verified`. A caller's `header` still decides the proof layer when given, and the node then reads only the
+  recipient. Only the node's **host** is ever shown (`effect.recipient.host`); its URL, which can carry a key, never is. A node on another chain, one without history, one that is down and a setting that is not a usable URL
+  each leave a named gap (`EFFECT_UNREADABLE`, `NODE_NOT_CONSULTED`), never a pass.
+  **Without a configured node** a receipt for a `transfer { chain, to, amount }` has `effect.state: "unchecked"`, carries the `EFFECT_UNCHECKED` gap, and is never `verified` until the caller has read the recipient from its
+  own node: the agent's own claim of a balance is not a reading and is not accepted. `call { chain, expect: { address, topic0, topic1? } }` is judged from the proof's own execution receipt, as `--expect` is.
   With neither, the receipt has no request on record: `request` is `null`, `effect.state` is `not_applicable`, and `verified` then speaks to the proof only.
+- **A proof share link is opened only on this server's gateway or an origin its operator listed.** `certen_proof_verify` given a share link (`https://<gateway>/v1/proof/shared/<token>`) used to fetch from whatever origin the
+  link named, and a bare `cps_` token from the default gateway. It now fetches from the gateway the server is configured for (`CERTEN_API_URL`) or an origin in the operator's **`CERTEN_SHARE_ORIGINS`** (comma-separated
+  origins; server configuration, never an argument). A link anywhere else is `SHARE_ORIGIN_NOT_ALLOWED` (status `0`, nothing requested, naming the variable); a list that does not parse is `SHARE_ORIGINS_INVALID`, refused by
+  name rather than skipped; a bare token is the configured gateway's; and a fetch that is redirected off its origin is refused (`FOREIGN_ORIGIN_URL`), in the SDK for every caller. `certen_proof_open_shared` was never affected:
+  it takes only the token and asks the server's own gateway. A counterparty verifying a proof shared from a **different deployment** needs the operator to list it. The CLI and the SDK are unchanged.
 - **`certen_readiness` never names a command.** `checks[].fix` is `{ text, url? }`; `fix.command` is a CLI's addition and an agent has no CLI to run. The Accumulate endpoint for the independent key page read
   is the one the gateway's chain registry advertises, or the operator's `CERTEN_ACCUMULATE_RPC`; it is never an argument.
 - **The invocation is checked before a request is made**, with status `0`: `INVALID_IDENTITY_ID` and `INVALID_INTENT_ID` (not a UUID), `INVALID_KEY_HASH`, `INVALID_AMOUNT` (not whole units, or wei-looking),
@@ -994,6 +1005,39 @@ Where it differs, and why (each is a rule of the MCP server, tested in `packages
 - **An argument the tool does not have is refused by name, not ignored.** `UNKNOWN_ARGUMENT` lists the ones it takes; `NODE_ARGUMENT_REFUSED` is the same for a name that means "call this node" (`rpc`, `accumulateRpc`, `url`,
   `endpoint`, `node`, …) and says what to do instead. Ignoring it would let an agent believe the node was used. This holds inside `transfer`, `call` and `call.expect` too.
 - **It writes nothing.** The result is the record; keep it if you want it.
+
+### 14. Key store errors: typed, and the exit codes that changed
+
+Every error the local key store (`~/.certen/keys`) raises has a `code`, and the exit code the contract's own definitions give it. They were bare errors, so every one of them came out as `UNKNOWN_ERROR` with exit `1`, indistinguishable from a
+rejected request. **The messages are unchanged**; the code, the exit code and the `next` are what is new.
+
+| `error.code` | Exit | When | `error.next` |
+|---|:--:|---|---|
+| `UNKNOWN_KEY` | **2** | no key with that name (`keys show`, `keys verify`, `keys delete`, `--sign-with`, and any other door; `use key` already answered this) | `certen keys list` |
+| `INVALID_KEY_NAME` | **2** | a name that is not 1-64 of letters, digits, `-`, `_`, starting with a letter or digit | the command's `--help` |
+| `KEY_EXISTS` | **2** | `keys generate` over an existing name; the existing key is untouched | `certen keys list` |
+| `INVALID_HASH` | **2** | a hash to sign that is not even-length hex | the command's `--help` |
+| `PASSPHRASE_REQUIRED` | 2 | the key is encrypted and no passphrase could be supplied (no terminal, no `CERTEN_KEY_PASSPHRASE`); no longer reported as `WRONG_PASSPHRASE` | `certen keys path` |
+| `PASSPHRASE_MISMATCH` | **2** | the new passphrase and its confirmation differ; nothing was written | the command's `--help` |
+| `NO_TTY` | **2** | a hidden prompt where nothing can answer (the API key, a token) | the command's `--help` |
+| `WRONG_PASSPHRASE` | 1 | the passphrase did not open the key, or the file was modified; carries `details.key` | `certen keys verify <key>` |
+| `KEY_FILE_CORRUPT` | 1 | the key file is not JSON, or holds no key | `certen keys path` |
+| `KEY_FILE_UNSUPPORTED` | 1 | a version or algorithm this CLI does not understand, or not a plain Ed25519 key | `certen keys path` |
+| `KEY_FILE_INSECURE` | 1 | (POSIX) the key file is readable by group or others; the message gives the `chmod` | `certen keys path` |
+
+**What changed, plainly.** `keys show nope`, `keys verify nope`, `keys delete nope --yes`, an invalid `--name`, a name that already exists, a non-hex `--hash` and "passphrases did not match" exited `1` as `UNKNOWN_ERROR`; they exit `2` with the
+codes above. This is the exit-code change the CLI UX Phase 5 note declined to make quietly: a caller that branched on `!= 0` is unaffected, and one that branched on `== 1` to mean "the key is not there" now sees `2`, the same as
+`certen use key nope` has always answered, and the same as every other "you named something that is not there" in this contract. The conformance suite's canonical exit-`1` example used to be `keys show` on a missing key; it is now a
+damaged key file (`KEY_FILE_CORRUPT`), and a missing key is a canonical `2`. `WRONG_PASSPHRASE` keeps exit `1` (the invocation was well-formed and the key did not open), and a key file that cannot be used is `1` for the same reason.
+
+### 15. Where a report goes
+
+A command whose product is a **report** (`doctor`, `status`, `gas`, and the readiness card of `setup` and `send`) prints what it found, then exits `1` when what it found is a problem. In **table mode** the report is on **stdout**, and the failure
+line (`Error [CODE]: …`) and the one command to run next (`  next: …`, the last line) are on **stderr**. With **`--json`** the report rides in the single envelope: in `data` when the answer is yes, in `error.details` when it is not.
+
+This is the convention of `diff` and `grep`: a non-zero exit there is a finding, not a malfunction, so `certen doctor | tee report.txt` and `certen gas > send.txt` keep working when the news is bad, and the report is never printed twice. A
+command that fails for any other reason (a usage error, an unreachable gateway) has no report to give, and says what went wrong on stderr. Table output is not a contract (rule 1); this section describes what the tests pin
+(`doctor.test.ts`, `status.test.ts`, `gas.test.ts`).
 
 ## Example: a correct retry loop
 
@@ -1008,6 +1052,12 @@ for attempt in 1 2 3; do
   esac
 done
 ```
+
+## Release note — key store errors (unreleased; breaking only for a caller that branched on exit `1`)
+
+Seven key-store failures change from exit `1` / `UNKNOWN_ERROR` to exit `2` with a code: a key that is not there (`UNKNOWN_KEY`), an invalid key name (`INVALID_KEY_NAME`), a name already taken (`KEY_EXISTS`), a non-hex hash (`INVALID_HASH`), two
+passphrases that differ (`PASSPHRASE_MISMATCH`), nothing to prompt on (`NO_TTY`), and an encrypted key with no passphrase available (`PASSPHRASE_REQUIRED`, which was reported as `WRONG_PASSPHRASE`). Four more are typed without changing their exit
+(`WRONG_PASSPHRASE`, `KEY_FILE_CORRUPT`, `KEY_FILE_UNSUPPORTED`, `KEY_FILE_INSECURE`, all `1`). Messages are unchanged. See section 14 for the table and the reasoning.
 
 ## Release note — 0.7.0 (breaking for `--json` consumers)
 

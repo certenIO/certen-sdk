@@ -106,6 +106,8 @@ const USAGE_CODES = [
   'EXPECT_NEEDS_WAIT', 'INCOMPLETE_INTENT', 'INVALID_ACCUMULATE_RPC', 'INVALID_ADDRESS', 'INVALID_AMOUNT', 'INVALID_ARGUMENT',
   'INVALID_EXPECT', 'INVALID_FUNCTION_SIGNATURE', 'INVALID_INTENT_JSON', 'INVALID_LEG_COUNT', 'INVALID_NUMBER', 'INVALID_PAYER_ADDRESS',
   'INVALID_PROOF_CLASS', 'INVALID_PROOF_TARGET', 'INVALID_PUBLIC_KEY', 'INVALID_RPC', 'INVALID_SIGN_TARGET', 'INVALID_SIGNING_DATA_JSON',
+  // The key store's invocation mistakes: a name that cannot be a file name, a hash that is not hex, two passphrases that differ, nothing to prompt on.
+  'INVALID_KEY_NAME', 'INVALID_HASH', 'PASSPHRASE_MISMATCH', 'NO_TTY',
   'INVALID_URL', 'INVALID_VALUE', 'MISSING_CHAIN', 'MISSING_SIGNATURE', 'MISSING_SIGNER_DETAILS', 'MISSING_SIGNING_DATA', 'MISSING_TOKEN',
   'MISSING_VALUE', 'SIGN_WITH_NEEDS_TRANSACTION', 'SIGNER_KEY_MISMATCH', 'TREE_SIZE_WITHOUT_PROOF', 'TUPLE_NOT_SUPPORTED',
   'UNREADABLE_BUNDLE', 'INCLUSION_NOT_ESTABLISHED', 'RECEIPT_VERIFICATION_FAILED', 'RECEIPT_VERIFICATION_INCOMPLETE', 'PAYMENT_NOT_OPENED',
@@ -191,6 +193,12 @@ const STEPS: Record<string, Step> = {
   // Keys that stay unlocked for a while (experimental, behind the security review: docs/security/keys-unlock-review.md).
   KEY_UNLOCK_NOT_ENABLED: 'certen keys --help',
   KEY_NOT_ENCRYPTED: 'certen keys list',
+  // The key store's other answers. A name already taken is settled by looking at what is there; a key FILE that cannot be used (unreadable, damaged, from a
+  // newer CLI, readable by others) is found with `keys path`, which says where they are kept.
+  KEY_EXISTS: 'certen keys list',
+  KEY_FILE_INSECURE: 'certen keys path',
+  KEY_FILE_CORRUPT: 'certen keys path',
+  KEY_FILE_UNSUPPORTED: 'certen keys path',
   UNLOCK_DURATION_INVALID: 'certen keys unlock --help',
   LOCK_TARGET_REQUIRED: 'certen keys list',
   // Ctrl-C stops the wait and never the intent. A funds wait is resumed by running the same command; an intent wait by `watch`.

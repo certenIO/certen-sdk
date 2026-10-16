@@ -65,7 +65,7 @@ function localizeFix(check: Check, chainHint: string, apiUrl: string): Check {
         ? { ...check, fix: `certen login   (or mint one at ${getPortalUrl()})` }
         : check;
     case 'identity can sign':
-      return { ...check, fix: `certen init   (or: certen identity create --name <name> --sign-with <key> --chains ${chainHint} --wait)` };
+      return { ...check, fix: `certen setup   (or: certen identity create --name <name> --sign-with <key> --chains ${chainHint} --wait)` };
     case 'abstract accounts funded': {
       // Name the faucets for the chains actually affected, rather than a generic instruction.
       const chains = [...check.detail.matchAll(/\b([a-z]+-[a-z]+)\b/g)].map((m) => normalizeChain(m[1]));

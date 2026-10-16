@@ -183,7 +183,7 @@ export async function resolveIdentityRef(text: string, opts: ResolveIdentityOpti
   const recorded = recordedIdentities() as RecordedIdentity[];
   throw new UsageError(
     recorded.length === 0
-      ? `No identity is recorded on this machine under the name "${ref.alias}" (nothing recorded yet). Use the identity's UUID or ADI URL, or create one with: certen init`
+      ? `No identity is recorded on this machine under the name "${ref.alias}" (nothing recorded yet). Use the identity's UUID or ADI URL, or create one with: certen setup`
       : `No identity recorded on this machine is called "${ref.alias}". Recorded: ${recorded.map(describe).join('; ')}. The identity's UUID or ADI URL always works.`,
     'UNKNOWN_IDENTITY_ALIAS',
   );

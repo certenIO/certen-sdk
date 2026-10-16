@@ -31,7 +31,7 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->2596 tests in 145 files (sdk 867, cli 1197, mcp 275, verify 257), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->2675 tests in 152 files (sdk 881, cli 1231, mcp 306, verify 257), 0 skipped<!-- test-counts:end --> | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
 | `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |
@@ -162,9 +162,13 @@ docs/guides/       task-shaped guides
   (`certen_receipt` and `certen_proof_verify` take a block `header`, which must carry a `receiptsRoot`:
   one with nothing to compare is refused, not counted); the one node the server calls itself is
   Accumulate's for `certen_readiness`, which the gateway advertises or the operator sets with
-  `CERTEN_ACCUMULATE_RPC`. The tools that exist for this (`certen_readiness`, `certen_receipt`) refuse an
-  argument they do not have, by name, rather than ignoring it. A proof *share link* is the one URL a
-  caller may hand over; the test that lists URL-like parameters makes any new one a visible decision.
+  `CERTEN_ACCUMULATE_RPC`; a node for a chain's execution (the recipient's balance, the proof's block
+  header) is the operator's too, `CERTEN_RPC_URL_<CHAIN>`. The tools that exist for this
+  (`certen_readiness`, `certen_receipt`) refuse an argument they do not have, by name, rather than
+  ignoring it. A proof *share link* is the only URL-shaped thing a caller hands over, and it does not
+  choose a host either: `certen_proof_open_shared` takes only its token and asks the server's own gateway,
+  and `certen_proof_verify` opens a link only on that gateway or an origin the operator listed in
+  `CERTEN_SHARE_ORIGINS`. The test that lists URL-like parameters makes any new one a visible decision.
 
 A new tool must declare the gateway endpoint it reaches; a test checks that endpoint exists in the
 vendored spec and that no read-tier tool points at a write-only one. A tool that builds its own result

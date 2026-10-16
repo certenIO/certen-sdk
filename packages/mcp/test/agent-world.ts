@@ -86,7 +86,58 @@ export const keyPageReply = (res: http.ServerResponse, account: Record<string, u
   res.end(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { account: { type: 'keyPage', url: PAGE, keys: [{ publicKeyHash: KEY }], creditBalance: 1240, version: 2, acceptThreshold: 1, ...account } } }));
 };
 
+/** The secret a hosted node puts in its URL path. It must never appear in anything a tool returns. */
+export const NODE_KEY = 'SECRETNODEKEY_0123456789';
+
+export interface NodeStub { url: string; host: string; seen: string[]; close: () => Promise<void> }
+
+/**
+ * The OPERATOR's EVM node: the header of the proof's block, a chain id, and balances by block tag. `url` carries a key in its path, as hosted providers do.
+ * `header: 'none'` answers as a node that does not have the block.
+ */
+export async function evmNode(o: { chainId?: number; balances?: Record<string, bigint>; header?: 'good' | 'none' | 'wrongroot' } = {}): Promise<NodeStub> {
+  const seen: string[] = [];
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      const call = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      seen.push(call.method);
+      const reply = (result: unknown): void => void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: 1, result }));
+      const err = (message: string): void => void res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32000, message } }));
+      if (call.method === 'eth_chainId') return reply(`0x${(o.chainId ?? 84532).toString(16)}`);
+      if (call.method === 'eth_getBlockByNumber') {
+        if (o.header === 'none') return reply(null);
+        return reply({ number: call.params[0], hash: component.block_hash, receiptsRoot: o.header === 'wrongroot' ? `0x${'00'.repeat(32)}` : component.receipts_root });
+      }
+      if (call.method === 'eth_getBalance') {
+        const v = o.balances?.[String(call.params[1])];
+        return v === undefined ? err('missing trie node') : reply(`0x${v.toString(16)}`);
+      }
+      err('method not found');
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  const port = (server.address() as AddressInfo).port;
+  return {
+    url: `http://127.0.0.1:${port}/v2/${NODE_KEY}`, host: `127.0.0.1:${port}`, seen,
+    close: () => new Promise<void>((r) => { server.closeAllConnections?.(); server.close(() => r()); }),
+  };
+}
+
+const tag = (n: number): string => `0x${n.toString(16)}`;
+const eth = (n: string): bigint => BigInt(Math.round(Number(n) * 1e6)) * 10n ** 12n;
+/** The recipient's balance rising by 0.001 ETH across the proof's block. */
+export const RISE_BALANCES = { [tag(BLOCK - 1)]: eth('0.005'), [tag(BLOCK)]: eth('0.006'), latest: eth('0.006') };
+/** A balance that did not move. */
+export const FLAT_BALANCES = { [tag(BLOCK - 1)]: eth('0.005'), [tag(BLOCK)]: eth('0.005'), latest: eth('0.005') };
+
+/** What a gateway answers for a redeemed share link: the repo's real execution bundle, as the gateway stores it. */
+export const sharedProof = () => ({ proof_id: PROOF, shared: true, expires_at: '2026-12-01T00:00:00Z', view_count: 1, bundle: execBundle });
+
 export interface World {
+  /** `/v1/proof/shared/redirect-out` answers 302 to this URL. */
+  redirectShareTo?: string;
   /** Status and body for GET /v1/identity/:id. */
   identity?: [number, unknown];
   /** Status and body for GET /v1/billing/balance. */
@@ -147,6 +198,12 @@ export async function startWorld(w: World = {}): Promise<AgentWorld> {
       return send(res, 200, portable);
     }
     if (path.startsWith('/v1/proof/tx/') && path.endsWith('/receipt')) return send(res, 200, { tx_hash: ACCUM, status: 'delivered', anchored: true });
+    const shared = /^\/v1\/proof\/shared\/([^/]+)$/.exec(path);
+    if (shared) {
+      // A redirect out of the origin, for the case where an allowed host tries to send the fetch somewhere it was never allowed to go.
+      if (shared[1] === 'redirect-out' && w.redirectShareTo) { res.statusCode = 302; res.setHeader('location', w.redirectShareTo); return void res.end(); }
+      return send(res, 200, sharedProof());
+    }
     return send(res, 404, { message: `no route ${path}` });
   });
 

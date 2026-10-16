@@ -152,8 +152,10 @@ every tool that changes something needs `confirm: true`. Two read tools answer t
 - `certen_receipt { intentId, header?, transfer?, call? }` — what happened to this intent: the ids to keep, the proof verified here layer by layer, and what of the effect is established. It is the document
   `certen receipt --json` returns. `verdict` is `verified` · `partial` · `failed` · `pending` · `unproven`; **PARTIAL and NO EVIDENCE are never verified**, and `gaps` says what is missing. The server **never calls a
   node you name**: close the proof's execution layer by passing the block `header` you fetched from your own node (`{ receiptsRoot, hash?, number? }`; one with no `receiptsRoot` compares nothing and is refused), and
-  read the recipient's balance yourself (a described `transfer` is `unchecked`, so the receipt is not `verified`, until you have). It keeps no state and writes nothing.
-The Accumulate endpoint for the key page read is the gateway's own advertisement, or the operator's `CERTEN_ACCUMULATE_RPC`; neither tool has an `rpc` argument. Read `certen://docs/llms.txt` first.
+  read the recipient's balance yourself (a described `transfer` is `unchecked`, so the receipt is not `verified`, until you have) **unless the operator configured a node for the chain**
+  (`CERTEN_RPC_URL_<CHAIN>`; `certen_chains_enabled` reports `receiptNode`), in which case the server reads the recipient and compares the proof's block header itself and a transfer can be `confirmed`. It keeps no state and writes nothing.
+The Accumulate endpoint for the key page read is the gateway's own advertisement, or the operator's `CERTEN_ACCUMULATE_RPC`; neither tool has an `rpc` argument. **No tool lets a caller choose a host the server connects to:**
+a proof share link given to `certen_proof_verify` is opened only on the server's own gateway or an origin its operator listed in `CERTEN_SHARE_ORIGINS`. Read `certen://docs/llms.txt` first.
 
 ## Resources
 - Full API digest: `llms-full.txt`

@@ -96,6 +96,8 @@ destructive one.
 | `CERTEN_ENABLED_CHAINS` | Comma-separated chains this server accepts in tool calls. Unset means the three live testnets (`ethereum-sepolia`, `base-sepolia`, `arbitrum-sepolia`). Telcoin Adiri (`telcoin-adiri`, chain 2017) is **off by default**: add it here, and it is used only while the gateway also lists it as served. |
 | `CERTEN_ALLOW_ANY_CHAIN` | Exactly `1` skips chain-name checking, for a chain the gateway serves that this catalogue does not list. |
 | `CERTEN_ACCUMULATE_RPC` | An Accumulate JSON-RPC endpoint (e.g. `https://kermit.accumulatenetwork.io/v3`) for the independent key page read in `certen_readiness`. Unset, the endpoint the gateway's own chain registry advertises is used. It is **server configuration, never a tool argument**: no tool takes a node to call. |
+| `CERTEN_RPC_URL_<CHAIN>` | A node **you** trust on one chain, e.g. `CERTEN_RPC_URL_BASE_SEPOLIA=https://…` (the slug upper-cased, anything else an underscore). With one, `certen_receipt` for that chain reads the recipient's balance before and after the execution block and compares the proof's block header itself, so a transfer can be **confirmed** and the receipt **verified**. Its chain id is checked first; only its host is ever shown, never the URL (hosted nodes put a key in it). `certen_chains_enabled` reports `receiptNode` per chain. Unset, a transfer's effect stays `unchecked`. |
+| `CERTEN_SHARE_ORIGINS` | Comma-separated origins (e.g. `https://gateway.other.example`) whose proof **share links** `certen_proof_verify` may open, besides this server's own gateway. A link on any other origin is refused before a request (`SHARE_ORIGIN_NOT_ALLOWED`); a bare `cps_` token is the configured gateway's. Needed only to verify a proof shared from a *different* deployment. |
 
 A chain name is checked against the SDK's catalogue before anything is sent (`certen_quote`, `certen_billing_register_payer`,
 `certen_identity_create`, `certen_readiness`, `certen_receipt`, and every chain named in an intent opened with `certen_transaction_open`). A typo or an unlisted chain
@@ -133,13 +135,14 @@ are a blocker. The gas check is an estimate and says so. A wei-looking `amount` 
 `verified` · `partial` · `failed` · `pending` · `unproven`, and `gaps` names what is not established; PARTIAL and NO EVIDENCE are never verified, and a proof service that
 answers 5xx is `unavailable`, not "no evidence". The proof's execution layer stays `not_checked` until you pass `header` (`{ receiptsRoot, hash?, number? }`), the block header
 you fetched from **your own node**; a header with no `receiptsRoot` compares nothing and is refused. Say what the intent was and the receipt can say what of its effect is
-established: `transfer { chain, to, amount }` for a native transfer (the server cannot read a recipient, so its effect is `unchecked` and the receipt is not `verified` until you have),
+established: `transfer { chain, to, amount }` for a native transfer (where the operator set `CERTEN_RPC_URL_<CHAIN>` the server reads the recipient itself and the effect can be `confirmed`; otherwise it cannot, so the effect is `unchecked` and the receipt is not `verified` until you have read the recipient yourself),
 `call { chain, expect: { address, topic0 } }` for a contract call (the event is looked for in the proof's own execution receipt). It does not wait (`certen_execute_wait` first),
 and it writes nothing: the CLI keeps receipts in `~/.certen`, this server keeps no state.
 
 Neither takes a node to call. The server never connects to a JSON-RPC node a caller names, which is why there is a `header` argument and not an `rpc` one, and why an `rpc` (or `url`, `node`, …)
-passed anyway is refused by name (`NODE_ARGUMENT_REFUSED`) rather than silently ignored. (The one URL a
-caller may hand over is a proof *share link*, for `certen_proof_open_shared` and `certen_proof_verify`: its origin is the deployment that issued it, and its path is fixed.)
+passed anyway is refused by name (`NODE_ARGUMENT_REFUSED`) rather than silently ignored. No tool lets a caller choose a host at all: a proof *share link* is the only URL-shaped thing
+a caller hands over, and `certen_proof_open_shared` takes only its token and asks this server's own gateway, while `certen_proof_verify` opens a link only on that gateway or an origin the
+operator listed in `CERTEN_SHARE_ORIGINS`, and refuses to be redirected off it.
 
 **Write tier** (`CERTEN_MCP_ALLOW_WRITES=1`)
 

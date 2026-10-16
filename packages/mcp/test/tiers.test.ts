@@ -172,9 +172,10 @@ describe('tool invariants', () => {
   });
 
   it('names every parameter that looks like a URL, so a new one is a decision in review and not an accident', () => {
-    // Each of these is accounted for: `link` is a proof share link (its origin is the deployment that issued it and its path is fixed to
-    // /v1/proof/shared/<token>); `webhookUrl` is called by the GATEWAY, never by this server; `signerUrl` is an Accumulate key page identifier
-    // (acc://...), not something fetched. Add a tool that takes another and this fails until it is argued here.
+    // Each of these is accounted for: `link` is a proof share link, from which `certen_proof_open_shared` takes only the TOKEN and asks this server's own
+    // gateway (share-origin.test.ts pins it); `webhookUrl` is called by the GATEWAY, never by this server; `signerUrl` is an Accumulate key page identifier
+    // (acc://...), not something fetched. (`certen_proof_verify` takes a share link in `target`, a name that does not look like a URL, and opens it only
+    // on an origin the operator allows: also share-origin.test.ts.) Add a tool that takes another and this fails until it is argued here.
     const urlish = /url|uri|endpoint|rpc|host|^link$/i;
     const found = ALL_TOOLS.flatMap((t) => Object.keys(t.inputSchema.properties).filter((p) => urlish.test(p)).map((p) => `${t.name}.${p}`)).sort();
     expect(found).toEqual(['certen_identity_update.webhookUrl', 'certen_proof_open_shared.link', 'certen_sign_create.signerUrl']);

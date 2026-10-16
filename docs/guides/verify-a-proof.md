@@ -67,8 +67,9 @@ execution receipt with a block header you fetched. See [CLI-CONTRACT](../CLI-CON
 
 An AI agent asks the MCP server instead: `certen_receipt { intentId }` does the whole of this in one call (the ids, the layers, whether the value arrived) and returns the same record
 `certen receipt` prints. The server never calls a node you name, so the comparison with the execution chain is made by passing it the block header you fetched yourself
-(`header: { receiptsRoot, hash, number }`); a header with no `receiptsRoot` compares nothing, and is refused rather than counted. `certen_readiness` is the question before it: can this
-identity, on this chain, act right now?
+(`header: { receiptsRoot, hash, number }`); a header with no `receiptsRoot` compares nothing, and is refused rather than counted. If whoever runs the server configured a node for the chain
+(`CERTEN_RPC_URL_<CHAIN>`), it reads the recipient's balance and compares the header itself, and a transfer can come back confirmed. A proof *share link* given to `certen_proof_verify` is opened
+only on the server's own gateway or an origin its operator allows (`CERTEN_SHARE_ORIGINS`). `certen_readiness` is the question before it: can this identity, on this chain, act right now?
 
 ## Independent verification, without this API
 

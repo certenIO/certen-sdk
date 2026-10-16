@@ -1,7 +1,8 @@
 import { gunzipSync } from 'node:zlib';
 import axios, { AxiosError } from 'axios';
 import { parseShareTarget } from './share-target.js';
-import { CertenError } from './errors.js';
+import { CertenError, CertenForeignOriginError } from './errors.js';
+import { redirectStaysOnOrigin } from './origin.js';
 import { apiPath } from './internal.js';
 import type { SharedProof } from './types.js';
 
@@ -46,6 +47,19 @@ export async function fetchSharedProof(
         headers: { 'Content-Type': 'application/json' },
         // No API key. See above — sending one would be harmless but misleading about what this
         // endpoint requires.
+        //
+        // But it stays on the origin it was pointed at. No credential can leak from here, and still a host that was allowed (by a server's operator, or by a
+        // person typing a link) must not be able to send this request somewhere nobody chose by answering 302. The authenticated client has refused that since
+        // RB7b; this is the same rule for the standalone redeemer. A redirect within the origin (a moved path) is followed.
+        beforeRedirect: (redirect: Record<string, unknown>) => {
+          const to = String(redirect.href ?? `${String(redirect.protocol)}//${String(redirect.host ?? redirect.hostname)}${String(redirect.path ?? '')}`);
+          if (!redirectStaysOnOrigin(baseUrl, to)) {
+            throw new CertenForeignOriginError(
+              `certen: the share link's host redirected to ${JSON.stringify(to)}, which is not its own origin. The redirect was not followed.`,
+              to, baseUrl, 'redirect',
+            );
+          }
+        },
       },
     );
     return data as SharedProof;
@@ -75,6 +89,13 @@ export function decodeSharedBundle(bundle: unknown): Record<string, unknown> | n
 }
 
 function translate(err: unknown): Error {
+  // An error raised here on purpose (the origin guard) is already typed, and wrapping it as NETWORK_ERROR would make it retryable.
+  if (err instanceof CertenError) return err;
+  // follow-redirects wraps what a beforeRedirect hook throws, one or two levels down.
+  for (let cause: unknown = (err as { cause?: unknown } | null)?.cause, depth = 0; cause && depth < 5; depth++) {
+    if (cause instanceof CertenForeignOriginError) return cause;
+    cause = (cause as { cause?: unknown }).cause;
+  }
   const axiosErr = err as AxiosError<{ error?: string; code?: string }>;
   const status = axiosErr.response?.status;
   const body = axiosErr.response?.data;

@@ -87,9 +87,9 @@ export const CUSTOM_OUTPUT_SCHEMAS: Readonly<Record<string, Schema>> = {
           type: 'object',
           properties: {
             slug: str, chainId: { type: 'integer' }, displayName: str, environment: str, support: { type: 'string', enum: ['live', 'opt-in'] },
-            nativeSymbol: str, faucet: strOrNull, blocksOnlyWithTraffic: bool,
+            nativeSymbol: str, faucet: strOrNull, blocksOnlyWithTraffic: bool, receiptNode: bool,
           },
-          required: ['slug', 'chainId', 'displayName', 'environment', 'support', 'nativeSymbol', 'faucet', 'blocksOnlyWithTraffic'],
+          required: ['slug', 'chainId', 'displayName', 'environment', 'support', 'nativeSymbol', 'faucet', 'blocksOnlyWithTraffic', 'receiptNode'],
           additionalProperties: false,
         },
       },

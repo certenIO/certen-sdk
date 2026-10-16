@@ -2,7 +2,7 @@ import { getKeyInfo, unlockKey } from './keystore.js';
 import { resolvePassphrase } from './passphrase.js';
 import { CliError, EXIT, UsageError } from './errors.js';
 import { keyArg } from './next-step.js';
-import { sessionSigner } from './session-unlock.js';
+import { sessionSigner, type SessionOptions } from './session-unlock.js';
 
 /**
  * Bridge a local key into the shape the rest of the CLI needs.
@@ -18,12 +18,24 @@ export interface ResolvedSigner {
   sign: (hashHex: string) => string;
 }
 
-export async function resolveSigner(name: string): Promise<ResolvedSigner> {
+export interface ResolveSignerOptions {
+  /**
+   * May an unlocked session (`keys unlock`) stand in for the passphrase? Default true.
+   *
+   * Pass `false` where the bytes being signed are chosen by the GATEWAY and no card can describe them: `signup --with-key` signs a 32-byte nonce, and the
+   * passphrase prompt is the one moment a person is made to notice a key is being used. With `false` the session is not used and not even read.
+   */
+  session?: boolean;
+  /** A keyring and clock to use instead of the OS ones. For tests; production leaves it out. */
+  sessionOptions?: SessionOptions;
+}
+
+export async function resolveSigner(name: string, opts: ResolveSignerOptions = {}): Promise<ResolvedSigner> {
   const info = getKeyInfo(name);
   // A key the person has unlocked for a while signs without a prompt, and without reading CERTEN_KEY_PASSPHRASE: the session replaces ONLY the
   // passphrase. The card, `checkIntentSigning` and the confirmation all still run in the callers. Inert unless the experimental switch is on
   // (session-unlock.ts), and a session that does not check out is removed and falls through to the prompt.
-  const session = await sessionSigner(name, info);
+  const session = opts.session === false ? undefined : await sessionSigner(name, info, opts.sessionOptions);
   if (session) return { publicKey: info.publicKey, publicKeyHash: info.publicKeyHash, sign: session.sign };
   const passphrase = await resolvePassphrase(info.encrypted, name);
   // Unlocked NOW, not at the moment of signing. A wrong passphrase used to surface only when the signature was made: after the intent was
@@ -32,7 +44,10 @@ export async function resolveSigner(name: string): Promise<ResolvedSigner> {
   try {
     key = unlockKey(name, passphrase);
   } catch (err) {
-    // `keys verify` is the command that asks for the passphrase and says whether it opens the key, so a person can sort it out without an intent in play.
+    // The key store types what it knows: WRONG_PASSPHRASE (the key did not open), PASSPHRASE_REQUIRED, KEY_FILE_*. Those pass through as they are, so "this
+    // key needs a passphrase" is not reported as "wrong passphrase". Anything else that comes out of the unlock is, as it always was, a key that would not open;
+    // `keys verify` is the command that asks for the passphrase and says whether it does, so a person can sort it out without an intent in play.
+    if (err instanceof CliError) throw err;
     throw new CliError(err instanceof Error ? err.message : String(err), 'WRONG_PASSPHRASE', EXIT.FAILED, false, undefined, `certen keys verify ${keyArg(name)}`);
   }
   return {

@@ -1,5 +1,23 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — the key store speaks in codes; older advice says `setup` (CLI UX, Phase 6 follow-ups)
+
+One exit-code change, on purpose and for a short list of failures, and nothing else that works today changes. A maintainer versions and publishes this.
+
+### Changed (exit codes: read this if a script branches on `== 1`)
+- **Key-store failures are typed, and seven of them move from exit `1` / `UNKNOWN_ERROR` to exit `2`.** They were bare errors, so `keys show nope` was indistinguishable from a rejected request. Now, exit **2**: `UNKNOWN_KEY` (no key with that name, from every command that takes one, the same
+  answer `certen use key nope` always gave), `INVALID_KEY_NAME`, `KEY_EXISTS`, `INVALID_HASH`, `PASSPHRASE_REQUIRED` (an encrypted key with no passphrase available; it used to be reported as `WRONG_PASSPHRASE`), `PASSPHRASE_MISMATCH` and `NO_TTY`.
+  Exit **1**, as before but with a code now: `WRONG_PASSPHRASE`, `KEY_FILE_CORRUPT`, `KEY_FILE_UNSUPPORTED`, `KEY_FILE_INSECURE`. Every message is word for word what it was; each failure also ends with its `next:` (`certen keys list`, `certen keys path`, `certen keys verify <key>`). A script that branches on `!= 0` is unaffected.
+  Table in `docs/CLI-CONTRACT.md` section 14.
+- **Every message that told a person to run `certen init` first now says `certen setup`** (`status`, `doctor`, `signup`, `context`, and the identity-reference and readiness fixes), including `certen setup --key <name>` after `signup --with-key`. `init` is unchanged and keeps every flag; a test now scans every string the CLI can print for the old advice.
+
+### Fixed
+- **`signup --with-key` never uses an unlocked session.** With the experimental `keys unlock` switch on, it would have signed the 32 bytes the gateway chose without a prompt. The passphrase prompt is the one moment a person is made to notice a key is being used, so `signup --with-key` now always asks (`setup` already did). Answers review question 5 (`docs/security/keys-unlock-review.md`); the switch is still off by default.
+- **A key that needs a passphrase when none can be supplied is `PASSPHRASE_REQUIRED`, not `WRONG_PASSPHRASE`**, and a damaged key file says so (`KEY_FILE_CORRUPT`) instead of the JSON parser's words.
+
+### Not changed, on purpose
+- **Where a report goes.** `doctor`, `status`, `gas` and the readiness card print their report on stdout and exit `1` when it is a problem, like `diff` and `grep`; the failure line and `next:` are on stderr. This was reported as a bug in `doctor` alone; it is the behaviour of the whole family and `gas`'s report is its product, so it is documented (section 15) and pinned instead (`doctor.test.ts` gained the table-mode tests it lacked).
+
 ## Unreleased — learnability: `next:` on every failure, a help that leads with five commands (CLI UX, Phase 5)
 
 Nothing that works today changes. Every command and flag keeps its meaning and its exit code; the `--json` change is one added field, and the human change is one added line at the end of a failure. A maintainer versions and publishes this.

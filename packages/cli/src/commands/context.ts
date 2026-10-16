@@ -103,7 +103,7 @@ function contextAction(): void {
   } else if (ctx.candidates.identity.length > 1) {
     row('Identity', `not chosen. Recorded here: ${ctx.candidates.identity.map(describeRecorded).join(', ')}  ->  certen use identity <ref>`);
   } else {
-    row('Identity', 'not chosen  ->  certen use identity <ref>   (certen init makes one)');
+    row('Identity', 'not chosen  ->  certen use identity <ref>   (certen setup makes one)');
   }
 
   if (key) row('Key', `${key.value}  (${phrase(ctx.key!)}${key.exists ? '' : '; NOT FOUND on this machine'})`);
