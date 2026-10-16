@@ -21,7 +21,7 @@ All seven CLI UX phases of PLAN §4 (0 to 6) and the follow-ups are merged. What
 
 | Item | Status | Who |
 |---|---|---|
-| **Phase G**: the gateway asks of PLAN §6 (G1 testnet gas drip, the destination transaction hash on the intent, a balance read for an arbitrary address, G6 credit top-up, G5 quote, G4 readiness aggregate) | **all six built and verified, held locally by the human's instruction ("hold them to the end"): nothing pushed, merged or deployed.** Detail, decisions and findings in "Phase G" below | the human: open and merge the PRs in order, deploy, enable |
+| **Phase G**: the gateway asks of PLAN §6 (G1 testnet gas drip, the destination transaction hash on the intent, a balance read for an arbitrary address, G6 credit top-up, G5 quote, G4 readiness aggregate) | **all six built and verified; the gateway stack (7 branches) and the bridge drip branch are PUSHED (2026-10-16, on the human's "push") but not merged or deployed.** One more bridge branch (`feat/credits-by-count`, the credit-unit fix) is local until the human says push. Detail, decisions and findings in "Phase G" below | the human: open and merge the PRs in order, deploy, enable |
 | Adopt the new routes in the SDK, CLI and MCP | not started; needs the gateway deployed and the vendored spec refreshed (`npm run spec:refresh` is human-only, HARNESS §4); the same refresh makes the `/v1/proof/{}/v2` entry of `tools/agentgen/pending-routes.json` obsolete (the deployed gateway already serves it) | after the deploy |
 | A real **archive node** for `CERTEN_RPC_URL_BASE_SEPOLIA`, and one real receipt read from it | **dropped, by the human's decision (2026-10-16):** "continue to use the public node; I don't want to run a node". Consequence, already documented and tested: a non-archive node shows `EFFECT_UNREADABLE` for an old transfer (named, never a pass) and works for a recent one. Nobody runs an archive node for this. | closed |
 | Run the two Phase 6 MCP tools once against the **real gateway** (read-only) | open; needs the human's API key and a real intent id, so it is a human run (HARNESS §4) | the human |
@@ -29,10 +29,11 @@ All seven CLI UX phases of PLAN §4 (0 to 6) and the follow-ups are merged. What
 
 ---
 
-## Phase G: the gateway asks (2026-10-16): built, verified, held
+## Phase G: the gateway asks (2026-10-16): built, verified, pushed
 
-The asks live in two other repos, so they are branches there and not changes here. **Nothing is pushed, merged or deployed**: the human
-said "hold them to the end", and the bridge change was not authorised in so many words (below). Everything was built under Node 22.23.3
+The asks live in two other repos, so they are branches there and not changes here. They were held until the human said "push", then pushed
+(the gateway stack through its own pre-push hook, which ran the whole suite: 220 files, 2362 passed, 4 skipped); **nothing is merged or deployed**.
+The one exception is `feat/credits-by-count` in the bridge, written afterwards (finding 2) and not pushed until the human says so. Everything was built under Node 22.23.3
 (the gateway's `engines`, enforced) against a throwaway Postgres 16 on port 54329; the user's own database was never touched.
 
 ### What was built
@@ -47,9 +48,10 @@ resolution (the branches all edit the same registry lists, which is why they wer
 | 3 | `feat/chain-address-balance` | 6a8ac6a | a balance read for an arbitrary address | 48 | 2115 / 2115 |
 | 4 | `feat/identity-readiness` | 26f20a3 | G4, the readiness aggregate | 40 | 2155 / 2155 |
 | 5 | `feat/transaction-quote-preflight` | 27b5799 (3 commits) | G5, the quote endpoint | 56 | 2211 / 2211 |
-| 6 | `feat/identity-credit-topup` | 6e84a08 | G6, credit top-up | 71 | 2282 / 2282 |
-| 7 | `feat/chain-account-drip` | 63dfb79 (2 commits) | G1, the testnet gas drip (gateway half) | 84 | 2366 / 2366 |
+| 6 | `feat/identity-credit-topup` | 5c9eda9 (was 6e84a08 before finding 2 changed what it sends) | G6, credit top-up | 71 | 2282 / 2282 |
+| 7 | `feat/chain-account-drip` | 03d0d53 (2 commits, rebased over 6) | G1, the testnet gas drip (gateway half) | 84 | 2366 total: 2362 passed, 4 skipped |
 | B | `feat/chain-drip` in **`api-bridge`**, base `786c033` | b7cc49c | G1, the drip (bridge half) | 52 checks | 57 / 57 test files |
+| C | `feat/credits-by-count` in **`api-bridge`**, base `786c033` | 3202d34 (local) | the credit-unit fix (finding 2): `credits`, priced at the live oracle | 29 checks | 57 / 57 test files, lint clean |
 
 Every gateway tip: typecheck clean, `eslint src test` 0 errors and **exactly the 96 warnings the baseline has**, the full suite green, and the
 real server (`ROLE=api`, no mocks) booted against the migrated database with all five new operations in its live spec. Mutation checks were run
@@ -66,7 +68,8 @@ Migrations 054 (`credit_topups`) and 055 (`chain_drips`), both with row-level se
 
 **The human's** (2026-10-16): ACME credits are **always sponsored** by the platform, and the sponsor ACME account is topped up by the human from the
 Kermit faucet; the ETH and TEL the human supplies fund the platform's **own gas** (nodes, contract deployments), and a fee layer that passes costs on
-exists but is **not enforced**; the gateway branches are held unpushed; the archive-node item is dropped.
+exists but is **not enforced**; "push" (the gateway stack and the ledger commit); the archive-node item is dropped; and **the credits price is never a constant**
+("the true way to settle the credits oracle amount is to query it ... the rate is different on Kermit than on mainnet"), which is how finding 2 was settled.
 
 **Made for the human, to overrule in review** (each is also in the PR it belongs to):
 - The money-moving routes (6, 7, B) **ship off**, and the drip needs three separate opt-ins on the bridge (switch, chain list, amount per chain) with **no default
@@ -80,9 +83,18 @@ exists but is **not enforced**; the gateway branches are held unpushed; the arch
 ### Findings (nothing here was changed unless it says so)
 
 1. **`main` of api-gateway was red** and its `errors.json` stale. Fixed in PR 1.
-2. **Unresolved, and not "fixed": the bridge's `/credits/add` unit.** It multiplies the amount by 100 twice before converting at the oracle price, and
-   `governance.orchestrator.ts:636` passes it ACME with a comment about "100 credits per ACME" while provisioning passes credits. What `500` buys on-chain
-   could not be determined without spending ACME. The top-up uses credits, the unit the project's own comments say provisioning means, and adds no third reading.
+2. **The bridge's `/credits/add` `amount` is dollars of credits, not ACME and not credits: settled by reading the chain (read-only), not by spending.**
+   Kermit (`network-status`: network `DevNet`, `oracle.price` 10,000,000; the v2 `describe` reports the same). The sponsor's own AddCredits transactions
+   record what they bought: `amount` 50,000,000 base units (0.5 ACME) at oracle 10,000,000 gave `credits` 5,000,000 units, i.e. **50,000 credits**. The network's rule is
+   `units = amount x oracle / 1e8`, with credits kept to two decimals. So `amount: N` buys `N x 100` credits, and what it costs in ACME follows the oracle.
+   Consequences, none changed by this work: (a) provisioning passes 500 meaning "500 credits, $5" and has been buying **50,000 credits ($500) for 0.5 ACME** per identity
+   (three live key pages hold 59,947 to 59,972 credits today): a hundred times the intended grant, for a hundred times the ACME (credits per ACME are the same either way); (b) `governance.orchestrator.ts:636` passes a credit count there
+   too; (c) the bridge's formula reads the oracle on every call, which is right, but nothing lets a caller say "N credits".
+   **Fix, bridge branch C** (`feat/credits-by-count`): `credits` on `POST /api/v1/credits/add`; the ACME is `ceil(credits x 100 x 1e8 / oracle)` in exact integers, the oracle read
+   from `network-status` on that call (a different oracle gives a different cost, tested), nothing about a price held anywhere; `amount` unchanged; both together refused; an unusable
+   oracle is a named 503. The gateway top-up (branch 6) now sends `credits`, so against a bridge without C it fails and spends nothing. **Decision left to the human:**
+   whether provisioning and governance move to `credits` too. That changes what every new identity costs and receives (50,000 credits for 0.5 ACME today; 500 for about 0.005 ACME at this
+   oracle), so it was not done unasked. Nothing should be enabled before C is deployed.
 3. **Provisioning's `addCredits` still uses the retrying client**, so a timeout can pay twice there too. Left alone; the new routes use a client that never retries
    (shown with real sockets: 3 requests against 1).
 4. **The bridge's account deployments do not take the new per-chain sponsor lock**, so a deploy and a drip at the same instant can collide on a nonce (one fails and the
@@ -94,10 +106,11 @@ exists but is **not enforced**; the gateway branches are held unpushed; the arch
 
 ### Human steps, in order
 
-1. Review the bridge branch (B) first: it is the one that moves value, and you have not seen it. Then open PRs 1 to 7 against `main`, merging in order.
-2. Deploy the gateway. To use the top-up: `CREDIT_TOPUP_ENABLED=true`. To use the drip: deploy the bridge with `EVM_DRIP_ENABLED`, `EVM_DRIP_CHAINS` and `EVM_DRIP_AMOUNT_<id>`
-   first, then `CHAIN_DRIP_ENABLED=true` on the gateway. Both are in `.env.example` with their reasons.
-3. Decide finding 2. Nothing should be enabled for real use before it is.
+1. Review the bridge branches (B, and C once pushed): they move value. Then open the bridge PRs and PRs 1 to 7 against `main`, merging in order.
+2. Deploy the bridge before the gateway (C is what the top-up needs). To use the top-up: `CREDIT_TOPUP_ENABLED=true`. To use the drip: deploy the bridge with `EVM_DRIP_ENABLED`,
+   `EVM_DRIP_CHAINS` and `EVM_DRIP_AMOUNT_<id>` first, then `CHAIN_DRIP_ENABLED=true` on the gateway. Both are in `.env.example` with their reasons.
+3. Decide the last part of finding 2 (provisioning and governance onto `credits`). Fund the sponsor: ACME account `acc://64250b1e4f16aa9b10b14106611b6fce2e7bb5acf3a188b9/ACME`
+   (1,656.39 ACME on 2026-10-16) from the Kermit faucet; EVM wallet `0x32422604b797f0a135d8F28B84Ce72EefA185FC8`, the one that pays deployments on all four chains.
 4. `npm run spec:refresh` in this repo (human-only), then adopt the routes in the SDK, CLI and MCP.
 5. Run the two Phase 6 MCP tools against the real gateway, and release (SDK first).
 
