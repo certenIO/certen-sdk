@@ -344,6 +344,8 @@ gateway balance is money, so they end the run as blockers with their fix.)*
   key in the key file, so a planted entry can make a command ask for the passphrase and can never make one sign with the wrong key. Default 15m, ceiling 8h (the plan names none). **Expiry is enforced on use, not by a daemon**: bytes can sit in the keyring after
   expiry until the next command that looks, or `keys lock`; the review says so and asks whether that is acceptable. A refused keyring is a refusal, never a file. `keys delete` also wipes the key's session. `setup`'s signup nonce deliberately never uses a
   session. An unencrypted key has nothing to unlock.)*
+  *(Phase 6 follow-ups. **`signup --with-key` never uses a session** (review question 5, answered in the code; the sign-off is still the human's): it signs bytes the gateway chose, which no card can describe, so the passphrase prompt is the one moment a person notices a key is in use. **The key store's errors are typed**, so every failure from `~/.certen/keys` has a code and a `next`, and seven moved from exit `1` / `UNKNOWN_ERROR` to exit `2`
+  (`docs/CLI-CONTRACT.md` section 14): done loudly, on the human's explicit instruction, where Phase 5 had declined to change an exit code quietly. The remaining `certen init` advice in messages now says `certen setup`.)*
 - Docs: rewrite "Run a first CERTEN transaction" around `setup` → `send` → `receipt`, with a
   short "What just happened" section that keeps the substance of the current page (async
   provisioning, three resources, layer verdicts, why exit 0 ≠ everything verified) as explanation,
@@ -365,6 +367,9 @@ gateway balance is money, so they end the run as blockers with their fix.)*
   registry advertises or the operator's `CERTEN_ACCUMULATE_RPC`. **A header must carry a `receiptsRoot`**: `{}` or a bare block number compared nothing and read the execution layer VERIFIED, in `certen_proof_verify` as it had in the CLI's node fallback (closed in Phase 4); one checked entry
   in the SDK (`assertComparableHeader`) now serves both tools. **The effect of a native transfer cannot be read by the server** (the recipient is not readable from the gateway, and a node cannot be named), so a described `transfer` is `unchecked` and the receipt is not VERIFIED until the agent has read the recipient itself; a contract
   `call` with an expected event is judged from the proof's own execution receipt. `llms.txt` gained an "MCP" section through the template.)*
+  *(Phase 6 follow-ups. **The transfer's effect can now be read over MCP, from the OPERATOR's node.** `CERTEN_RPC_URL_<CHAIN>` (server configuration, never an argument) lets `certen_receipt` read the recipient before the execution block and at it, with the chain id checked first, and close the proof's execution layer when the caller gave no header, so a transfer can be `confirmed` and the receipt `verified`;
+  the SDK gained `effectRpc` (a node for the recipient only) so a caller's header can still decide the proof layer. An agent's own claim of a balance is still not a reading. **No tool lets a caller choose a host.** The Phase 6 note above, and the ledger, said both share-link tools fetched from the link's origin; only `certen_proof_verify` did (`certen_proof_open_shared` takes the token and asks the server's own gateway), and a bare token went to
+  the default gateway. It now opens a link only on the configured gateway or an origin the operator listed in `CERTEN_SHARE_ORIGINS`, and the SDK's `fetchSharedProof` refuses to be redirected off its origin.)*
 
 ---
 

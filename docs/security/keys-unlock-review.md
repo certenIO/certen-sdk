@@ -26,7 +26,7 @@ still shows the confirmation card, still asks `[Y/n]` where a person is at a ter
 not make any signature the person has not seen; it makes the passphrase prompt go away.
 
 Commands that consume a session: everything that opens a key through `resolveSigner` (`send`, `call`, `tx create --sign-with`,
-`governance <op> --sign-with`, `pending sign --sign-with`, `identity create --sign-with`, `init`, `signup --with-key`) and `keys sign`.
+`governance <op> --sign-with`, `pending sign --sign-with`, `identity create --sign-with`, `init`) and `keys sign`. (`signup --with-key` was on this list and is not any more: see Q5.)
 
 Deliberately **not** consumers: `keys verify` (it exists to check that the passphrase opens the key; a session would skip exactly that),
 `keys generate`, and `setup` (it signs its sign-up nonce with the passphrase it already holds from creating the key).
@@ -173,6 +173,8 @@ By reading `packages/cli/src/session-unlock.ts`, a reviewer should confirm: the 
 - **Q3.** Should sessions be bound to a profile or to a gateway, so that a session made for a testnet identity cannot serve a mainnet one?
 - **Q4.** Is 8 h the right ceiling, and should the default be shorter?
 - **Q5.** Should `signup --with-key` (which signs a gateway-chosen nonce) refuse to use a session, since the reason for the prompt there is partly to make the person notice?
+  **Answered in the code (2026-10-16): yes.** `signup --with-key` now calls `resolveSigner(name, { session: false })`: the session is not used and the keyring is not even read, so the passphrase is asked for every time, as `setup` already did for its own signup nonce. Every other command that signs shows what it signs first (the card, rebuilt from the gateway's bytes and matched to the request), so a session removes only the passphrase there;
+  a nonce the gateway chose has no such card, so the prompt is the only moment a person notices a key is being used. Pinned by `packages/cli/test/signer-session.test.ts` (including that a session is read in exactly two places: the signer, unless told not to, and `keys sign`). This is the code's answer, not the sign-off: the block below is still blank and still the human's.
 
 ## 11. Sign-off
 

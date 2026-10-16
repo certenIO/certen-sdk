@@ -1,5 +1,15 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — a node for the recipient, and a share fetch that stays on its origin (CLI UX, Phase 6 follow-ups)
+
+Additive, plus one hardening. A maintainer versions and publishes this; the MCP server's operator-configured node and share-origin rule need it.
+
+### Added
+- **`effectRpc` on `buildReceipt`**: a node used ONLY to read the recipient's balance (before the execution block and at it). It never closes the proof's execution layer; that is `header`'s job (or `rpc`'s). For a process that takes the block header from its caller but has a node of its own for the one thing a header cannot say, whether the value arrived. Where `rpc` is also given, the recipient is read from `effectRpc` and the proof layer from `rpc`. Checked and reported exactly as `rpc` is (the chain id first, no credential, no redirect, only the host shown). `header` together with `rpc` is still `CONFLICTING_OPTIONS`; `header` together with `effectRpc` is the case it is for.
+
+### Changed
+- **`fetchSharedProof` refuses to be redirected off the origin it was pointed at** (`FOREIGN_ORIGIN_URL`, `source: 'redirect'`, not retryable). It sends no credential, so nothing could leak, but a host that was allowed (by a server's operator, or by a person typing a link) must not be able to send the request somewhere nobody chose by answering `302`. The authenticated client has refused this since RB7b; the standalone redeemer follows the same rule now. A redirect within the origin (a moved path) still works. A caller that relied on a share link redirecting to another host will now get that error.
+
 ## Unreleased — a block header you fetched yourself (CLI UX, Phase 6)
 
 Additive. Nothing that works today changes. A maintainer versions and publishes this; the MCP server's `certen_receipt` and the checked `header` of `certen_proof_verify` need it.

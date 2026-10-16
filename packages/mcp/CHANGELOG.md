@@ -1,5 +1,25 @@
 # Changelog — @certen.io/mcp
 
+## Unreleased — a confirmed transfer over MCP, and no tool lets a caller choose a host (CLI UX, Phase 6 follow-ups)
+
+Two operator settings, one tightening of an existing tool, one added field. No tool is removed or renamed and no parameter becomes required. Needs the `@certen.io/sdk` release that carries `effectRpc` and the redirect guard, so the SDK goes out first.
+
+### Added
+- **`CERTEN_RPC_URL_<CHAIN>`** (server configuration; the chain slug upper-cased, anything that is not a letter or digit an underscore: `CERTEN_RPC_URL_BASE_SEPOLIA`). A node the OPERATOR trusts, per chain. With one, `certen_receipt` for that chain reads the recipient's balance before the execution block and at it (the node's chain id is checked first) and, when the
+  caller passed no `header`, compares the proof's block header with it too: **a transfer receipt can now be `confirmed`, and `verified`**, from a node the server read. The chain is the one the caller described (`transfer.chain` / `call.chain`), else the one the validators' record says the intent ran on; with neither, no node is used. A caller's own `header` still decides the
+  proof layer, and the node then reads only the recipient. A node on another chain, without history, down, or a setting that is not a usable URL leaves a named gap (`EFFECT_UNREADABLE`, `NODE_NOT_CONSULTED`), never a pass; only its host is ever shown, never its URL (which can carry a key). A caller still cannot name a node: `rpc` and friends are refused. An agent's own claim of a balance is still not a reading, and cannot upgrade a verdict.
+- **`receiptNode: boolean`** on each chain in `certen_chains_enabled`: whether the operator configured such a node, so an agent knows whether fetching a header and a balance itself is still worth doing. An added field on a closed schema (updated).
+- **`CERTEN_SHARE_ORIGINS`** (server configuration; comma-separated origins): other deployments whose proof share links `certen_proof_verify` may open. See Changed.
+
+### Changed
+- **`certen_proof_verify` given a share link opens it only on this server's own gateway or an origin the operator listed in `CERTEN_SHARE_ORIGINS`.** It used to fetch from whatever origin the link named, so a caller chose a host the server connected to; and a bare `cps_` token went to the default gateway rather than the one the server is configured for. A link elsewhere is
+  `SHARE_ORIGIN_NOT_ALLOWED` (nothing requested; the message names the variable), a list that does not parse is `SHARE_ORIGINS_INVALID` (refused by name, not skipped), a bare token is this gateway's, and a fetch redirected off its origin is refused. **Behaviour change:** a counterparty verifying a proof shared from a different deployment now needs the operator to list that origin. After this no tool lets a caller
+  choose what the server connects to.
+- `certen_chains_enabled` reads its chain settings from the server's `env` (the same object as `process.env` in production).
+
+### Corrected
+- Earlier notes (Phase 6 ledger, `AGENTS.md`, this README) said `certen_proof_open_shared` also fetched from the link's origin. It never did: it takes only the token from a link and asks the server's own gateway. Only `certen_proof_verify` named a host.
+
 ## Unreleased — ready? and what happened? for an agent (CLI UX, Phase 6)
 
 Two read-tier tools, one fix to an existing one, and nothing else that works today changes: no tool is removed or renamed, no parameter becomes required, no write tool moves. The server still holds no key,
