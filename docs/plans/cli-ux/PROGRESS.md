@@ -25,7 +25,7 @@ All seven CLI UX phases of PLAN §4 (0 to 6) and the follow-ups are merged. What
 | Adopt the new routes in the SDK, CLI and MCP | not started; needs the gateway deployed and the vendored spec refreshed (`npm run spec:refresh` is human-only, HARNESS §4); the same refresh makes the `/v1/proof/{}/v2` entry of `tools/agentgen/pending-routes.json` obsolete (the deployed gateway already serves it) | after the deploy |
 | A real **archive node** for `CERTEN_RPC_URL_BASE_SEPOLIA`, and one real receipt read from it | **dropped, by the human's decision (2026-10-16):** "continue to use the public node; I don't want to run a node". Consequence, already documented and tested: a non-archive node shows `EFFECT_UNREADABLE` for an old transfer (named, never a pass) and works for a recent one. Nobody runs an archive node for this. | closed |
 | Run the two Phase 6 MCP tools once against the **real gateway** (read-only) | open; needs the human's API key and a real intent id, so it is a human run (HARNESS §4) | the human |
-| **Release** the SDK, then the CLI and MCP | open; no version has been bumped; npm versions are immutable, so tagging and publishing stay the human's (HARNESS §4) | the human |
+| **Release** the SDK, then the CLI and MCP | **prepared, not published.** Branch `release/cli-ux-0.11` (e2bda8b, off `origin/main`, PUSHED) sets sdk 0.11.0, cli 0.11.0, mcp 0.6.0, pins cli and mcp to `sdk ^0.11.0`, and turns the CLI UX "Unreleased" sections into the release entries. `proof-verify` is unchanged since v0.1.0 (0 commits), so it is not re-released. Gates on that branch: build, typecheck, workspace pins and `agentgen:check` clean; the whole suite **152 files, 2675 tests, 0 skipped** (counts gate exit 0). An earlier run under load saw five 20-second subprocess timeouts that pass alone (114/114); an orphaned vitest pins a core on this machine. Publishing is the workflow's staged route (`release.yml`: tag, OIDC, the maintainer approves each staged version with two-factor), NOT a local token, which that workflow and the README say not to use. To do: merge the branch's PR, then push tags in order `sdk-v0.11.0`, `cli-v0.11.0`, `mcp-v0.6.0`, approving and seeing each in `npm view` before the next | the human |
 
 ---
 
@@ -113,7 +113,9 @@ exists but is **not enforced**; "push" (the gateway stack and the ledger commit)
 2. Deploy the bridge before the gateway (C is what the top-up needs). To use the top-up: `CREDIT_TOPUP_ENABLED=true`. To use the drip: deploy the bridge with `EVM_DRIP_ENABLED`,
    `EVM_DRIP_CHAINS` and `EVM_DRIP_AMOUNT_<id>` first, then `CHAIN_DRIP_ENABLED=true` on the gateway. Both are in `.env.example` with their reasons.
 3. Decide the last part of finding 2 (provisioning and governance onto `credits`). Fund the sponsor: ACME account `acc://64250b1e4f16aa9b10b14106611b6fce2e7bb5acf3a188b9/ACME`
-   (1,656.39 ACME on 2026-10-16) from the Kermit faucet; EVM wallet `0x32422604b797f0a135d8F28B84Ce72EefA185FC8`, the one that pays deployments on all four chains.
+   (1,656.39 ACME at first, 4,086.39 ACME after the human's top-up, oracle 10,000,000) from the Kermit faucet; EVM wallet `0x32422604b797f0a135d8F28B84Ce72EefA185FC8`, the one that pays deployments
+   on all four chains. Read from the bridge's own RPCs on 2026-10-16, against floors of 0.01 ETH and 0.1 TEL: ethereum-sepolia 2.351891, base-sepolia 0.585940, arbitrum-sepolia 0.666441, telcoin-adiri 1.998999.
+   Production at that time: gateway `dc21237` and bridge `786c033` equal to their `origin/main`, every container healthy, only old `.bak` files untracked; nothing was changed on the host.
 4. `npm run spec:refresh` in this repo (human-only), then adopt the routes in the SDK, CLI and MCP.
 5. Run the two Phase 6 MCP tools against the real gateway, and release (SDK first).
 
