@@ -2,7 +2,7 @@ import {
   CertenError, DEFAULT_BASE_URL, chainInfo, evmAddressProblem, nativeSymbolFor, wholeUnitAmountProblem,
 } from '@certen.io/sdk';
 import type { CertenClient, Readiness, Receipt, ReceiptRequest } from '@certen.io/sdk';
-import { ALLOW_ANY_CHAIN_ENV_VAR, assertChainUsable, configuredChains } from './chains.js';
+import { ALLOW_ANY_CHAIN_ENV_VAR, assertChainUsable, configuredChains, receiptNodeFor } from './chains.js';
 
 /**
  * What `certen_readiness` and `certen_receipt` do around the SDK.
@@ -248,11 +248,21 @@ export async function runReceiptTool(client: CertenClient, args: Record<string, 
   const described = await describeIntent(client, args, env);
 
   const transaction = await client.transaction.get(intentId);
+  const request = described.request ? described.request(transaction.identity_id) : null;
+
+  // The operator's node for the chain, if there is one. The chain is what the caller described, else the one the validators say the intent ran on; with neither,
+  // no node is used (which one would be a guess).
+  const chain = request?.chain ?? chainInfo(transaction.validator?.members?.[0]?.chain_id)?.slug;
+  const node = receiptNodeFor(chain, env);
+  // A caller's block header decides the proof layer when it gives one (and the node then reads only the recipient); without one the node does both jobs.
+  const nodes = node === undefined ? {} : header ? { effectRpc: node } : { rpc: node };
+
   return buildReceipt(client, intentId, {
     transaction,
     header,
     expect: described.expect,
-    request: described.request ? described.request(transaction.identity_id) : null,
+    request,
     gateway: env.CERTEN_API_URL || DEFAULT_BASE_URL,
+    ...nodes,
   });
 }

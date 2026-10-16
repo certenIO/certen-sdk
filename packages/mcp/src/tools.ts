@@ -673,9 +673,11 @@ const READ_TOOLS: ToolDef[] = [
       'The chains this server will accept in a tool call right now: the configured set (CERTEN_ENABLED_CHAINS, or the three live '
       + 'testnets by default) narrowed to those the gateway lists as served. Use it, not certen_chains_list, to decide which chain '
       + 'to name. Telcoin Adiri (chain 2017) is OFF by default: it appears in "enabled" only when the server was started with it '
-      + 'enabled AND the gateway serves it, and "optIn" says how to enable it. A chain not in "enabled" is refused before anything is sent.',
+      + 'enabled AND the gateway serves it, and "optIn" says how to enable it. A chain not in "enabled" is refused before anything is sent. '
+      + '`receiptNode` is true when the operator configured a node this server can read for the chain (CERTEN_RPC_URL_<CHAIN>): certen_receipt then reads a recipient\'s '
+      + 'balance and closes a proof\'s execution layer itself, so fetching them yourself is only needed where it is false.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    run: (c) => enabledChainReport(c),
+    run: (c, _a, env = process.env) => enabledChainReport(c, env),
   },
   {
     name: 'certen_doctor',
@@ -858,7 +860,9 @@ const READ_TOOLS: ToolDef[] = [
       + '`partial` | `failed` | `pending` | `unproven`. PARTIAL and NO EVIDENCE are NOT verified; `gaps` names, one by one, what is not established, and is empty exactly when the verdict is '
       + '`verified`. A proof service answering 5xx is `unavailable` (try again), which is not "no evidence". The proof\'s execution layer stays `not_checked` until it is compared with a '
       + 'block `header` YOU fetched from your own node ({ receiptsRoot, hash?, number? }; a header with no receiptsRoot compares nothing and is refused): this tool never calls a node '
-      + 'you name, and an argument that names one (rpc, url, ...) is refused, not ignored. For the same reason it cannot read a recipient\'s balance. Pass `transfer` { chain, to, amount } for a native transfer and its effect is `unchecked`, so the receipt is '
+      + 'you name, and an argument that names one (rpc, url, ...) is refused, not ignored. Where the OPERATOR configured a node for the chain (CERTEN_RPC_URL_<CHAIN>; '
+      + 'certen_chains_enabled reports it as `receiptNode`), this tool uses it: it reads the recipient\'s balance before and after the execution block, and, if you passed no `header`, '
+      + 'compares the proof\'s block header with it too, so a transfer can be CONFIRMED and the receipt VERIFIED. Without one it cannot read a recipient\'s balance. Pass `transfer` { chain, to, amount } for a native transfer and its effect is `unchecked`, so the receipt is '
       + 'not VERIFIED, until you have read the recipient from your own node; pass `call` { chain, expect: { address, topic0 } } for a contract call and the event is looked for in the '
       + 'proof\'s own execution receipt. With neither there is no request on record, the effect is `not_applicable`, and VERIFIED then speaks to the proof only. Does not wait: '
       + 'certen_execute_wait first (60-110 seconds), or read `pending` and come back. Reads only; it keeps no state and writes nothing (the CLI keeps receipts in ~/.certen; here the '

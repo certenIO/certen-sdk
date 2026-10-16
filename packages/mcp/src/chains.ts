@@ -35,6 +35,22 @@ async function servedChains(client: CertenClient): Promise<Array<{ id: string; c
   return reply.chains as Array<{ id: string; chainId?: number | null; enabled?: boolean }>;
 }
 
+/**
+ * The OPERATOR's node for a chain, `CERTEN_RPC_URL_<CHAIN>` (the slug upper-cased, anything that is not a letter or digit an underscore:
+ * `CERTEN_RPC_URL_BASE_SEPOLIA`). It lets `certen_receipt` read a recipient's balance and compare a proof's block header itself, from a node the person
+ * running this server chose. It is server configuration and never an argument: no tool takes a node to call.
+ */
+export const RPC_URL_ENV_PREFIX = 'CERTEN_RPC_URL_';
+
+export const receiptNodeVar = (chain: string): string => `${RPC_URL_ENV_PREFIX}${chain.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`;
+
+/** The configured node for `chain`, or undefined. An empty setting is none. Not validated here: the SDK refuses an unusable URL when it is used, and says so as a gap. */
+export function receiptNodeFor(chain: string | null | undefined, env: Env = process.env): string | undefined {
+  if (!chain) return undefined;
+  const value = env[receiptNodeVar(chain)];
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+}
+
 /** The configured set. A setting naming an unknown or retired chain is refused by name, never skipped. */
 export function configuredChains(env: Env = process.env): string[] {
   try {
@@ -108,6 +124,9 @@ export async function enabledChainReport(client: CertenClient, env: Env = proces
     enabled: usable.map((c) => ({
       slug: c.slug, chainId: c.chainId, displayName: c.displayName, environment: c.environment, support: c.support,
       nativeSymbol: c.nativeSymbol, faucet: c.faucet ?? null, blocksOnlyWithTraffic: c.blocksOnlyWithTraffic,
+      // Whether the operator configured a node this server can read for the chain. Says nothing about the node (or its URL, which can carry a key): only that
+      // `certen_receipt` will use one, so an agent knows whether fetching a block header and the recipient's balance itself is still worth doing.
+      receiptNode: receiptNodeFor(c.slug, env) !== undefined,
     })),
     configured,
     defaultSet: defaultEnabledChains(),
