@@ -65,6 +65,11 @@ gateway's own receipt; both are printed as what they are. Exit `0` means every l
 `1` names the layer a tamper is in; `5` means the gateway serves no proof v2 document for this proof. Add `--rpc` with your own node to compare the
 execution receipt with a block header you fetched. See [CLI-CONTRACT](../CLI-CONTRACT.md) for the output.
 
+An AI agent asks the MCP server instead: `certen_receipt { intentId }` does the whole of this in one call (the ids, the layers, whether the value arrived) and returns the same record
+`certen receipt` prints. The server never calls a node you name, so the comparison with the execution chain is made by passing it the block header you fetched yourself
+(`header: { receiptsRoot, hash, number }`); a header with no `receiptsRoot` compares nothing, and is refused rather than counted. `certen_readiness` is the question before it: can this
+identity, on this chain, act right now?
+
 ## Independent verification, without this API
 
 A verifier who does not trust the gateway should not be asking the gateway. Two routes:

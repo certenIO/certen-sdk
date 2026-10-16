@@ -359,6 +359,12 @@ gateway balance is money, so they end the run as blockers with their fix.)*
 - MCP: add `certen_readiness` (read) and `certen_receipt` (read). Under the existing tier rules,
   `send` is a write-tier tool that never takes key material. It returns signing data plus the
   summary, as the intent tools already do.
+  *(Phase 6, what the code settled. **Both tools are thin and read-tier**: `certen_readiness` is `client.readiness()` and `certen_receipt` is `buildReceipt()`, the document `certen receipt --json` returns, so an agent and a script read the same thing; neither signs, neither
+  writes (the server keeps no state, so there is no `~/.certen/receipts` here). **No MCP `send` tool was added**: the write-tier tool the plan describes already exists as `certen_transaction_open` (it returns the signing data and the rebuilt summary), and the SDK's `execute.send()` signs
+  with a local key, which this server must never hold. **The server never calls a node a caller names**, so neither tool has the CLI's `--rpc` / `--accumulate-rpc`: the execution layer is closed with a block `header` the agent fetched itself, and the Accumulate endpoint is the one the gateway's
+  registry advertises or the operator's `CERTEN_ACCUMULATE_RPC`. **A header must carry a `receiptsRoot`**: `{}` or a bare block number compared nothing and read the execution layer VERIFIED, in `certen_proof_verify` as it had in the CLI's node fallback (closed in Phase 4); one checked entry
+  in the SDK (`assertComparableHeader`) now serves both tools. **The effect of a native transfer cannot be read by the server** (the recipient is not readable from the gateway, and a node cannot be named), so a described `transfer` is `unchecked` and the receipt is not VERIFIED until the agent has read the recipient itself; a contract
+  `call` with an expected event is judged from the proof's own execution receipt. `llms.txt` gained an "MCP" section through the template.)*
 
 ---
 

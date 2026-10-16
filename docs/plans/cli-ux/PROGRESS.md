@@ -11,8 +11,8 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 | 2 | Readiness (W3) | merged | #29 (65d6bbe) |
 | 3 | Setup + gas (W2, W6) | merged | #30 (c7dc989) |
 | 4 | Send + receipt (W4, W5) | merged | #31 (9537081) |
-| 5 | Learnability (W7) | in-review (work complete, branch `ux/phase-5-learnability` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
-| 6 | Agents (W8) | not-started | |
+| 5 | Learnability (W7) | merged | #32 (a589f20) |
+| 6 | Agents (W8) | in-progress (branch `ux/phase-6-agents`) | |
 
 ---
 
@@ -600,8 +600,93 @@ review; `setup` now ends in the first blocker's own fix, as `status` and `send` 
 - **A decision for the human, not made here: turning `keys unlock` on.** The review (`docs/security/keys-unlock-review.md`) asks five open questions (expiry without a daemon, mainnet, binding a session to a profile, the 8h ceiling, `signup --with-key`) and has a blank sign-off block. The change that makes it default-on is one line in `keyUnlockEnabled()`.
 - The first-transaction guide's receipt sample is labelled illustrative; a fully VERIFIED receipt end to end is still unverified live (Phase 4's note).
 
+## Phase 6: Agents (W8)
+
+Branch `ux/phase-6-agents`, from `main` at `a589f20` (Phase 5 merged as #32). Acceptance (HARNESS-PROMPT §8): MCP `certen_readiness` and `certen_receipt`; tier tests updated; `llms.txt` regenerated.
+
+### Baseline for this phase (before any change, 2026-10-16, `main` = `a589f20`)
+
+| Gate | Result |
+|---|---|
+| `npm install` | exit 0 (the same 5 advisories) |
+| `node scripts/build-all.mjs` | exit 0 |
+| `node scripts/typecheck-all.mjs` | exit 0 |
+| `node scripts/test-all.mjs` | exit 0, **2490 passed in 141 files**, 0 failed, 0 skipped (286s) |
+| `npm run agentgen:check` | exit 0, 4 artifacts up to date (125 operations, 82 SDK methods) |
+
+Pre-existing failures: none.
+
+### Design decisions, from reading the code (the plan is silent or wrong on these)
+
+1. **Both tools are thin: the SDK owns the judgement.** `certen_readiness` is `client.readiness()`; `certen_receipt` is `buildReceipt()` from `@certen.io/sdk/verify`. Both are read tier and `mutates: false`; neither signs, neither writes. The MCP server keeps no state, so unlike the CLI it writes no `~/.certen/receipts`:
+   the result is the record, and the agent keeps it if it wants it.
+2. **The server never fetches a URL the caller names** (the standing MCP rule: `certen_proof_verify` takes the execution block's header as `header` rather than an `rpc` to call). So neither tool has an `rpc` or `accumulateRpc` parameter. The execution layer is closed with a header the agent fetched itself
+   (`header`), and the independent Accumulate read uses the node the gateway's registry advertises, or the OPERATOR's `CERTEN_ACCUMULATE_RPC` (server configuration, beside `CERTEN_ENABLED_CHAINS`; never an argument). A test holds the rule: a stand-in node named in the arguments is never contacted.
+3. **A header that compares nothing must not read as a comparison.** `certen_proof_verify` hands `header` straight to `verifyBundle`, where `{}` or a number-only header is "a comparison" with nothing to disagree about, so the execution layer reads VERIFIED. That is the hole Phase 4 closed for the CLI's node fallback
+   (`verifyEvidence` refuses a header without a receipts root). The SDK gets ONE checked entry (`assertComparableHeader`, a `header` option on `verifyEvidence` and `buildReceipt`), `certen_receipt` uses it, and `certen_proof_verify` moves onto it: a header with no receipts root is now `INVALID_HEADER` instead of a pass.
+   This is a behaviour change to an existing tool, in the direction "unknown is not ok", and it is called out in the changelog and the PR.
+4. **Chains go through the server's own gate.** `chain` is checked by `assertChainUsable` before anything is sent (so Adiri stays off unless enabled), and the readiness call is handed the server's enabled set as `configuredChains`. A wei-looking `amount` is refused before any request, as `send` does.
+5. **The effect of a transfer cannot be read by this server** (it would have to call a node the caller names; the gateway cannot read an arbitrary address). So a receipt for a described `transfer` has `effect.state: unchecked` and is PARTIAL with `EFFECT_UNCHECKED`, saying to read the recipient from your own node. Without `transfer` or `call` there is no request on record, the effect is `not_applicable` as it is in the CLI for an
+   intent opened elsewhere, and the tool's description says that VERIFIED then speaks to the proof only. A contract `call` with an expected event is judged from the proof's own execution receipt, exactly as `certen receipt --expect` does.
+6. **One receipt shape.** The tool returns the `Receipt` object of `docs/CLI-CONTRACT.md` section 10 unchanged (`receipt_version: 1`), so an agent and a script read the same document. Its `outputSchema` is written by hand (the tool builds its own result) and is closed at the top and in each named block, so a field added to the SDK result fails the structured-output test until the schema says what it is.
+7. **`certen_readiness` states fixes in words.** The SDK never names a CLI command, so an agent gets `fix.text`, a stable `code`, and `fix.url` only where the SDK itself knows one (a faucet). It never takes a key: `keyHash` is the SHA-256 of a PUBLIC key.
+8. **An argument a tool does not have is refused by name, not ignored** (both tools, and inside `transfer`, `call` and `call.expect`). An agent that passes `rpc` and gets a normal result believes the node was used, and a receipt whose effect says "no node of yours was given" reads like an invitation to try again. A name that means "call
+   this node" gets `NODE_ARGUMENT_REFUSED` with what to do instead (the header; the operator's variable); anything else gets `UNKNOWN_ARGUMENT` listing what the tool takes. This follows the package's own precedent (`HEADER_FIELDS_UNSUPPORTED`: refused, nothing sent). Found by the offline transcript, where the first version ignored an `rpc` argument and returned a normal receipt.
+   A model's `null` for an optional argument is read as not provided, as `certen_proof_verify` already read a `null` header.
+9. **"The server never fetches a URL the caller names" is not literally true of this package, and the tests now say exactly what is.** `certen_proof_verify` (given a share link) and `certen_proof_open_shared` fetch from the ORIGIN named in the link (path fixed to `/v1/proof/shared/<token>`, no credential sent), so a caller does name a host there. That is by design (a counterparty verifies a proof
+   shared from another deployment and cannot be asked to configure it), so the invariant is stated as "no tool takes a JSON-RPC node", enforced by name, and a second test lists every URL-like parameter that exists (`link`, `webhookUrl`, `signerUrl`) so a new one is argued in review. See "Found, not fixed".
+10. **Not in this phase, with reasons:** no `send` tool (PLAN W8 says a write-tier `send` "returns signing data plus the summary, as the intent tools already do": `certen_transaction_open` already is that tool, and `execute.send()` signs with a local key, which the server must never hold); no `rpc` on `certen_receipt` (decision 2);
+   no MCP resource for the new tools beyond the regenerated `llms.txt` and the contract document.
+
+### Tasks (check = the acceptance check; evidence = what was run)
+
+- [x] 0. Baseline taken. *Check: the table above.*
+- [x] 1. **SDK `assertComparableHeader` + a `header` option on `verifyEvidence` and `buildReceipt`.** *Check: new `verify-header.test.ts`; red first (the option does not exist), then green; the 35 `build-receipt` tests and the `proof-verify` suites unchanged and green.*
+- [x] 2. **`certen_proof_verify` moves onto the checked header path.** *Check: new MCP test: `header: {}` and a number-only header are refused with `INVALID_HEADER`; a full header still closes the execution layer; red first.*
+- [x] 3. **`certen_readiness`** (read tier). *Check: new `readiness-tool.test.ts` against a localhost gateway and a localhost Accumulate stand-in: ready, blocked on gas, unconfirmed (never ready over an unknown), the operator's `CERTEN_ACCUMULATE_RPC` used, an `accumulateRpc`/`rpc`/`url` argument refused by name (`NODE_ARGUMENT_REFUSED`) and never contacted, an unknown argument refused (`UNKNOWN_ARGUMENT`), `null` for an optional argument read as not provided, a chain refused before any request, a wei-looking amount refused before any request. Mutation-checked: accepting an `accumulateRpc` argument (1 red), dropping the allow-any-chain branch (1), the server not passing `env` to tools (3).*
+- [x] 4. **`certen_receipt`** (read tier). *Check: new `receipt-tool.test.ts` against a localhost gateway serving the repo's real proof fixtures: partial without a header, a good header closes the execution layer, a wrong one FAILS, a header with no receipts root is refused, a described transfer is never VERIFIED, a failed and a pending intent, a proof service that is down is a gap and not "no evidence", an `rpc` argument is refused by name and never contacted (also inside `transfer`, `call` and `call.expect`), nothing is written to disk, and every kind of receipt (verified, partial, failed, pending, unproven) validates against the declared `outputSchema`. Mutation-checked: no address check on `transfer.to` (1 red), a zero amount allowed (1).*
+- [x] 5. **Schemas, tiers, counts.** `CUSTOM_TOOLS` and `output-schemas.ts` gain both tools; `agentgen` regenerated (`output-schemas.generated.ts`); `tiers.test.ts` (composites, read-tier list, descriptions say what the tool cannot establish, no `rpc`-named parameter), `structured-output.test.ts` and `interop.test.ts` (48 → 50 tools, 33 → 35 read). *Check: the MCP suite; `agentgen:check` clean.*
+- [x] 6. **Docs**: MCP README and CHANGELOG, SDK CHANGELOG, `docs/CLI-CONTRACT.md` (the MCP tool returns the section 10 receipt), `verify-a-proof.md`, the llms template (an "MCP" section) regenerated, PLAN corrections, test counts refreshed.
+- [x] 7. **Measurement**: what an agent needs, before and after, in tool calls and gateway round trips (measured by the new tests, not by `measure-onboarding`, which drives the CLI and whose journeys this phase does not change).
+- [ ] 8. **Gates, offline transcript (the real server over stdio against a stand-in gateway), §5 self-review, push.** Outputs are quoted in the PR body. **Opening the PR needs a human**: `gh` is not installed on this machine.
+
+### Phase 6 results
+
+**Measured (offline, a localhost stand-in for the gateway and for an Accumulate node, the real built server over stdio):** what an agent had to call before, against the two new tools. `measure-onboarding` drives the CLI, whose journeys this phase does not change, so the seven pinned baselines are untouched.
+
+| | Before (existing tools) | After |
+|---|---|---|
+| "Can this identity, on this chain, act?" | **5 tool calls**, 10 gateway requests (`certen_doctor` 6, `identity_get`, `portfolio_get`, `chains_enabled`, `billing_balance`) | **1 call** (`certen_readiness`), 3 gateway requests + 1 Accumulate read |
+| "What happened to this intent?" | **5 tool calls**, 9 gateway requests (`transaction_get`, `proof_get` 2, `proof_verify` 4, `proof_receipt`, `chains_list`) | **1 call** (`certen_receipt`), 5 gateway requests |
+
+What the "before" could not establish at all: that the key page really holds the key (Accumulate was never read), the key page's credits other than the gateway's own number, gas against an amount plus an estimate, one record to keep, an explorer link, a verdict that names what is missing, and any statement about the effect.
+What did not improve, plainly: a transfer's effect is still `unchecked` over MCP (the server cannot name a node), so a transfer receipt is PARTIAL until the agent has read the recipient itself.
+
+**Tests:** 2490 in 141 files → **2596 in 145 files** (sdk 835 → 867, cli 1197, mcp 201 → 275, verify 257): `verify-header` 32 (sdk), `readiness-tool` 27, `receipt-tool` 34, `proof-verify-header` 8, `tiers` +3 and `structured-output` +2 (one per new tool) (mcp: 27 + 34 + 8 + 3 + 2 = 74); the counts in `interop`, `structured-output` and `output-schema-generator` moved with the tool list (48 → 50, 33 → 35 read).
+Gates on the final tree: build ✓ typecheck ✓ `agentgen:check` ✓ and `test-all` **2596 passed, 0 failed (271 s)**, run twice back to back (the second inside `test-counts --write`, which refreshed the quoted counts in README and AGENTS). The CLI is untouched.
+
+**Proven in the transcript, not only in tests:** the built server lists 50 tools (35 read-only) with the two new ones read-only and schema'd and no parameter that names a node; `certen_readiness` is `ready` with the key page "read from Accumulate … not the gateway", `blocked` on gas with a fix in words and a faucet link (no CLI command), a `warn` without `keyHash`, and refuses a wei-looking amount, an `acc://` identity, a typo chain and Adiri before any request; `certen_receipt` is PARTIAL
+naming the execution layer and the page chains, `node_checked` with a header, FAILED with a wrong receipts root, `INVALID_HEADER` for `{}` and a bare block number (also for `certen_proof_verify`, where it used to read VERIFIED), `unchecked` for a described transfer, and a stand-in node named in an argument is refused and never contacted.
+
+**Bugs found and fixed on the way** (each covered by a test that failed first): `certen_proof_verify` read an empty or number-only header as a comparison that passed (reproduced before the fix: `isError: false`, outcome layer `verified`, `headerCheck.ok: true`); the first version of the two tools silently ignored an `rpc` argument and returned a normal result (found by the transcript);
+`verifyEvidence`'s `nodeConsulted` would have said a header was compared for a proof with no execution component to compare it with.
+
+**A flaky gate, and what it was.** The first three full runs on this branch each had CLI-test timeouts at the 20 s ceiling (1, then 4, then 1 failing, a different test each time, every one a test that spawns the built CLI), while the CLI is untouched and every one of those files passed in isolation (91 of 91). The cause was a **stray `python.exe -` process of mine** (a heredoc I ran to look for a runtime and never closed) pegging one core for the whole session, on a machine already at 55% CPU idle. With it stopped,
+two full runs back to back passed (273 s and 271 s, against 286 s at baseline). No test timeout, assertion or config was touched. The honest limit: this machine has other heavy tenants, the suite is timing-sensitive under that load, and a red CLI timeout on a busy machine is not by itself a regression.
+
+**Unverified live / limits stated plainly:**
+- Nothing here touched a live gateway, a real Accumulate node or a real chain, signed, or minted a credential (HARNESS §4). **A human should point `certen-mcp` at the real gateway once** and call both tools: the Accumulate read was exercised against a stand-in that answers the way the gateway's own `computeCanSign` expects, and the real gateway does not yet serve `GET /v1/proof/{id}/v2` (`tools/agentgen/pending-routes.json`), so a real receipt will read NO EVIDENCE until it does.
+- The proof fixture's page chains are unbound, so no offline receipt can reach VERIFIED: the verified shape is pinned over constructed inputs (`assembleReceipt`) and validated against the `outputSchema`.
+- No MCP client of a real agent was run; the official clients of every protocol revision list and call the tools in `interop.test.ts`.
+
 ## Found, not fixed
 
+- **(Phase 6) A share link names the host the server fetches from.** `certen_proof_verify` given a link, and `certen_proof_open_shared`, `GET` `<origin of the link>/v1/proof/shared/<token>` with no credential: the path is fixed, the origin is the caller's. By design (a counterparty verifies a proof from another deployment), but it is a server-side request to a caller-chosen host, and the MCP changelog's wording "never fetches a URL the caller names" is
+  therefore broader than the code. Restricting it to the configured gateway origin would stop a counterparty verifying a proof shared from a different deployment; that is a decision for a human. Phase 6 states the narrower, true rule ("no tool takes a JSON-RPC node") and pins every URL-like parameter in a test. Not changed.
+- **(Phase 6) The existing MCP tools read `process.env` for the chain settings** (`chains.ts`), while the two new tools take the server's `env` (the same object in production). A test that configures `createHandlers({ env })` therefore configures the new tools only. Moving the old ones is mechanical and was left alone: nothing that works changes in this phase.
+- **(Phase 6) `certen_proof_verify` passes `expect` and `govRoot` to the verifier unvalidated.** Harmless (a malformed `expect` finds no event and says so), and not the hole `header` was; left as it is.
+- **(Phase 6) `certen_receipt` cannot establish a transfer's effect**, so over MCP a transfer receipt is PARTIAL until the agent has read the recipient itself, and the agent has no way to hand that reading back for the receipt to record. A caller-supplied balance would be the agent's claim, not an independent read, and was not made to upgrade a verdict. If agents need a `verified` over MCP, the options are a gateway balance read for an arbitrary address (the Phase 4 gateway ask) or an operator-configured node; both are decisions.
+- **(Phase 6) The CLI tests that spawn the built CLI time out at 20 s on a busy machine.** Several did, one or a few per full run, while a stray process of mine and other tenants loaded the CPU, and none did in two full runs once the stray process was gone (see "A flaky gate" above). The suite is timing-sensitive by construction (a subprocess per case, 20 s ceiling, one vitest process for 145 files) and this machine is shared. Not changed: loosening a timeout would hide a real hang.
 - **(Phase 5) Untyped throws in the key store.** `keys show nope`, an invalid key name and "passphrases did not match" are bare `Error`s, so they exit 1 with `UNKNOWN_ERROR` and end `next: certen <command> --help`. Typing them (`UsageError`) would be the better answer and would change an exit code from 1 to 2, which the contract
   forbids doing quietly. Not changed.
 - **(Phase 5) Many messages still carry advice from before `setup`** ("Run: certen init", "certen auth login", "Check with: certen tx status"). They are pinned by tests and valid; `next:` is the current, single answer beside them. Not rewritten.

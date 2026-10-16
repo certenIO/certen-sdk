@@ -143,6 +143,18 @@ certen init                     # signing key, identity, funding; idempotent (se
 - Failures carry the same codes and `retryable` flag as the SDK, so the retry decision is identical either way.
 - `certen --help --json` returns the whole command tree (commands, flags, types) in one call.
 
+## MCP (an AI agent, no code)
+`@certen.io/mcp` (`certen-mcp`) is a Model Context Protocol server over the same gateway. It is read-only unless started with `CERTEN_MCP_ALLOW_WRITES=1`, **holds no signing key and cannot sign**, and
+every tool that changes something needs `confirm: true`. Two read tools answer the two questions around every action:
+- `certen_readiness { identityId, chain, keyHash?, amount? }` — can THIS identity, on THIS chain, act right now? The checks `client.readiness()` makes, in one call. Gate on `state`: `ready`, `blocked`
+  (read `first_blocker`) or `unconfirmed`, which is **not** ready (an `unknown` is never read as `ok`). `keyHash` is the SHA-256 of the signing key's *public* key; with it the key page is read from Accumulate
+  as well as from the gateway. Fixes are in words (`fix.text`), never a CLI command.
+- `certen_receipt { intentId, header?, transfer?, call? }` — what happened to this intent: the ids to keep, the proof verified here layer by layer, and what of the effect is established. It is the document
+  `certen receipt --json` returns. `verdict` is `verified` · `partial` · `failed` · `pending` · `unproven`; **PARTIAL and NO EVIDENCE are never verified**, and `gaps` says what is missing. The server **never calls a
+  node you name**: close the proof's execution layer by passing the block `header` you fetched from your own node (`{ receiptsRoot, hash?, number? }`; one with no `receiptsRoot` compares nothing and is refused), and
+  read the recipient's balance yourself (a described `transfer` is `unchecked`, so the receipt is not `verified`, until you have). It keeps no state and writes nothing.
+The Accumulate endpoint for the key page read is the gateway's own advertisement, or the operator's `CERTEN_ACCUMULATE_RPC`; neither tool has an `rpc` argument. Read `certen://docs/llms.txt` first.
+
 ## Resources
 - Full API digest: `llms-full.txt`
 - Repository guide (build/test/lint, for working ON this SDK): `AGENTS.md`

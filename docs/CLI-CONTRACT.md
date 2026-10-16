@@ -966,6 +966,35 @@ certen keys lock dev            # or --all
 | `WRONG_PASSPHRASE` | 1 | the passphrase did not open the key; nothing is stored |
 | `LOCK_TARGET_REQUIRED` | 2 | `keys lock` with neither a name nor `--all` |
 
+### 13. The same two documents for an agent: `certen_readiness`, `certen_receipt` (MCP)
+
+`@certen.io/mcp` answers "can this identity act?" and "what happened to this intent?" with the documents the CLI prints, so an agent and a script read the same
+thing. The MCP server is not the CLI: there is no envelope, no exit code and no `~/.certen`. The tool result **is** the object, and an error is an MCP error result
+(`isError: true`) whose text is `{"error":{"code","message","status","retryable",…}}`, exactly as every other tool's. Nothing in sections 1 to 12 changes.
+
+| MCP tool | Returns | Same as |
+|---|---|---|
+| `certen_readiness { identityId, chain, keyHash?, amount?, tokenSymbol? }` | the `readiness` object of section 8 (`ready`, `state`, `first_blocker`, `checks`, `context`) | `certen status --json` → `data.readiness`, less what only a CLI can see (a key on this machine) |
+| `certen_receipt { intentId, header?, transfer?, call? }` | the receipt of section 10 (`receipt_version: 1`) | `certen receipt <intent> --json` → `data.receipt` |
+
+Where it differs, and why (each is a rule of the MCP server, tested in `packages/mcp/test`):
+
+- **No tool takes a node to call.** `certen receipt --rpc <url>` has no counterpart. The execution layer is closed with a block `header` the **caller** fetched from its own node:
+  `{ receiptsRoot, hash?, number? }`. **`receiptsRoot` is required**: a header with no receipts root (`{}`, or only the block number the bundle itself states) compares nothing, and is refused
+  with `INVALID_HEADER` (status `0`, nothing was requested) rather than read as a comparison that passed. `certen_proof_verify` takes the same header under the same rule: before this it
+  passed such a header to the verifier, where it found no disagreement and the execution layer read `verified` having compared nothing. A header together with a node is `CONFLICTING_OPTIONS` in the SDK.
+- **The recipient's balance cannot be read here**, so a receipt for a `transfer { chain, to, amount }` has `effect.state: "unchecked"`, carries the `EFFECT_UNCHECKED` gap, and is never `verified`
+  until the caller has read the recipient from its own node. `call { chain, expect: { address, topic0, topic1? } }` is judged from the proof's own execution receipt, as `--expect` is.
+  With neither, the receipt has no request on record: `request` is `null`, `effect.state` is `not_applicable`, and `verified` then speaks to the proof only.
+- **`certen_readiness` never names a command.** `checks[].fix` is `{ text, url? }`; `fix.command` is a CLI's addition and an agent has no CLI to run. The Accumulate endpoint for the independent key page read
+  is the one the gateway's chain registry advertises, or the operator's `CERTEN_ACCUMULATE_RPC`; it is never an argument.
+- **The invocation is checked before a request is made**, with status `0`: `INVALID_IDENTITY_ID` and `INVALID_INTENT_ID` (not a UUID), `INVALID_KEY_HASH`, `INVALID_AMOUNT` (not whole units, or wei-looking),
+  `INVALID_ADDRESS` (bad EIP-55 checksum included), `INVALID_TRANSFER`, `INVALID_CALL`, `INVALID_EXPECTATION`, `CONFLICTING_OPTIONS` (`transfer` with `call`), `INVALID_HEADER`, and `UNSUPPORTED_CHAIN` for a chain this server does
+  not enable (`CERTEN_ENABLED_CHAINS`).
+- **An argument the tool does not have is refused by name, not ignored.** `UNKNOWN_ARGUMENT` lists the ones it takes; `NODE_ARGUMENT_REFUSED` is the same for a name that means "call this node" (`rpc`, `accumulateRpc`, `url`,
+  `endpoint`, `node`, …) and says what to do instead. Ignoring it would let an agent believe the node was used. This holds inside `transfer`, `call` and `call.expect` too.
+- **It writes nothing.** The result is the record; keep it if you want it.
+
 ## Example: a correct retry loop
 
 ```bash
