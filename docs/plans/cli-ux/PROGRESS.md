@@ -12,7 +12,7 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 | 3 | Setup + gas (W2, W6) | merged | #30 (c7dc989) |
 | 4 | Send + receipt (W4, W5) | merged | #31 (9537081) |
 | 5 | Learnability (W7) | merged | #32 (a589f20) |
-| 6 | Agents (W8) | in-progress (branch `ux/phase-6-agents`) | |
+| 6 | Agents (W8) | in-review (work complete, branch `ux/phase-6-agents` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
 
 ---
 
@@ -648,7 +648,7 @@ Pre-existing failures: none.
 - [x] 5. **Schemas, tiers, counts.** `CUSTOM_TOOLS` and `output-schemas.ts` gain both tools; `agentgen` regenerated (`output-schemas.generated.ts`); `tiers.test.ts` (composites, read-tier list, descriptions say what the tool cannot establish, no `rpc`-named parameter), `structured-output.test.ts` and `interop.test.ts` (48 → 50 tools, 33 → 35 read). *Check: the MCP suite; `agentgen:check` clean.*
 - [x] 6. **Docs**: MCP README and CHANGELOG, SDK CHANGELOG, `docs/CLI-CONTRACT.md` (the MCP tool returns the section 10 receipt), `verify-a-proof.md`, the llms template (an "MCP" section) regenerated, PLAN corrections, test counts refreshed.
 - [x] 7. **Measurement**: what an agent needs, before and after, in tool calls and gateway round trips (measured by the new tests, not by `measure-onboarding`, which drives the CLI and whose journeys this phase does not change).
-- [ ] 8. **Gates, offline transcript (the real server over stdio against a stand-in gateway), §5 self-review, push.** Outputs are quoted in the PR body. **Opening the PR needs a human**: `gh` is not installed on this machine.
+- [x] 8. **Gates, offline transcript (the real server over stdio against a stand-in gateway), §5 self-review, push.** Outputs are quoted in the PR body. **Opening the PR needs a human**: `gh` is not installed on this machine.
 
 ### Phase 6 results
 
