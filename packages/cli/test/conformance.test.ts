@@ -458,3 +458,193 @@ describe('CLI contract: table mode is unchanged for humans', () => {
     expect(r.stderr).toContain('Error');
   });
 });
+
+describe('CLI contract: send, receipt and watch (docs/CLI-CONTRACT.md section 10)', () => {
+  // Its own HOME, with one signing key and nothing else: `send` needs a key that exists before it will go anywhere, and the shared HOME above
+  // is deliberately empty. Every case here either fails BEFORE a request is made (so the unreachable gateway cannot turn a usage error into a
+  // 3), or is the one case that is meant to reach it and find nobody there.
+  const SEND_HOME = mkdtempSync(join(tmpdir(), 'certen-conformance-send-'));
+  const IDENTITY = '11111111-1111-4111-8111-111111111111';
+  const INTENT = '7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13';
+  const RECIPIENT = '0x1111111111111111111111111111111111111111';
+  const OFFLINE = { CERTEN_API_KEY: 'ck_test_notreal', CERTEN_API_URL: 'http://127.0.0.1:9' };
+  const WHO = ['--identity', IDENTITY, '--chain', 'base-sepolia', '--sign-with', 'dev'];
+
+  function run(args: string[], env: Record<string, string> = {}): Run {
+    const base: Record<string, string | undefined> = { ...process.env, HOME: SEND_HOME, USERPROFILE: SEND_HOME, ...env };
+    for (const k of Object.keys(base)) if (k.startsWith('CERTEN_') && !(k in env)) delete base[k];
+    try {
+      const stdout = execFileSync(process.execPath, [CLI, ...args], { env: base as NodeJS.ProcessEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      return { stdout, stderr: '', code: 0 };
+    } catch (err) {
+      const e = err as { stdout?: string; stderr?: string; status?: number };
+      return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', code: e.status ?? -1 };
+    }
+  }
+  const errorOf = (r: Run): { code: string; message: string; retryable: boolean; status?: number } => soleJson(r.stdout).error as { code: string; message: string; retryable: boolean };
+
+  beforeAll(() => {
+    const made = run(['--json', 'keys', 'generate', '--name', 'dev', '--no-passphrase']);
+    expect(made.code, made.stderr).toBe(0);
+  });
+
+  it('2 — send without --to is a usage error in an envelope, before any request', () => {
+    const r = run(['--json', 'send', '0.0001', 'ETH', ...WHO], OFFLINE);
+    expect(r.code).toBe(2);
+    const error = errorOf(r);
+    expect(error.code).toBe('USAGE_ERROR');
+    expect(error.message).toContain('--to');
+    expect(error.retryable).toBe(false);
+  });
+
+  it('2 — a bad amount, address, asset, node or timeout is refused before any request: the unreachable gateway is never asked, so it is 2 and not 3', () => {
+    for (const [args, code] of [
+      [['0.0001', 'ETH', '--to', 'nope'], 'INVALID_ADDRESS'],
+      // 0x5aAeb605...: the EIP-55 spec vector with one letter's case flipped. A checksum that does not hold is a mistyped address.
+      [['0.0001', 'ETH', '--to', '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1beAed'], 'INVALID_ADDRESS'],
+      [['1000000000000000000', 'ETH', '--to', RECIPIENT], 'INVALID_AMOUNT'],
+      [['0', 'ETH', '--to', RECIPIENT], 'INVALID_AMOUNT'],
+      [['0.0001', 'USDC', '--to', RECIPIENT], 'UNSUPPORTED_ASSET'],
+      [['0.0001', 'ETH', '--to', RECIPIENT, '--timeout', 'soon'], 'INVALID_TIMEOUT'],
+      [['0.0001', 'ETH', '--to', RECIPIENT, '--rpc', 'ftp://node.example/rpc'], 'INVALID_RPC'],
+      [['0.0001', 'ETH', '--to', RECIPIENT, '--gas-reserve', 'lots'], 'INVALID_AMOUNT'],
+    ] as Array<[string[], string]>) {
+      const r = run(['--json', 'send', ...args, ...WHO, '--yes'], OFFLINE);
+      expect(r.code, args.join(' ')).toBe(2);
+      expect(errorOf(r).code, args.join(' ')).toBe(code);
+      expect(errorOf(r).retryable, args.join(' ')).toBe(false);
+    }
+    // Eight sequential spawns of the built CLI: well inside the default on a quiet machine, past it when the whole suite is running at once.
+  }, 120_000);
+
+  it('2 — a mixed-case address with a bad checksum is refused naming the correct capitalisation', () => {
+    const r = run(['--json', 'send', '0.0001', 'ETH', '--to', '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1beAed', ...WHO, '--yes'], OFFLINE);
+    expect(errorOf(r).message).toContain('0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed');
+    expect(errorOf(r).message).toMatch(/checksum/i);
+  });
+
+  it('2 — the node URL is never repeated in the refusal: hosted nodes put a key in it', () => {
+    const r = run(['--json', 'send', '0.0001', 'ETH', '--to', RECIPIENT, ...WHO, '--yes'], { ...OFFLINE, CERTEN_RPC_URL: 'http://user:supersecret@127.0.0.1:1/v2/KEYINPATH' });
+    expect(r.code).toBe(2);
+    expect(errorOf(r).code).toBe('INVALID_RPC');
+    expect(errorOf(r).message).toContain('CERTEN_RPC_URL');
+    expect(r.stdout).not.toContain('supersecret');
+    expect(r.stdout).not.toContain('KEYINPATH');
+    expect(r.stderr).not.toContain('supersecret');
+  });
+
+  it('2 — with no --yes, no --json and nobody at a terminal, send refuses to sign on nobody\'s say-so (CONFIRMATION_REQUIRED), before a passphrase or a request', () => {
+    const r = run(['send', '0.0001', 'ETH', '--to', RECIPIENT, ...WHO], OFFLINE);
+    expect(r.code).toBe(2);
+    expect(r.stdout.trim()).toBe('');
+    expect(r.stderr).toContain('CONFIRMATION_REQUIRED');
+    expect(r.stderr).toContain('--yes skips the question, never the check');
+    // Said before the gateway was asked anything: the unreachable gateway did not turn it into a 3.
+    expect(r.stderr).not.toContain('NETWORK_ERROR');
+  });
+
+  it('3 — send against an unreachable gateway is retryable, and nothing was signed, opened or saved', () => {
+    const r = run(['--json', 'send', '0.0001', 'ETH', '--to', RECIPIENT, ...WHO], OFFLINE);
+    expect(r.code).toBe(3);
+    expect(errorOf(r)).toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+    expect(r.stderr).not.toMatch(/Signed\./);
+    expect(existsSync(join(SEND_HOME, '.certen', 'receipts'))).toBe(false);
+  });
+
+  it('2 — receipt with nothing saved and no id says so, before any request', () => {
+    const r = run(['--json', 'receipt'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect(errorOf(r).code).toBe('NO_RECEIPTS');
+  });
+
+  it('2 — receipt and watch refuse an id that is not an intent id, before any request', () => {
+    for (const cmd of ['receipt', 'watch']) {
+      const r = run(['--json', cmd, 'not-a-uuid'], OFFLINE);
+      expect(r.code, cmd).toBe(2);
+      expect(errorOf(r).code, cmd).toBe('INVALID_INTENT_ID');
+    }
+  });
+
+  it('0 — receipt --list is local: no credential and no network are needed, and the list is empty when nothing is saved', () => {
+    // No API key at all, and a gateway that is not there: if this reached for either it would not be exit 0.
+    const r = run(['--json', 'receipt', '--list'], { CERTEN_API_URL: 'http://127.0.0.1:9' });
+    expect(r.code).toBe(0);
+    expect(soleJson(r.stdout)).toEqual({ ok: true, data: { receipts: [] } });
+    // (The human line "No receipts are saved on this machine yet" goes to stderr; this harness only returns stderr when the exit is non-zero,
+    // so receipt-command.test.ts is where that line is pinned.)
+  });
+
+  it('2 — receipt --offline for an intent with nothing saved is NO_SAVED_RECEIPT, and it needs neither a credential nor a network', () => {
+    const r = run(['--json', 'receipt', INTENT, '--offline'], { CERTEN_API_URL: 'http://127.0.0.1:9' });
+    expect(r.code).toBe(2);
+    expect(errorOf(r).code).toBe('NO_SAVED_RECEIPT');
+  });
+
+  it('2 — receipt --offline cannot be combined with --share or --rpc', () => {
+    for (const extra of [['--share'], ['--rpc', 'http://127.0.0.1:9']]) {
+      const r = run(['--json', 'receipt', INTENT, '--offline', ...extra], { CERTEN_API_URL: 'http://127.0.0.1:9' });
+      expect(r.code, extra.join(' ')).toBe(2);
+      expect(errorOf(r).code, extra.join(' ')).toBe('CONFLICTING_FLAGS');
+    }
+  });
+
+  it('2 — watch refuses a bad --timeout before any request', () => {
+    const r = run(['--json', 'watch', INTENT, '--timeout', 'soon'], OFFLINE);
+    expect(r.code).toBe(2);
+    expect(errorOf(r).code).toBe('INVALID_TIMEOUT');
+  });
+
+  it('--help --json lists send, receipt and watch with every option, and --yes on every command that signs', () => {
+    const r = run(['--json', '--help']);
+    type Node = { name: string; description: string; arguments: Array<{ name: string; required: boolean }>; options: Array<{ name: string; required: boolean }>; commands: Node[] };
+    const data = soleJson(r.stdout).data as Node & { exitCodes: Record<string, string> };
+    const find = (...path: string[]): Node => {
+      let node: Node = data;
+      for (const name of path) {
+        const next = node.commands.find((c) => c.name === name);
+        expect(next, `${path.join(' ')} is listed`).toBeDefined();
+        node = next!;
+      }
+      return node;
+    };
+    const optionsOf = (...path: string[]): string[] => find(...path).options.map((o) => o.name);
+
+    const send = find('send');
+    expect(send.description.length).toBeGreaterThan(0);
+    expect(send.arguments).toEqual([expect.objectContaining({ name: 'amount', required: true }), expect.objectContaining({ name: 'asset', required: true })]);
+    expect(optionsOf('send')).toEqual(expect.arrayContaining([
+      'to', 'chain', 'identity', 'signWith', 'yes', 'dryRun', 'wait', 'timeout', 'pollInterval', 'rpc', 'force', 'gasReserve', 'accumulateRpc',
+      'proofClass', 'idempotencyKey', 'expiresIn',
+    ]));
+    // The recipient is the one thing no context can supply, and the help says it is required.
+    expect(send.options.find((o) => o.name === 'to')!.required).toBe(true);
+
+    const receipt = find('receipt');
+    expect(receipt.arguments).toEqual([expect.objectContaining({ name: 'intent', required: false })]);
+    expect(optionsOf('receipt')).toEqual(expect.arrayContaining(['list', 'explain', 'rpc', 'expect', 'share', 'offline']));
+
+    const watch = find('watch');
+    expect(watch.arguments).toEqual([expect.objectContaining({ name: 'intent', required: true })]);
+    expect(optionsOf('watch')).toEqual(expect.arrayContaining(['timeout', 'pollInterval', 'rpc', 'expect']));
+
+    // Every command that signs takes --yes: the confirmation is asked only at a terminal, and a person can say yes in advance.
+    expect(optionsOf('call')).toContain('yes');
+    expect(optionsOf('tx', 'create')).toContain('yes');
+    expect(optionsOf('governance', 'add-key')).toContain('yes');
+    expect(optionsOf('pending', 'sign')).toContain('yes');
+
+    // The exit-code table the tree publishes: 4 and 5 are verdicts, 130 is Ctrl-C while waiting.
+    expect(data.exitCodes['4']).toMatch(/partial/);
+    expect(data.exitCodes['5']).toMatch(/no evidence/);
+    expect(data.exitCodes['130']).toMatch(/Ctrl-C/);
+  });
+
+  it('send, receipt and watch are listed in the root help for a person, and receipt is not confused with the billing receipts', () => {
+    const r = run(['--help']);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/^\s+send\s+/m);
+    expect(r.stdout).toMatch(/^\s+receipt\s+/m);
+    expect(r.stdout).toMatch(/^\s+watch\s+/m);
+    expect(r.stdout).toMatch(/^\s+receipts\s+/m);
+  });
+});
