@@ -12,7 +12,19 @@ the work. Phase status values: `not-started` · `in-progress` · `in-review` (PR
 | 3 | Setup + gas (W2, W6) | merged | #30 (c7dc989) |
 | 4 | Send + receipt (W4, W5) | merged | #31 (9537081) |
 | 5 | Learnability (W7) | merged | #32 (a589f20) |
-| 6 | Agents (W8) | in-review (work complete, branch `ux/phase-6-agents` pushed; PR to be opened by a human, `gh` is not installed) | not opened |
+| 6 | Agents (W8) | merged | #33 (1b1b3c0) |
+| 6b | Phase 6 follow-ups: the six open items of Phases 5 and 6 | merged | #34 (2697735) |
+
+All seven CLI UX phases of PLAN §4 (0 to 6) and the follow-ups are merged. What is left is not a phase of this repo's plan; it is below.
+
+## After Phase 6: what remains (2026-10-16)
+
+| Item | Status | Who |
+|---|---|---|
+| **Phase G**: the gateway asks of PLAN §6 (G1 testnet gas drip, the destination transaction hash on the intent, a balance read for an arbitrary address, G6 credit top-up, G5 quote, G4 readiness aggregate) | go-ahead given by the human for these six, in the session of 2026-10-16 (HARNESS §4 asks for each one explicitly); separate repo (`api-gateway`), separate PRs, nothing deployed from here | the engineer, then the human reviews and merges |
+| A real **archive node** for `CERTEN_RPC_URL_BASE_SEPOLIA`, and one real receipt read from it | **dropped, by the human's decision (2026-10-16):** "continue to use the public node; I don't want to run a node". Consequence, already documented and tested: a non-archive node shows `EFFECT_UNREADABLE` for an old transfer (named, never a pass) and works for a recent one. Nobody runs an archive node for this. | closed |
+| Run the two Phase 6 MCP tools once against the **real gateway** (read-only) | open; needs the human's API key and a real intent id, so it is a human run (HARNESS §4) | the human |
+| **Release** the SDK, then the CLI and MCP | open; no version has been bumped; npm versions are immutable, so tagging and publishing stay the human's (HARNESS §4) | the human |
 
 ---
 
