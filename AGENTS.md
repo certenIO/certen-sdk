@@ -31,7 +31,7 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->2490 tests in 141 files (sdk 835, cli 1197, mcp 201, verify 257), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->2596 tests in 145 files (sdk 867, cli 1197, mcp 275, verify 257), 0 skipped<!-- test-counts:end --> | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
 | `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |
@@ -149,7 +149,7 @@ docs/guides/       task-shaped guides
 
 ## MCP server
 
-`packages/mcp` exposes the gateway to AI agents. Two rules hold and are enforced by
+`packages/mcp` exposes the gateway to AI agents. Three rules hold and are enforced by
 `packages/mcp/test/tiers.test.ts` — treat them as invariants, not preferences:
 
 - **It never signs and never accepts key material.** A test asserts no tool parameter is even named
@@ -157,9 +157,20 @@ docs/guides/       task-shaped guides
 - **Write tools are not registered unless `CERTEN_MCP_ALLOW_WRITES=1`**, and every *mutating* tool
   additionally requires `confirm: true`. `tier` controls visibility; `mutates` controls confirmation.
   They are separate fields because the admin read tools are gated but have nothing to confirm.
+- **No tool takes a JSON-RPC node to call.** A parameter naming one would let a prompt-injected model make
+  the server probe whatever network it sits in. A check that needs a node's answer takes the answer
+  (`certen_receipt` and `certen_proof_verify` take a block `header`, which must carry a `receiptsRoot`:
+  one with nothing to compare is refused, not counted); the one node the server calls itself is
+  Accumulate's for `certen_readiness`, which the gateway advertises or the operator sets with
+  `CERTEN_ACCUMULATE_RPC`. The tools that exist for this (`certen_readiness`, `certen_receipt`) refuse an
+  argument they do not have, by name, rather than ignoring it. A proof *share link* is the one URL a
+  caller may hand over; the test that lists URL-like parameters makes any new one a visible decision.
 
 A new tool must declare the gateway endpoint it reaches; a test checks that endpoint exists in the
-vendored spec and that no read-tier tool points at a write-only one.
+vendored spec and that no read-tier tool points at a write-only one. A tool that builds its own result
+(rather than returning the gateway's body) is listed in `tools/agentgen/emit/mcp-output-schemas.mjs`
+(`CUSTOM_TOOLS`), has its `outputSchema` written in `packages/mcp/src/output-schemas.ts`, and is
+validated against what it really returns by `structured-output.test.ts`.
 
 ## CLI
 

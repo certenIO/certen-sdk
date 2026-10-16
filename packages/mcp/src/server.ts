@@ -166,7 +166,7 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
       }
 
       try {
-        const result = await tool.run(getClient(), args);
+        const result = await tool.run(getClient(), args, env);
         return toolResult(tool, result, era);
       } catch (err) {
         if (err instanceof RpcError) throw err;

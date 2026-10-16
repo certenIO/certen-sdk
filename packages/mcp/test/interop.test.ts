@@ -74,7 +74,7 @@ describe('2026-07-28: @modelcontextprotocol/client 2.3.1', () => {
       expect(client.getInstructions()).toMatch(/HOLDS NO SIGNING KEY/);
 
       const { tools } = await client.listTools();
-      expect(tools).toHaveLength(48);
+      expect(tools).toHaveLength(50);
       for (const t of tools) {
         expect(t.annotations, t.name).toBeDefined();
         expect(t.outputSchema, t.name).toBeDefined();
@@ -121,7 +121,7 @@ describe('2026-07-28: @modelcontextprotocol/client 2.3.1', () => {
     const client = await connect({ mode: 'auto' });
     try {
       expect(client.getNegotiatedProtocolVersion()).toBe('2026-07-28');
-      expect((await client.listTools()).tools).toHaveLength(48);
+      expect((await client.listTools()).tools).toHaveLength(50);
     } finally { await client.close(); }
   });
 
@@ -129,7 +129,7 @@ describe('2026-07-28: @modelcontextprotocol/client 2.3.1', () => {
     const client = await connect();
     try {
       expect(client.getNegotiatedProtocolVersion()).toBe('2025-11-25');
-      expect((await client.listTools()).tools).toHaveLength(48);
+      expect((await client.listTools()).tools).toHaveLength(50);
     } finally { await client.close(); }
   });
 });
@@ -157,7 +157,7 @@ describe.each(BY_VERSION)('$version: the official client that asks for it', ({ v
     const client = await open();
     try {
       const { tools } = await client.listTools();
-      expect(tools).toHaveLength(48);
+      expect(tools).toHaveLength(50);
       for (const t of tools as Array<{ name: string; annotations?: unknown; outputSchema?: unknown }>) {
         expect(t.annotations !== undefined, `${t.name} annotations`).toBe(annotations);
         expect(t.outputSchema !== undefined, `${t.name} outputSchema`).toBe(outputSchema);

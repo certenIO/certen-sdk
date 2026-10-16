@@ -76,7 +76,7 @@ describe('the generated schemas', () => {
   it('lists as custom exactly the tools whose result the tool builds', () => {
     expect([...CUSTOM_TOOLS].sort()).toEqual([
       'certen_admin_revoke_api_key', 'certen_billing_verify_receipt', 'certen_chains_enabled', 'certen_doctor', 'certen_identity_create',
-      'certen_proof_get', 'certen_proof_verify', 'certen_whoami',
+      'certen_proof_get', 'certen_proof_verify', 'certen_readiness', 'certen_receipt', 'certen_whoami',
     ]);
   });
 });

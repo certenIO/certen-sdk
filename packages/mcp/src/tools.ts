@@ -1,6 +1,7 @@
 import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, type SigningSummary } from '@certen.io/sdk';
 import type { CertenClient } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
+import { runReadinessTool, runReceiptTool } from './agent-tools.js';
 
 /**
  * Tool definitions, split into two tiers.
@@ -10,7 +11,7 @@ import { assertChainUsable, assertIntentChains, enabledChainReport } from './cha
  * called by a confused model, a prompt injection, or a bug; a tool that is registered with
  * "please don't call this" in its description can be called by all three.
  *
- * Two invariants hold across this file, and `test/tiers.test.ts` enforces both:
+ * Three invariants hold across this file, and `test/tiers.test.ts` enforces each:
  *
  *   1. **No tool ever accepts a private key or produces a signature.** The signing flow is: open an
  *      intent, receive `hash_to_sign`, sign it wherever the key actually lives, submit the
@@ -19,6 +20,15 @@ import { assertChainUsable, assertIntentChains, enabledChainReport } from './cha
  *      undo that.
  *   2. **Every write tool requires `confirm: true`.** Without it the tool returns a description of
  *      what it *would* do and changes nothing.
+ *   3. **No tool takes a JSON-RPC node to call.** A parameter naming a node (`rpc`, …) would let a
+ *      prompt-injected model make this server probe whatever network it sits in. Where a check needs a
+ *      node's answer (the execution chain's block header), the CALLER fetches it and passes the answer
+ *      in; where the server must call one (Accumulate, for the independent key page read), the operator
+ *      configures it (`CERTEN_ACCUMULATE_RPC`) or the gateway's own registry advertises it. The one URL a
+ *      caller may hand over is a proof SHARE link (`certen_proof_open_shared`, and `certen_proof_verify`
+ *      given a link): its origin is the deployment that issued it, which a counterparty cannot be asked
+ *      to configure, and its path is fixed to `/v1/proof/shared/<token>`. The test names every
+ *      parameter that looks like a URL, so a new one is a visible decision.
  *
  * There is deliberately NO funding tool, in either tier. Balance and obligations are readable so an
  * agent can say what work will cost and why a call was refused — but opening a payment or
@@ -72,7 +82,12 @@ export interface ToolDef {
     required?: string[];
     additionalProperties?: boolean;
   };
-  run: (client: CertenClient, args: Record<string, unknown>) => Promise<unknown>;
+  /**
+   * `env` is the configuration the server was started with (`createHandlers({ env })`), for the settings that belong to the operator and never to
+   * a caller. A tool that predates it reads `process.env` through `chains.ts`; the same object in production, and the reason new tools take it:
+   * a test can say what the operator configured without touching the process.
+   */
+  run: (client: CertenClient, args: Record<string, unknown>, env?: NodeJS.ProcessEnv) => Promise<unknown>;
 }
 
 const str = (description: string) => ({ type: 'string', description });
@@ -743,8 +758,11 @@ const READ_TOOLS: ToolDef[] = [
         target: str('An intent id, a proof id, an Accumulate transaction hash (64 hex), or a proof share link'),
         header: {
           type: 'object',
-          description: 'The execution chain block header you fetched from your own node: { number (hex), hash, receiptsRoot }. Without it the receipts root is only what the validators say it is.',
+          description:
+            'The execution chain block header you fetched from your own node: { receiptsRoot, hash, number (hex) }. Without it the receipts root is only what the validators say it is. '
+            + 'receiptsRoot is required: a header without it (an empty one, or only the block number the bundle itself states) compares nothing, and is refused rather than read as a comparison that passed.',
           properties: { number: { type: 'string' }, hash: { type: 'string' }, receiptsRoot: { type: 'string' } },
+          required: ['receiptsRoot'],
           additionalProperties: false,
         },
         expect: {
@@ -760,8 +778,11 @@ const READ_TOOLS: ToolDef[] = [
     },
     run: async (c, a) => {
       // Loaded on first use: the verifier brings the Accumulate encoder with it, which the other 47 tools never need.
-      const { verifyBundle, loadProofEvidence, bundleInputOf } = await import('@certen.io/sdk/verify');
+      const { verifyEvidence, loadProofEvidence, assertComparableHeader } = await import('@certen.io/sdk/verify');
       const target = s(a, 'target');
+      // A header is a comparison only if it carries the receipts root the proof commits to. `{}` or a bare block number used to be handed to the
+      // verifier as it was, found nothing to disagree about, and read the execution layer VERIFIED. Refused here, before anything is fetched.
+      const header = a.header === undefined || a.header === null ? undefined : assertComparableHeader(a.header);
       let evidence;
       if (/^https?:\/\//i.test(target) || /^cps_/.test(target)) {
         const shared = await fetchSharedProof(target);
@@ -771,13 +792,14 @@ const READ_TOOLS: ToolDef[] = [
         evidence = await loadProofEvidence(c, target);
       }
       const opt = (k: string) => (a[k] && typeof a[k] === 'object' ? (a[k] as Record<string, string | undefined>) : undefined);
-      const v = verifyBundle(bundleInputOf(evidence), {
-        header: opt('header'),
+      const v = await verifyEvidence(evidence, {
+        header,
         expect: opt('expect'),
         expectGovRoot: typeof a.govRoot === 'string' ? a.govRoot : undefined,
       });
-      const { report: _report, ...rest } = v;
+      const { report: _report, nodeConsulted: _consulted, ...rest } = v;
       void _report;
+      void _consulted;
       return {
         ...rest,
         evidence: { found: v.evidenceFound, ...(evidence.notServed ? { code: evidence.notServed.code, reason: evidence.notServed.reason } : {}), ...(evidence.bundleError ? { bundleError: evidence.bundleError } : {}) },
@@ -786,6 +808,95 @@ const READ_TOOLS: ToolDef[] = [
           : null,
       };
     },
+  },
+  {
+    name: 'certen_readiness',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/identity/{id}',
+    alsoReaches: ['GET /v1/chains', 'GET /v1/billing/balance', 'GET /v1/portfolio'],
+    description:
+      'Can THIS identity, on THIS chain, act right now? One call instead of five: the gateway, the credential, the identity, the chain, the key page, the Accumulate credits, '
+      + 'the organization\'s gateway balance and the abstract account\'s gas, in dependency order, each `ok` | `warn` | `fail` | `unknown` | `skipped` with a stable `code` '
+      + 'and a `fix` stated in words. Gate on `state`, not on one check: `ready` means every check is ok or warn; `blocked` means something failed (read `first_blocker`); '
+      + '`unconfirmed` means nothing failed but something could not be answered, and it is NOT ready - an `unknown` is never read as `ok`. Pass `keyHash` (the SHA-256 of the signing '
+      + 'key\'s PUBLIC key; never the key itself) and the key page is read from an Accumulate node as well as from the gateway, and two reads that disagree are a blocker '
+      + '(`KEY_PAGE_DISAGREES`); without it the check is a `warn`, which is only the gateway\'s word. That read goes to the Accumulate node the gateway\'s registry advertises, or to '
+      + 'CERTEN_ACCUMULATE_RPC if the operator set it: this tool never calls a node you name (an argument that names one is refused). Gas is the account\'s balance against `amount` (whole units as a string, never wei) '
+      + 'plus an estimate of the gas, labelled as one: the gateway publishes no per-execution figure. '
+      + 'Run it before certen_transaction_open, and when something is not working. Creates and changes nothing; the balance check is `unknown` for a key without billing:read.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        identityId: str('The identity\'s id (UUID); certen_portfolio_get lists them. An acc:// URL is not accepted.'),
+        chain: str('The chain about to be used, e.g. base-sepolia. certen_chains_enabled lists what this server accepts.'),
+        keyHash: str('SHA-256 of the signing key\'s PUBLIC key, 64 hex characters. Never the key itself. Without it the key page is not compared with Accumulate.'),
+        amount: str('The native amount about to be moved, in whole units as a string ("0.001"), never wei. Judged together with an estimate of the gas.'),
+        tokenSymbol: str('The token being moved when it is not the chain\'s native one: the amount is then not counted against the gas balance.'),
+      },
+      required: ['identityId', 'chain'],
+      additionalProperties: false,
+    },
+    run: (c, a, env = process.env) => runReadinessTool(c, a, env),
+  },
+  {
+    name: 'certen_receipt',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/transaction/{id}',
+    alsoReaches: ['GET /v1/proof/{id}/bundle', 'GET /v1/proof/tx/{txHash}/receipt', 'GET /v1/chains'],
+    description:
+      'Everything known about one intent, in one call instead of four: what happened, the ids to keep (the intent, the Accumulate transaction, the destination transaction and a link '
+      + 'to it), whether the proof holds, and what of the effect is established. It reads the intent, fetches its proof (the bundle, the proof v2 document and the Accumulate receipt) '
+      + 'and verifies it HERE, layer by layer, from the proof\'s own bytes; a flag in the bundle saying "verified" is never used. `verdict` is the weakest honest reading: `verified` | '
+      + '`partial` | `failed` | `pending` | `unproven`. PARTIAL and NO EVIDENCE are NOT verified; `gaps` names, one by one, what is not established, and is empty exactly when the verdict is '
+      + '`verified`. A proof service answering 5xx is `unavailable` (try again), which is not "no evidence". The proof\'s execution layer stays `not_checked` until it is compared with a '
+      + 'block `header` YOU fetched from your own node ({ receiptsRoot, hash?, number? }; a header with no receiptsRoot compares nothing and is refused): this tool never calls a node '
+      + 'you name, and an argument that names one (rpc, url, ...) is refused, not ignored. For the same reason it cannot read a recipient\'s balance. Pass `transfer` { chain, to, amount } for a native transfer and its effect is `unchecked`, so the receipt is '
+      + 'not VERIFIED, until you have read the recipient from your own node; pass `call` { chain, expect: { address, topic0 } } for a contract call and the event is looked for in the '
+      + 'proof\'s own execution receipt. With neither there is no request on record, the effect is `not_applicable`, and VERIFIED then speaks to the proof only. Does not wait: '
+      + 'certen_execute_wait first (60-110 seconds), or read `pending` and come back. Reads only; it keeps no state and writes nothing (the CLI keeps receipts in ~/.certen; here the '
+      + 'result is the record). The same document as `certen receipt --json`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        intentId: str('The intent\'s id (UUID), returned when it was opened.'),
+        header: {
+          type: 'object',
+          description:
+            'The execution chain\'s block header for the block the proof says the action ran in, fetched from your own node: { receiptsRoot, hash, number (hex) }. Closes the proof\'s '
+            + 'execution layer. receiptsRoot is required; a header without it is refused, not read as a comparison that passed.',
+          properties: { receiptsRoot: { type: 'string' }, hash: { type: 'string' }, number: { type: 'string' } },
+          required: ['receiptsRoot'],
+          additionalProperties: false,
+        },
+        transfer: {
+          type: 'object',
+          description: 'This intent was a native transfer: { chain, to, amount } (whole units as a string). The receipt then states that the recipient\'s balance was not checked, rather than being silent about it.',
+          properties: { chain: { type: 'string' }, to: { type: 'string' }, amount: { type: 'string' } },
+          required: ['chain', 'to', 'amount'],
+          additionalProperties: false,
+        },
+        call: {
+          type: 'object',
+          description: 'This intent was a contract call: { chain, expect? }. With expect { address, topic0, topic1? } the event is looked for in the proof\'s execution receipt.',
+          properties: {
+            chain: { type: 'string' },
+            expect: {
+              type: 'object',
+              properties: { address: { type: 'string' }, topic0: { type: 'string' }, topic1: { type: 'string' } },
+              required: ['address', 'topic0'],
+              additionalProperties: false,
+            },
+          },
+          required: ['chain'],
+          additionalProperties: false,
+        },
+      },
+      required: ['intentId'],
+      additionalProperties: false,
+    },
+    run: (c, a, env = process.env) => runReceiptTool(c, a, env),
   },
 ];
 
