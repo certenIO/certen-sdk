@@ -115,6 +115,24 @@ export function terminalPrompter(
   };
 }
 
+let prompterOverride: Prompter | undefined;
+
+/**
+ * The prompter a command uses: the terminal, unless a test has put another in its place.
+ *
+ * A test cannot sit at a TTY, and the confirmation before a signature only exists where a person is at one. Every command that asks goes
+ * through here so one scripted prompter can stand in for the person, and so a test can prove both what was asked and what was done with
+ * the answer. The same kind of seam as `resetOutput` in output.ts: it changes nothing for a real run.
+ */
+export function commandPrompter(): Prompter {
+  return prompterOverride ?? terminalPrompter();
+}
+
+/** Test seam: answer every question from this prompter, or pass undefined to go back to the terminal. */
+export function setPrompterOverride(prompter: Prompter | undefined): void {
+  prompterOverride = prompter;
+}
+
 /** A default identity name that is valid (3-63 chars) and unlikely to collide on a retry. */
 export function suggestedName(): string {
   return `bot-${Math.floor(Date.now() / 1000) % 1_000_000}`;

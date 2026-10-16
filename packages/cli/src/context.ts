@@ -200,6 +200,14 @@ function phrase(r: Resolved): string {
 }
 
 /**
+ * Where a value came from, in the words the echo uses, or undefined when the person just typed it. The confirmation card lists these:
+ * a default the person did not type is the one thing on the card they have not already read.
+ */
+export function describeSource(r: Resolved | undefined): string | undefined {
+  return !r || r.source === 'flag' ? undefined : phrase(r);
+}
+
+/**
  * Say, on stderr, that a value was taken from context rather than typed. Silent for a flag, which the person just typed.
  *
  * stderr in both modes: in `--json` mode stdout is exactly one envelope, and this is not part of it. `shown` is what the person
