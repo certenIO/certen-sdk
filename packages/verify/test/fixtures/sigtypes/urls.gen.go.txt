@@ -1,0 +1,112 @@
+// Scratch generator: Accumulate URL parse/format oracle. Inputs are byte strings (hex); an output of null is a string
+// accumulate's url.Parse (or ParseTxID) refuses.
+package main
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+)
+
+type Case struct {
+	In  string  `json:"in"`
+	Out *string `json:"out"`
+}
+
+type File struct {
+	Format      string `json:"format"`
+	Description string `json:"description"`
+	Accumulate  string `json:"accumulate"`
+	URLs        []Case `json:"urls"`
+	TxIDs       []Case `json:"txids"`
+}
+
+var bases = []string{
+	"acc://probe.acme/book/1", "probe.acme/book/1", "ACC://Probe.Acme/Book/1/", "acc://probe.acme/book/a%20b", "acc://probe.acme//book/1",
+	"acc://probe.acme/book//1", "acc://u:p@probe.acme/book", "acc://u@probe.acme/book?x=1#frag", "acc://probe.acme/a;b,c", "acc://probe.acme/a!b",
+	"acc://probe.acme:8080/x", "acc://[::1]/x", "acc://[fe80::1%25en0]:80/x", "acc://probe.acme/%7e", "acc://héllo.acme/x", "acc://probe.acme/café",
+	"acc://probe.acme", "acc:probe.acme", "acc://", "acc:///x", "x", "", "acc://probe.acme/book/1?", "acc://probe.acme/a b", "abc://probe.acme/x",
+	"acc://:80/x", "acc://probe.acme/x#a%20b", "acc://probe.acme/x#a b", "acc://probe.acme/?a=b", "acc://probe.acme/p%2Fq", "acc://pro%C3%A9be.acme/x",
+	"acc://probe.acme/p%zz", "acc://us%40er@probe.acme/x", "acc://probe.acme/x?%zz", "acc://probe.acme/x#%zz", "acc://probe.acme:abc/x", "//probe.acme/x",
+	"/probe.acme/x", "acc:/probe.acme/x", "a:b/c", "acc://probe.acme/x/", "acc://probe.acme/ /", "acc://probe.acme/%25", "acc://probe.acme/+", "acc://pro+be.acme/x",
+}
+
+func main() {
+	r := rand.New(rand.NewSource(20261017))
+	out := &File{
+		Format:      "certen:acc-urls:v1",
+		Description: "Accumulate url.Parse(s).String() and url.ParseTxID(s).String() over byte strings: hand-picked bases and 3000 random byte-level mutations of them. An output of null is a string Accumulate's parser refuses.",
+		Accumulate:  "gitlab.com/accumulatenetwork/accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c",
+	}
+	run := func(in []byte) {
+		c := Case{In: hex.EncodeToString(in)}
+		if u, err := url.Parse(string(in)); err == nil {
+			s := hex.EncodeToString([]byte(u.String()))
+			c.Out = &s
+		}
+		out.URLs = append(out.URLs, c)
+		t := Case{In: hex.EncodeToString(in)}
+		if x, err := url.ParseTxID(string(in)); err == nil {
+			s := hex.EncodeToString([]byte(x.String()))
+			t.Out = &s
+		}
+		out.TxIDs = append(out.TxIDs, t)
+	}
+	hashes := []string{"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff", "00112233445566778899AABBCCDDEEFF00112233445566778899aabbccddeeff", "0011", ""}
+	var txbases []string
+	for _, h := range hashes {
+		for _, rest := range []string{"probe.acme/book/1", "probe.acme/book/1/", "probe.acme/x?q#f", "probe.acme"} {
+			txbases = append(txbases, "acc://"+h+"@"+rest, h+"@"+rest)
+		}
+	}
+	all := append(append([]string{}, bases...), txbases...)
+	for _, b := range all {
+		run([]byte(b))
+	}
+	alphabet := []byte("abcxyz09-_.~:/?#[]@%!$&'()*+,;= {}|\\^`\"<>")
+	for i := 0; i < 3000; i++ {
+		b := []byte(all[r.Intn(len(all))])
+		for k := 0; k < 1+r.Intn(3); k++ {
+			switch r.Intn(5) {
+			case 0:
+				if len(b) > 0 {
+					b[r.Intn(len(b))] = byte(r.Intn(256))
+				}
+			case 1:
+				if len(b) > 0 {
+					b[r.Intn(len(b))] = alphabet[r.Intn(len(alphabet))]
+				}
+			case 2:
+				if len(b) > 0 {
+					j := r.Intn(len(b))
+					b = append(b[:j], b[j+1:]...)
+				}
+			case 3:
+				j := r.Intn(len(b) + 1)
+				b = append(b[:j], append([]byte{alphabet[r.Intn(len(alphabet))]}, b[j:]...)...)
+			case 4:
+				j := r.Intn(len(b) + 1)
+				b = append(b[:j], append([]byte{byte(r.Intn(256))}, b[j:]...)...)
+			}
+		}
+		run(b)
+	}
+	j, _ := json.Marshal(out)
+	if err := os.WriteFile(os.Args[1], j, 0o644); err != nil {
+		panic(err)
+	}
+	ok, okt := 0, 0
+	for i := range out.URLs {
+		if out.URLs[i].Out != nil {
+			ok++
+		}
+		if out.TxIDs[i].Out != nil {
+			okt++
+		}
+	}
+	fmt.Println("cases", len(out.URLs), "urls parsed", ok, "txids parsed", okt)
+}

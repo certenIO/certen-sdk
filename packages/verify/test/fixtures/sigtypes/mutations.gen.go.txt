@@ -1,0 +1,120 @@
+package main
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+
+	"github.com/certen/independant-validator/accumulate-lite-client-2/liteclient/proof/govsig/sigfixture"
+)
+
+type Mutation struct {
+	ID        string            `json:"id"`
+	Base      string            `json:"base"`
+	Op        string            `json:"op"`
+	Signature string            `json:"signature"`
+	Expect    sigfixture.Expect `json:"expect"`
+}
+
+type File struct {
+	Format      string     `json:"format"`
+	Description string     `json:"description"`
+	Source      string     `json:"source"`
+	Mutations   []Mutation `json:"mutations"`
+}
+
+func judge(v sigfixture.Vector) (verdict string, exp sigfixture.Expect, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+		}
+	}()
+	verdict, verified, _ := sigfixture.Judge(v)
+	exp.Verdict = verdict
+	if verdict == "accepted" {
+		exp.KeyHash = hex.EncodeToString(verified.KeyHash)
+		exp.Form = verified.Form
+		exp.EthRule = verified.EthRule
+		exp.InnerType = verified.Inner.Type().String()
+		for _, d := range verified.Delegators {
+			exp.Delegators = append(exp.Delegators, d.String())
+		}
+	}
+	return verdict, exp, true
+}
+
+func main() {
+	vs, _, err := sigfixture.LoadVectors(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	per := 14
+	out := &File{
+		Format:      "certen:sigtypes-mutations:v1",
+		Description: "Byte-level mutations of the shared sigtypes vectors' binary signatures (bit flip, byte replace, delete, insert, truncate, append), each judged by the validator's govsig.Verify through sigfixture.Judge. The base vector supplies everything but the signature bytes. A mutation on which Go panics is not recorded: Go has no verdict there.",
+		Source:      "go run (scratch) over validator pv2/rb8-b-every-key-signature-type govsig/sigfixture",
+	}
+	panics := 0
+	for _, base := range vs {
+		raw, err := hex.DecodeString(base.Signature)
+		if err != nil || len(raw) == 0 {
+			continue
+		}
+		r := rand.New(rand.NewSource(int64(len(base.ID))*7919 + int64(raw[len(raw)-1]) + int64(len(raw))))
+		for k := 0; k < per; k++ {
+			m := append([]byte(nil), raw...)
+			op := ""
+			switch k % 7 {
+			case 0:
+				i := r.Intn(len(m))
+				m[i] ^= 1 << uint(r.Intn(8))
+				op = fmt.Sprintf("flip@%d", i)
+			case 1:
+				i := r.Intn(len(m))
+				m[i] = byte(r.Intn(256))
+				op = fmt.Sprintf("set@%d", i)
+			case 2:
+				i := r.Intn(len(m))
+				m = append(m[:i], m[i+1:]...)
+				op = fmt.Sprintf("del@%d", i)
+			case 3:
+				i := r.Intn(len(m) + 1)
+				m = append(m[:i], append([]byte{byte(r.Intn(256))}, m[i:]...)...)
+				op = fmt.Sprintf("ins@%d", i)
+			case 4:
+				i := 1 + r.Intn(len(m))
+				m = m[:i]
+				op = fmt.Sprintf("trunc@%d", i)
+			case 5:
+				extra := []byte{byte(1 + r.Intn(31)), byte(r.Intn(4))}
+				m = append(m, extra...)
+				op = "append"
+			case 6:
+				// flip a bit inside the last third (usually the signature or key material)
+				i := len(m)*2/3 + r.Intn(len(m)-len(m)*2/3)
+				m[i] ^= 1 << uint(r.Intn(8))
+				op = fmt.Sprintf("flip-tail@%d", i)
+			}
+			v := base
+			v.Signature = hex.EncodeToString(m)
+			v.SignatureJSON = nil
+			_, exp, ok := judge(v)
+			if !ok {
+				panics++
+				continue
+			}
+			out.Mutations = append(out.Mutations, Mutation{ID: fmt.Sprintf("%s#%02d", base.ID, k), Base: base.ID, Op: op, Signature: v.Signature, Expect: exp})
+		}
+	}
+	b, _ := json.Marshal(out)
+	if err := os.WriteFile(os.Args[2], b, 0o644); err != nil {
+		panic(err)
+	}
+	mix := map[string]int{}
+	for _, m := range out.Mutations {
+		mix[m.Expect.Verdict]++
+	}
+	fmt.Println("mutations", len(out.Mutations), "panics", panics, mix)
+}

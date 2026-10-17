@@ -1,0 +1,294 @@
+// Scratch generator: EIP-712 digest oracle for every user transaction body type, written by Accumulate itself
+// (protocol.EIP712Hash).
+package main
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"math/rand"
+	"os"
+	"reflect"
+	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type enumLike interface {
+	SetEnumValue(uint64) bool
+	String() string
+}
+
+type filler struct {
+	r      *rand.Rand
+	sparse float64
+	nuni   int
+}
+
+func (f *filler) word() string {
+	const letters = "abcdefghijklmnop"
+	n := 3 + f.r.Intn(6)
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[f.r.Intn(len(letters))]
+	}
+	return string(b)
+}
+
+func (f *filler) url() *url.URL {
+	return url.MustParse("acc://" + f.word() + ".acme/" + f.word() + "/" + f.word())
+}
+
+func (f *filler) bytes(n int) []byte {
+	b := make([]byte, n)
+	f.r.Read(b)
+	return b
+}
+
+func validEnums(t reflect.Type) []uint64 {
+	var out []uint64
+	for i := uint64(0); i < 64; i++ {
+		v := reflect.New(t)
+		e, ok := v.Interface().(enumLike)
+		if !ok {
+			return nil
+		}
+		if e.SetEnumValue(i) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+var tEnum = reflect.TypeOf((*enumLike)(nil)).Elem()
+
+func (f *filler) fill(v reflect.Value, depth int) {
+	t := v.Type()
+	switch {
+	case t == reflect.TypeOf((*url.URL)(nil)):
+		v.Set(reflect.ValueOf(f.url()))
+		return
+	case t == reflect.TypeOf((*url.TxID)(nil)):
+		var h [32]byte
+		f.r.Read(h[:])
+		v.Set(reflect.ValueOf(f.url().WithTxID(h)))
+		return
+	case t == reflect.TypeOf((*big.Int)(nil)):
+		v.Set(reflect.ValueOf(new(big.Int).SetBytes(f.bytes(1 + f.r.Intn(9)))))
+		return
+	case t == reflect.TypeOf(big.Int{}):
+		v.Set(reflect.ValueOf(*new(big.Int).SetBytes(f.bytes(1 + f.r.Intn(9)))))
+		return
+	case t == reflect.TypeOf(time.Time{}):
+		v.Set(reflect.ValueOf(time.Unix(1700000000+int64(f.r.Intn(100000000)), 0).UTC()))
+		return
+	case t == reflect.TypeOf(time.Duration(0)):
+		return
+	case t == reflect.TypeOf(json.RawMessage{}):
+		v.Set(reflect.ValueOf(json.RawMessage(`{"k":1}`)))
+		return
+	}
+	if v.CanAddr() && reflect.PtrTo(t).Implements(tEnum) {
+		if ev := validEnums(t); len(ev) > 0 {
+			v.SetUint(ev[f.r.Intn(len(ev))])
+			return
+		}
+	}
+	switch t.Kind() {
+	case reflect.Ptr:
+		n := reflect.New(t.Elem())
+		f.fill(n.Elem(), depth+1)
+		v.Set(n)
+	case reflect.Struct:
+		if depth > 5 {
+			return
+		}
+		for i := 0; i < t.NumField(); i++ {
+			sf := t.Field(i)
+			if !sf.IsExported() {
+				continue
+			}
+			if f.r.Float64() < f.sparse {
+				continue
+			}
+			f.fill(v.Field(i), depth+1)
+		}
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			v.SetBytes(f.bytes(1 + f.r.Intn(40)))
+			return
+		}
+		n := 1 + f.r.Intn(3)
+		s := reflect.MakeSlice(t, n, n)
+		for i := 0; i < n; i++ {
+			f.fill(s.Index(i), depth+1)
+		}
+		v.Set(s)
+	case reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			b := f.bytes(t.Len())
+			for i := range b {
+				v.Index(i).SetUint(uint64(b[i]))
+			}
+		}
+	case reflect.String:
+		v.SetString(f.word() + " " + f.word())
+	case reflect.Bool:
+		v.SetBool(true)
+	case reflect.Uint64, reflect.Uint32, reflect.Uint:
+		v.SetUint(1 + uint64(f.r.Intn(1000000000)))
+	case reflect.Int64, reflect.Int:
+		v.SetInt(1 + int64(f.r.Intn(1000000000)))
+	case reflect.Interface:
+		f.fillUnion(v, depth)
+	}
+}
+
+func (f *filler) fillUnion(v reflect.Value, depth int) {
+	t := v.Type()
+	var vals []any
+	switch t {
+	case reflect.TypeOf((*protocol.DataEntry)(nil)).Elem():
+		for i := protocol.DataEntryType(0); i < 8; i++ {
+			if x, err := protocol.NewDataEntry(i); err == nil {
+				vals = append(vals, x)
+			}
+		}
+	case reflect.TypeOf((*protocol.KeyPageOperation)(nil)).Elem():
+		for i := protocol.KeyPageOperationType(0); i < 16; i++ {
+			if x, err := protocol.NewKeyPageOperation(i); err == nil {
+				vals = append(vals, x)
+			}
+		}
+	case reflect.TypeOf((*protocol.AccountAuthOperation)(nil)).Elem():
+		for i := protocol.AccountAuthOperationType(0); i < 16; i++ {
+			if x, err := protocol.NewAccountAuthOperation(i); err == nil {
+				vals = append(vals, x)
+			}
+		}
+	case reflect.TypeOf((*protocol.NetworkMaintenanceOperation)(nil)).Elem():
+		for i := protocol.NetworkMaintenanceOperationType(0); i < 16; i++ {
+			if x, err := protocol.NewNetworkMaintenanceOperation(i); err == nil {
+				vals = append(vals, x)
+			}
+		}
+	}
+	if len(vals) == 0 || depth > 6 {
+		return
+	}
+	pick := vals[f.nuni%len(vals)]
+	f.nuni++
+	pv := reflect.ValueOf(pick)
+	if pv.Kind() == reflect.Ptr {
+		n := reflect.New(pv.Type().Elem())
+		f.fill(n.Elem(), depth+1)
+		v.Set(n)
+	}
+}
+
+type Vector struct {
+	ID          string `json:"id"`
+	Body        string `json:"body"`
+	Transaction string `json:"transaction"`
+	TxHash      string `json:"txHash"`
+	Signature   string `json:"signature"`
+	ChainID     string `json:"chainId"`
+	Hash        string `json:"hash,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+type File struct {
+	Format      string   `json:"format"`
+	Description string   `json:"description"`
+	Accumulate  string   `json:"accumulate"`
+	Vectors     []Vector `json:"vectors"`
+}
+
+func main() {
+	out := &File{
+		Format:      "certen:eip712-bodies:v1",
+		Description: "EIP-712 digests of typedData signatures over every user transaction body type, written by Accumulate's own protocol.EIP712Hash. Transactions and signatures are populated reflectively from deterministic seeds; an error vector is a transaction and signature that EIP712Hash refuses.",
+		Accumulate:  "gitlab.com/accumulatenetwork/accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c",
+	}
+	perType := 16
+	for ti := protocol.TransactionType(1); ti < protocol.TransactionType(protocol.TransactionMaxUser); ti++ {
+		probe, err := protocol.NewTransactionBody(ti)
+		if err != nil {
+			continue
+		}
+		name := probe.Type().String()
+		for k := 0; k < perType; k++ {
+			seed := int64(ti)*1000 + int64(k)
+			f := &filler{r: rand.New(rand.NewSource(seed)), sparse: []float64{0, 0.3, 0.5, 0.7}[k%4], nuni: k}
+			body, _ := protocol.NewTransactionBody(ti)
+			f.fill(reflect.ValueOf(body).Elem(), 0)
+			txn := new(protocol.Transaction)
+			txn.Body = body
+			hf := &filler{r: rand.New(rand.NewSource(seed + 7)), sparse: []float64{0.2, 0.5, 0.8, 0.0}[k%4]}
+			hf.fill(reflect.ValueOf(&txn.Header).Elem(), 0)
+			if txn.Header.Principal == nil {
+				txn.Header.Principal = f.url()
+			}
+
+			sf := &filler{r: rand.New(rand.NewSource(seed + 13))}
+			td := &protocol.TypedDataSignature{
+				PublicKey:     sf.bytes(65),
+				Signature:     sf.bytes(64),
+				Signer:        sf.url(),
+				SignerVersion: uint64(1 + sf.r.Intn(9)),
+				Timestamp:     uint64(1700000000000 + sf.r.Intn(1000000)),
+				ChainID:       protocol.EthChainID("DevNet"),
+			}
+			if k%3 == 1 {
+				td.Vote = protocol.VoteType(1 + sf.r.Intn(3))
+			}
+			if k%5 == 2 {
+				td.Memo = sf.word() + " " + sf.word()
+			}
+			if k%5 == 3 {
+				td.Data = sf.bytes(1 + sf.r.Intn(20))
+			}
+			if k%4 == 3 {
+				td.ChainID = protocol.EthChainID("Kermit")
+			}
+			var outer protocol.Signature = td
+			nd := k % 3
+			for d := 0; d < nd; d++ {
+				outer = &protocol.DelegatedSignature{Delegator: sf.url(), Signature: outer}
+			}
+			tb, err := txn.MarshalBinary()
+			if err != nil {
+				continue
+			}
+			sb, err := outer.MarshalBinary()
+			if err != nil {
+				panic(err)
+			}
+			v := Vector{ID: fmt.Sprintf("%s/%02d", name, k), Body: name, Transaction: hex.EncodeToString(tb), TxHash: hex.EncodeToString(txn.GetHash()), Signature: hex.EncodeToString(sb), ChainID: td.ChainID.String()}
+			if len(os.Args) > 2 && os.Args[2] == v.ID {
+				j, _ := protocol.MarshalEip712(txn, outer)
+				fmt.Println(string(j))
+			}
+			h, err := protocol.EIP712Hash(txn, outer)
+			if err != nil {
+				v.Error = err.Error()
+			} else {
+				v.Hash = hex.EncodeToString(h)
+			}
+			out.Vectors = append(out.Vectors, v)
+		}
+	}
+	b, _ := json.MarshalIndent(out, "", " ")
+	if err := os.WriteFile(os.Args[1], b, 0o644); err != nil {
+		panic(err)
+	}
+	nerr := 0
+	for _, v := range out.Vectors {
+		if v.Error != "" {
+			nerr++
+		}
+	}
+	fmt.Println("vectors", len(out.Vectors), "errors", nerr)
+}
