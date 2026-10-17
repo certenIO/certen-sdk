@@ -1,6 +1,7 @@
-import type { Receipt, ReceiptStage } from '@certen.io/sdk';
+import type { Receipt, ReceiptStage, TransactionDestination } from '@certen.io/sdk';
 import { human } from './output.js';
 import { EXIT, type ExitCode } from './errors.js';
+import { destinationRows } from './destination.js';
 
 /**
  * Putting a `Receipt` in front of a person, and deciding what exit code it earns.
@@ -68,8 +69,14 @@ export function proofLine(r: Receipt): string {
 const rowOf = (label: string, value: string): string => `  ${label.padEnd(9)} ${value}`;
 const cont = (value: string): string => `  ${' '.repeat(9)} ${value}`;
 
-/** The receipt as lines. Pure. */
-export function receiptLines(r: Receipt, opts: { savedTo?: string; explain?: boolean } = {}): string[] {
+/**
+ * The receipt as lines. Pure.
+ *
+ * `destination` is what the gateway said the intent made on its destination chain on the read this receipt was built from, and it is shown
+ * under its own label: it is the validators' record and nothing checked it, while the lines around it come from the proof this CLI verified.
+ * It is not part of the saved receipt, so a receipt shown from disk without asking the gateway has none.
+ */
+export function receiptLines(r: Receipt, opts: { savedTo?: string; explain?: boolean; destination?: TransactionDestination | null } = {}): string[] {
   const lines: string[] = [''];
   lines.push(`  ${stageLine(r)}`);
   lines.push('');
@@ -91,6 +98,7 @@ export function receiptLines(r: Receipt, opts: { savedTo?: string; explain?: boo
     lines.push(rowOf('Called', `${r.request.contract_call.function_signature} on ${r.request.contract_call.target} (${r.request.chain})`));
   }
 
+  lines.push(...destinationRows(opts.destination ?? null));
   lines.push(rowOf('Effect', r.effect.detail));
   lines.push(rowOf('Proof', proofLine(r)));
   // The overall reading is its own line only when it says something the proof line does not: the intent failed or has not finished, or the
@@ -142,6 +150,6 @@ function shorten(v: unknown): string {
 }
 
 /** Print the receipt: ordinary output in table mode, stderr in `--json` mode (where stdout is the one envelope). */
-export function renderReceipt(r: Receipt, opts: { savedTo?: string; explain?: boolean } = {}): void {
+export function renderReceipt(r: Receipt, opts: { savedTo?: string; explain?: boolean; destination?: TransactionDestination | null } = {}): void {
   for (const line of receiptLines(r, opts)) human(line);
 }

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { CertenClient, intentOutcome } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
+import { printTransaction } from '../destination.js';
 import { confirmBeforeSigning, contextValues } from '../card.js';
 import { commandPrompter } from '../prompt.js';
 import { resolveSigner } from '../signer.js';
@@ -342,7 +343,7 @@ export function registerTransactionCommands(program: Command): void {
       }
 
       const final = await waitForTransaction(client, intentId, budget);
-      printOutput(final);
+      printTransaction(final);
       emitTerminalHints(final, intentId);
     });
 
@@ -440,14 +441,14 @@ export function registerTransactionCommands(program: Command): void {
         // reason_code, completion_basis, expires_at and additional_authorities are always present
         // in the output (null when unset), so a script need not probe for them.
         const result = withOutcomeFields(await client.transaction.get(id) as unknown as Record<string, unknown>);
-        printOutput(result);
+        printTransaction(result);
         emitOutcomeHints(result);
         emitTerminalHints(result, id);
         return;
       }
 
       const final = withOutcomeFields(await waitForTransaction(client, id, budget));
-      printOutput(final);
+      printTransaction(final);
       emitOutcomeHints(final);
       emitTerminalHints(final, id);
     });

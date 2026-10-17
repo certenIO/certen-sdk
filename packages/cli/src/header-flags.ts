@@ -87,6 +87,8 @@ const HEADER_KEYS = ['reason_code', 'completion_basis', 'expires_at', 'additiona
 export function withOutcomeFields(tx: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...tx };
   for (const key of HEADER_KEYS) if (out[key] === undefined) out[key] = null;
+  // The destination transaction the validators recorded (null until they have, and for an intent on several chains): always present, like the rest.
+  if (out.destination === undefined) out.destination = null;
   return out;
 }
 

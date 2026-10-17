@@ -41,6 +41,11 @@ export interface SigningCard {
   /** The chain the card is about, for the mainnet rule. Absent for a command that is not about one (governance). */
   chain?: string;
   fee?: FeeEstimate | null;
+  /**
+   * What the gateway's own estimate of this request says, as lines (`estimateLines`), or its absence ("unavailable"). Only `send` asks for one. It
+   * is shown under the fee and never replaces it; a card without it is exactly what it was.
+   */
+  estimate?: string[];
   /** Values the person did NOT type. */
   fromContext: CardContextValue[];
   summary: SigningSummary;
@@ -75,10 +80,12 @@ export function renderSigningCard(card: SigningCard): string[] {
   const mainnet = isMainnetLike(card.chain);
   const lines: string[] = [''];
   lines.push(`  ${mainnet && card.chain ? card.headline.split(card.chain).join(card.chain.toUpperCase()) : card.headline}`);
-  const width = Math.max(4, ...card.rows.map(([label]) => label.length), card.fee !== undefined ? 3 : 0, mainnet ? 7 : 0, card.fromContext.length > 0 ? 7 : 0);
+  const hasEstimate = card.estimate !== undefined && card.estimate.length > 0;
+  const width = Math.max(4, ...card.rows.map(([label]) => label.length), card.fee !== undefined ? 3 : 0, hasEstimate ? 8 : 0, mainnet ? 7 : 0, card.fromContext.length > 0 ? 7 : 0);
   if (mainnet) lines.push(`    ${'network'.padEnd(width)}  NOT A KNOWN TESTNET: this moves real funds`);
   for (const [label, value] of card.rows) lines.push(`    ${label.padEnd(width)}  ${value}`);
   if (card.fee !== undefined) lines.push(`    ${'fee'.padEnd(width)}  ${feeLine(card.fee)}`);
+  if (hasEstimate) card.estimate!.forEach((line, i) => lines.push(`    ${(i === 0 ? 'estimate' : '').padEnd(width)}  ${line}`));
   if (card.fromContext.length > 0) {
     lines.push(`    ${'context'.padEnd(width)}  not typed by you: ${card.fromContext.map((c) => `${c.field} ${c.value} (${c.source})`).join('; ')}`);
   }

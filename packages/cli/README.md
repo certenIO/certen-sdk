@@ -43,6 +43,28 @@ run `certen setup` again to continue. The amounts are planning figures, not a qu
 `certen gas` is the same, on its own: what the abstract account holds, what to send where, and `--wait` for it. It is **not** `certen fund`, which
 tops up the organization's gateway balance (the stablecoin that pays CERTEN's fees).
 
+### Asking the platform for gas or credits: `gas --drip`, `credits topup`
+
+Two commands spend **the platform's** money, not yours: `certen gas --drip` asks it to send testnet gas to an account that is short, and
+`certen credits topup --credits 500` adds credits to an identity's key page (1 credit = $0.01; `--credits` is a **count of credits, never ACME**). The
+operator switches both off by default, so against most gateways today they answer `DRIP_DISABLED` / `CREDIT_TOPUP_DISABLED` in plain words, and the
+manual route (`certen gas` without the flag) is still there.
+
+```bash
+certen gas --drip [--wait] [--yes]                          # only when the account is short; a funded account is reported funded and nothing is sent
+certen credits topup --credits 500 [--identity <ref>] [--yes] [--idempotency-key <key>]
+```
+
+- **Nothing spends unattended.** At a terminal you are asked and a bare Enter is *no*. With nobody to ask (a pipe, CI, `--json`) the command refuses with
+  exit `2` before it reads or sends anything, unless you pass `--yes`. `--json` is not consent.
+- **The Idempotency-Key is printed every time** (and is in the `--json` result). Pass it back with `--idempotency-key` to repeat the *same* attempt: a
+  repeat with the same key can never be a second draw, a new key can. A script that retries must reuse the key it was told.
+- **`unconfirmed` is not a success.** If the gateway does not know whether it sent the drip or applied the credits, the command says the credits (or gas)
+  **may** be there, exits `1` (`CREDIT_TOPUP_UNCONFIRMED`, `DRIP_UNCONFIRMED`), and names the command that settles it: `certen identity readiness` to read
+  the credits back, `certen gas --wait` to watch for the gas. A plain `submitted` / `sent` exits `0`; `submitted` means accepted, not yet confirmed.
+- **One attempt, and no retry of a limit.** A limit is a window, and a switch that is off does not turn on by retrying: the CLI sends one request and
+  explains. When the connection drops after the request left, the exit is `3` but the spend **may** have happened: repeat with the same key.
+
 The steps one at a time, if you prefer them: `certen login` (approve this machine once in the portal; the key arrives here) and `certen init`
 (signing key, identity, funding). `init` is unchanged: it exits `0` once its steps are done, whether or not the account can act yet.
 
@@ -175,7 +197,9 @@ certen watch <intent-id>  # pick a wait back up after Ctrl-C or a timeout
    `certen call` with `transfer(address,uint256)`, which shows exactly what it will call. A chain that is not a known testnet is never taken from a default: spell it out with `--chain`.
 2. **It checks readiness before it asks for a passphrase** (the same checks as `certen status`, for this amount), so a passphrase is never asked for in order to fail. A failing check refuses
    and says what to do. A check that could not be answered is shown and does not block. `--force` excuses the gas checks only.
-3. **It shows the confirmation card and asks.** What is about to happen in your own terms, the recipient in full, the fee (an estimate from the price book, or "not available"), every value you did not
+3. **It shows the confirmation card and asks.** What is about to happen in your own terms, the recipient in full, the fee (an estimate from the price book, or "not available"), **the gateway's own
+   estimate of this request** (labelled an estimate, with the gates it checked and the ones it did not; "unavailable" when the gateway has no such route or does not answer, and then the send is
+   exactly what it would have been; `certen quote <amount> <asset> --to <address>` shows the same before you commit), every value you did not
    type and where it came from, then what the signature will authorise, **rebuilt from the gateway's bytes and matched to your request**. At a terminal it asks `Sign with "dev"? [Y/n]`; on
    anything that is not a known testnet the chain name is in capitals and the default is **no**. `--yes` says yes in advance (it is required when nobody is at a terminal, or `send` refuses before
    reading a passphrase). `--yes` and `--json` skip the question; **nothing skips the check of what is signed**.
@@ -211,7 +235,11 @@ The record the docs have always told you to keep (the intent, the Accumulate tra
 - `certen receipt [intent]` shows it again, **re-verifying the proof here** and refreshing whatever was pending (`--list` lists the saved ones, `--offline` asks nothing, `--explain` prints the layers, `--share` makes a link a
   counterparty opens with no CERTEN account). `certen watch <intent>` waits for an intent to finish and shows it. Both work for any intent, not only ones this machine sent. (`certen receipts` is something else: your billing receipts.)
 
-`--json` is one envelope with `data.receipt` and `data.saved_to`; the shape is versioned and documented in [docs/CLI-CONTRACT.md](../../docs/CLI-CONTRACT.md) section 10.
+- **The destination transaction is the validators' word, and is shown that way.** When the gateway reports the transaction an intent made on its destination chain, `send`, `receipt`, `watch`, `call` and
+  `tx status` print it under its own `Recorded` row with its settlement, **"as recorded by the validators; not verified"**. The gateway copies it from what the validators wrote down and does not read the
+  chain; it is not proof (the `Proof` row is) and is not part of the saved receipt. `--json` carries it as `data.destination` (`null` until recorded, and for an intent on several chains).
+
+`--json` is one envelope with `data.receipt`, `data.saved_to` and `data.destination`; the shape is versioned and documented in [docs/CLI-CONTRACT.md](../../docs/CLI-CONTRACT.md) section 10.
 
 ## Proof-gated contract calls
 
@@ -359,6 +387,10 @@ certen portfolio                                 # balances across every identit
 certen tx status <id> --wait | tx list
 certen pricing                                   # everything CERTEN charges for, in one call
 certen balance | quote --chain <chain> [--sku <sku>] | fund <amount> --chain <chain>
+certen balance <address> [--chain <chain>]       # the native balance of ANY EVM address, as the gateway's node answers (a failed read is an error, never a 0)
+certen quote <amount> <asset> --to <address>     # the gateway's ESTIMATE for a send: creates, charges and signs nothing; lists what it did not check
+certen identity readiness [ref] [--chain <chain>]  # facts from ONE gateway read (key on its key page, credits, a chain's balance, the org's balance); no verdict
+certen credits topup --credits <n>               # credits for a key page, paid by the platform (asks first; see above)
 certen governance add-key | remove-key | set-threshold | add-authority | remove-authority | add-delegate | sign
                                                  # --sign-with <key> signs and submits in one step; add-authority is how
                                                  # a policy signer becomes a required co-signer on an agent;
@@ -406,7 +438,7 @@ certen --json portfolio
 - **Exactly one JSON object on stdout**, nothing else. Every human-facing line goes to stderr.
 - **Exit codes:** `0` ok · `1` operation failed · `2` usage error · `3` gateway unreachable. Branch on
   these instead of parsing text. `3` guarantees nothing was submitted, so a retry cannot
-  double-execute. `4` and `5` are the verdicts of `proof verify`, `send`, `receipt` and `watch` (partial or
+  double-execute (except `credits topup` and `gas --drip`, whose request may have left: repeat those with the same `--idempotency-key`). `4` and `5` are the verdicts of `proof verify`, `send`, `receipt` and `watch` (partial or
   pending; no evidence), and `130` is Ctrl-C while `setup`, `gas`, `send` or `watch` was waiting.
 - **`error.retryable`** comes from the SDK's own `CertenError.isRetryable`, so the CLI and the SDK
   give an identical retry decision.

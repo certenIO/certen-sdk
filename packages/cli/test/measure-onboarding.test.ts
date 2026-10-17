@@ -156,12 +156,17 @@ const BASELINE = {
    * node (`--rpc`: the chain id and the recipient's balance before signing, then the chain id and the balance after, and the block header the proof
    * is compared with), which is the independent check the plan asks for. The rest are the readiness read, the price book for the card, the intent
    * (open, sign, read), the proof, the abstract account's balance after, and the chain registry for the explorer link.
+   *
+   * **Moved by one, on purpose: `send` costs 19 round trips, not 18.** Its confirmation card now carries the gateway's own estimate of the request
+   * (`POST /v1/transaction/quote`), asked once after the readiness checks and before the passphrase. It is one read that never blocks or changes the
+   * send (a gateway without the route prints "unavailable" and goes on), and it replaces a guess on the card with the gateway's figure. Every other
+   * line is exactly as it was measured, which is the evidence that nothing else changed.
    */
   send: {
-    round_trips: 34,
+    round_trips: 35,
     per_step: [
       ['certen setup --yes --new-account --org-name journey --name journey-probe --chain base-sepolia --no-keyring --wait-for-funds --poll-interval 0.2 --funds-timeout 10s', 16],
-      ['certen send 0.0001 ETH --to {recipient} --yes --wait --timeout 6m --rpc {rpc_url}', 18],
+      ['certen send 0.0001 ETH --to {recipient} --yes --wait --timeout 6m --rpc {rpc_url}', 19],
     ],
   },
 } as const;

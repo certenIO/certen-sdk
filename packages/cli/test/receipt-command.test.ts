@@ -62,7 +62,7 @@ describe('receipt: refresh, show and explain a saved receipt', () => {
     expect(r.code).toBe(4);
     expect(requests(env)).toContain(`GET /v1/transaction/${INTENT_ID}`);
     const e = envelope(r);
-    expect(Object.keys(e.data!).sort()).toEqual(['receipt', 'refreshed', 'saved_to']);
+    expect(Object.keys(e.data!).sort()).toEqual(['destination', 'receipt', 'refreshed', 'saved_to']);
     expect(e.data!.refreshed).toBe(true);
     expect(e.data!.saved_to).toBe(filePath(env.home));
     expect(e.data!.receipt.verdict).toBe('partial');
