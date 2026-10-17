@@ -118,8 +118,11 @@ exists but is **not enforced**; "push" (the gateway stack and the ledger commit)
    Production at that time: gateway `dc21237` and bridge `786c033` equal to their `origin/main`, every container healthy, only old `.bak` files untracked; nothing was changed on the host.
 4. `spec:refresh` is DONE (on `feat/adopt-gateway-asks`): it is not run on the host. It downloads the gateway's public OpenAPI document into `spec/openapi.json` in THIS repo on a developer machine,
    and changes nothing on the server. The SDK half of the adoption is on the same branch; the CLI and MCP half waits for the human's choice of surface.
-5. After the 2026-10-16 deploy (human): gateway `d786bd2`, bridge `76984cf`. Still to do: merge `feat/credits-by-count` and redeploy the bridge (the top-up needs it), merge `release/cli-ux-0.11`
-   and the adoption branch (the release PR first, then rebase the adoption branch over it: both edit the top of the three changelogs), and release. Publishing is the workflow's staged route, not a local token.
+5. After the 2026-10-16 deploy (human): gateway `d786bd2`, bridge `76984cf`. `release/cli-ux-0.11` is merged (PR #36, `e8afe27`) and the adoption branch took `main` by a merge, not a rebase (it was already pushed, so no force-push):
+   one conflict, the top of `packages/sdk/CHANGELOG.md`, resolved by keeping the adoption entry as the Unreleased section above the `0.11.0` section. Still to do: merge `feat/credits-by-count` (bridge PR #34, its conflict with `main` in
+   `src/accumulate-errors.ts` is resolved and pushed as `d9656bd`) and redeploy the bridge (the top-up needs it), merge the adoption branch (it goes out in the release after 0.11.0), and tag the 0.11 release:
+   `sdk-v0.11.0`, then `cli-v0.11.0`, then `mcp-v0.6.0`, each on the release merge commit `e8afe27` (not on the tip of `main` once the adoption branch has merged, which would put unreleased code under 0.11.0).
+   Publishing is the workflow's staged route, not a local token.
 6. Run the two Phase 6 MCP tools against the real gateway, and release (SDK first).
 
 ### Follow-ups found while adopting (none changed)
