@@ -601,6 +601,45 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           }
         }
       },
+      "destination": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "description": "The one transaction this intent made on its destination chain, on the VALIDATORS' word (`source`): the `settlement_tx` of the member for the chain the intent declares. It is the validators' record, not a fact the gateway checked and not the proof - the proof artifact is what lets anyone check it against the chain. `settlement` says what became of it: `reverted` is a transaction that exists and did not succeed. Null while the validators have not recorded a transaction for that chain yet (that is \"not yet\", not \"none\"), and ALWAYS null for an intent on several chains or with a leg whose chain cannot be read: it has more than one destination transaction and none is named as the destination, so read each `validator.members` entry. An intent that never reaches the validators has none.",
+        "additionalProperties": false,
+        "properties": {
+          "chain_id": {
+            "type": "integer",
+            "description": "The destination chain's numeric id."
+          },
+          "tx_hash": {
+            "type": "string",
+            "description": "The destination-chain transaction hash, as the validators recorded it."
+          },
+          "settlement": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "settled",
+              "reverted",
+              "unobserved",
+              "none",
+              null
+            ],
+            "description": "What the validators recorded became of the transaction; null when they have not stated it."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "validators"
+            ],
+            "description": "Whose word this is. Always `validators`: the hash is their record, not verified by the gateway."
+          }
+        }
+      },
       "validator": {
         "type": [
           "object",
@@ -1542,6 +1581,37 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           },
           "timestamp": {
             "type": "integer"
+          },
+          "transaction": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "signature_metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ed25519"
+                ]
+              },
+              "public_key": {
+                "type": "string"
+              },
+              "signer": {
+                "type": "string"
+              },
+              "signer_version": {
+                "type": "integer"
+              },
+              "timestamp_us": {
+                "type": "integer"
+              },
+              "vote": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -1705,6 +1775,45 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
                 "null"
               ]
             }
+          }
+        }
+      },
+      "destination": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "description": "The one transaction this intent made on its destination chain, on the VALIDATORS' word (`source`): the `settlement_tx` of the member for the chain the intent declares. It is the validators' record, not a fact the gateway checked and not the proof - the proof artifact is what lets anyone check it against the chain. `settlement` says what became of it: `reverted` is a transaction that exists and did not succeed. Null while the validators have not recorded a transaction for that chain yet (that is \"not yet\", not \"none\"), and ALWAYS null for an intent on several chains or with a leg whose chain cannot be read: it has more than one destination transaction and none is named as the destination, so read each `validator.members` entry. An intent that never reaches the validators has none.",
+        "additionalProperties": false,
+        "properties": {
+          "chain_id": {
+            "type": "integer",
+            "description": "The destination chain's numeric id."
+          },
+          "tx_hash": {
+            "type": "string",
+            "description": "The destination-chain transaction hash, as the validators recorded it."
+          },
+          "settlement": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "settled",
+              "reverted",
+              "unobserved",
+              "none",
+              null
+            ],
+            "description": "What the validators recorded became of the transaction; null when they have not stated it."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "validators"
+            ],
+            "description": "Whose word this is. Always `validators`: the hash is their record, not verified by the gateway."
           }
         }
       },
@@ -2090,6 +2199,37 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           },
           "hash_to_sign": {
             "type": "string"
+          },
+          "transaction": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "signature_metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "ed25519"
+                ]
+              },
+              "public_key": {
+                "type": "string"
+              },
+              "signer": {
+                "type": "string"
+              },
+              "signer_version": {
+                "type": "integer"
+              },
+              "timestamp_us": {
+                "type": "integer"
+              },
+              "vote": {
+                "type": "string"
+              }
+            }
           }
         }
       },

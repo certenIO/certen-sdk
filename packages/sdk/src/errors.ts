@@ -53,6 +53,8 @@ export class CertenError extends Error {
     // Code beats status, in both directions.
     if (this.code === 'IDEMPOTENCY_KEY_IN_FLIGHT') return true;
     if (this.code === 'PLAN_QUOTA_EXCEEDED') return false;
+    // A feature the operator has not switched on does not switch on by retrying, whatever the 503 says.
+    if (this.code === 'CREDIT_TOPUP_DISABLED' || this.code === 'DRIP_DISABLED') return false;
     if (this.status >= 500 && this.status < 600) return true;
     if (this.status === 429) return true;
     if (this.status === 408) return true;

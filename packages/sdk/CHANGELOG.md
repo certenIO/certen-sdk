@@ -1,5 +1,25 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — the gateway asks: readiness, quote, credit top-up, gas drip, any-address balance, and the destination transaction (CLI UX, Phase G)
+
+Additive. A maintainer versions and publishes this. Needs a gateway that serves the five operations (deployed 2026-10-16); against an older one each answers `ENDPOINT_NOT_ON_GATEWAY`. Two of the calls spend the platform's funds and are off unless the deployment's operator switched them on.
+
+### Added
+- **`chains.balance(chain, address)`**: the native balance of any EVM address on a chain the gateway serves, as a decimal string (`'0'` is a successful read of an empty account). Needs an API key. A mistyped address is refused before any request with `INVALID_ADDRESS` (a mixed-case address whose EIP-55 checksum fails names the correct capitalisation); a node that did not answer is `BALANCE_UNREADABLE`, never a zero.
+- **`identity.readiness(id, { chain? })`**: the identity, whether its key is on its key page, its credits, optionally one chain's account and native balance, and the organisation's spendable balance, in one read. It reports facts and says nothing like "ready"; each section carries its own `state`. It does not check the key page against Accumulate itself, which `client.readiness()` does.
+- **`identity.topUpCredits(id, { credits, idempotencyKey? })`**: sponsor-paid credits for the identity's key page (1 credit = $0.01; `credits` is a count, never ACME). Refuses anything but a whole number of at least 1 before any request. The gateway requires an `Idempotency-Key`: the SDK always sends one, yours if given, otherwise one it generates (the same one on its own internal retries), even with `autoIdempotencyKey: false`. Answered 202; `status: 'unconfirmed'` is returned as data, because the credits may have been applied.
+- **`identity.drip(id, chain, { idempotencyKey? })`**: a testnet gas drip to the identity's own deployed account. The request carries no body: the destination is the gateway's record and the amount is the operator's. `sent`, `skipped` and `unconfirmed` are all answers.
+- **`transaction.quote({ intent, proofClass? })`**: what an intent would cost and whether it would be admitted, with nothing created, charged or signed. An estimate (`estimate: true`), with the gates it checked and the ones it did not.
+- **`TransactionResponse.destination`** (`TransactionDestination`): the one transaction the intent made on its destination chain, **as the validators recorded it**. Not verified by the gateway; null until recorded and null for an intent on several chains.
+- **The eleven error codes the gateway added are known to the SDK** (`BALANCE_UNREADABLE`, `CREDIT_TOPUP_DISABLED`, `CREDIT_TOPUP_LIMIT`, `DRIP_DISABLED`, `DRIP_LIMIT`, `DRIP_RECIPIENT_REJECTS`, `DRIP_TESTNET_ONLY`, `DRIP_UNAVAILABLE`, `IDEMPOTENCY_KEY_REQUIRED`, `INVALID_ADDRESS`, `PROOF_V2_NOT_AVAILABLE`): they are in `VENDORED_ERROR_CODES`, so `doctor` no longer reports the gateway as ahead of the SDK for them, and in `docs/errors.md`.
+
+### Changed
+- **`CertenError.isRetryable` is false for `CREDIT_TOPUP_DISABLED` and `DRIP_DISABLED`** (both 503): a feature the operator has not switched on does not switch on by retrying, so the client's automatic retry no longer repeats them.
+- The vendored spec is refreshed to the deployed gateway (131 operations): the five above, `GET /v1/proof/{id}/v2` (no longer a pending route), `destination`, and `signing_data.transaction` / `signing_data.signature_metadata` on the prepare responses, which the SDK already read.
+
+### Known
+- `CREDIT_TOPUP_LIMIT` and `DRIP_LIMIT` are 429s the gateway's catalogue marks retryable, so the client retries them a few times with backoff. They are daily and cooldown limits, which an immediate retry cannot clear, as `PLAN_QUOTA_EXCEEDED` already is. The SDK mirrors the catalogue (a test requires the two to agree); the fix belongs in the gateway's catalogue first.
+
 ## Unreleased — a node for the recipient, and a share fetch that stays on its origin (CLI UX, Phase 6 follow-ups)
 
 Additive, plus one hardening. A maintainer versions and publishes this; the MCP server's operator-configured node and share-origin rule need it.

@@ -1,7 +1,9 @@
 import { AxiosInstance } from 'axios';
-import type { ChainsListResponse, ChainDetailResponse } from '../types.js';
+import type { ChainsListResponse, ChainDetailResponse, AddressBalanceResponse } from '../types.js';
 import { resolveEnabledChains, defaultEnabledChains, type ChainCatalogueEntry } from '../chains.js';
 import { apiPath } from '../internal.js';
+import { evmAddressProblem } from '../address.js';
+import { CertenError } from '../errors.js';
 
 /**
  * The contract registry: which chains CERTEN is deployed on, and at what addresses.
@@ -44,6 +46,25 @@ export class ChainsResource {
    */
   async get(idOrChainId: string | number): Promise<ChainDetailResponse> {
     const { data } = await this.http.get(apiPath`/v1/chains/${idOrChainId}`);
+    return data;
+  }
+
+  /**
+   * The native balance of ANY EVM address on a chain the gateway serves, read through the gateway's own node.
+   *
+   * **Unlike `list()` and `get()`, this needs an API key.** The gateway reads through its node, so an open version would be an open RPC
+   * proxy. The scope is the existing balance-read scope.
+   *
+   * `balance` is whole units of the native token as a decimal string (`0.25`). `0` is a successful read of an empty account; a node that
+   * did not answer is a `BALANCE_UNREADABLE` error, never a zero. A mistyped address is refused here, before any request, with the same
+   * `INVALID_ADDRESS` the gateway would give (a mixed-case address whose EIP-55 checksum does not hold names the correct capitalisation).
+   * Chains this gateway does not serve answer `UNKNOWN_CHAIN`. Reading through the gateway trusts the gateway's node: for a check that does
+   * not, use `readEvmBalance` with a node you chose.
+   */
+  async balance(idOrChainId: string | number, address: string): Promise<AddressBalanceResponse> {
+    const problem = evmAddressProblem(address);
+    if (problem) throw new CertenError(`certen: balance: ${problem}`, 0, 'INVALID_ADDRESS');
+    const { data } = await this.http.get(apiPath`/v1/chains/${idOrChainId}/addresses/${address}/balance`);
     return data;
   }
 

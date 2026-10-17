@@ -495,7 +495,7 @@ export class CertenClient {
       },
     );
 
-    this.identity = new IdentityResource(this.http);
+    this.identity = new IdentityResource(this.http, generateIdempotencyKey);
     this.transaction = new TransactionResource(this.http);
     this.governance = new GovernanceResource(this.http);
     this.pending = new PendingResource(this.http);

@@ -1,8 +1,13 @@
 import { AxiosInstance } from 'axios';
 import { omitUndefined, apiPath } from '../internal.js';
 import type {
+  ChainDripParams,
+  ChainDripResponse,
   CreateIdentityParams,
+  CreditTopUpParams,
+  CreditTopUpResponse,
   Identity,
+  IdentityReadinessResponse,
   IdentityResponse,
   UpdateIdentityParams,
 } from '../types.js';
@@ -39,7 +44,11 @@ export function parseMnemonicTarget(
 }
 
 export class IdentityResource {
-  constructor(private http: AxiosInstance) {}
+  /**
+   * `newIdempotencyKey` makes the key for a call that must carry one when the caller gave none (`topUpCredits`, `drip`): the gateway
+   * refuses those without a key, and the client's automatic stamping can be turned off.
+   */
+  constructor(private http: AxiosInstance, private newIdempotencyKey?: () => string) {}
 
   /**
    * Create an identity.
@@ -92,6 +101,74 @@ export class IdentityResource {
       ...(opts.include ? { params: { include: opts.include.join(',') } } : {}),
     });
     return data;
+  }
+
+  /**
+   * What is needed to act as this identity, in ONE gateway read: the identity and its status, whether its key is on its key page, its
+   * credits, optionally one chain's account and native balance, and the organisation's spendable balance.
+   *
+   * **This reports facts and says nothing like "ready".** Each section carries its own `state` (`ok`, `unreadable`, `not_permitted`...),
+   * and an `unreadable` section is NOT a failure of the others: read them one by one. `client.readiness()` is the other way to ask the
+   * same question: it assembles the answer from several reads and checks the key page against Accumulate itself, which this does not.
+   * Use this for one cheap call; use that when the answer gates a signature.
+   *
+   * `chain` is a registry id (`base-sepolia`) or a numeric EVM chain id; omitted, the `chain` section is null.
+   */
+  async readiness(id: string, opts: { chain?: string | number } = {}): Promise<IdentityReadinessResponse> {
+    const { data } = await this.http.get(apiPath`/v1/identity/${id}/readiness`, {
+      ...(opts.chain !== undefined ? { params: { chain: String(opts.chain) } } : {}),
+    });
+    return data;
+  }
+
+  /**
+   * Top up the Accumulate credits of this identity's key page, **paid by the platform's sponsor account** (the organisation is not charged).
+   *
+   * Spends real ACME, so it is deliberate: the deployment may have it off (`CREDIT_TOPUP_DISABLED`, not retried), limits each request and
+   * each day (`CREDIT_TOPUP_LIMIT`), and requires an `Idempotency-Key`: pass your own `idempotencyKey` so a retry after a crash or timeout
+   * can never be a second draw; left out, one is generated for this call only.
+   *
+   * Answered 202: the transaction is submitted, not confirmed. **`status: 'unconfirmed'` means the outcome is not known and the credits MAY
+   * have been applied. Read the balance (`readiness`, `identity.get`) before repeating it**; a repeat with a new key is a second draw.
+   * `credits` is a count of whole credits (1 credit = $0.01), never a quantity of ACME.
+   */
+  async topUpCredits(id: string, params: CreditTopUpParams): Promise<CreditTopUpResponse> {
+    const credits: unknown = params?.credits;
+    if (typeof credits !== 'number' || !Number.isSafeInteger(credits) || credits < 1) {
+      throw new CertenError('certen: topUpCredits: credits must be a whole number of at least 1 (a count of credits, not ACME).', 0, 'INVALID_CREDITS');
+    }
+    const { data } = await this.http.post(
+      apiPath`/v1/identity/${id}/credits`,
+      { credits },
+      { headers: this.idempotencyHeaders(params.idempotencyKey) },
+    );
+    return data;
+  }
+
+  /**
+   * Ask the platform to send this identity's deployed account on `chain` a small amount of native token for gas, **on testnets only**.
+   *
+   * The destination is the account the gateway recorded for the identity, and the amount is the operator's: the request carries neither,
+   * so there is nothing here to point elsewhere. `status` is `sent` (mined), `skipped` (the account already held enough; nothing sent) or
+   * `unconfirmed` (answered 202: it MAY have been sent, so read the balance before asking again).
+   *
+   * Often refused by design: off unless an operator enables it (`DRIP_DISABLED`, not retried), one per account and chain per cooldown
+   * (`DRIP_LIMIT`), testnets only (`DRIP_TESTNET_ONLY`). When it is, fund the account by hand: `gasFundingPlan` says how. Requires an
+   * `Idempotency-Key`: pass your own `idempotencyKey` to make a retry after a crash safe; left out, one is generated for this call.
+   */
+  async drip(id: string, chain: string | number, params: ChainDripParams = {}): Promise<ChainDripResponse> {
+    const { data } = await this.http.post(
+      apiPath`/v1/identity/${id}/chain-accounts/${chain}/drip`,
+      undefined,
+      { headers: this.idempotencyHeaders(params.idempotencyKey) },
+    );
+    return data;
+  }
+
+  /** The header for a call the gateway will not run without one: the caller's key, else a fresh one. */
+  private idempotencyHeaders(key: string | undefined): Record<string, string> {
+    const value = key ?? this.newIdempotencyKey?.();
+    return value ? { 'Idempotency-Key': value } : {};
   }
 
   /**
