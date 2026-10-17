@@ -570,7 +570,8 @@ describe('certen send checks readiness BEFORE the passphrase', () => {
     expect(r.code, r.stderr).toBe(4);
     expect(r.stderr).not.toMatch(/^using /m);
     expect(r.stderr).not.toContain('not typed by you');
-    expect(r.stderr).toContain(`to    ${RECIPIENT}`);
+    // (The label column is as wide as the widest row, which is `estimate` now that the card carries the gateway's estimate.)
+    expect(r.stderr).toMatch(new RegExp(`^ {4}to +${RECIPIENT}$`, 'm'));
   });
 });
 
@@ -620,7 +621,8 @@ describe('certen send --dry-run', () => {
     expect(r.code, r.stderr).toBe(0);
     const e1 = oneLine(r);
     expect(e1.ok).toBe(true);
-    expect(Object.keys(e1.data).sort()).toEqual(['dry_run', 'fee', 'readiness', 'request']);
+    // `estimate` is the gateway's estimate of this request (additive); send-estimate.test.ts pins it.
+    expect(Object.keys(e1.data).sort()).toEqual(['dry_run', 'estimate', 'fee', 'readiness', 'request']);
     expect(e1.data.dry_run).toBe(true);
     expect(e1.data.request).toEqual({
       kind: 'transfer', chain: 'base-sepolia', chain_id: 84532, identity_id: IDENTITY_ID, adi_url: ADI, from: ABSTRACT_ACCOUNT, to: RECIPIENT,

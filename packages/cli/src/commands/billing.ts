@@ -4,6 +4,7 @@ import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.j
 import { printOutput, human, hint, isJsonMode, usd } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { runAddressBalance } from '../address-balance.js';
+import { runIntentQuote } from '../quote-intent.js';
 import { assertChain } from '../chains.js';
 import { resolveContext, echoFromContext, sourceLabel } from '../context.js';
 import { buildPaymentUri, estimateWait, preciseDuration } from '../payment-uri.js';
@@ -307,14 +308,40 @@ export function registerBillingCommands(program: Command): void {
   }
 
   program
-    .command('quote')
-    .description('What a piece of work will cost, before you commit to it')
-    .option('--chain <chain>', 'Chain the work executes on, e.g. base-sepolia')
+    // Two questions share the name, and what you give it tells them apart. With the inputs of `send` (an amount, an asset, --to) it is the
+    // gateway's ESTIMATE for that send: nothing is created or charged, and the answer lists what it did not check. With --chain and --sku (or
+    // --id) it is what it has always been: a binding price for an operation, which can be locked with a quote id.
+    .command('quote [amount] [asset]')
+    .description('What a piece of work will cost, before you commit to it: an ESTIMATE for a send (quote <amount> <asset> --to <address>), or a price by --chain and --sku')
+    .option('--to <address>', 'An estimate for a send: the recipient, as for `certen send`')
+    .option('--identity <ref>', 'An estimate for a send: the identity that would send (default: your context)')
+    .option('--chain <chain>', 'Chain the work executes on, e.g. base-sepolia (an estimate for a send: default your context)')
     .option('--id <quote-id>', 'Read back a quote you already have, instead of asking for a new one')
     .option('--sku <sku>', 'Operation to price, e.g. identity.provision. See: certen pricing')
-    .option('--proof-class <class>', 'on_cadence (batched, cheaper) or on_demand (immediate)', 'on_cadence')
+    .option('--proof-class <class>', 'on_cadence (batched, cheaper) or on_demand (immediate). An estimate for a send: only when you give it', 'on_cadence')
     .option('--legs <n>', 'Number of legs in the intent', '1')
-    .action(async (opts: { chain?: string; id?: string; sku?: string; proofClass: string; legs: string }) => {
+    .action(async (amount: string | undefined, asset: string | undefined, opts: {
+      to?: string; identity?: string; chain?: string; id?: string; sku?: string; proofClass: string; legs: string;
+    }, command: Command) => {
+      const given = (name: string): boolean => command.getOptionValueSource(name) !== 'default' && command.getOptionValueSource(name) !== undefined;
+
+      // An estimate for a send is asked for by giving it a send: an amount, an asset, a recipient or an identity.
+      if (amount !== undefined || asset !== undefined || opts.to !== undefined || opts.identity !== undefined) {
+        if (opts.id !== undefined || opts.sku !== undefined || given('legs')) {
+          throw new CliError(
+            '--id, --sku and --legs price an operation by name; an amount, an asset and --to ask for an estimate of a send. Pass one kind or the other.',
+            'CONFLICTING_QUOTE_ARGS', EXIT.USAGE,
+          );
+        }
+        if (given('proofClass') && opts.proofClass !== 'on_cadence' && opts.proofClass !== 'on_demand') {
+          throw new CliError(`"${opts.proofClass}" is not a proof class. Use on_cadence or on_demand.`, 'INVALID_PROOF_CLASS', EXIT.USAGE);
+        }
+        await runIntentQuote(amount, asset, {
+          to: opts.to, chain: opts.chain, identity: opts.identity,
+          ...(given('proofClass') ? { proofClass: opts.proofClass as 'on_demand' | 'on_cadence' } : {}),
+        });
+        return;
+      }
       // Reading a quote back is the same question as asking for one — "what does this cost, and
       // may I still use this price?" — so it is the same command rather than a second one to
       // discover. Without it a caller who priced work, got interrupted, and came back had to

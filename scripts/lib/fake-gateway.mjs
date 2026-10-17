@@ -288,6 +288,19 @@ export async function startFakeGateway(options = {}) {
     ['GET', /^\/v1\/health\/ready$/, () => [200, { status: 'ready', reasons: [] }]],
     ['GET', /^\/v1\/errors$/, () => [200, { errors: [] }]],
     ['GET', /^\/v1\/billing\/balance$/, () => [200, balanceBody()]],
+    // The estimate `send` shows on its confirmation card. It answers the same for any intent: what the CLI does with an estimate is what is under
+    // test, not the gateway's pricing, and it is shaped as the real route answers (`estimate: true`, the gates it checked and the ones it did not).
+    ['POST', /^\/v1\/transaction\/quote$/, () => [200, {
+      estimate: true, evaluated_at: '2026-10-15T00:00:00Z',
+      request: { chains: ['base-sepolia'], chain: 'base-sepolia', leg_count: 1, proof_class: null },
+      checked: ['chain_enabled', 'price_book', 'organization_funds'],
+      not_checked: ['the identity and its key page', 'destination-chain gas', 'quota', 'the bridge\'s own validation'],
+      billing: {
+        state: 'priced', enforcing: false,
+        price: { sku: 'proof.execute', total_usd: '0.150000', platform_fee_usd: '0.150000', gas_usd: '0.000000', max_total_usd: '0.150000', gas_basis: 'flat_priced', price_book_version: 'fake-1' },
+        funds: { state: 'ok', spendable_usd: '5.000000', remaining_usd: '5.000000', shortfall_usd: '0.000000', covered: true, gate: 'passes' },
+      },
+    }]],
     ['GET', /^\/v1\/me$/, () => [200, {
       auth_method: 'api_key', org: { id: 'org-journey', name: 'journey' }, scopes: ['*'],
       key: { id: 'key-journey', rate_limit_rpm: 600 }, user: null, active_org_id: null, role: null, orgs: [],

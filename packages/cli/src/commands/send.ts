@@ -1,6 +1,6 @@
 import { Command, Option } from 'commander';
 import {
-  CertenClient, CertenError, chainInfo, estimateFee, evmAddressProblem, nativeSymbolFor, snapshotRecipient, wholeUnitAmountProblem,
+  CertenClient, CertenError, chainInfo, estimateFee, snapshotRecipient,
   type ReceiptRequest, type RecipientSnapshot, type Readiness,
 } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl } from '../config.js';
@@ -18,6 +18,9 @@ import { commandPrompter } from '../prompt.js';
 import { assertCanConfirm, confirmSigning, contextValues, feeLine, signingDeclined } from '../card.js';
 import { renderReceipt } from '../receipt-render.js';
 import { followIntent } from '../receipt-flow.js';
+import {
+  assertTransferInputs, estimateClient, estimateJson, estimateLines, fetchEstimate, nativeAssetFor, transferIntent,
+} from '../estimate.js';
 
 /**
  * `certen send 0.0001 ETH --to 0x...`: the whole transfer, as one command.
@@ -34,13 +37,13 @@ import { followIntent } from '../receipt-flow.js';
  *
  * `--yes` and `--json` skip the question and never the check. A new command can be strict from day one: with nobody to confirm it and no
  * `--yes`, it refuses before reading a passphrase.
+ *
+ * The card also carries the gateway's ESTIMATE of this request (what `certen quote` shows), asked for after the readiness checks and before the
+ * passphrase. It is a convenience and nothing more: it is labelled an estimate with the gates it did and did not look at, and an estimate that
+ * cannot be had (no route on an older gateway, a timeout, a refusal) prints "unavailable" and the send goes on exactly as it would have.
  */
 
 const GAS_CODES = new Set(['ABSTRACT_ACCOUNT_UNFUNDED', 'ABSTRACT_ACCOUNT_UNDERFUNDED']);
-
-async function getClient(): Promise<CertenClient> {
-  return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
-}
 
 export function registerSendCommands(program: Command): void {
   program
@@ -69,11 +72,7 @@ export function registerSendCommands(program: Command): void {
       expiresIn?: string;
     }) => {
       // ── 1. the invocation, without the network ────────────────────────────────────────────────────────
-      const amountProblem = wholeUnitAmountProblem(amount);
-      if (amountProblem) throw new UsageError(amountProblem, 'INVALID_AMOUNT');
-      if (!/[1-9]/.test(amount)) throw new UsageError('The amount must be greater than zero.', 'INVALID_AMOUNT');
-      const addressProblem = evmAddressProblem(opts.to);
-      if (addressProblem) throw new UsageError(`--to: ${addressProblem}`, 'INVALID_ADDRESS');
+      assertTransferInputs(amount, opts.to);
       parseExpiresIn(opts.expiresIn);
       const wait = resolveWait();
       const budget = parseWaitBudget(opts.timeout, opts.pollInterval, TX_WAIT);
@@ -87,19 +86,8 @@ export function registerSendCommands(program: Command): void {
       const chainFrom = requireChain(ctx);
       const chain = assertChain(chainFrom.value, sourceLabel(chainFrom, '--chain'));
 
-      const symbol = nativeSymbolFor(chain);
-      if (!symbol) {
-        throw new UsageError(`${chain} is not a chain this client knows the native token of, so what a transfer there moves cannot be checked before signing.`, 'UNSUPPORTED_CHAIN');
-      }
-      if (asset.trim().toUpperCase() !== symbol.toUpperCase()) {
-        // A mismatch is refused, never guessed: "ETH" on a TEL chain is not sent as TEL. A token is not sent at all, for the reason below.
-        throw new UsageError(
-          `${chain} moves ${symbol}, and you asked to send ${asset}. certen send moves a chain's native token only: what a token transfer moves (the token contract and `
-          + 'its decimals) is chosen downstream, so it cannot be checked before signing, and nothing is signed that cannot be checked. '
-          + `To send ${symbol}: certen send ${amount} ${symbol} --to ${opts.to}. For a token, certen call with its transfer(address,uint256) shows exactly what it will call.`,
-          'UNSUPPORTED_ASSET',
-        );
-      }
+      // A mismatch is refused, never guessed: "ETH" on a TEL chain is not sent as TEL. A token is not sent at all (see nativeAssetFor).
+      const symbol = nativeAssetFor(chain, asset, amount, opts.to);
 
       const keyFrom = ctx.key;
       if (!keyFrom && !opts.dryRun) {
@@ -118,7 +106,8 @@ export function registerSendCommands(program: Command): void {
       if (!opts.dryRun) assertCanConfirm({ yes: Boolean(opts.yes), prompter, mode: 'strict', command: 'certen send' });
 
       // ── 2. readiness, BEFORE anything is unlocked ──────────────────────────────────────────────────────
-      const client = await getClient();
+      const apiKey = await getApiKey();
+      const client = new CertenClient({ apiKey, baseUrl: getApiUrl() });
       const who = await resolveCommandIdentity(ctx, client, 'id');
       echoFromContext('chain', ctx.chain);
       echoFromContext('key', ctx.key);
@@ -174,14 +163,22 @@ export function registerSendCommands(program: Command): void {
         from: fromAddress, to: opts.to, amount, asset: symbol, contract_call: null,
       };
 
+      // The gateway's estimate of THIS request. It cannot throw and it decides nothing: see estimate.ts.
+      const estimate = await fetchEstimate(
+        estimateClient(apiKey, getApiUrl()),
+        transferIntent({ adiUrl, chain, fromAddress, toAddress: opts.to, amount }),
+        opts.proofClass,
+      );
+
       if (opts.dryRun) {
         human('');
         human(`  Would send ${amount} ${symbol} on ${chain}`);
         human(`    from  ${adiUrl}  ->  ${fromAddress} (abstract account)`);
         human(`    to    ${opts.to}`);
         human(`    fee   ${feeLine(fee)}`);
+        estimateLines(estimate).forEach((line, i) => human(`    ${(i === 0 ? 'estimate' : '').padEnd(8)} ${line}`));
         human(`    state ${readiness.ready ? 'ready' : 'not fully confirmed'} (certen status shows every check)`);
-        printOutput({ dry_run: true, request, fee, readiness } as unknown as Record<string, unknown>, { machineOnly: true });
+        printOutput({ dry_run: true, request, fee, ...estimateJson(estimate), readiness } as unknown as Record<string, unknown>, { machineOnly: true });
         hint('');
         hint('Nothing was signed or sent. Drop --dry-run to send it.');
         return;
@@ -237,7 +234,7 @@ export function registerSendCommands(program: Command): void {
                 ['from', `${adiUrl}  ->  ${fromAddress} (abstract account on ${chain})`],
                 ['to', opts.to],
               ],
-              chain, fee, fromContext, summary, keyName: keyFrom!.value,
+              chain, fee, estimate: estimateLines(estimate), fromContext, summary, keyName: keyFrom!.value,
             }, { yes: Boolean(opts.yes), prompter });
           },
         });
