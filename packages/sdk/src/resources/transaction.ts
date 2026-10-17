@@ -10,6 +10,8 @@ import type {
   SubmitSignatureParams,
   SubmitSignatureResponse,
   ListTransactionsParams,
+  TransactionQuoteParams,
+  TransactionQuoteResponse,
 } from '../types.js';
 
 export class TransactionResource {
@@ -42,6 +44,24 @@ export class TransactionResource {
         ...header,
       }),
       { headers },
+    );
+    return data;
+  }
+
+  /**
+   * Preflight an intent: what it would cost and whether the gateway would admit it, **with nothing created, charged or signed**.
+   *
+   * **An estimate, and it says so**: the response's `estimate` is always `true`, `checked` lists the gates it evaluated and `not_checked`
+   * what it did not look at (it cannot know the signature will be valid or the chain will be reachable). `billing.state` is `priced`,
+   * `disabled` or `not_gated`; a funds shortfall is reported as a fact in `billing.funds`, not as a 402 error. Safe to repeat.
+   *
+   * Takes the same `intent` as `create()`. Needs the scope that lets you open a transaction. Show the price from here instead of a guess,
+   * and still treat the figure as what admission would say now, not a promise.
+   */
+  async quote(params: TransactionQuoteParams): Promise<TransactionQuoteResponse> {
+    const { data } = await this.http.post(
+      '/v1/transaction/quote',
+      omitUndefined({ intent: params.intent, proof_class: params.proofClass }),
     );
     return data;
   }

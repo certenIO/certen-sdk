@@ -76,6 +76,17 @@ Catch `CertenError` and branch on `.code`. `.isRetryable` implements the table b
 | `IDEMPOTENCY_KEY_MISMATCH` | 409 | no | This Idempotency-Key was already used with a different request body. | A key binds to one request. Use a new key, or resend the original body unchanged. |
 | `SHARE_NO_LONGER_VALID` | 410 | no | The share link was real and is now revoked, expired, or out of views. | Ask the sender for a fresh link. This does NOT mean the proof does not exist. |
 | `PLAN_QUOTA_EXCEEDED` | 429 | no | A plan limit for the period is exhausted — a quota, not a per-second rate. | Waiting will not clear this within the period. Raise the plan limit. |
+| `INVALID_ADDRESS` | 400 | no | Not an EVM address: `0x` and 40 hex characters. Or it mixes case and its EIP-55 checksum does not hold, so a character is mistyped. | The message says which. Never "fix" a checksum failure by lower-casing: that sends to whatever was typed. |
+| `IDEMPOTENCY_KEY_REQUIRED` | 400 | no | This operation spends the platform's funds and refuses to run without an `Idempotency-Key`. | Send one, and reuse the SAME key when you repeat the request after a crash or timeout: that is what makes a repeat not a second draw. |
+| `BALANCE_UNREADABLE` | 503 | yes | The chain's node did not answer, or did not answer with a balance. | This is NOT a zero balance. Retry; do not treat it as an empty account. |
+| `PROOF_V2_NOT_AVAILABLE` | 404 | no | The proof service has no v2 portable document for this proof id. | It does not say whether the id is unknown or the proof has no v2 document. The v1 bundle may still exist. |
+| `CREDIT_TOPUP_DISABLED` | 503 | no | Credit top-up is not enabled on this deployment. | An operator turns it on. Retrying changes nothing; the SDK does not retry it. |
+| `CREDIT_TOPUP_LIMIT` | 429 | yes | This identity or organization has drawn its daily limit of credits. | The message says how many credits remain. The limit counts the last 24 hours, so an immediate retry will not clear it. |
+| `DRIP_DISABLED` | 503 | no | The gas drip is not enabled on this deployment. | An operator turns it on. Retrying changes nothing; the SDK does not retry it. Fund the account by hand (see `gasFundingPlan`). |
+| `DRIP_UNAVAILABLE` | 503 | yes | The platform cannot send a drip on this chain right now: switched off for it, no amount set, or the sponsor wallet is too low. | The message names which. Fund the account by hand if you cannot wait. |
+| `DRIP_LIMIT` | 429 | yes | A drip limit was reached: this account was already dripped within the cooldown, or the organization or platform hit its daily ceiling. | The message says which. The cooldown is hours, so an immediate retry will not clear it. |
+| `DRIP_TESTNET_ONLY` | 422 | no | The chain is not a testnet; the gas drip is for testnets only. | Fund the account yourself on this chain (see `gasFundingPlan`). |
+| `DRIP_RECIPIENT_REJECTS` | 422 | no | The account contract did not accept a plain transfer of the native token, so it cannot be dripped. | Nothing was sent. Fund the account by another route. |
 | `TOO_MANY_REQUESTS` | 429 | yes | Generic throttle. | Wait for the `Retry-After` header. The SDK honours it automatically. |
 | `SLOW_DOWN` | 429 | yes | Polling the device-authorization flow faster than it allows. | Increase the poll interval to the value the flow published. |
 | `CHAIN_UNRESOLVED` | 400 | no | The chain identifier could not be resolved to a deployment. | List valid chains with `chains.list()`. |
@@ -447,6 +458,26 @@ Accepts either the registry id (`ethereum-sepolia`) or the numeric EVM chain id 
 Path parameters:
   - `id`: string
 
+#### certen.chains.balance()
+
+The native balance of ANY EVM address on a chain the gateway serves, read through the gateway's own node.
+
+GET /v1/chains/{id}/addresses/{address}/balance — Get the native balance of any address on a chain
+
+The native-token balance (ETH, or TEL on Telcoin Adiri) of ANY EVM address on a chain this gateway serves - the wallet that will fund an account, a recipient, a sponsor - not only the caller's own linked accounts, which `GET /v1/portfolio` and `GET /v1/identity/{id}?include=balances` already read. `id` is the registry id (`base-sepolia`) or the numeric chain id (`84532`), as for `GET /v1/chains/{id}`. The address is checked as a wallet checks it (EIP-55): an all-lower-case or all-upper-case address is read as given, a mixed-case one must carry the right checksum or it is refused as `INVALID_ADDRESS`, so a mistyped character cannot read some other account. A balance that could not be read is NEVER reported as zero: it is a `503 BALANCE_UNREADABLE` (retry), and so is an answer that is not a balance. A `0` here means the node answered and the account holds nothing. `balance` is a decimal string in whole units of the native token (never a number: no precision is lost), and `read_at` is when this gateway read it, not a block time. Requires portfolio:read, identity:read or identity:write.
+
+Path parameters:
+  - `id`: string — Registry id (`base-sepolia`) or numeric EVM chain id (`84532`).
+  - `address`: string — An EVM address: 0x and 40 hexadecimal characters.
+
+Response 200 — The balance, as the chain's node answered it:
+  - `chain`: string — The registry id of the chain that was read.
+  - `chain_id`: integer
+  - `address`: string — The address in its EIP-55 checksummed form, whatever case it was sent in.
+  - `balance`: string — Whole units of the native token as a decimal string, e.g. `0.25`. `0` is a successful read of an empty account.
+  - `symbol`: string — The native token: `ETH`, or `TEL` on Telcoin Adiri.
+  - `read_at`: string — When this gateway read the balance (RFC 3339). Not a block time.
+
 ### certen.device
 
 #### certen.device.start()
@@ -527,7 +558,7 @@ Response 201 — Intent created. External mode returns signing_data + submit_url
   - `intent_id`: string
   - `status`: string
   - `signing_mode`: "external" | "provider"
-  - `signing_data`: { request_id, transaction_hash, hash_to_sign }
+  - `signing_data`: { request_id, transaction_hash, hash_to_sign, transaction, signature_metadata }
   - `submit_url`: string
   - `tx_hash`: string
   - `proof_id`: string
@@ -587,7 +618,7 @@ Response 201 — Intent created. External mode returns signing_data + submit_url
   - `intent_id`: string
   - `status`: string
   - `signing_mode`: "external" | "provider"
-  - `signing_data`: { request_id, transaction_hash, hash_to_sign }
+  - `signing_data`: { request_id, transaction_hash, hash_to_sign, transaction, signature_metadata }
   - `submit_url`: string
   - `tx_hash`: string
   - `proof_id`: string
@@ -638,7 +669,7 @@ Response 201 — Sign request created. Provider mode returns `{status: "signed",
   - `signature_count`: integer
   - `signing_mode`: "provider"
   - `sign_request_id`: string
-  - `signing_data`: { data_for_signature, transaction_hash, signer_url, signer_version, timestamp }
+  - `signing_data`: { data_for_signature, transaction_hash, signer_url, signer_version, timestamp, transaction, signature_metadata }
   - `submit_url`: string
   - `expires_at`: any
 
@@ -682,6 +713,7 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `proof_id`: string — The CERTEN proof artifact for this transaction. Feed it to POST /v1/proof/{id}/share to mint a link a counterparty can resolve without a CERTEN account. An intent completes only on the verdict of the validators, with its proof (RB5-F39), so a `completed` intent carries it. It is null while the intent is in flight, and while it is `executed` with its proof bundle still pending. This endpoint resolves it from the proof service on read. An intent on several chains has one proof per chain member: it completes only when every chain names its own proof and none of them records a revert, this is its first declared chain's, and `proofs` lists every one with the legs it settles.
   - `proof_bundle_url`: string
   - `proofs`: { chain_id, legs, proof_id, proof_bundle_url, write_back_tx }[] — Every chain member's proof, as the validators recorded it: one per chain an intent settles on (a single-chain intent has one), each with its own bundle link. For an intent on several chains, in the order it declares them, each with `legs`. Empty until the validators have produced one.
+  - `destination`: { chain_id, tx_hash, settlement, source } — The one transaction this intent made on its destination chain, on the VALIDATORS' word (`source`): the `settlement_tx` of the member for the chain the intent declares. It is the validators' record, not a fact the gateway checked and not the proof - the proof artifact is what lets anyone check it against the chain. `settlement` says what became of it: `reverted` is a transaction that exists and did not succeed. Null while the validators have not recorded a transaction for that chain yet (that is "not yet", not "none"), and ALWAYS null for an intent on several chains or with a leg whose chain cannot be read: it has more than one destination transaction and none is named as the destination, so read each `validator.members` entry. An intent that never reaches the validators has none.
   - `validator`: { state, since, overdue, members, disagreement } — What the CERTEN validators recorded for this intent, followed until it is final - also after the gateway has ended the intent. Null until first observed.
   - `error_message`: string
   - `reason_code`: string — Why the intent ended where it did, as a stable value rather than prose. `target_reverted` is the one to branch on: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call. That is a business outcome — it is billed, and retrying the identical call reverts again. `validator_refused`: the validators refused the intent itself (it cannot be settled as written, no entitlement, or its governance fell short); nothing executed. `validator_unprocessed`, `chain_settlement_failed`, `validator_failed_unclassified`, `post_submission_timeout`, `network_failed`, `pre_submission_error`, `relayer_exhausted`, `expectation_unmet`, `expectation_unverifiable`: CERTEN did not complete. `execution_proof_unavailable` (status `completed_unproven`): the action executed, and its proof can never be produced. Null when the intent has not ended, or ended without a recorded reason. `expired` means the `expires_at` deadline passed before every required authority signed; nothing executed and nothing is charged. A deadline-derived `expired` on a submitted transaction is re-checked for INTENT_EXPIRY_RECHECK_HOURS and reopened if Accumulate reports it delivered after all.
@@ -717,6 +749,7 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `proof_id`: string — The CERTEN proof artifact for this transaction. Feed it to POST /v1/proof/{id}/share to mint a link a counterparty can resolve without a CERTEN account. An intent completes only on the verdict of the validators, with its proof (RB5-F39), so a `completed` intent carries it. It is null while the intent is in flight, and while it is `executed` with its proof bundle still pending. This endpoint resolves it from the proof service on read. An intent on several chains has one proof per chain member: it completes only when every chain names its own proof and none of them records a revert, this is its first declared chain's, and `proofs` lists every one with the legs it settles.
   - `proof_bundle_url`: string
   - `proofs`: { chain_id, legs, proof_id, proof_bundle_url, write_back_tx }[] — Every chain member's proof, as the validators recorded it: one per chain an intent settles on (a single-chain intent has one), each with its own bundle link. For an intent on several chains, in the order it declares them, each with `legs`. Empty until the validators have produced one.
+  - `destination`: { chain_id, tx_hash, settlement, source } — The one transaction this intent made on its destination chain, on the VALIDATORS' word (`source`): the `settlement_tx` of the member for the chain the intent declares. It is the validators' record, not a fact the gateway checked and not the proof - the proof artifact is what lets anyone check it against the chain. `settlement` says what became of it: `reverted` is a transaction that exists and did not succeed. Null while the validators have not recorded a transaction for that chain yet (that is "not yet", not "none"), and ALWAYS null for an intent on several chains or with a leg whose chain cannot be read: it has more than one destination transaction and none is named as the destination, so read each `validator.members` entry. An intent that never reaches the validators has none.
   - `validator`: { state, since, overdue, members, disagreement } — What the CERTEN validators recorded for this intent, followed until it is final - also after the gateway has ended the intent. Null until first observed.
   - `error_message`: string
   - `reason_code`: string — Why the intent ended where it did, as a stable value rather than prose. `target_reverted` is the one to branch on: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call. That is a business outcome — it is billed, and retrying the identical call reverts again. `validator_refused`: the validators refused the intent itself (it cannot be settled as written, no entitlement, or its governance fell short); nothing executed. `validator_unprocessed`, `chain_settlement_failed`, `validator_failed_unclassified`, `post_submission_timeout`, `network_failed`, `pre_submission_error`, `relayer_exhausted`, `expectation_unmet`, `expectation_unverifiable`: CERTEN did not complete. `execution_proof_unavailable` (status `completed_unproven`): the action executed, and its proof can never be produced. Null when the intent has not ended, or ended without a recorded reason. `expired` means the `expires_at` deadline passed before every required authority signed; nothing executed and nothing is charged. A deadline-derived `expired` on a submitted transaction is re-checked for INTENT_EXPIRY_RECHECK_HOURS and reopened if Accumulate reports it delivered after all.
@@ -895,6 +928,91 @@ Response 200 — The identity plus any requested enrichments (governance, balanc
   - `governance`: object
   - `balances`: object[]
   - `pending`: object
+
+#### certen.identity.readiness()
+
+What is needed to act as this identity, in ONE gateway read: the identity and its status, whether its key is on its key page, its credits, optionally one chain's account and native balance, and the organisation's spendable balance.
+
+GET /v1/identity/{id}/readiness — Get what is needed to send from an identity, in one read
+Scope: `billing:read`
+
+The facts a caller checks before sending from an identity, in one request instead of five: the identity and its status; whether its key is on its on-chain key page (`can_sign`) and how many credits that page holds; with `chain`, its account on that chain and the native balance of that account; and the organisation's balance. Each is its own section with its own state, and a section that cannot be read does not take the others with it. This states FACTS and does not say "ready": whether a balance is enough gas, or a fee affordable, is a judgement against figures the caller owns. Nothing is ever made to look better than it is: `can_sign` is `unreadable` with a null value when the key page could not be read (unknown, NOT a soft yes); `credits.source` is `recorded` when the figure is the one stored at provisioning and not the key page's own; a native balance that could not be read is `unreadable` with its error code, never `0`. The organisation section is shown only to a key with `billing:read` (`not_permitted` otherwise) and is `billing_disabled` where billing is off. `remaining_usd` is the figure to gate on, as for `GET /v1/billing/balance`; `enforcing` says whether a shortfall is refused or only recorded. Requires identity:read or identity:write.
+
+Path parameters:
+  - `id`: string
+
+Query parameters:
+  - `chain`: string — Optional. A chain this gateway serves, by registry id (`base-sepolia`) or numeric chain id (`84532`): adds the identity's account on it and that account's native balance. Without it the `chain` section is null and no chain is read.
+
+Response 200 — The facts, one section each:
+  - `identity`: { id, adi_url, key_page_url, status, error_message }
+  - `can_sign`: { state, value }
+  - `credits`: { value, source }
+  - `chain`: { chain, chain_id, account, balance } — Null unless `chain` was asked for.
+  - `org`: { state, remaining_usd, spendable_usd, enforcing, status, scope }
+  - `read_at`: string — When this gateway assembled the answer. Each section is as of its own read, moments apart.
+
+#### certen.identity.topUpCredits()
+
+Top up the Accumulate credits of this identity's key page, **paid by the platform's sponsor account** (the organisation is not charged).
+
+POST /v1/identity/{id}/credits — Top up the Accumulate credits of an identity's key page, paid by the platform
+
+Adds `credits` to the identity's key page when it is running low (an identity is provisioned with a fixed grant and an intent write spends a fraction of a credit). The platform pays: ACME credits are sponsored, so the organization is not charged. Because every top-up draws on the platform's sponsor account, it is limited: a per-request maximum, daily limits per identity and per organization that count everything drawn in the last 24 hours, and, for an unapproved self-service organization, the credit allowance given at signup. It is OFF unless the operator enables it (`CREDIT_TOPUP_DISABLED` otherwise). An `Idempotency-Key` header is REQUIRED (`IDEMPOTENCY_KEY_REQUIRED`): a repeated key is never a second draw. The answer is `202`, never "applied": `status: submitted` means the bridge accepted a transaction and the network has not yet confirmed it (read the identity's `credit_balance`, or the `credits_before` here against it). `status: unconfirmed` means the bridge did not say whether it submitted, so it MAY have been applied: do NOT retry it, check the balance, and it counts toward the limits as if it had been. A request the bridge refused is an error and counts for nothing. Requires identity:write.
+
+Path parameters:
+  - `id`: string
+
+Request body:
+  - `credits`: integer **required** — Whole credits to add (1 credit = $0.01). Limited per request by the deployment (500 by default).
+
+Response 202 — The top-up was recorded and the bridge was asked once. See `status`:
+  - `topup_id`: string
+  - `identity_id`: string
+  - `key_page_url`: string
+  - `credits`: integer
+  - `status`: "submitted" | "unconfirmed" — `submitted`: accepted, not yet confirmed. `unconfirmed`: not known; may have been applied.
+  - `tx_id`: string — The Accumulate transaction id the bridge returned; null when it did not return one.
+  - `credits_before`: number — The page's credits just before the top-up; null when it could not be read.
+  - `note`: string
+
+#### certen.identity.drip()
+
+Ask the platform to send this identity's deployed account on `chain` a small amount of native token for gas, **on testnets only**.
+
+POST /v1/identity/{id}/chain-accounts/{chain}/drip — Send an identity's chain account a testnet gas drip, paid by the platform
+
+Asks the platform's sponsor wallet to send the identity's DEPLOYED account on `chain` a small, fixed amount of the chain's native token (ETH, or TEL on Telcoin Adiri), so the account can pay for its first transactions without a faucet. TESTNETS ONLY. There is nothing to choose, and the request takes no body: the destination is the address the gateway recorded for the account (never one you send), and the amount is the platform operator's configuration. `chain` is the registry id (`base-sepolia`) or numeric chain id. The sponsor wallet is the one that pays for account deployments, so the drip is limited: OFF unless the operator enables it (`DRIP_DISABLED`), one drip per account and chain per cooldown, and a daily ceiling per organization and for the whole platform (`DRIP_LIMIT`). An account that already holds enough is sent nothing (`status: skipped`). An `Idempotency-Key` header is REQUIRED (`IDEMPOTENCY_KEY_REQUIRED`): a repeated key is never a second drip. `status: sent` means the transfer was mined (200). `status: unconfirmed` (202) means the bridge did not say whether it sent, or the node accepted the transfer and it had not mined: it MAY have been sent, so do NOT retry it, check the account's balance (`GET /v1/chains/{id}/addresses/{address}/balance`), and it counts toward the limits as if it had been sent. A drip the platform could not make is an error and counts for nothing. Requires identity:write.
+
+Path parameters:
+  - `id`: string
+  - `chain`: string — Registry id (`base-sepolia`) or numeric EVM chain id (`84532`).
+
+Response 200 — The drip was sent and mined, or the account already held enough and nothing was sent:
+  - `drip_id`: string
+  - `identity_id`: string
+  - `chain`: string — The registry id of the chain.
+  - `chain_id`: integer
+  - `address`: string — The account the gateway recorded for this identity on this chain: the only place the drip can go.
+  - `status`: "sent" | "skipped" | "unconfirmed" — `sent`: mined. `skipped`: the account already held enough, nothing sent. `unconfirmed`: it may have been sent.
+  - `tx_hash`: string
+  - `amount`: string — What the bridge reports it sent, in whole units of the native token. The amount is the operator's, never the caller's.
+  - `symbol`: string
+  - `explorer_url`: string
+  - `note`: string
+
+Response 202 — It may have been sent: check the balance, do not retry:
+  - `drip_id`: string
+  - `identity_id`: string
+  - `chain`: string — The registry id of the chain.
+  - `chain_id`: integer
+  - `address`: string — The account the gateway recorded for this identity on this chain: the only place the drip can go.
+  - `status`: "sent" | "skipped" | "unconfirmed" — `sent`: mined. `skipped`: the account already held enough, nothing sent. `unconfirmed`: it may have been sent.
+  - `tx_hash`: string
+  - `amount`: string — What the bridge reports it sent, in whole units of the native token. The amount is the operator's, never the caller's.
+  - `symbol`: string
+  - `explorer_url`: string
+  - `note`: string
 
 #### certen.identity.update()
 
@@ -1116,6 +1234,21 @@ Path parameters:
 
 The proof v2 portable document for a proof (`certen-proof-v2-accumulate-portable/1`): everything `@certen.io/sdk/verify` needs to check the Accumulate side offline.
 
+GET /v1/proof/{id}/v2 — Download the proof v2 portable document
+
+The portable proof v2 document for a proof ID (`certen-proof-v2-accumulate-portable/1`), proxied from the proof-service: the incarnation pin and genesis, the Directory's major blocks from the first, and the evidence (the transaction's receipt to a certified Directory root, the partition anchor, the governing pages, the validator set in force) with the govRoot v3 inputs when the intent's certificate has been built. A verifier (`@certen.io/proof-verify`, certen-sdk `proof.portable()`) checks it offline; nothing in it is a verdict. 404 `PROOF_V2_NOT_AVAILABLE` when this proof has no v2 document (an older proof, or a build that failed). Requires the proof:read scope.
+
+Path parameters:
+  - `id`: string
+
+Response 200 — The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, and `govRootV3Inputs` when recorded:
+  - `format`: "certen-proof-v2-accumulate-portable/1"
+  - `pin`: string
+  - `genesis`: object
+  - `majors`: object[]
+  - `evidence`: object
+  - `govRootV3Inputs`: object
+
 #### certen.proof.custody()
 
 The custody chain for a proof.
@@ -1248,7 +1381,7 @@ Response 201 — Sign request created. Provider mode returns `{status: "signed",
   - `signature_count`: integer
   - `signing_mode`: "provider"
   - `sign_request_id`: string
-  - `signing_data`: { data_for_signature, transaction_hash, signer_url, signer_version, timestamp }
+  - `signing_data`: { data_for_signature, transaction_hash, signer_url, signer_version, timestamp, transaction, signature_metadata }
   - `submit_url`: string
   - `expires_at`: any
 
@@ -1306,13 +1439,33 @@ Response 201 — Intent created. External mode returns signing_data + submit_url
   - `intent_id`: string
   - `status`: string
   - `signing_mode`: "external" | "provider"
-  - `signing_data`: { request_id, transaction_hash, hash_to_sign }
+  - `signing_data`: { request_id, transaction_hash, hash_to_sign, transaction, signature_metadata }
   - `submit_url`: string
   - `tx_hash`: string
   - `proof_id`: string
   - `additional_authorities`: string[] — Transaction-header additional authorities the intent was created with; null when none.
   - `expires_at`: string — Transaction-header deadline (RFC 3339, whole seconds); null when the intent never expires.
   - `idempotent`: boolean
+
+#### certen.transaction.quote()
+
+Preflight an intent: what it would cost and whether the gateway would admit it, **with nothing created, charged or signed**.
+
+POST /v1/transaction/quote — Preflight a transaction: its price and whether it would be admitted, without creating anything
+
+Evaluates what `POST /v1/transaction` would do with this request RIGHT NOW and creates nothing: no transaction, no quote, no hold, no charge, no payment target. Send the body you would send to `POST /v1/transaction`; only `intent` and `proof_class` are read, anything else is ignored, and a `quote_id` is ignored too (admission without one prices fresh, and so does this). It runs the same gates in the same order and refuses what admission refuses, with the same code: a chain this gateway does not serve (`UNKNOWN_CHAIN`, `CHAIN_NOT_ENABLED`), a leg that names no chain (`CHAIN_UNRESOLVED`), an unknown `proof_class`, a suspended chain (`CHAIN_SUSPENDED`), and a price that cannot be computed (`NO_PRICE_BOOK`, `CHAIN_NOT_PRICEABLE`, an FX refusal). A funds shortfall is NOT an error here: admission answers it with a 402 that mints a payment target, and a preflight states it instead, as `funds`. This is an ESTIMATE, not a quote: it carries no `quote_id` and promises nothing. Balances move, a chain can be suspended, and the FX rate and cost window shift; it is true as of `evaluated_at`. `checked` lists what it evaluated and `not_checked` what it did not (the identity and its key page, destination-chain gas, quota, header conditions, the bridge's own validation), so an answer that finds nothing wrong is not read as more than it is. Where billing is off, or this operation is not gated, nothing is priced and `billing.state` says so. Requires transaction:write, the scope that creates the transaction.
+
+Request body:
+  - `intent`: object — The intent you would submit. Its legs (`chain` on each) decide what is priced.
+  - `proof_class`: string — `on_demand` or `on_cadence`. Omitted, it is priced as unclassified, as admission does. An unknown value is a 400.
+
+Response 200 — The estimate. `billing.state` is `priced`, `disabled` or `not_gated`:
+  - `estimate`: true — Always true: this is not a quote and promises nothing.
+  - `evaluated_at`: string — RFC 3339. Everything below is as of this moment.
+  - `request`: { chains, chain, leg_count, proof_class } — What the request is priced on. Null where nothing is priced.
+  - `checked`: string[] — The gates evaluated.
+  - `not_checked`: string[] — What was NOT looked at.
+  - `billing`: { state, enforcing, price, funds } — `{state:"disabled"}` or `{state:"not_gated"}` where nothing is priced; otherwise `state:"priced"` with `enforcing`, `price` and `funds`.
 
 #### certen.transaction.submitSignature()
 
@@ -1354,6 +1507,7 @@ Response 200 — The transaction intent, including a joined `proof` object when 
   - `proof_id`: string — The CERTEN proof artifact for this transaction. Feed it to POST /v1/proof/{id}/share to mint a link a counterparty can resolve without a CERTEN account. An intent completes only on the verdict of the validators, with its proof (RB5-F39), so a `completed` intent carries it. It is null while the intent is in flight, and while it is `executed` with its proof bundle still pending. This endpoint resolves it from the proof service on read. An intent on several chains has one proof per chain member: it completes only when every chain names its own proof and none of them records a revert, this is its first declared chain's, and `proofs` lists every one with the legs it settles.
   - `proof_bundle_url`: string
   - `proofs`: { chain_id, legs, proof_id, proof_bundle_url, write_back_tx }[] — Every chain member's proof, as the validators recorded it: one per chain an intent settles on (a single-chain intent has one), each with its own bundle link. For an intent on several chains, in the order it declares them, each with `legs`. Empty until the validators have produced one.
+  - `destination`: { chain_id, tx_hash, settlement, source } — The one transaction this intent made on its destination chain, on the VALIDATORS' word (`source`): the `settlement_tx` of the member for the chain the intent declares. It is the validators' record, not a fact the gateway checked and not the proof - the proof artifact is what lets anyone check it against the chain. `settlement` says what became of it: `reverted` is a transaction that exists and did not succeed. Null while the validators have not recorded a transaction for that chain yet (that is "not yet", not "none"), and ALWAYS null for an intent on several chains or with a leg whose chain cannot be read: it has more than one destination transaction and none is named as the destination, so read each `validator.members` entry. An intent that never reaches the validators has none.
   - `validator`: { state, since, overdue, members, disagreement } — What the CERTEN validators recorded for this intent, followed until it is final - also after the gateway has ended the intent. Null until first observed.
   - `error_message`: string
   - `reason_code`: string — Why the intent ended where it did, as a stable value rather than prose. `target_reverted` is the one to branch on: CERTEN validated, proved, anchored and submitted, and the DESTINATION CONTRACT rejected the call. That is a business outcome — it is billed, and retrying the identical call reverts again. `validator_refused`: the validators refused the intent itself (it cannot be settled as written, no entitlement, or its governance fell short); nothing executed. `validator_unprocessed`, `chain_settlement_failed`, `validator_failed_unclassified`, `post_submission_timeout`, `network_failed`, `pre_submission_error`, `relayer_exhausted`, `expectation_unmet`, `expectation_unverifiable`: CERTEN did not complete. `execution_proof_unavailable` (status `completed_unproven`): the action executed, and its proof can never be produced. Null when the intent has not ended, or ended without a recorded reason. `expired` means the `expires_at` deadline passed before every required authority signed; nothing executed and nothing is charged. A deadline-derived `expired` on a submitted transaction is re-checked for INTENT_EXPIRY_RECHECK_HOURS and reopened if Accumulate reports it delivered after all.
@@ -1622,7 +1776,7 @@ Response 200 — Delivery requeued:
 
 ## Gateway endpoints with no SDK method
 
-The SDK wraps 76 of the gateway's 125 operations. The rest are reachable only by
+The SDK wraps 82 of the gateway's 131 operations. The rest are reachable only by
 raw HTTP against the same base URL and `X-API-Key`. **There is no SDK method for these — do not invent one.**
 
 **Admin**

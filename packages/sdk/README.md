@@ -201,8 +201,9 @@ constructor argument. An escrow or any other contract ABI belongs on top of `cal
 
 | | |
 |---|---|
-| `certen.identity` | `create` · `get` · `update` · `retire` |
-| `certen.transaction` | `create` · `submitSignature` · `get` · `list` |
+| `certen.identity` | `create` · `get` · `update` · `retire` · `readiness` · `topUpCredits` · `drip` |
+| `certen.transaction` | `create` · `quote` · `submitSignature` · `get` · `list` |
+| `certen.chains` | `list` · `get` · `enabled` · `balance` |
 | `certen.sign` | `create` · `submitSignature` |
 | `certen.governance` | `create` · `submitSignature` · `get` |
 | `certen.pending` | `list` |
@@ -234,6 +235,30 @@ The funding guard reads each chain's own gas token (`readNativeBalance`). On Adi
 throws `CertenUnfundedAccountError`; a gas balance it cannot identify (an unknown chain, a balance row that
 is not the chain's gas token, or an unreadable one) throws `CertenFundingUnverifiableError` rather than
 letting the intent through.
+
+## Reads, estimates, and two calls that spend the platform's funds
+
+```ts
+// Reads (nothing is spent or created)
+await certen.chains.balance('base-sepolia', '0x…');            // any address's native balance, as a decimal string: '0.25'; '0' is an empty account
+await certen.identity.readiness(id, { chain: 'base-sepolia' }); // identity, key, credits, chain account + balance, org balance: one read, facts only
+await certen.transaction.quote({ intent });                     // what it would cost and whether it would be admitted: an ESTIMATE, nothing created
+
+// Calls that spend the PLATFORM's funds. Each needs an Idempotency-Key and is OFF unless the deployment's operator switched it on.
+await certen.identity.topUpCredits(id, { credits: 500, idempotencyKey: 'order-4411' }); // sponsor-paid ACME credits (1 credit = $0.01)
+await certen.identity.drip(id, 'base-sepolia', { idempotencyKey: 'drip-77' });          // testnet gas to the identity's own account
+```
+
+`balance` needs an API key (it reads through the gateway's node), and a node that did not answer is `BALANCE_UNREADABLE`, never a zero.
+`readiness` reports **facts and says nothing like "ready"**; each section has its own `state`, and an `unreadable` one does not fail the others.
+`client.readiness()` is the longer way to the same question: it checks the key page against Accumulate itself, which the gateway's aggregate does not.
+
+`topUpCredits` and `drip` return `202` with `status: 'unconfirmed'` when nobody can say whether the money moved. **That is data, not an error:
+read the balance before asking again**, because a new key is a second draw. Pass your own `idempotencyKey` so a retry after a crash reuses the
+same one; left out, the SDK generates one for that call (and the same one on its own internal retries). Both are refused with a code you can
+read when switched off (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`; not retried), limited (`CREDIT_TOPUP_LIMIT`, `DRIP_LIMIT`), or, for the drip,
+aimed at something that is not a testnet (`DRIP_TESTNET_ONLY`). The drip sends nothing anywhere you name: the destination is the account the
+gateway recorded for the identity and the amount is the operator's.
 
 ## Three things to know
 

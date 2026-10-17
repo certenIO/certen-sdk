@@ -2194,6 +2194,1319 @@
         }
       }
     },
+    "/v1/identity/{id}/readiness": {
+      "get": {
+        "summary": "Get what is needed to send from an identity, in one read",
+        "tags": [
+          "Identity"
+        ],
+        "description": "The facts a caller checks before sending from an identity, in one request instead of five: the identity and its status; whether its key is on its on-chain key page (`can_sign`) and how many credits that page holds; with `chain`, its account on that chain and the native balance of that account; and the organisation's balance. Each is its own section with its own state, and a section that cannot be read does not take the others with it. This states FACTS and does not say \"ready\": whether a balance is enough gas, or a fee affordable, is a judgement against figures the caller owns. Nothing is ever made to look better than it is: `can_sign` is `unreadable` with a null value when the key page could not be read (unknown, NOT a soft yes); `credits.source` is `recorded` when the figure is the one stored at provisioning and not the key page's own; a native balance that could not be read is `unreadable` with its error code, never `0`. The organisation section is shown only to a key with `billing:read` (`not_permitted` otherwise) and is `billing_disabled` where billing is off. `remaining_usd` is the figure to gate on, as for `GET /v1/billing/balance`; `enforcing` says whether a shortfall is refused or only recorded. Requires identity:read or identity:write.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "examples": {
+              "84532": {
+                "value": "84532"
+              },
+              "base-sepolia": {
+                "value": "base-sepolia"
+              }
+            },
+            "in": "query",
+            "name": "chain",
+            "required": false,
+            "description": "Optional. A chain this gateway serves, by registry id (`base-sepolia`) or numeric chain id (`84532`): adds the identity's account on it and that account's native balance. Without it the `chain` section is null and no chain is read."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "identity:read",
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "The facts, one section each.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The facts, one section each.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "identity",
+                    "can_sign",
+                    "credits",
+                    "chain",
+                    "org",
+                    "read_at"
+                  ],
+                  "properties": {
+                    "identity": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "adi_url": {
+                          "type": "string"
+                        },
+                        "key_page_url": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "status": {
+                          "type": "string",
+                          "description": "creating, active, suspended, error, revoked or deleted."
+                        },
+                        "error_message": {
+                          "type": "string",
+                          "description": "Why provisioning failed, when status is `error`.",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "can_sign": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "unreadable"
+                          ]
+                        },
+                        "value": {
+                          "type": "boolean",
+                          "description": "Is the identity's key on its key page. Null exactly when `state` is `unreadable`.",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "credits": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "value": {
+                          "type": "number",
+                          "description": "In credits."
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "key_page",
+                            "recorded"
+                          ],
+                          "description": "`recorded` is the stored figure from provisioning, shown when the key page could not be read."
+                        }
+                      }
+                    },
+                    "chain": {
+                      "type": "object",
+                      "description": "Null unless `chain` was asked for.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "chain": {
+                          "type": "string"
+                        },
+                        "chain_id": {
+                          "type": "integer"
+                        },
+                        "account": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "description": "`not_linked`, or the account's status: `deploying`, `deployed`, `failed`."
+                            },
+                            "address": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          }
+                        },
+                        "balance": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "unreadable",
+                                "not_applicable"
+                              ]
+                            },
+                            "balance": {
+                              "type": "string",
+                              "description": "With `ok`: whole units of the native token as a decimal string. `0` is a successful read of an empty account."
+                            },
+                            "symbol": {
+                              "type": "string",
+                              "description": "With `ok`: `ETH`, or `TEL` on Telcoin Adiri."
+                            },
+                            "read_at": {
+                              "type": "string",
+                              "description": "With `ok`: when the balance was read."
+                            },
+                            "code": {
+                              "type": "string",
+                              "description": "With `unreadable`: the error code (BALANCE_UNREADABLE, BAD_GATEWAY)."
+                            },
+                            "reason": {
+                              "type": "string",
+                              "description": "With `not_applicable`: why there is nothing to read."
+                            }
+                          }
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "org": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "ok",
+                            "billing_disabled",
+                            "not_permitted",
+                            "unreadable"
+                          ]
+                        },
+                        "remaining_usd": {
+                          "type": "string",
+                          "description": "With `ok`: spendable less what pending intents will consume."
+                        },
+                        "spendable_usd": {
+                          "type": "string",
+                          "description": "With `ok`."
+                        },
+                        "enforcing": {
+                          "type": "boolean",
+                          "description": "With `ok`: whether a shortfall is refused (true) or only recorded."
+                        },
+                        "status": {
+                          "type": "string",
+                          "description": "With `ok`: the organisation's billing account status."
+                        },
+                        "scope": {
+                          "type": "string",
+                          "description": "With `not_permitted`: the scope that shows this section."
+                        }
+                      }
+                    },
+                    "read_at": {
+                      "type": "string",
+                      "description": "When this gateway assembled the answer. Each section is as of its own read, moments apart."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UNKNOWN_CHAIN, or a chain with no address balance (the Accumulate protocol chain, a non-EVM chain).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "UNKNOWN_CHAIN, or a chain with no address balance (the Accumulate protocol chain, a non-EVM chain).",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication credentials.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Missing or invalid authentication credentials.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated principal lacks identity:read or identity:write.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Authenticated principal lacks identity:read or identity:write.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No identity with this id exists for the caller's org.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "No identity with this id exists for the caller's org.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CHAIN_NOT_ENABLED: the chain is in the catalogue but this gateway has not enabled it.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CHAIN_NOT_ENABLED: the chain is in the catalogue but this gateway has not enabled it.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/{id}/credits": {
+      "post": {
+        "summary": "Top up the Accumulate credits of an identity's key page, paid by the platform",
+        "tags": [
+          "Identity"
+        ],
+        "description": "Adds `credits` to the identity's key page when it is running low (an identity is provisioned with a fixed grant and an intent write spends a fraction of a credit). The platform pays: ACME credits are sponsored, so the organization is not charged. Because every top-up draws on the platform's sponsor account, it is limited: a per-request maximum, daily limits per identity and per organization that count everything drawn in the last 24 hours, and, for an unapproved self-service organization, the credit allowance given at signup. It is OFF unless the operator enables it (`CREDIT_TOPUP_DISABLED` otherwise). An `Idempotency-Key` header is REQUIRED (`IDEMPOTENCY_KEY_REQUIRED`): a repeated key is never a second draw. The answer is `202`, never \"applied\": `status: submitted` means the bridge accepted a transaction and the network has not yet confirmed it (read the identity's `credit_balance`, or the `credits_before` here against it). `status: unconfirmed` means the bridge did not say whether it submitted, so it MAY have been applied: do NOT retry it, check the balance, and it counts toward the limits as if it had been. A request the bridge refused is an error and counts for nothing. Requires identity:write.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "credits"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "credits": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000,
+                    "description": "Whole credits to add (1 credit = $0.01). Limited per request by the deployment (500 by default)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Pays out of the platform sponsor's ACME, so the key is REQUIRED (IDEMPOTENCY_KEY_REQUIRED) and unique per organization even beyond the 24-hour replay window. A replay returns the stored answer, including an `unconfirmed` one, without drawing again.",
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "202": {
+            "description": "The top-up was recorded and the bridge was asked once. See `status`.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The top-up was recorded and the bridge was asked once. See `status`.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "topup_id",
+                    "identity_id",
+                    "key_page_url",
+                    "credits",
+                    "status",
+                    "tx_id",
+                    "credits_before",
+                    "note"
+                  ],
+                  "properties": {
+                    "topup_id": {
+                      "type": "string"
+                    },
+                    "identity_id": {
+                      "type": "string"
+                    },
+                    "key_page_url": {
+                      "type": "string"
+                    },
+                    "credits": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "submitted",
+                        "unconfirmed"
+                      ],
+                      "description": "`submitted`: accepted, not yet confirmed. `unconfirmed`: not known; may have been applied."
+                    },
+                    "tx_id": {
+                      "type": "string",
+                      "description": "The Accumulate transaction id the bridge returned; null when it did not return one.",
+                      "nullable": true
+                    },
+                    "credits_before": {
+                      "type": "number",
+                      "description": "The page's credits just before the top-up; null when it could not be read.",
+                      "nullable": true
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a whole number of credits, above the per-request maximum, or no Idempotency-Key (IDEMPOTENCY_KEY_REQUIRED). A refusal the bridge states is also a 400.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Not a whole number of credits, above the per-request maximum, or no Idempotency-Key (IDEMPOTENCY_KEY_REQUIRED). A refusal the bridge states is also a 400.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication credentials.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Missing or invalid authentication credentials.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Lacks identity:write, or an unapproved self-service organization would pass its credit allowance.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Lacks identity:write, or an unapproved self-service organization would pass its credit allowance.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No identity with this id exists for the caller's org.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "No identity with this id exists for the caller's org.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The identity is not active or has no key page; another top-up for the organization is in progress; or this Idempotency-Key was already used.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The identity is not active or has no key page; another top-up for the organization is in progress; or this Idempotency-Key was already used.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "CREDIT_TOPUP_LIMIT: the identity or organization has drawn its daily limit.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CREDIT_TOPUP_LIMIT: the identity or organization has drawn its daily limit.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The key page could not be read to check an unapproved organization's allowance.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The key page could not be read to check an unapproved organization's allowance.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CREDIT_TOPUP_DISABLED: not enabled on this deployment.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CREDIT_TOPUP_DISABLED: not enabled on this deployment.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/identity/{id}/chain-accounts/{chain}/drip": {
+      "post": {
+        "summary": "Send an identity's chain account a testnet gas drip, paid by the platform",
+        "tags": [
+          "Identity"
+        ],
+        "description": "Asks the platform's sponsor wallet to send the identity's DEPLOYED account on `chain` a small, fixed amount of the chain's native token (ETH, or TEL on Telcoin Adiri), so the account can pay for its first transactions without a faucet. TESTNETS ONLY. There is nothing to choose, and the request takes no body: the destination is the address the gateway recorded for the account (never one you send), and the amount is the platform operator's configuration. `chain` is the registry id (`base-sepolia`) or numeric chain id. The sponsor wallet is the one that pays for account deployments, so the drip is limited: OFF unless the operator enables it (`DRIP_DISABLED`), one drip per account and chain per cooldown, and a daily ceiling per organization and for the whole platform (`DRIP_LIMIT`). An account that already holds enough is sent nothing (`status: skipped`). An `Idempotency-Key` header is REQUIRED (`IDEMPOTENCY_KEY_REQUIRED`): a repeated key is never a second drip. `status: sent` means the transfer was mined (200). `status: unconfirmed` (202) means the bridge did not say whether it sent, or the node accepted the transfer and it had not mined: it MAY have been sent, so do NOT retry it, check the account's balance (`GET /v1/chains/{id}/addresses/{address}/balance`), and it counts toward the limits as if it had been sent. A drip the platform could not make is an error and counts for nothing. Requires identity:write.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "chain",
+            "required": true,
+            "description": "Registry id (`base-sepolia`) or numeric EVM chain id (`84532`)."
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "description": "Optional. Repeat a request safely: an identical retry with the SAME key returns the stored response instead of performing the work twice, and the replay is marked with an `X-Idempotency-Replay` header. Reusing a key with a DIFFERENT body is rejected (IDEMPOTENCY_KEY_MISMATCH); retrying while the first is still running returns IDEMPOTENCY_KEY_IN_FLIGHT, which means wait and retry the same key — never a new one."
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-idempotent": true,
+        "x-retry-safety": "idempotent-with-key",
+        "x-retry-note": "Sends from the platform sponsor wallet, so the key is REQUIRED (IDEMPOTENCY_KEY_REQUIRED) and unique per organization even beyond the 24-hour replay window. A replay returns the stored answer, including an `unconfirmed` one, without sending again.",
+        "x-required-scopes": [
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "The drip was sent and mined, or the account already held enough and nothing was sent.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The drip was sent and mined, or the account already held enough and nothing was sent.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "drip_id",
+                    "identity_id",
+                    "chain",
+                    "chain_id",
+                    "address",
+                    "status",
+                    "tx_hash",
+                    "amount",
+                    "symbol",
+                    "explorer_url",
+                    "note"
+                  ],
+                  "properties": {
+                    "drip_id": {
+                      "type": "string"
+                    },
+                    "identity_id": {
+                      "type": "string"
+                    },
+                    "chain": {
+                      "type": "string",
+                      "description": "The registry id of the chain."
+                    },
+                    "chain_id": {
+                      "type": "integer"
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "The account the gateway recorded for this identity on this chain: the only place the drip can go."
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "sent",
+                        "skipped",
+                        "unconfirmed"
+                      ],
+                      "description": "`sent`: mined. `skipped`: the account already held enough, nothing sent. `unconfirmed`: it may have been sent."
+                    },
+                    "tx_hash": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "amount": {
+                      "type": "string",
+                      "description": "What the bridge reports it sent, in whole units of the native token. The amount is the operator's, never the caller's.",
+                      "nullable": true
+                    },
+                    "symbol": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "explorer_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "It may have been sent: check the balance, do not retry.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "It may have been sent: check the balance, do not retry.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "drip_id",
+                    "identity_id",
+                    "chain",
+                    "chain_id",
+                    "address",
+                    "status",
+                    "tx_hash",
+                    "amount",
+                    "symbol",
+                    "explorer_url",
+                    "note"
+                  ],
+                  "properties": {
+                    "drip_id": {
+                      "type": "string"
+                    },
+                    "identity_id": {
+                      "type": "string"
+                    },
+                    "chain": {
+                      "type": "string",
+                      "description": "The registry id of the chain."
+                    },
+                    "chain_id": {
+                      "type": "integer"
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "The account the gateway recorded for this identity on this chain: the only place the drip can go."
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "sent",
+                        "skipped",
+                        "unconfirmed"
+                      ],
+                      "description": "`sent`: mined. `skipped`: the account already held enough, nothing sent. `unconfirmed`: it may have been sent."
+                    },
+                    "tx_hash": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "amount": {
+                      "type": "string",
+                      "description": "What the bridge reports it sent, in whole units of the native token. The amount is the operator's, never the caller's.",
+                      "nullable": true
+                    },
+                    "symbol": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "explorer_url": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No Idempotency-Key (IDEMPOTENCY_KEY_REQUIRED), UNKNOWN_CHAIN, or a chain that has no address (the Accumulate protocol chain).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "No Idempotency-Key (IDEMPOTENCY_KEY_REQUIRED), UNKNOWN_CHAIN, or a chain that has no address (the Accumulate protocol chain).",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication credentials.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Missing or invalid authentication credentials.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Lacks identity:write.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Lacks identity:write.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No identity with this id exists for the caller's org.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "No identity with this id exists for the caller's org.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The identity is not active, has no deployed account on this chain, a drip is already in progress, or this Idempotency-Key was already used.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The identity is not active, has no deployed account on this chain, a drip is already in progress, or this Idempotency-Key was already used.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CHAIN_NOT_ENABLED, DRIP_TESTNET_ONLY (not a testnet), or DRIP_RECIPIENT_REJECTS (the account would not take a plain transfer).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CHAIN_NOT_ENABLED, DRIP_TESTNET_ONLY (not a testnet), or DRIP_RECIPIENT_REJECTS (the account would not take a plain transfer).",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DRIP_LIMIT: this account's cooldown, or the organization's or the platform's daily ceiling.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "DRIP_LIMIT: this account's cooldown, or the organization's or the platform's daily ceiling.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The platform could not send the drip (the bridge refused it or failed).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The platform could not send the drip (the bridge refused it or failed).",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "DRIP_DISABLED (not enabled on this deployment) or DRIP_UNAVAILABLE (the platform cannot send one on this chain right now).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "DRIP_DISABLED (not enabled on this deployment) or DRIP_UNAVAILABLE (the platform cannot send one on this chain right now).",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/portfolio": {
       "get": {
         "summary": "Get a portfolio of identities and balances",
@@ -7037,6 +8350,37 @@
                         },
                         "hash_to_sign": {
                           "type": "string"
+                        },
+                        "transaction": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "signature_metadata": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "ed25519"
+                              ]
+                            },
+                            "public_key": {
+                              "type": "string"
+                            },
+                            "signer": {
+                              "type": "string"
+                            },
+                            "signer_version": {
+                              "type": "integer"
+                            },
+                            "timestamp_us": {
+                              "type": "integer"
+                            },
+                            "vote": {
+                              "type": "string"
+                            }
+                          }
                         }
                       }
                     },
@@ -7799,6 +9143,41 @@
                         }
                       }
                     },
+                    "destination": {
+                      "type": "object",
+                      "description": "The one transaction this intent made on its destination chain, on the VALIDATORS' word (`source`): the `settlement_tx` of the member for the chain the intent declares. It is the validators' record, not a fact the gateway checked and not the proof - the proof artifact is what lets anyone check it against the chain. `settlement` says what became of it: `reverted` is a transaction that exists and did not succeed. Null while the validators have not recorded a transaction for that chain yet (that is \"not yet\", not \"none\"), and ALWAYS null for an intent on several chains or with a leg whose chain cannot be read: it has more than one destination transaction and none is named as the destination, so read each `validator.members` entry. An intent that never reaches the validators has none.",
+                      "additionalProperties": false,
+                      "properties": {
+                        "chain_id": {
+                          "type": "integer",
+                          "description": "The destination chain's numeric id."
+                        },
+                        "tx_hash": {
+                          "type": "string",
+                          "description": "The destination-chain transaction hash, as the validators recorded it."
+                        },
+                        "settlement": {
+                          "type": "string",
+                          "enum": [
+                            "settled",
+                            "reverted",
+                            "unobserved",
+                            "none",
+                            null
+                          ],
+                          "description": "What the validators recorded became of the transaction; null when they have not stated it.",
+                          "nullable": true
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "validators"
+                          ],
+                          "description": "Whose word this is. Always `validators`: the hash is their record, not verified by the gateway."
+                        }
+                      },
+                      "nullable": true
+                    },
                     "validator": {
                       "type": "object",
                       "description": "What the CERTEN validators recorded for this intent, followed until it is final - also after the gateway has ended the intent. Null until first observed.",
@@ -8369,6 +9748,413 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/transaction/quote": {
+      "post": {
+        "summary": "Preflight a transaction: its price and whether it would be admitted, without creating anything",
+        "tags": [
+          "Transaction"
+        ],
+        "description": "Evaluates what `POST /v1/transaction` would do with this request RIGHT NOW and creates nothing: no transaction, no quote, no hold, no charge, no payment target. Send the body you would send to `POST /v1/transaction`; only `intent` and `proof_class` are read, anything else is ignored, and a `quote_id` is ignored too (admission without one prices fresh, and so does this). It runs the same gates in the same order and refuses what admission refuses, with the same code: a chain this gateway does not serve (`UNKNOWN_CHAIN`, `CHAIN_NOT_ENABLED`), a leg that names no chain (`CHAIN_UNRESOLVED`), an unknown `proof_class`, a suspended chain (`CHAIN_SUSPENDED`), and a price that cannot be computed (`NO_PRICE_BOOK`, `CHAIN_NOT_PRICEABLE`, an FX refusal). A funds shortfall is NOT an error here: admission answers it with a 402 that mints a payment target, and a preflight states it instead, as `funds`. This is an ESTIMATE, not a quote: it carries no `quote_id` and promises nothing. Balances move, a chain can be suspended, and the FX rate and cost window shift; it is true as of `evaluated_at`. `checked` lists what it evaluated and `not_checked` what it did not (the identity and its key page, destination-chain gas, quota, header conditions, the bridge's own validation), so an answer that finds nothing wrong is not read as more than it is. Where billing is off, or this operation is not gated, nothing is priced and `billing.state` says so. Requires transaction:write, the scope that creates the transaction.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "intent": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The intent you would submit. Its legs (`chain` on each) decide what is priced."
+                  },
+                  "proof_class": {
+                    "type": "string",
+                    "description": "`on_demand` or `on_cadence`. Omitted, it is priced as unclassified, as admission does. An unknown value is a 400."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-retry-safety": "idempotent",
+        "x-retry-note": "A read that states a price: it mints no quote, reserves nothing and records nothing, so repeating it changes nothing (the figures it reads may have moved since).",
+        "x-required-scopes": [
+          "transaction:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "The estimate. `billing.state` is `priced`, `disabled` or `not_gated`.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The estimate. `billing.state` is `priced`, `disabled` or `not_gated`.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": [
+                    "estimate",
+                    "evaluated_at",
+                    "request",
+                    "checked",
+                    "not_checked",
+                    "billing"
+                  ],
+                  "properties": {
+                    "estimate": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "description": "Always true: this is not a quote and promises nothing."
+                    },
+                    "evaluated_at": {
+                      "type": "string",
+                      "description": "RFC 3339. Everything below is as of this moment."
+                    },
+                    "request": {
+                      "type": "object",
+                      "description": "What the request is priced on. Null where nothing is priced.",
+                      "additionalProperties": true,
+                      "properties": {
+                        "chains": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "chain": {
+                          "type": "string",
+                          "description": "The primary chain."
+                        },
+                        "leg_count": {
+                          "type": "integer"
+                        },
+                        "proof_class": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      },
+                      "nullable": true
+                    },
+                    "checked": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The gates evaluated."
+                    },
+                    "not_checked": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "What was NOT looked at."
+                    },
+                    "billing": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "`{state:\"disabled\"}` or `{state:\"not_gated\"}` where nothing is priced; otherwise `state:\"priced\"` with `enforcing`, `price` and `funds`.",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "disabled",
+                            "not_gated",
+                            "priced"
+                          ]
+                        },
+                        "enforcing": {
+                          "type": "boolean",
+                          "description": "Whether a shortfall is refused (true) or only recorded (false)."
+                        },
+                        "price": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "sku": {
+                              "type": "string"
+                            },
+                            "total_usd": {
+                              "type": "string",
+                              "description": "What admission would price this at now."
+                            },
+                            "platform_fee_usd": {
+                              "type": "string"
+                            },
+                            "gas_usd": {
+                              "type": "string",
+                              "description": "Zero on a flat-priced chain: its fee is all-in."
+                            },
+                            "max_total_usd": {
+                              "type": "string",
+                              "description": "The cap admission would promise."
+                            },
+                            "gas_basis": {
+                              "type": "string",
+                              "description": "What the gas figure rests on: class_specific, class_thin, unclassified_fallback or flat_priced.",
+                              "nullable": true
+                            },
+                            "price_book_version": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "funds": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "ok",
+                                "unreadable"
+                              ]
+                            },
+                            "spendable_usd": {
+                              "type": "string"
+                            },
+                            "remaining_usd": {
+                              "type": "string",
+                              "description": "Spendable less what pending intents will consume: the figure to gate on."
+                            },
+                            "shortfall_usd": {
+                              "type": "string",
+                              "description": "How much more would cover this request and what is already committed."
+                            },
+                            "covered": {
+                              "type": "boolean"
+                            },
+                            "gate": {
+                              "type": "string",
+                              "enum": [
+                                "passes",
+                                "PAYMENT_REQUIRED",
+                                "COMMITMENT_EXCEEDED"
+                              ],
+                              "description": "The 402 admission would answer with now, only where that gate enforces; otherwise `passes` (read `covered`)."
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "UNKNOWN_CHAIN, CHAIN_UNRESOLVED (a leg names no chain), or an unknown proof_class.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "UNKNOWN_CHAIN, CHAIN_UNRESOLVED (a leg names no chain), or an unknown proof_class.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication credentials.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Missing or invalid authentication credentials.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated principal lacks transaction:write.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Authenticated principal lacks transaction:write.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CHAIN_NOT_ENABLED: the chain is in the catalogue but this gateway has not enabled it.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CHAIN_NOT_ENABLED: the chain is in the catalogue but this gateway has not enabled it.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "CHAIN_SUSPENDED, NO_PRICE_BOOK, CHAIN_NOT_PRICEABLE or an FX refusal: the same as admission.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CHAIN_SUSPENDED, NO_PRICE_BOOK, CHAIN_NOT_PRICEABLE or an FX refusal: the same as admission.",
+                  "type": "object",
+                  "additionalProperties": true
                 }
               }
             }
@@ -8963,6 +10749,260 @@
               "application/json": {
                 "schema": {
                   "description": "Failed to fetch proof bundle from the proof-service.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proof/{id}/v2": {
+      "get": {
+        "summary": "Download the proof v2 portable document",
+        "tags": [
+          "Proof"
+        ],
+        "description": "The portable proof v2 document for a proof ID (`certen-proof-v2-accumulate-portable/1`), proxied from the proof-service: the incarnation pin and genesis, the Directory's major blocks from the first, and the evidence (the transaction's receipt to a certified Directory root, the partition anchor, the governing pages, the validator set in force) with the govRoot v3 inputs when the intent's certificate has been built. A verifier (`@certen.io/proof-verify`, certen-sdk `proof.portable()`) checks it offline; nothing in it is a verdict. 404 `PROOF_V2_NOT_AVAILABLE` when this proof has no v2 document (an older proof, or a build that failed). Requires the proof:read scope.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, and `govRootV3Inputs` when recorded.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, and `govRootV3Inputs` when recorded.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "required": [
+                    "format",
+                    "pin",
+                    "genesis",
+                    "majors",
+                    "evidence"
+                  ],
+                  "properties": {
+                    "format": {
+                      "type": "string",
+                      "enum": [
+                        "certen-proof-v2-accumulate-portable/1"
+                      ]
+                    },
+                    "pin": {
+                      "type": "string"
+                    },
+                    "genesis": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "majors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true
+                      }
+                    },
+                    "evidence": {
+                      "type": "object",
+                      "additionalProperties": true
+                    },
+                    "govRootV3Inputs": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key / bearer token.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Missing or invalid API key / bearer token.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but the key lacks the proof:read scope.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Authenticated, but the key lacks the proof:read scope.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PROOF_V2_NOT_AVAILABLE: this proof has no proof v2 document.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "PROOF_V2_NOT_AVAILABLE: this proof has no proof v2 document.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Failed to fetch the document from the proof-service.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Failed to fetch the document from the proof-service.",
                   "type": "object",
                   "additionalProperties": true
                 }
@@ -10449,6 +12489,328 @@
                       "type": "string"
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chains/{id}/addresses/{address}/balance": {
+      "get": {
+        "summary": "Get the native balance of any address on a chain",
+        "tags": [
+          "Portfolio"
+        ],
+        "description": "The native-token balance (ETH, or TEL on Telcoin Adiri) of ANY EVM address on a chain this gateway serves - the wallet that will fund an account, a recipient, a sponsor - not only the caller's own linked accounts, which `GET /v1/portfolio` and `GET /v1/identity/{id}?include=balances` already read. `id` is the registry id (`base-sepolia`) or the numeric chain id (`84532`), as for `GET /v1/chains/{id}`. The address is checked as a wallet checks it (EIP-55): an all-lower-case or all-upper-case address is read as given, a mixed-case one must carry the right checksum or it is refused as `INVALID_ADDRESS`, so a mistyped character cannot read some other account. A balance that could not be read is NEVER reported as zero: it is a `503 BALANCE_UNREADABLE` (retry), and so is an answer that is not a balance. A `0` here means the node answered and the account holds nothing. `balance` is a decimal string in whole units of the native token (never a number: no precision is lost), and `read_at` is when this gateway read it, not a block time. Requires portfolio:read, identity:read or identity:write.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "Registry id (`base-sepolia`) or numeric EVM chain id (`84532`)."
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "in": "path",
+            "name": "address",
+            "required": true,
+            "description": "An EVM address: 0x and 40 hexadecimal characters."
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "portfolio:read",
+          "identity:read",
+          "identity:write"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "The balance, as the chain's node answered it.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The balance, as the chain's node answered it.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "chain",
+                    "chain_id",
+                    "address",
+                    "balance",
+                    "symbol",
+                    "read_at"
+                  ],
+                  "properties": {
+                    "chain": {
+                      "type": "string",
+                      "description": "The registry id of the chain that was read."
+                    },
+                    "chain_id": {
+                      "type": "integer"
+                    },
+                    "address": {
+                      "type": "string",
+                      "description": "The address in its EIP-55 checksummed form, whatever case it was sent in."
+                    },
+                    "balance": {
+                      "type": "string",
+                      "description": "Whole units of the native token as a decimal string, e.g. `0.25`. `0` is a successful read of an empty account."
+                    },
+                    "symbol": {
+                      "type": "string",
+                      "description": "The native token: `ETH`, or `TEL` on Telcoin Adiri."
+                    },
+                    "read_at": {
+                      "type": "string",
+                      "description": "When this gateway read the balance (RFC 3339). Not a block time."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "INVALID_ADDRESS (not an address, or a bad checksum), UNKNOWN_CHAIN, or a chain that has no address balance (the Accumulate protocol chain, a non-EVM chain).",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "INVALID_ADDRESS (not an address, or a bad checksum), UNKNOWN_CHAIN, or a chain that has no address balance (the Accumulate protocol chain, a non-EVM chain).",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid authentication credentials.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Missing or invalid authentication credentials.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated principal lacks a required portfolio/identity scope.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Authenticated principal lacks a required portfolio/identity scope.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "CHAIN_NOT_ENABLED: the chain is in the catalogue but this gateway has not enabled it.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CHAIN_NOT_ENABLED: the chain is in the catalogue but this gateway has not enabled it.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "BAD_GATEWAY: the service that reads chains did not answer.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "BAD_GATEWAY: the service that reads chains did not answer.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "BALANCE_UNREADABLE: the balance could not be read right now. It is not zero. Retry.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "BALANCE_UNREADABLE: the balance could not be read right now. It is not zero. Retry.",
+                  "type": "object",
+                  "additionalProperties": true
                 }
               }
             }
@@ -13234,6 +15596,37 @@
                         },
                         "timestamp": {
                           "type": "integer"
+                        },
+                        "transaction": {
+                          "type": "object",
+                          "additionalProperties": true
+                        },
+                        "signature_metadata": {
+                          "type": "object",
+                          "additionalProperties": true,
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "ed25519"
+                              ]
+                            },
+                            "public_key": {
+                              "type": "string"
+                            },
+                            "signer": {
+                              "type": "string"
+                            },
+                            "signer_version": {
+                              "type": "integer"
+                            },
+                            "timestamp_us": {
+                              "type": "integer"
+                            },
+                            "vote": {
+                              "type": "string"
+                            }
+                          }
                         }
                       }
                     },

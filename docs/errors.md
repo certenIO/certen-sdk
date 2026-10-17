@@ -66,6 +66,17 @@ backoff — a second retry loop wrapped around it is wrong.
 | `EXPIRES_AT_OUT_OF_RANGE` | 400 | no | `expires_at` is in the past, too soon, or too far ahead; the message states the accepted window |
 | `INTENT_EXPIRED` | 409 | no | The intent passed its `expires_at` before it was signed; nothing was charged; create a new intent |
 | `UNKNOWN_CHAIN` | 400 | no | No chain by that name is served; the message names the closest match |
+| `INVALID_ADDRESS` | 400 | no | Not an EVM address (`0x` and 40 hex characters), or mixed case with a wrong EIP-55 checksum, which means a character is mistyped; the message says which |
+| `IDEMPOTENCY_KEY_REQUIRED` | 400 | no | This operation spends the platform's funds and refuses to run without an `Idempotency-Key` header, so a repeat is never a second draw |
+| `BALANCE_UNREADABLE` | 503 | yes | The chain's node did not answer, or did not answer with a balance; this is NOT a zero balance |
+| `PROOF_V2_NOT_AVAILABLE` | 404 | no | The proof service has no v2 portable document for this proof id; the route does not say whether the id is unknown or the proof simply has none |
+| `CREDIT_TOPUP_DISABLED` | 503 | no | Credit top-up is not enabled on this deployment; an operator turns it on, so retrying changes nothing |
+| `CREDIT_TOPUP_LIMIT` | 429 | yes | This identity or organization has drawn its daily limit of credits; the message states how many remain |
+| `DRIP_DISABLED` | 503 | no | The gas drip is not enabled on this deployment; an operator turns it on, so retrying changes nothing |
+| `DRIP_UNAVAILABLE` | 503 | yes | The platform cannot send a drip on this chain right now (switched off for it, no amount set, or the sponsor wallet is too low); the message names which |
+| `DRIP_LIMIT` | 429 | yes | A drip limit was reached: this account was already dripped within the cooldown, or the organization or the platform hit its daily ceiling; the message says which |
+| `DRIP_TESTNET_ONLY` | 422 | no | The chain is not a testnet; the gas drip is for testnets only |
+| `DRIP_RECIPIENT_REJECTS` | 422 | no | The account contract did not accept a plain transfer of the native token, so it cannot be dripped; nothing was sent |
 | `INTERNAL_ERROR` | 500 | yes | An unexpected server error occurred |
 | `BAD_GATEWAY` | 502 | yes | A downstream service (api-bridge, proofs service) returned an error |
 | `NETWORK_ERROR` | — | yes | Synthesized by the SDK when the request never reached the gateway |

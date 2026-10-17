@@ -505,6 +505,11 @@ export interface TransactionResponse {
   proof_lookup?: ProofLookup | null;
   /** Every chain member's proof, one per chain the intent settles on. Empty until the validators produced one. */
   proofs?: ChainMemberProof[];
+  /**
+   * The one transaction this intent made on its destination chain, as the validators recorded it. Null until they have recorded one, and
+   * null for an intent on several chains (it names one transaction, so it does not guess). Not verified by the gateway.
+   */
+  destination?: TransactionDestination | null;
   /** What the validators recorded for this intent. Null until first observed. */
   validator?: ValidatorView | null;
   created_at: string;
@@ -1634,4 +1639,217 @@ export interface DeviceAuthorizationStatus {
   interval?: number;
   note?: string;
   warning?: string;
+}
+
+// ── The gateway asks of the CLI UX plan (PLAN §6): G1 drip, G4 readiness, G5 quote, G6 top-up, the balance read and the destination ─────
+
+/**
+ * The one transaction an intent made on its destination chain, **as the validators recorded it**. The gateway does not verify the hash;
+ * `source` says whose word it is. Read it back from the chain (or `buildReceipt`) before treating the transfer as having happened.
+ */
+export interface TransactionDestination {
+  /** The destination chain's numeric id. */
+  chain_id?: number;
+  /** The destination-chain transaction hash, as the validators recorded it. */
+  tx_hash?: string;
+  /** What the validators recorded became of the transaction; null when they have not stated it. */
+  settlement?: 'settled' | 'reverted' | 'unobserved' | 'none' | (string & {}) | null;
+  /** Whose word this is. Always `validators`. */
+  source?: 'validators';
+}
+
+/** `GET /v1/chains/{id}/addresses/{address}/balance`: the native balance of any address, as the chain's node answered it. */
+export interface AddressBalanceResponse {
+  /** The registry id of the chain that was read. */
+  chain: string;
+  chain_id: number;
+  /** The address in its EIP-55 checksummed form, whatever case it was sent in. */
+  address: string;
+  /** Whole units of the native token as a decimal string, e.g. `0.25`. `0` is a successful read of an empty account. */
+  balance: string;
+  /** The native token: `ETH`, or `TEL` on Telcoin Adiri. */
+  symbol: string;
+  /** When the gateway read the balance (RFC 3339). Not a block time. */
+  read_at: string;
+}
+
+/** `GET /v1/identity/{id}/readiness`: facts about whether an identity can act, one section each. It says nothing like "ready"; read the facts. */
+export interface IdentityReadinessResponse {
+  identity: {
+    id?: string;
+    adi_url?: string;
+    key_page_url?: string | null;
+    /** creating, active, suspended, error, revoked or deleted. */
+    status?: string;
+    /** Why provisioning failed, when status is `error`. */
+    error_message?: string | null;
+  };
+  can_sign: {
+    state?: 'ok' | 'unreadable';
+    /** Is the identity's key on its key page. Null exactly when `state` is `unreadable`. */
+    value?: boolean | null;
+  };
+  credits: {
+    /** In credits. */
+    value?: number;
+    /** `recorded` is the stored figure from provisioning, shown when the key page could not be read. */
+    source?: 'key_page' | 'recorded';
+  };
+  /** Null unless a `chain` was asked for. */
+  chain: {
+    chain?: string;
+    chain_id?: number;
+    account?: {
+      /** `not_linked`, or the account's status: `deploying`, `deployed`, `failed`. */
+      state?: string;
+      address?: string | null;
+    };
+    balance?: {
+      state?: 'ok' | 'unreadable' | 'not_applicable';
+      /** With `ok`: whole units of the native token as a decimal string. `0` is a successful read of an empty account. */
+      balance?: string;
+      /** With `ok`: `ETH`, or `TEL` on Telcoin Adiri. */
+      symbol?: string;
+      /** With `ok`: when the balance was read. */
+      read_at?: string;
+      /** With `unreadable`: the error code (BALANCE_UNREADABLE, BAD_GATEWAY). */
+      code?: string;
+      /** With `not_applicable`: why there is nothing to read. */
+      reason?: string;
+    };
+  } | null;
+  org: {
+    state?: 'ok' | 'billing_disabled' | 'not_permitted' | 'unreadable';
+    /** With `ok`: spendable less what pending intents will consume. */
+    remaining_usd?: string;
+    /** With `ok`. */
+    spendable_usd?: string;
+    /** With `ok`: whether a shortfall is refused (true) or only recorded. */
+    enforcing?: boolean;
+    /** With `ok`: the organisation's billing account status. */
+    status?: string;
+    /** With `not_permitted`: the scope that shows this section. */
+    scope?: string;
+  };
+  /** When the gateway assembled the answer. Each section is as of its own read, moments apart. */
+  read_at: string;
+}
+
+export interface TransactionQuoteParams {
+  /** The intent you would submit. Its legs (`chain` on each) decide what is priced. */
+  intent: TransactionIntent;
+  /** `on_demand` or `on_cadence`. Omitted, it is priced as unclassified, as admission does. */
+  proofClass?: 'on_demand' | 'on_cadence';
+}
+
+/**
+ * `POST /v1/transaction/quote`: what a transaction would cost and whether it would be admitted, with nothing created or charged.
+ * **An estimate, not a quote**: it promises nothing, and `not_checked` lists what was not looked at.
+ */
+export interface TransactionQuoteResponse {
+  /** Always true: this is not a quote and promises nothing. */
+  estimate: true;
+  /** RFC 3339. Everything below is as of this moment. */
+  evaluated_at: string;
+  /** What the request is priced on. Null where nothing is priced. */
+  request: {
+    chains?: string[];
+    /** The primary chain. */
+    chain?: string;
+    leg_count?: number;
+    proof_class?: string | null;
+  } | null;
+  /** The gates evaluated. */
+  checked: string[];
+  /** What was NOT looked at. */
+  not_checked: string[];
+  /** `{ state: 'disabled' }` or `{ state: 'not_gated' }` where nothing is priced; otherwise `state: 'priced'` with `enforcing`, `price` and `funds`. */
+  billing: {
+    state?: 'disabled' | 'not_gated' | 'priced';
+    /** Whether a shortfall is refused (true) or only recorded (false). */
+    enforcing?: boolean;
+    price?: {
+      sku?: string;
+      /** What admission would price this at now. */
+      total_usd?: string;
+      platform_fee_usd?: string;
+      /** Zero on a flat-priced chain: its fee is all-in. */
+      gas_usd?: string;
+      /** The cap admission would promise. */
+      max_total_usd?: string;
+      /** What the gas figure rests on: class_specific, class_thin, unclassified_fallback or flat_priced. */
+      gas_basis?: string | null;
+      price_book_version?: string;
+    };
+    funds?: {
+      state?: 'ok' | 'unreadable';
+      spendable_usd?: string;
+      /** Spendable less what pending intents will consume: the figure to gate on. */
+      remaining_usd?: string;
+      /** How much more would cover this request and what is already committed. */
+      shortfall_usd?: string;
+      covered?: boolean;
+      /** The 402 admission would answer with now, only where that gate enforces; otherwise `passes` (read `covered`). */
+      gate?: 'passes' | 'PAYMENT_REQUIRED' | 'COMMITMENT_EXCEEDED';
+    };
+  };
+}
+
+export interface CreditTopUpParams {
+  /** Whole credits to add (1 credit = $0.01). The deployment limits it per request (500 by default). */
+  credits: number;
+  /**
+   * Makes a repeat safe. A top-up spends the platform's ACME, so the gateway REQUIRES a key and a repeated one is never a second draw.
+   * Pass your own to make a retry after a crash or timeout safe; left out, the SDK generates one for this call.
+   */
+  idempotencyKey?: string;
+}
+
+/**
+ * `POST /v1/identity/{id}/credits`: the key page's credits were topped up by the platform. Answered 202: the transaction is submitted,
+ * not confirmed. `status: 'unconfirmed'` means the outcome is unknown and it MAY have been applied: read the balance before repeating.
+ */
+export interface CreditTopUpResponse {
+  topup_id: string;
+  identity_id: string;
+  key_page_url: string;
+  credits: number;
+  /** `submitted`: accepted, not yet confirmed. `unconfirmed`: not known; may have been applied. */
+  status: 'submitted' | 'unconfirmed';
+  /** The Accumulate transaction id the bridge returned; null when it did not return one. */
+  tx_id: string | null;
+  /** The page's credits just before the top-up; null when they could not be read. */
+  credits_before: number | null;
+  note: string;
+}
+
+export interface ChainDripParams {
+  /**
+   * The gateway REQUIRES a key and a repeated one is never a second drip. Pass your own to make a retry after a crash or timeout safe;
+   * left out, the SDK generates one for this call.
+   */
+  idempotencyKey?: string;
+}
+
+/**
+ * `POST /v1/identity/{id}/chain-accounts/{chain}/drip`: a testnet gas drip to the identity's own deployed account, paid by the platform.
+ * The amount and the destination are the operator's and the gateway's record; neither is the caller's. Answered 200 (sent, or skipped)
+ * or 202 (`unconfirmed`: it may have been sent).
+ */
+export interface ChainDripResponse {
+  drip_id: string;
+  identity_id: string;
+  /** The registry id of the chain. */
+  chain: string;
+  chain_id: number;
+  /** The account the gateway recorded for this identity on this chain: the only place the drip can go. */
+  address: string;
+  /** `sent`: mined. `skipped`: the account already held enough, nothing sent. `unconfirmed`: it may have been sent. */
+  status: 'sent' | 'skipped' | 'unconfirmed';
+  tx_hash: string | null;
+  /** What the bridge reports it sent, in whole units of the native token. */
+  amount: string | null;
+  symbol: string | null;
+  explorer_url: string | null;
+  note: string;
 }

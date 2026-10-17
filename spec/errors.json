@@ -31,6 +31,14 @@
       "meaning": "The request was understood but is not valid for this operation."
     },
     {
+      "code": "BALANCE_UNREADABLE",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The balance could not be read right now: the chain's node did not answer, or the answer was not a balance. It is NOT zero. Nothing is reported rather than a guess, because an empty account and a failed read look the same to anyone who sees a 0.",
+      "action": "Retry shortly. Do not treat it as an empty account."
+    },
+    {
       "code": "BILLING_DISABLED",
       "status": 503,
       "retryable": false,
@@ -90,12 +98,68 @@
       "meaning": "The measured cost history of the chain holds costs recorded in an asset other than its native asset in the network catalogue, so no quote is derived from it."
     },
     {
+      "code": "CREDIT_TOPUP_DISABLED",
+      "status": 503,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "Credit top-up is not enabled on this deployment. It draws on the platform's sponsor account, so an operator turns it on explicitly (CREDIT_TOPUP_ENABLED).",
+      "action": "Contact the platform operators. Retrying will not enable it."
+    },
+    {
+      "code": "CREDIT_TOPUP_LIMIT",
+      "status": 429,
+      "retryable": true,
+      "audience": "caller",
+      "meaning": "This identity or organization has drawn its daily limit of credits. The limits count everything drawn in the last 24 hours, including a top-up whose outcome was not known; the message states how many credits remain.",
+      "action": "Retry later, once earlier draws are more than 24 hours old, or ask for a higher limit. The message gives the figures."
+    },
+    {
       "code": "DB_CONNECTION_LOST",
       "status": 503,
       "retryable": true,
       "audience": "platform",
       "meaning": "The database ended the connection this request was using (for example an idle-in-transaction timeout or a failover). Nothing the request wrote was committed.",
       "action": "Retry with the SAME Idempotency-Key where the operation accepts one."
+    },
+    {
+      "code": "DRIP_DISABLED",
+      "status": 503,
+      "retryable": false,
+      "audience": "platform",
+      "meaning": "The gas drip is not enabled on this deployment. It draws on the platform sponsor wallet that also pays for account deployments, so an operator turns it on explicitly (CHAIN_DRIP_ENABLED, and the bridge's own switches).",
+      "action": "Fund the account from a faucet instead, or contact the platform operators. Retrying will not enable it."
+    },
+    {
+      "code": "DRIP_LIMIT",
+      "status": 429,
+      "retryable": true,
+      "audience": "caller",
+      "meaning": "A drip limit was reached: this account was already dripped within the cooldown (one drip per account and chain), or the organization or the platform has reached its daily ceiling. The message says which. A drip whose outcome was not known counts as sent.",
+      "action": "Retry after the window in the message. If the account needs more native token sooner, send it from another wallet."
+    },
+    {
+      "code": "DRIP_RECIPIENT_REJECTS",
+      "status": 422,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The account contract did not accept a plain transfer of the native token, so it cannot be dripped. Nothing was sent.",
+      "action": "This account cannot receive a drip. Contact support with the account address."
+    },
+    {
+      "code": "DRIP_TESTNET_ONLY",
+      "status": 422,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The chain is not a testnet. The gas drip is for testnets only, and the catalogue's own `environment` decides which chains those are.",
+      "action": "Use a testnet listed by GET /v1/chains."
+    },
+    {
+      "code": "DRIP_UNAVAILABLE",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "The platform cannot send a gas drip on this chain right now: the bridge has it switched off, or has no amount set for the chain, or the sponsor wallet is too low to send one and stay above the balance deployments need. The message names which.",
+      "action": "Retry later, or fund the account from a faucet."
     },
     {
       "code": "ENTITLEMENT_UNAVAILABLE",
@@ -174,6 +238,14 @@
       "action": "A key binds to one request. Use a new key, or resend the original body."
     },
     {
+      "code": "IDEMPOTENCY_KEY_REQUIRED",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "This operation spends the platform's funds, and a repeated request must never be a second draw, so it cannot be sent without an Idempotency-Key header. Most routes only protect a retry when the header is present; this one refuses to run without it.",
+      "action": "Send an Idempotency-Key (1 to 255 characters from A-Z a-z 0-9 _ . : -). Resend the SAME key to retry; a new key is a new draw."
+    },
+    {
       "code": "INSUFFICIENT_BALANCE",
       "status": 402,
       "retryable": false,
@@ -195,6 +267,14 @@
       "retryable": true,
       "audience": "platform",
       "meaning": "An unhandled fault. The request id in the response identifies it in our logs."
+    },
+    {
+      "code": "INVALID_ADDRESS",
+      "status": 400,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The address is not an EVM address: 0x followed by 40 hexadecimal characters. Or it mixes upper and lower case and its EIP-55 checksum does not match, which means a character is mistyped (the message says which).",
+      "action": "Correct the address. An address written all in lower case carries no checksum and skips that check."
     },
     {
       "code": "LEDGER_ACCOUNT_NOT_LOCKED",
@@ -268,18 +348,18 @@
       "action": "Add the native asset of the chain to certen-contracts networks.json and regenerate the gateway catalogue."
     },
     {
-      "code": "NO_PRICE_BOOK",
-      "status": 503,
-      "retryable": true,
-      "audience": "platform",
-      "meaning": "No price book is in effect, so nothing can be priced."
-    },
-    {
       "code": "NOT_FOUND",
       "status": 404,
       "retryable": false,
       "audience": "caller",
       "meaning": "No such resource for this organization. Ids are org-scoped, so another org's id reads as missing."
+    },
+    {
+      "code": "NO_PRICE_BOOK",
+      "status": 503,
+      "retryable": true,
+      "audience": "platform",
+      "meaning": "No price book is in effect, so nothing can be priced."
     },
     {
       "code": "PAYMENT_REQUIRED",
@@ -312,6 +392,14 @@
       "audience": "platform",
       "meaning": "The gateway has no PROOFS_TENANT_KEY_SECRET (or one shorter than 32 bytes), so it cannot derive the API key the proof service requires for a tenant. The proof request was not sent.",
       "action": "Platform operators: set PROOFS_TENANT_KEY_SECRET on the gateway and its worker. Callers cannot fix this."
+    },
+    {
+      "code": "PROOF_V2_NOT_AVAILABLE",
+      "status": 404,
+      "retryable": false,
+      "audience": "caller",
+      "meaning": "The proof service answered 404 for this proof's v2 portable document: it has none for this proof id. The route maps every upstream 404 here, so it does not say whether the id is unknown or the proof simply has no v2 document.",
+      "action": "Check the proof id against GET /v1/proof/{id}. A proof with no v2 document cannot be verified through this route."
     },
     {
       "code": "QUOTE_EXPIRED",

@@ -236,6 +236,123 @@
         "responseShapes": {}
       }
     },
+    "/v1/identity/{id}/readiness": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [
+          "chain"
+        ],
+        "responses": {
+          "200": [
+            "identity",
+            "can_sign",
+            "credits",
+            "chain",
+            "org",
+            "read_at"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "identity": [
+              "id",
+              "adi_url",
+              "key_page_url",
+              "status",
+              "error_message"
+            ],
+            "can_sign": [
+              "state",
+              "value"
+            ],
+            "credits": [
+              "value",
+              "source"
+            ],
+            "chain": [
+              "chain",
+              "chain_id",
+              "account",
+              "balance"
+            ],
+            "org": [
+              "state",
+              "remaining_usd",
+              "spendable_usd",
+              "enforcing",
+              "status",
+              "scope"
+            ]
+          }
+        }
+      }
+    },
+    "/v1/identity/{id}/credits": {
+      "post": {
+        "required": [
+          "credits"
+        ],
+        "properties": [
+          "credits"
+        ],
+        "propertyTypes": {
+          "credits": "integer"
+        },
+        "query": [],
+        "responses": {
+          "202": [
+            "topup_id",
+            "identity_id",
+            "key_page_url",
+            "credits",
+            "status",
+            "tx_id",
+            "credits_before",
+            "note"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
+    "/v1/identity/{id}/chain-accounts/{chain}/drip": {
+      "post": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {
+          "200": [
+            "drip_id",
+            "identity_id",
+            "chain",
+            "chain_id",
+            "address",
+            "status",
+            "tx_hash",
+            "amount",
+            "symbol",
+            "explorer_url",
+            "note"
+          ],
+          "202": [
+            "drip_id",
+            "identity_id",
+            "chain",
+            "chain_id",
+            "address",
+            "status",
+            "tx_hash",
+            "amount",
+            "symbol",
+            "explorer_url",
+            "note"
+          ]
+        },
+        "responseShapes": {}
+      }
+    },
     "/v1/portfolio": {
       "get": {
         "required": [],
@@ -790,7 +907,9 @@
             "signing_data": [
               "request_id",
               "transaction_hash",
-              "hash_to_sign"
+              "hash_to_sign",
+              "transaction",
+              "signature_metadata"
             ]
           }
         }
@@ -839,6 +958,7 @@
             "proof_id",
             "proof_bundle_url",
             "proofs",
+            "destination",
             "validator",
             "error_message",
             "reason_code",
@@ -863,6 +983,12 @@
               "proof_id",
               "proof_bundle_url",
               "write_back_tx"
+            ],
+            "destination": [
+              "chain_id",
+              "tx_hash",
+              "settlement",
+              "source"
             ],
             "validator": [
               "state",
@@ -929,6 +1055,46 @@
         }
       }
     },
+    "/v1/transaction/quote": {
+      "post": {
+        "required": [],
+        "properties": [
+          "intent",
+          "proof_class"
+        ],
+        "propertyTypes": {
+          "intent": "object",
+          "proof_class": "string"
+        },
+        "query": [],
+        "responses": {
+          "200": [
+            "estimate",
+            "evaluated_at",
+            "request",
+            "checked",
+            "not_checked",
+            "billing"
+          ]
+        },
+        "responseShapes": {
+          "200": {
+            "request": [
+              "chains",
+              "chain",
+              "leg_count",
+              "proof_class"
+            ],
+            "billing": [
+              "state",
+              "enforcing",
+              "price",
+              "funds"
+            ]
+          }
+        }
+      }
+    },
     "/v1/proof/tx/{txHash}/receipt": {
       "get": {
         "required": [],
@@ -967,6 +1133,25 @@
         "propertyTypes": {},
         "query": [],
         "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/proof/{id}/v2": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {
+          "200": [
+            "format",
+            "pin",
+            "genesis",
+            "majors",
+            "evidence",
+            "govRootV3Inputs"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1075,6 +1260,25 @@
         "propertyTypes": {},
         "query": [],
         "responses": {},
+        "responseShapes": {}
+      }
+    },
+    "/v1/chains/{id}/addresses/{address}/balance": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {
+          "200": [
+            "chain",
+            "chain_id",
+            "address",
+            "balance",
+            "symbol",
+            "read_at"
+          ]
+        },
         "responseShapes": {}
       }
     },
@@ -1438,7 +1642,9 @@
               "transaction_hash",
               "signer_url",
               "signer_version",
-              "timestamp"
+              "timestamp",
+              "transaction",
+              "signature_metadata"
             ]
           }
         }

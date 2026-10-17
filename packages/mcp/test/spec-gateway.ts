@@ -36,6 +36,22 @@ export function example(s: any): any {
   }
 }
 
+/**
+ * `signing_data.transaction` and `signing_data.signature_metadata` are the unsigned transaction and the signature's metadata, which the
+ * tools REBUILD the hashes from and refuse to sign on if they disagree. An example generated from the schema ("x", 1, true) is not hash-consistent
+ * signing material, and the verifier correctly rejects it (`signature_metadata.public_key: invalid hex`), so the stub leaves them out, as it did
+ * before the vendored spec described them: the tools then report the signing data as absent instead of as forged. What the verifier does with
+ * REAL signing material is covered where an honest gateway can be built (packages/sdk/test/helpers/honest-gateway.ts, packages/verify/test).
+ */
+function withoutUnverifiableSigningMaterial(body: unknown): unknown {
+  const sd = (body as { signing_data?: Record<string, unknown> } | null)?.signing_data;
+  if (sd && typeof sd === 'object') {
+    delete sd.transaction;
+    delete sd.signature_metadata;
+  }
+  return body;
+}
+
 const routes = Object.entries(SPEC.paths).flatMap(([template, ops]: [string, any]) =>
   Object.entries(ops).map(([method, op]: [string, any]) => ({
     method: method.toUpperCase(),
@@ -67,7 +83,7 @@ export async function startSpecGateway(): Promise<SpecGateway> {
       if (!route) { res.statusCode = 404; return void res.end(JSON.stringify({ code: 'NOT_FOUND', error: `no route ${req.method} ${path}` })); }
       res.statusCode = route.status;
       if (route.status === 204 || !route.schema) return void res.end();
-      res.end(JSON.stringify(example(toJsonSchema(route.schema, SPEC.components?.schemas ?? {}))));
+      res.end(JSON.stringify(withoutUnverifiableSigningMaterial(example(toJsonSchema(route.schema, SPEC.components?.schemas ?? {})))));
     });
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
