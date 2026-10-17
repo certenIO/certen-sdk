@@ -46,13 +46,13 @@ the others. They are exact-pinned **devDependencies**, never installed with the 
 ## What a tool tells a client
 
 Every tool carries MCP **annotations** derived from the metadata the server already enforces with: `readOnlyHint` is false exactly
-for the 12 tools that change something; revoke, retire, rotate, update and the signature submissions are `destructiveHint: true`;
+for the 14 tools that change something; revoke, retire, rotate, update and the signature submissions are `destructiveHint: true`;
 every tool is `openWorldHint: true`. Annotations are hints, not enforcement: the `confirm:true` stop and `CERTEN_MCP_ALLOW_WRITES`
 are what enforce.
 
 Every tool also declares an **`outputSchema`** and returns **`structuredContent`** that conforms to it, alongside the JSON text. Most
 schemas are generated from the gateway's own response schemas (`npm run agentgen`; CI fails if they are stale); the ten tools that
-build their own result have schemas written beside the server code, and a test runs all 50 tools and validates what each returns. A
+build their own result have schemas written beside the server code, and a test runs all 55 tools and validates what each returns. A
 `confirmation_required` stop and any failure are returned with `isError: true` and no `structuredContent`.
 
 ## It also serves the documentation
@@ -78,8 +78,8 @@ registered cannot be called by a confused model, a prompt injection, or a bug. A
 with "please don't call this" in its description can be called by all three.
 
 ```bash
-certen-mcp                              # 35 read tools
-CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 50 tools
+certen-mcp                              # 38 read tools
+CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 55 tools
 ```
 
 Every tool that changes something additionally requires `confirm: true`. Called without it, the tool
@@ -100,7 +100,8 @@ destructive one.
 | `CERTEN_SHARE_ORIGINS` | Comma-separated origins (e.g. `https://gateway.other.example`) whose proof **share links** `certen_proof_verify` may open, besides this server's own gateway. A link on any other origin is refused before a request (`SHARE_ORIGIN_NOT_ALLOWED`); a bare `cps_` token is the configured gateway's. Needed only to verify a proof shared from a *different* deployment. |
 
 A chain name is checked against the SDK's catalogue before anything is sent (`certen_quote`, `certen_billing_register_payer`,
-`certen_identity_create`, `certen_readiness`, `certen_receipt`, and every chain named in an intent opened with `certen_transaction_open`). A typo or an unlisted chain
+`certen_identity_create`, `certen_readiness`, `certen_receipt`, `certen_chain_balance`, `certen_identity_readiness`, `certen_gas_drip`, and every chain named in an intent opened with
+`certen_transaction_open` or estimated with `certen_intent_quote`). A typo or an unlisted chain
 comes back as `UNSUPPORTED_CHAIN` naming the alternatives; `certen_chains_enabled` lists what is usable now. The gateway's own
 answer for an opt-in chain is told apart: not listed at all is `unknown_chain`, listed but switched off is `chain_not_enabled`.
 
@@ -120,6 +121,9 @@ answer for an opt-in chain is told apart: not listed at all is `unknown_chain`, 
 | `certen_execute_wait` | Poll to a terminal state — **takes 60–110 seconds**. |
 | `certen_readiness` | **Can this identity, on this chain, act right now?** One call: ordered checks, a `fix` in words for each, never `ready` over an `unknown`. |
 | `certen_receipt` | **What happened to this intent?** One call: the ids to keep, the proof verified here layer by layer, and what of the effect is established. |
+| `certen_chain_balance` | **The native balance of ANY EVM address** on a chain, through the gateway's own node. `"0"` is a real read; an unreadable balance is an error, never a zero. |
+| `certen_identity_readiness` | **Facts about an identity in one read**: key on its key page, credits, optionally one chain's account and balance, the organization's spendable balance. Facts only, never "ready". |
+| `certen_intent_quote` | **An ESTIMATE for an intent**: its price and whether it would be admitted. Creates, charges and signs nothing; not a quote (no `quote_id`). |
 
 ### Ready? and what happened?
 
@@ -144,9 +148,49 @@ passed anyway is refused by name (`NODE_ARGUMENT_REFUSED`) rather than silently 
 a caller hands over, and `certen_proof_open_shared` takes only its token and asks this server's own gateway, while `certen_proof_verify` opens a link only on that gateway or an origin the
 operator listed in `CERTEN_SHARE_ORIGINS`, and refuses to be redirected off it.
 
+### Look before you act, and the two that spend the platform's funds
+
+**Three read tools** (the gateway's newer operations, always available):
+
+- **`certen_chain_balance { chain, address }`** is the native balance of *any* EVM address on a chain the server enables, not only the caller's own accounts. `balance` is a decimal
+  string in whole units; `"0"` is a real read (the node answered and the account is empty); a balance that could not be read is the error `BALANCE_UNREADABLE` (retryable) and is
+  never a zero. A mistyped address (a mixed-case one whose EIP-55 checksum fails) is `INVALID_ADDRESS` before any request, naming the capitalisation it would accept.
+- **`certen_identity_readiness { identity_id, chain? }`** is the gateway's own one-read **facts** about an identity, and never a verdict. Each section has its own `state`: `can_sign`
+  `unreadable` is unknown (not a soft yes), `credits.source` `recorded` is the figure stored at provisioning, a chain balance is `unreadable` with its error code (never 0), the
+  organization section is `not_permitted` without `billing:read`. It differs from `certen_readiness`, which judges (`ready` | `blocked` | `unconfirmed`, a `fix` in words, and the key
+  page compared with Accumulate itself) from several reads: use this one to look, and to read credits or a balance back after a top-up or a drip; use `certen_readiness` before
+  signing or sending. `certen_platform_ready` is about CERTEN itself.
+- **`certen_intent_quote { intent, proof_class? }`** is the gateway's **estimate** of what an intent would cost and whether it would be admitted *now*, with nothing created, charged,
+  held or signed. It is not a quote: there is no `quote_id`, it promises nothing, and `evaluated_at` is the moment it is true. `estimate` is always `true`, `checked` lists the gates
+  evaluated and `not_checked` what was not (the identity and its key page, destination-chain gas, quota, header conditions, the bridge's own validation): relay both. A funds shortfall is a
+  fact in `billing.funds`, not an error. It differs from `certen_quote`, which is a price-book quote for one sku on one chain and returns the **binding** `quote_id` you open the transaction
+  with. The gateway gates this operation by the `transaction:write` scope (it rehearses creating one), so a read-only key is refused with a 403 although it creates nothing.
+
+**Two write tools that spend the PLATFORM's funds** (`CERTEN_MCP_ALLOW_WRITES=1`, `confirm: true`; not registered otherwise). They draw on CERTEN's sponsor account, never on the
+organization's balance, and the gateway ships them **off**: `CREDIT_TOPUP_DISABLED` / `DRIP_DISABLED` mean the operator has not switched the feature on (a setting, not a fault; retrying
+cannot change it, and the result says so). Each is also limited per request and per day.
+
+- **`certen_credits_topup { identity_id, credits, idempotency_key? }`** adds credits to the identity's key page. **1 credit = $0.01**, and `credits` is a **count of credits**
+  (300 is $3.00), never an amount of ACME; anything but a whole number of at least 1 is refused before any request. The answer is never "applied": `submitted` means the bridge accepted a
+  transaction and the network has not confirmed it, and `unconfirmed` means the outcome is **unknown** and the credits **may** have been applied (`next_step` says to read them back with
+  `certen_identity_readiness` and compare with `credits_before`, not to ask again).
+- **`certen_gas_drip { identity_id, chain, idempotency_key? }`** sends the identity's own deployed account on a **testnet** a small, fixed amount of native token. There is no destination
+  and no amount to choose (an argument naming either is refused by name); the account is the gateway's record and the amount is the operator's setting. `sent` carries `tx_hash` and
+  `explorer_url`; `skipped` means the account already held enough and nothing was sent; `unconfirmed` means it may have been sent (read the balance with `certen_chain_balance`).
+
+Both always carry an **Idempotency-Key**, which the gateway requires and which makes a repeat safe: this server sends yours or makes one, and **returns it as `idempotency_key`** (on a
+failure as well, `error.idempotency_key`). Repeat a request with the **same** key and it can never be a second draw; a **new** key is a new draw. That is why, after a timeout or an
+`unconfirmed` answer, the next step is to read the state or to repeat with the same key. Their annotations say `readOnlyHint: false`, `destructiveHint: false` (they add) and
+`idempotentHint: false` (with no key given, each call makes its own).
+
+**The destination transaction.** `certen_transaction_get`, `certen_execute_wait`, `certen_transaction_open`, `certen_transaction_list` and `certen_receipt` return `destination`
+(`chain_id`, `tx_hash`, `settlement`) when the gateway has one, **as the validators recorded it: not verified by the gateway, and not proof.** A `destination_note` saying so travels with it,
+in the text and in the structured output, whenever it is present; `null` (not recorded yet, or an intent on several chains) carries no note. The receipt's `ids.destination_tx_source`
+says whether its own hash came from the `proof` or only from the `validators`. `certen_receipt` is the one that checks the proof.
+
 **Write tier** (`CERTEN_MCP_ALLOW_WRITES=1`)
 
-Identity `create` / `update` / `retire`; `transaction_open` and `transaction_submit_signature`;
+Identity `create` / `update` / `retire`; `credits_topup` and `gas_drip` (they spend the platform's funds); `transaction_open` and `transaction_submit_signature`;
 `sign_create` and `sign_submit_signature`; `governance_submit_signature`; and the admin tools
 (`list_api_keys`, `audit_log`, `usage`, `rotate_api_key`, `revoke_api_key`).
 

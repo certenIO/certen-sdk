@@ -2,6 +2,10 @@ import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, 
 import type { CertenClient } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
 import { runReadinessTool, runReceiptTool, shareSource } from './agent-tools.js';
+import { withDestinationNote, withDestinationNotes } from './destination.js';
+import {
+  runChainBalanceTool, runCreditsTopupTool, runGasDripTool, runIdentityReadinessTool, runIntentQuoteTool,
+} from './gateway-tools.js';
 
 /**
  * Tool definitions, split into two tiers.
@@ -32,11 +36,18 @@ import { runReadinessTool, runReceiptTool, shareSource } from './agent-tools.js'
  *      gateway. So no tool lets a caller choose what the server connects to. The test names every
  *      parameter that looks like a URL, so a new one is a visible decision.
  *
- * There is deliberately NO funding tool, in either tier. Balance and obligations are readable so an
- * agent can say what work will cost and why a call was refused — but opening a payment or
+ * There is deliberately NO tool that funds the ORGANISATION, in either tier. Balance and obligations are
+ * readable so an agent can say what work will cost and why a call was refused — but opening a payment or
  * registering a payer address is spending on the operator's behalf, and an agent that could do it
  * would be an agent that can move money. Those stay on the portal and the CLI, where a human is
  * present. Reading is explanation; the remedy belongs to the person.
+ *
+ * Two write-tier tools do spend, and the difference is whose money: `certen_credits_topup` and `certen_gas_drip`
+ * draw on the PLATFORM's sponsor account, never on the organisation's balance. They are the narrowest spending
+ * a tool can offer: the gateway ships them OFF, limits each request and each day, and takes no destination and no
+ * amount from the caller (credits go to the identity's own key page; the drip goes to the identity's own account
+ * in the operator's amount). Here they are write-tier, `confirm:true`, and return the Idempotency-Key they used so
+ * that a retry can never be a second draw.
  */
 
 export type Tier = 'read' | 'write';
@@ -179,7 +190,9 @@ const READ_TOOLS: ToolDef[] = [
       + 'in between. Single-use and short-lived, so ask when ready to act, not while exploring — use '
       + 'certen_pricing for that. Get `sku` from certen_pricing rather than guessing it. Worth '
       + 'reporting `computation.gas_estimate_basis` when it is `class_thin`: the estimate is '
-      + 'indicative and can move materially.',
+      + 'indicative and can move materially. This is a price-book quote for one sku on one chain. To '
+      + 'learn what a whole intent would cost and whether the gateway would admit it, with nothing '
+      + 'held and no `quote_id`, use certen_intent_quote instead (an estimate, not a quote).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -513,27 +526,32 @@ const READ_TOOLS: ToolDef[] = [
       'Status of one transaction intent. Terminal states are completed/delivered/proven (success) '
       + 'and failed/error. Anything else means it is still in flight. On failure `reason_code` says why: '
       + '`expired` (deadline passed with signatures missing, nothing executed), `expectation_unmet` (the call '
-      + 'ran but its committed events are missing, NOT a success), `target_reverted` (the contract said no).',
+      + 'ran but its committed events are missing, NOT a success), `target_reverted` (the contract said no). '
+      + '`destination` is the destination-chain transaction (hash, chain, `settlement`) AS THE VALIDATORS RECORDED IT: not verified by the gateway '
+      + 'and not proof, which is why `destination_note` says so whenever it is present. null means not recorded yet, or an intent on several chains '
+      + '(read `validator.members`). Check it with certen_receipt before telling anyone the transfer happened.',
     inputSchema: {
       type: 'object',
       properties: { intentId: str('Intent id returned when the transaction was opened') },
       required: ['intentId'],
       additionalProperties: false,
     },
-    run: (c, a) => c.transaction.get(s(a, 'intentId')),
+    run: async (c, a) => withDestinationNote(await c.transaction.get(s(a, 'intentId'))),
   },
   {
     name: 'certen_transaction_list',
     tier: 'read',
     mutates: false,
     endpoint: 'GET /v1/transactions',
-    description: 'List transaction intents, most recent first.',
+    description:
+      'List transaction intents, most recent first. A row that carries a `destination` is the validators\' record of the destination transaction, not verified by the gateway '
+      + '(`destination_note` says so on that row); see certen_transaction_get.',
     inputSchema: {
       type: 'object',
       properties: { limit: num('Max results'), offset: num('Offset') },
       additionalProperties: false,
     },
-    run: (c, a) => c.transaction.list({ limit: optN(a, 'limit'), offset: optN(a, 'offset') }),
+    run: async (c, a) => withDestinationNotes(await c.transaction.list({ limit: optN(a, 'limit'), offset: optN(a, 'offset') })),
   },
   {
     name: 'certen_pending_list',
@@ -609,7 +627,8 @@ const READ_TOOLS: ToolDef[] = [
       + 'nothing to verify; this is not a failure and not "completed"); `executed` (only with until:"executed": the '
       + 'action ran on its chain and the proof bundle is still being produced). A failed or expired intent comes back '
       + 'as an INTENT_FAILED error with its reason_code. If time runs out the error is WAIT_TIMEOUT with the last '
-      + 'status seen: the intent may still complete, so check it again rather than opening a second one.',
+      + 'status seen: the intent may still complete, so check it again rather than opening a second one. A `destination` in the result is the '
+      + 'validators\' record of the destination transaction, not verified by the gateway (`destination_note` says so); certen_receipt is what checks the proof.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -632,7 +651,7 @@ const READ_TOOLS: ToolDef[] = [
         throw new Error(`until must be "terminal" or "executed", got ${JSON.stringify(until)}`);
       }
       const tx = await c.execute.wait(s(a, 'intentId'), { timeoutMs: optN(a, 'timeoutMs') ?? 360_000, until });
-      return { ...tx, outcome: intentOutcome(tx) };
+      return { ...withDestinationNote(tx), outcome: intentOutcome(tx) };
     },
   },
   {
@@ -832,7 +851,9 @@ const READ_TOOLS: ToolDef[] = [
       + '(`KEY_PAGE_DISAGREES`); without it the check is a `warn`, which is only the gateway\'s word. That read goes to the Accumulate node the gateway\'s registry advertises, or to '
       + 'CERTEN_ACCUMULATE_RPC if the operator set it: this tool never calls a node you name (an argument that names one is refused). Gas is the account\'s balance against `amount` (whole units as a string, never wei) '
       + 'plus an estimate of the gas, labelled as one: the gateway publishes no per-execution figure. '
-      + 'Run it before certen_transaction_open, and when something is not working. Creates and changes nothing; the balance check is `unknown` for a key without billing:read.',
+      + 'Run it before certen_transaction_open, and when something is not working. Creates and changes nothing; the balance check is `unknown` for a key without billing:read. '
+      + 'It JUDGES. For the gateway\'s own facts about an identity in one cheap read, with no verdict and no Accumulate comparison, use certen_identity_readiness; '
+      + 'for whether CERTEN itself can serve, certen_platform_ready.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -866,7 +887,9 @@ const READ_TOOLS: ToolDef[] = [
       + 'not VERIFIED, until you have read the recipient from your own node; pass `call` { chain, expect: { address, topic0 } } for a contract call and the event is looked for in the '
       + 'proof\'s own execution receipt. With neither there is no request on record, the effect is `not_applicable`, and VERIFIED then speaks to the proof only. Does not wait: '
       + 'certen_execute_wait first (60-110 seconds), or read `pending` and come back. Reads only; it keeps no state and writes nothing (the CLI keeps receipts in ~/.certen; here the '
-      + 'result is the record). The same document as `certen receipt --json`.',
+      + 'result is the record). The same document as `certen receipt --json`, plus `destination`: the gateway\'s record of the destination transaction (hash, chain_id, `settlement`; null '
+      + 'when it has none), AS THE VALIDATORS RECORDED IT and not verified by the gateway, with `destination_note` saying so. `ids.destination_tx_source` says where the receipt\'s own '
+      + 'hash came from: `proof` (the execution proof carries it) or `validators` (their word only). Neither is by itself confirmation that a transfer happened: read `verdict` and `effect`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -907,6 +930,86 @@ const READ_TOOLS: ToolDef[] = [
       additionalProperties: false,
     },
     run: (c, a, env = process.env) => runReceiptTool(c, a, env),
+  },
+  {
+    name: 'certen_chain_balance',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/chains/{id}/addresses/{address}/balance',
+    description:
+      'The native-token balance (ETH, or TEL on Telcoin Adiri) of ANY EVM address on a chain this server enables, read through the gateway\'s own node: the wallet that will fund an account, a recipient, '
+      + 'a sponsor, not only the caller\'s linked accounts (certen_portfolio_get reads those). Use it to answer "does this address hold anything" before and after a transfer or a gas drip. '
+      + '`balance` is whole units as a decimal STRING, never a number, so no precision is lost; `"0"` is a real read (the node answered and the account is empty). A balance that could not be read '
+      + 'is the retryable error BALANCE_UNREADABLE and is NEVER reported as zero: do not tell anyone an account is empty on the strength of an error. `read_at` is when the gateway read it, not a block time. '
+      + 'A mixed-case address must carry its EIP-55 checksum, otherwise INVALID_ADDRESS (naming the capitalisation it would accept) before any request; an all-lower-case address is read as given. '
+      + 'Free and changes nothing. Needs portfolio:read, identity:read or identity:write.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        chain: str('Chain to read, e.g. base-sepolia. certen_chains_enabled lists what this server accepts.'),
+        address: str('The EVM address to read, 0x followed by 40 hex characters. Any address, not only one of your own.'),
+      },
+      required: ['chain', 'address'],
+      additionalProperties: false,
+    },
+    run: (c, a, env = process.env) => runChainBalanceTool(c, a, env),
+  },
+  {
+    name: 'certen_identity_readiness',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'GET /v1/identity/{id}/readiness',
+    description:
+      'Facts about one identity in ONE gateway read: the identity and its status, whether its key is on its key page (`can_sign`), the page\'s credits, with `chain` that chain\'s account and its native balance, '
+      + 'and the organization\'s spendable balance. It reports FACTS and never a verdict: it does not say "ready", because whether a balance is enough gas or a fee affordable is a judgement against figures only the caller knows. '
+      + 'Read each section on its own, because a section that could not be read does not take the others with it: `can_sign.state` `unreadable` (value null) is unknown, not a soft yes; `credits.source` `recorded` '
+      + 'is the figure stored at provisioning, not the key page\'s own; a chain balance `unreadable` carries its error code and is never 0; `org` is `not_permitted` without billing:read and `billing_disabled` where billing is off. '
+      + 'HOW IT DIFFERS: certen_readiness JUDGES (ordered checks, `ready` | `blocked` | `unconfirmed`, a fix in words, the key page also compared with Accumulate itself) and takes several reads; this is the one cheap read with no judgement '
+      + 'and no Accumulate comparison. Use this to look, and to read credits or a balance back after certen_credits_topup or certen_gas_drip; use certen_readiness before signing or sending. '
+      + 'certen_platform_ready is about CERTEN itself, not an identity. Free and changes nothing. Needs identity:read or identity:write.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        identity_id: str('The identity\'s id (UUID); certen_portfolio_get lists them. An acc:// URL is not accepted.'),
+        chain: str('Optional. A chain to include that chain\'s account and native balance for, e.g. base-sepolia. Omitted, the `chain` section is null.'),
+      },
+      required: ['identity_id'],
+      additionalProperties: false,
+    },
+    run: (c, a, env = process.env) => runIdentityReadinessTool(c, a, env),
+  },
+  {
+    name: 'certen_intent_quote',
+    tier: 'read',
+    mutates: false,
+    endpoint: 'POST /v1/transaction/quote',
+    description:
+      'An ESTIMATE of what an intent would cost and whether the gateway would admit it right now, with nothing created, charged, held or signed. It is not a quote: there is no `quote_id`, it promises nothing, '
+      + 'and it holds only as of `evaluated_at` (balances move, a chain can be suspended, the FX rate shifts). `estimate` is always true. Always relay `not_checked` with the answer: it lists what was NOT looked at '
+      + '(the identity and its key page, destination-chain gas, quota, header conditions, the bridge\'s own validation), so an estimate that finds nothing wrong is never more than `checked`. A funds shortfall is '
+      + 'reported as a fact in `billing.funds` (`covered`, `shortfall_usd`), not as an error; where billing is off, `billing.state` says nothing is priced. Takes the intent you would pass to certen_transaction_open, '
+      + 'and the same chain rule applies. HOW IT DIFFERS from certen_quote: that is a price-book quote for one sku on one chain and returns a BINDING `quote_id` to open the transaction with; this estimates a whole '
+      + 'intent\'s price and admission and binds nothing. certen_pricing says what operations cost in general. Free. The gateway requires the transaction:write scope for it (it rehearses creating a transaction), '
+      + 'so a read-only key is refused with a 403 even though this creates nothing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        intent: {
+          type: 'object',
+          description:
+            'The intent you would pass to certen_transaction_open: either a native transfer ({fromChain,toChain,amount,fromAddress,toAddress,tokenSymbol}) '
+            + 'or a multi-leg/contract-call intent ({adiUrl,legs:[...]}). Amounts are base units as STRINGS. Every chain it names must be one this server enables.',
+        },
+        proof_class: {
+          type: 'string',
+          enum: ['on_demand', 'on_cadence'],
+          description: 'How you would ask for the proof cycle, as in certen_transaction_open. Left out, the intent is priced as unclassified, as admission does.',
+        },
+      },
+      required: ['intent'],
+      additionalProperties: false,
+    },
+    run: (c, a, env = process.env) => runIntentQuoteTool(c, a, env),
   },
 ];
 
@@ -1088,6 +1191,67 @@ const WRITE_TOOLS: ToolDef[] = [
     },
     run: (c, a) => c.identity.retire(s(a, 'identityId')),
   },
+  // The two tools below SPEND the platform's funds (its sponsor account), never the organisation's balance. `destructive: false`: they only add (credits, native
+  // token). `idempotent: false`: called again with the same arguments and no `idempotency_key`, each call makes its own key and is its own draw. Only a repeat
+  // WITH the same key is one request, which is why the key is returned and the description says to keep it.
+  {
+    name: 'certen_credits_topup',
+    tier: 'write',
+    mutates: true,
+    destructive: false,
+    idempotent: false,
+    endpoint: 'POST /v1/identity/{id}/credits',
+    description:
+      'SPENDS THE PLATFORM\'S FUNDS. Adds Accumulate credits to an identity\'s key page, paid by CERTEN\'s sponsor account; the organization is not charged. 1 credit = $0.01, and `credits` is a COUNT of credits '
+      + '(300 is $3.00 of credits), never an amount of ACME. Use it only when certen_identity_readiness shows `credits.value` low (an identity is provisioned with a fixed grant, and a write spends a fraction of a credit) '
+      + 'and a person has agreed. It is OFF on most deployments (CREDIT_TOPUP_DISABLED: the operator has not switched it on; say so plainly, retrying cannot enable it), limited per request (500 credits by default) '
+      + 'and per day per identity and organization (CREDIT_TOPUP_LIMIT; a top-up whose outcome was not known counts). The gateway requires an Idempotency-Key: this tool sends yours, or makes one, and RETURNS it as '
+      + '`idempotency_key` (on a failure too). KEEP IT: a repeat with the same key is never a second draw, and a repeat with a new key is. The answer is never "applied": `submitted` means the bridge accepted a '
+      + 'transaction and the network has not confirmed it; `unconfirmed` means the outcome is UNKNOWN and the credits MAY have been applied. After `unconfirmed`, or after a timeout, do NOT top up again with a new '
+      + 'key: read the credits back with certen_identity_readiness and compare with `credits_before`; to repeat the request itself, pass the same `idempotency_key`. A `credits` that is not a whole number of at least 1 '
+      + 'is refused before any request. Requires identity:write, and confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        identity_id: str('The identity whose key page is topped up (UUID); certen_portfolio_get lists them.'),
+        credits: { type: 'integer', minimum: 1, description: 'How many CREDITS to add: a whole number of at least 1. 1 credit = $0.01. A count of credits, never an amount of ACME.' },
+        idempotency_key: str('Optional. Your own key for this request (1 to 128 characters: letters, digits, . _ : -). Left out, one is made and returned. Pass the SAME key to repeat the SAME request; never a new one after a timeout or an unconfirmed answer.'),
+        confirm: CONFIRM,
+      },
+      required: ['identity_id', 'credits', 'confirm'],
+      additionalProperties: false,
+    },
+    run: (c, a) => runCreditsTopupTool(c, a),
+  },
+  {
+    name: 'certen_gas_drip',
+    tier: 'write',
+    mutates: true,
+    destructive: false,
+    idempotent: false,
+    endpoint: 'POST /v1/identity/{id}/chain-accounts/{chain}/drip',
+    description:
+      'SPENDS THE PLATFORM\'S FUNDS, ON TESTNETS ONLY. Asks the platform\'s sponsor wallet to send the identity\'s own deployed account on `chain` a small, fixed amount of native token (ETH, or TEL on Telcoin Adiri) '
+      + 'so it can pay for its first transactions without a faucet. There is nothing to choose: no destination and no amount. The account is the one the gateway recorded for the identity and the amount is the '
+      + 'operator\'s setting; an argument naming either is refused. Use it when certen_identity_readiness (with `chain`) or certen_chain_balance shows the account short of gas, and a person has agreed. '
+      + 'Result `status`: `sent` (the gateway reports it mined: `tx_hash`, `explorer_url`), `skipped` (the account already held enough; nothing was sent), or `unconfirmed` (the drip MAY have been sent and counts '
+      + 'against the limits as if it had: do NOT drip again with a new key, read the balance with certen_chain_balance first). It is OFF on most deployments (DRIP_DISABLED: the operator has not switched it on; '
+      + 'say so plainly, retrying cannot enable it; fund the account from a faucet instead), allowed once per account and chain per cooldown and under a daily ceiling (DRIP_LIMIT), and refused on any chain '
+      + 'that is not a testnet (DRIP_TESTNET_ONLY). The gateway requires an Idempotency-Key: this tool sends yours, or makes one, and RETURNS it as `idempotency_key` (on a failure too). KEEP IT: a repeat with '
+      + 'the same key is never a second drip, and a repeat with a new key is. Requires identity:write, and confirm:true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        identity_id: str('The identity whose own account is dripped (UUID); certen_portfolio_get lists them.'),
+        chain: str('The testnet the account is on, e.g. base-sepolia. certen_chains_enabled lists what this server accepts.'),
+        idempotency_key: str('Optional. Your own key for this request (1 to 128 characters: letters, digits, . _ : -). Left out, one is made and returned. Pass the SAME key to repeat the SAME request; never a new one after a timeout or an unconfirmed answer.'),
+        confirm: CONFIRM,
+      },
+      required: ['identity_id', 'chain', 'confirm'],
+      additionalProperties: false,
+    },
+    run: (c, a, env = process.env) => runGasDripTool(c, a, env),
+  },
   {
     name: 'certen_transaction_open',
     tier: 'write',
@@ -1186,7 +1350,7 @@ const WRITE_TOOLS: ToolDef[] = [
           expiresAt: optS(a, 'expiresAt'),
         });
       });
-      return { ...(created as unknown as Record<string, unknown>), ...signing };
+      return { ...withDestinationNote(created as unknown as Record<string, unknown>), ...signing };
     },
   },
   {

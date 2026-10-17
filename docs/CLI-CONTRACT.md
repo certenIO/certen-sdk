@@ -1005,6 +1005,9 @@ Where it differs, and why (each is a rule of the MCP server, tested in `packages
 - **An argument the tool does not have is refused by name, not ignored.** `UNKNOWN_ARGUMENT` lists the ones it takes; `NODE_ARGUMENT_REFUSED` is the same for a name that means "call this node" (`rpc`, `accumulateRpc`, `url`,
   `endpoint`, `node`, …) and says what to do instead. Ignoring it would let an agent believe the node was used. This holds inside `transfer`, `call` and `call.expect` too.
 - **It writes nothing.** The result is the record; keep it if you want it.
+- **`certen_receipt` adds the gateway's destination record.** Two fields beside the receipt, which only the MCP tool has: `destination` (the gateway's `destination`: `chain_id`, `tx_hash`, `settlement`, `source: "validators"`; `null` when it has none)
+  and, exactly when there is one, `destination_note`: *as recorded by the validators; not verified by the gateway*, and not proof. `ids.destination_tx_source` still says whether the receipt's own hash came from the verified `proof` or only from the
+  `validators`; `destination` also carries what the validators say became of the transaction (`settlement`, e.g. `reverted`), which the receipt does not. The verdict never rests on either. Everything else is the section 10 document.
 
 ### 14. Key store errors: typed, and the exit codes that changed
 

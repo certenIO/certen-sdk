@@ -49,8 +49,8 @@ function argsFor(tool: ToolDef): Record<string, unknown> {
     else if (name === 'address') out[name] = `0x${'11'.repeat(20)}`;
     else if (name === 'signature') out[name] = 'cd'.repeat(64);
     else if (/hash|publicKey/i.test(name)) out[name] = HEX64;
-    else if (/Id$|^id$/.test(name)) out[name] = UUID;
-    else if (p.type === 'number') out[name] = 1;
+    else if (/Id$|_id$|^id$/.test(name)) out[name] = UUID;
+    else if (p.type === 'number' || p.type === 'integer') out[name] = 1;
     else if (p.type === 'boolean') out[name] = true;
     else if (p.type === 'array') out[name] = ['base-sepolia'];
     else out[name] = 'example';
@@ -65,7 +65,7 @@ const handlersFor = () => createHandlers({ env: { CERTEN_API_KEY: 'k', CERTEN_AP
 
 describe('every tool declares an outputSchema', () => {
   it('has one for each of the tools, generated for most and written for the rest', () => {
-    expect(ALL_TOOLS.length).toBe(50);
+    expect(ALL_TOOLS.length).toBe(55);
     for (const t of ALL_TOOLS) expect(outputSchemaFor(t.name), t.name).toBeDefined();
     expect(Object.keys(GENERATED_OUTPUT_SCHEMAS).length + Object.keys(CUSTOM_OUTPUT_SCHEMAS).length).toBe(ALL_TOOLS.length);
     expect(Object.keys(CUSTOM_OUTPUT_SCHEMAS).sort()).toEqual([...CUSTOM_TOOLS].sort());

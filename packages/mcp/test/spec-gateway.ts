@@ -63,8 +63,15 @@ const routes = Object.entries(SPEC.paths).flatMap(([template, ops]: [string, any
 /** The spec documents a few responses only as "object"; where a tool needs a field the gateway really sends, the stub sends it. */
 export const FIXED_RESPONSES: Array<{ method: string; re: RegExp; body: unknown }> = [
   { method: 'GET', re: /^\/v1\/chains$/, body: { chains: [{ id: 'ethereum-sepolia', chainId: 11155111 }, { id: 'base-sepolia', chainId: 84532 }, { id: 'arbitrum-sepolia', chainId: 421614 }] } },
-  // a terminal status, so certen_execute_wait returns instead of waiting out its budget on an invented one
-  { method: 'GET', re: /^\/v1\/transaction\/[^/]+$/, body: { intent_id: 'i1', status: 'completed', proof_id: 'p1', created_at: '2026-01-01T00:00:00Z' } },
+  // a terminal status, so certen_execute_wait returns instead of waiting out its budget on an invented one; and a destination, so the tools that return a
+  // transaction are run with the field (and the note they put beside it) present
+  {
+    method: 'GET', re: /^\/v1\/transaction\/[^/]+$/,
+    body: {
+      intent_id: 'i1', status: 'completed', proof_id: 'p1', created_at: '2026-01-01T00:00:00Z',
+      destination: { chain_id: 84532, tx_hash: `0x${'ab'.repeat(32)}`, settlement: 'settled', source: 'validators' },
+    },
+  },
 ];
 
 export interface SpecGateway { url: string; seen: string[]; close: () => Promise<void> }
