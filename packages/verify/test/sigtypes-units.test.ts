@@ -5,6 +5,7 @@ import {
   decodeSignature,
   decodeTransaction,
   ethChainId,
+  eip712Hash,
   executorFloor,
   KERMIT_ACTIVATIONS,
   checkExecutorGate,
@@ -271,6 +272,24 @@ describe('typedData cannot be judged without the whole transaction, nor against 
     } catch (e) {
       expect(verdictOf(e)).toBe('refused:other');
       expect((e as Error).message).toContain('hashes to');
+    }
+  });
+});
+
+describe('a delegated typedData signature with no delegator has no EIP-712 digest', () => {
+  // Accumulate's NewEIP712Call dereferences the delegator (signature_eip712.go:110) and panics, so such a signature can never be
+  // accepted; the digest is refused here, not computed over an empty delegator.
+  it('refuses to form the digest', () => {
+    const v = vec('typedData/valid/delegated-1');
+    const sig = decodeSignature(hex(v.signature))!;
+    expect(sig.cls).toBe('DelegatedSignature');
+    sig.fields.delete('delegator');
+    expect(() => eip712Hash(decodeTransaction(hex(v.transaction!)), sig)).toThrow(/no delegator/);
+    try {
+      verifyKeySignature(sig, envOf(v));
+      expect.unreachable();
+    } catch (e) {
+      expect(verdictOf(e)).toBe('refused:signature_invalid');
     }
   });
 });

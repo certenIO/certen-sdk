@@ -474,7 +474,9 @@ export function eip712Hash(txn: WireNode, outer: WireNode): Uint8Array {
     while (inner.cls !== 'TypedDataSignature') {
       if (inner.cls !== 'DelegatedSignature') bad(`unsupported signature type ${inner.cls}`);
       const d = inner.fields.get('delegator');
-      delegators.push(typeof d === 'string' ? goText(d) : '');
+      // Accumulate's NewEIP712Call calls s.Delegator.String() and panics on a delegated signature with no delegator: there is no digest.
+      if (typeof d !== 'string' || d === '') bad('a delegated signature with no delegator');
+      delegators.push(goText(d));
       const next = inner.fields.get('signature');
       if (!next || typeof next !== 'object' || !('cls' in next)) bad('a delegated signature that wraps nothing');
       inner = next as WireNode;
