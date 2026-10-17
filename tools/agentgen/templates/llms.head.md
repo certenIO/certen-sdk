@@ -157,6 +157,21 @@ every tool that changes something needs `confirm: true`. Two read tools answer t
 The Accumulate endpoint for the key page read is the gateway's own advertisement, or the operator's `CERTEN_ACCUMULATE_RPC`; neither tool has an `rpc` argument. **No tool lets a caller choose a host the server connects to:**
 a proof share link given to `certen_proof_verify` is opened only on the server's own gateway or an origin its operator listed in `CERTEN_SHARE_ORIGINS`. Read `certen://docs/llms.txt` first.
 
+Three more read tools look before you act, and two write tools spend the **platform's** funds (CERTEN's sponsor account, never the organization's balance):
+- `certen_chain_balance { chain, address }` — the native balance of ANY EVM address on a chain the server enables. `balance` is a decimal string and `"0"` is a real read; a balance that could not be read is the
+  error `BALANCE_UNREADABLE`, never a zero.
+- `certen_identity_readiness { identity_id, chain? }` — the gateway's one-read FACTS about an identity (key on its key page, credits, optionally one chain's account and balance, the organization's spendable balance). It
+  reports facts and never "ready"; an `unreadable` section is unknown. `certen_readiness` is the one that judges.
+- `certen_intent_quote { intent, proof_class? }` — an ESTIMATE of an intent's price and admission, with nothing created or charged; `estimate` is always true and `not_checked` says what was not looked at. It is not `certen_quote`,
+  the price-book quote that returns a binding `quote_id`.
+- `certen_credits_topup { identity_id, credits, idempotency_key?, confirm }` (write tier) — credits for an identity's key page. 1 credit = $0.01 and `credits` is a count of credits, never ACME. `submitted` is not confirmed;
+  `unconfirmed` means the credits MAY have been applied: read them back with `certen_identity_readiness` and do not top up again with a new key.
+- `certen_gas_drip { identity_id, chain, idempotency_key?, confirm }` (write tier) — a small fixed amount of native token to the identity's own account on a TESTNET. No destination and no amount to choose.
+  `sent`, `skipped` (nothing sent) and `unconfirmed` (it may have been sent: read `certen_chain_balance`) are all answers.
+Both spending tools are off on most deployments (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`: the operator has not switched them on, so retrying cannot help), always carry an Idempotency-Key, and **return the key they used**
+(`idempotency_key`, also on a failure): a repeat with the same key is never a second draw, a new key is. A transaction's `destination` (hash, chain, `settlement`) is **as the validators recorded it, not verified by the gateway and
+not proof**; `destination_note` says so beside it.
+
 ## Resources
 - Full API digest: `llms-full.txt`
 - Repository guide (build/test/lint, for working ON this SDK): `AGENTS.md`
