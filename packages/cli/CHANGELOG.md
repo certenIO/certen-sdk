@@ -1,8 +1,8 @@
 # Changelog — @certen.io/cli
 
-## Unreleased — the gateway's newer routes: an address's balance, an estimate, an identity's facts, credits and gas from the platform, and the destination transaction
+## 0.12.0 — the gateway's newer routes: an address's balance, an estimate, an identity's facts, credits and gas from the platform, and the destination transaction (2026-10-17)
 
-The CLI now uses the five operations and the one field the gateway added for the CLI UX plan (they are in `@certen.io/sdk` already). **Every existing command and flag keeps its meaning;** what is new is
+The CLI now uses the five operations and the one field the gateway added for the CLI UX plan. Needs `@certen.io/sdk` 0.12.0, which carries them. **Every existing command and flag keeps its meaning;** what is new is
 additive, with one exception that matters if a script retries: **`credits topup` and `gas --drip` spend the platform's funds, and for them exit `3` means "no response", not "nothing was submitted"**
 (see Added; the safe retry is the same `--idempotency-key`). Both are OFF on most gateways today (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`), and say so plainly. A maintainer versions and publishes this.
 Full detail: `docs/CLI-CONTRACT.md` section 16.

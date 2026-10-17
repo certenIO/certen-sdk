@@ -1,8 +1,8 @@
 # Changelog — @certen.io/sdk
 
-## Unreleased — the gateway asks: readiness, quote, credit top-up, gas drip, any-address balance, and the destination transaction (CLI UX, Phase G)
+## 0.12.0 — the gateway asks: readiness, quote, credit top-up, gas drip, any-address balance, and the destination transaction (CLI UX, Phase G; 2026-10-17)
 
-Additive. A maintainer versions and publishes this. Needs a gateway that serves the five operations (deployed 2026-10-16); against an older one each answers `ENDPOINT_NOT_ON_GATEWAY`. Two of the calls spend the platform's funds and are off unless the deployment's operator switched them on.
+Additive. `@certen.io/cli` 0.12.0 and `@certen.io/mcp` 0.7.0 need this release, so it goes out first. Needs a gateway that serves the five operations (deployed 2026-10-16); against an older one each answers `ENDPOINT_NOT_ON_GATEWAY`. Two of the calls spend the platform's funds and are off unless the deployment's operator switched them on.
 
 ### Added
 - **`chains.balance(chain, address)`**: the native balance of any EVM address on a chain the gateway serves, as a decimal string (`'0'` is a successful read of an empty account). Needs an API key. A mistyped address is refused before any request with `INVALID_ADDRESS` (a mixed-case address whose EIP-55 checksum fails names the correct capitalisation); a node that did not answer is `BALANCE_UNREADABLE`, never a zero.

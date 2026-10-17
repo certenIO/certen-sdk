@@ -1,6 +1,6 @@
 # Changelog — @certen.io/mcp
 
-## Unreleased — the gateway asks over MCP: any-address balance, identity facts, an intent estimate, sponsor-paid credits and gas, and the destination transaction (CLI UX, Phase G)
+## 0.7.0 — the gateway asks over MCP: any-address balance, identity facts, an intent estimate, sponsor-paid credits and gas, and the destination transaction (CLI UX, Phase G; 2026-10-17)
 
 Additive: five tools (three read, two write) and one added field on the tools that return a transaction. No tool is removed or renamed, no parameter becomes required, and the server still holds no key and still registers no write tool without `CERTEN_MCP_ALLOW_WRITES=1`.
 Needs the `@certen.io/sdk` release that carries `chains.balance`, `identity.readiness`, `identity.topUpCredits`, `identity.drip`, `transaction.quote` and `TransactionResponse.destination`, so the SDK goes out first and this package's `@certen.io/sdk` range is raised with it (a maintainer versions both).
