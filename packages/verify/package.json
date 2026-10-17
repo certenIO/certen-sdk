@@ -31,6 +31,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0",
     "accumulate-sdk-opendlt": "2.5.2"
   },
   "devDependencies": {

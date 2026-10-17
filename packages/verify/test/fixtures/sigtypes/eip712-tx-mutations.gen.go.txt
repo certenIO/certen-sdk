@@ -1,0 +1,143 @@
+// Scratch generator: byte-level mutations of the transactions in the EIP-712 body corpus, judged by Accumulate itself:
+// does Transaction.UnmarshalBinary accept the bytes, what is the transaction hash, and what does protocol.EIP712Hash say.
+package main
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type Vector struct {
+	ID          string `json:"id"`
+	Transaction string `json:"transaction"`
+	Signature   string `json:"signature"`
+}
+type In struct {
+	Vectors []Vector `json:"vectors"`
+}
+
+type Mut struct {
+	ID          string `json:"id"`
+	Base        string `json:"base"`
+	Op          string `json:"op"`
+	Transaction string `json:"transaction"`
+	Decodes     bool   `json:"decodes"`
+	TxHash      string `json:"txHash,omitempty"`
+	Hash        string `json:"hash,omitempty"`
+	Refused     bool   `json:"refused,omitempty"`
+}
+
+type Out struct {
+	Format      string `json:"format"`
+	Description string `json:"description"`
+	Accumulate  string `json:"accumulate"`
+	Mutations   []Mut  `json:"mutations"`
+}
+
+func judge(tb []byte, sig protocol.Signature) (m Mut, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+		}
+	}()
+	txn := new(protocol.Transaction)
+	if err := txn.UnmarshalBinary(tb); err != nil {
+		return Mut{Decodes: false}, true
+	}
+	m.Decodes = true
+	m.TxHash = hex.EncodeToString(txn.GetHash())
+	h, err := protocol.EIP712Hash(txn, sig)
+	if err != nil {
+		m.Refused = true
+	} else {
+		m.Hash = hex.EncodeToString(h)
+	}
+	return m, true
+}
+
+func main() {
+	b, err := os.ReadFile(os.Args[1])
+	if err != nil {
+		panic(err)
+	}
+	var in In
+	if err := json.Unmarshal(b, &in); err != nil {
+		panic(err)
+	}
+	out := &Out{
+		Format:      "certen:eip712-tx-mutations:v1",
+		Description: "Byte-level mutations of the transactions in eip712-bodies.json (bit flip, byte replace, delete, insert, truncate, append), each judged by Accumulate: whether Transaction.UnmarshalBinary accepts the bytes, the transaction hash, and protocol.EIP712Hash under the base vector's signature. A mutation on which Go panics is not recorded.",
+		Accumulate:  "gitlab.com/accumulatenetwork/accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c",
+	}
+	panics := 0
+	for _, v := range in.Vectors {
+		raw, _ := hex.DecodeString(v.Transaction)
+		sb, _ := hex.DecodeString(v.Signature)
+		sig, err := protocol.UnmarshalSignature(sb)
+		if err != nil || len(raw) == 0 {
+			continue
+		}
+		r := rand.New(rand.NewSource(int64(len(v.ID))*104729 + int64(len(raw)) + int64(raw[0])))
+		for k := 0; k < 10; k++ {
+			m := append([]byte(nil), raw...)
+			op := ""
+			switch k % 6 {
+			case 0:
+				i := r.Intn(len(m))
+				m[i] ^= 1 << uint(r.Intn(8))
+				op = fmt.Sprintf("flip@%d", i)
+			case 1:
+				i := r.Intn(len(m))
+				m[i] = byte(r.Intn(256))
+				op = fmt.Sprintf("set@%d", i)
+			case 2:
+				i := r.Intn(len(m))
+				m = append(m[:i], m[i+1:]...)
+				op = fmt.Sprintf("del@%d", i)
+			case 3:
+				i := r.Intn(len(m) + 1)
+				m = append(m[:i], append([]byte{byte(r.Intn(256))}, m[i:]...)...)
+				op = fmt.Sprintf("ins@%d", i)
+			case 4:
+				i := 1 + r.Intn(len(m))
+				m = m[:i]
+				op = fmt.Sprintf("trunc@%d", i)
+			case 5:
+				m = append(m, byte(1+r.Intn(31)), byte(r.Intn(4)))
+				op = "append"
+			}
+			res, ok := judge(m, sig)
+			if !ok {
+				panics++
+				continue
+			}
+			res.ID = fmt.Sprintf("%s#%02d", v.ID, k)
+			res.Base = v.ID
+			res.Op = op
+			res.Transaction = hex.EncodeToString(m)
+			out.Mutations = append(out.Mutations, res)
+		}
+	}
+	j, _ := json.Marshal(out)
+	if err := os.WriteFile(os.Args[2], j, 0o644); err != nil {
+		panic(err)
+	}
+	dec, ref, hashed := 0, 0, 0
+	for _, m := range out.Mutations {
+		if m.Decodes {
+			dec++
+		}
+		if m.Refused {
+			ref++
+		}
+		if m.Hash != "" {
+			hashed++
+		}
+	}
+	fmt.Println("mutations", len(out.Mutations), "panics", panics, "decode", dec, "refused", ref, "digest", hashed)
+}

@@ -48,6 +48,25 @@ Layers: `trust_base`, `L4` (the spine), `L1`, `L2`, `L3`, `G0`, `G1`, `G1_chains
 `verifyBundle` checks `outcome` from the bundle's execution receipt). `overall` is `verified` only when every layer in the document's scope is verified, and
 `covers` / `notCovered` say which statements of docs/proof/PROOF_V2.md §3 that does and does not establish. A `verified` field in a document is never read.
 
+## Key signatures: every type Accumulate accepts
+
+`verifyKeySignature(decodeSignature(bytes), { txHash, transaction?, networkName?, where? })` verifies a user's key signature from its Accumulate binary encoding
+exactly as Accumulate's executor does, for every type it accepts on a key page - `ed25519`, `legacyED25519`, `rcd1`, `btc`, `btclegacy`, `eth`, `rsaSha256`,
+`ecdsaSha256` and `typedData` - directly or as the innermost signature of a delegation chain of at most 20. It returns the innermost type, the delegators, the
+key hash the type defines (the page-entry hash: sha256, the RCD hash, ripemd160(sha256), or the keccak address), and which digest form carried the signature, or throws
+the refusal or named state: `SignatureInvalid`, `NotKeySignature`, `DelegationDepthExceeded`, `TypedDataChainIdMismatch`, `ExecutorGateNotMet`,
+`ExecutorVersionUnproven` (`g1_executor_version_unproven`: `rsaSha256`, `ecdsaSha256` and `typedData` exist only from executor version v2-vandenberg, `eth`'s raw
+r||s rule from v2-baikonur, and a signature's block must prove it), `TransactionUnavailableForTypedData`, `NetworkNameUnproven`. `verdictOf(err)` gives the
+shared-vector vocabulary (`accepted`, `refused:*`, `named:*`). Whether the key hash is on the signer's page at the signature's block is the caller's: it holds the page.
+
+It accepts what Accumulate's Go `Verify` accepts and nothing it refuses: no low-S rule, a lax DER reader for `btc`/`btclegacy` (trailing bytes and non-minimal integers
+pass), a strict one for `ecdsaSha256`, a 64- or 65-byte r||s for `eth` and `typedData` with any V, PKCS#1 v1.5 over the digest as the *already-hashed* value for
+`rsaSha256` (which Web Crypto and `node:crypto` cannot express, so it is done here on `BigInt`s), and the EIP-712 digest of the whole transaction for `typedData`
+(`eip712Hash`, with the type dictionary generated from Accumulate's source by `tools/gen-eip712-schema.mjs`). The mathematics is `@noble/curves` and `@noble/hashes`,
+pinned exactly; nothing here implements a curve. `test/fixtures/sigtypes` holds the 154 vectors the validator's `govsig` package wrote (verdict, key hash, digest form for
+each) with their manifest hash, and four more corpora written by Accumulate itself: EIP-712 digests over every user transaction body, URLs, and byte-level mutations of the
+signatures and of the transactions; this package must agree with Go on every one.
+
 ## What it checks
 
 1. **The trust base.** The genesis network definition and globals are bound to the pinned incarnation identity:
