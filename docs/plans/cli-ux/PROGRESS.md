@@ -21,11 +21,11 @@ All seven CLI UX phases of PLAN §4 (0 to 6) and the follow-ups are merged. What
 
 | Item | Status | Who |
 |---|---|---|
-| **Phase G**: the gateway asks of PLAN §6 (G1 testnet gas drip, the destination transaction hash on the intent, a balance read for an arbitrary address, G6 credit top-up, G5 quote, G4 readiness aggregate) | **all six built and verified; the gateway stack (7 branches) and the bridge drip branch are PUSHED (2026-10-16, on the human's "push") but not merged or deployed.** One more bridge branch (`feat/credits-by-count`, the credit-unit fix) is local until the human says push. Detail, decisions and findings in "Phase G" below | the human: open and merge the PRs in order, deploy, enable |
+| **Phase G**: the gateway asks of PLAN §6 (G1 testnet gas drip, the destination transaction hash on the intent, a balance read for an arbitrary address, G6 credit top-up, G5 quote, G4 readiness aggregate) | **all six built and verified; the gateway stack (7 branches) and both bridge branches (`feat/chain-drip`, and `feat/credits-by-count`, the credit-unit fix) are PUSHED (2026-10-16, on the human's "push") but not merged or deployed.** The two bridge branches conflict on one table (see finding 2); the resolution is recorded. Detail, decisions and findings in "Phase G" below | the human: open and merge the PRs in order, deploy, enable |
 | Adopt the new routes in the SDK, CLI and MCP | not started; needs the gateway deployed and the vendored spec refreshed (`npm run spec:refresh` is human-only, HARNESS §4); the same refresh makes the `/v1/proof/{}/v2` entry of `tools/agentgen/pending-routes.json` obsolete (the deployed gateway already serves it) | after the deploy |
 | A real **archive node** for `CERTEN_RPC_URL_BASE_SEPOLIA`, and one real receipt read from it | **dropped, by the human's decision (2026-10-16):** "continue to use the public node; I don't want to run a node". Consequence, already documented and tested: a non-archive node shows `EFFECT_UNREADABLE` for an old transfer (named, never a pass) and works for a recent one. Nobody runs an archive node for this. | closed |
 | Run the two Phase 6 MCP tools once against the **real gateway** (read-only) | open; needs the human's API key and a real intent id, so it is a human run (HARNESS §4) | the human |
-| **Release** the SDK, then the CLI and MCP | open; no version has been bumped; npm versions are immutable, so tagging and publishing stay the human's (HARNESS §4) | the human |
+| **Release** the SDK, then the CLI and MCP | **prepared, not published.** Branch `release/cli-ux-0.11` (e2bda8b, off `origin/main`, PUSHED) sets sdk 0.11.0, cli 0.11.0, mcp 0.6.0, pins cli and mcp to `sdk ^0.11.0`, and turns the CLI UX "Unreleased" sections into the release entries. `proof-verify` is unchanged since v0.1.0 (0 commits), so it is not re-released. Gates on that branch: build, typecheck, workspace pins and `agentgen:check` clean; the whole suite **152 files, 2675 tests, 0 skipped** (counts gate exit 0). An earlier run under load saw five 20-second subprocess timeouts that pass alone (114/114); an orphaned vitest pins a core on this machine. Publishing is the workflow's staged route (`release.yml`: tag, OIDC, the maintainer approves each staged version with two-factor), NOT a local token, which that workflow and the README say not to use. To do: merge the branch's PR, then push tags in order `sdk-v0.11.0`, `cli-v0.11.0`, `mcp-v0.6.0`, approving and seeing each in `npm view` before the next | the human |
 
 ---
 
@@ -33,7 +33,7 @@ All seven CLI UX phases of PLAN §4 (0 to 6) and the follow-ups are merged. What
 
 The asks live in two other repos, so they are branches there and not changes here. They were held until the human said "push", then pushed
 (the gateway stack through its own pre-push hook, which ran the whole suite: 220 files, 2362 passed, 4 skipped); **nothing is merged or deployed**.
-The one exception is `feat/credits-by-count` in the bridge, written afterwards (finding 2) and not pushed until the human says so. Everything was built under Node 22.23.3
+`feat/credits-by-count` in the bridge was written afterwards (finding 2) and pushed on a second "push". Everything was built under Node 22.23.3
 (the gateway's `engines`, enforced) against a throwaway Postgres 16 on port 54329; the user's own database was never touched.
 
 ### What was built
@@ -51,7 +51,7 @@ resolution (the branches all edit the same registry lists, which is why they wer
 | 6 | `feat/identity-credit-topup` | 5c9eda9 (was 6e84a08 before finding 2 changed what it sends) | G6, credit top-up | 71 | 2282 / 2282 |
 | 7 | `feat/chain-account-drip` | 03d0d53 (2 commits, rebased over 6) | G1, the testnet gas drip (gateway half) | 84 | 2366 total: 2362 passed, 4 skipped |
 | B | `feat/chain-drip` in **`api-bridge`**, base `786c033` | b7cc49c | G1, the drip (bridge half) | 52 checks | 57 / 57 test files |
-| C | `feat/credits-by-count` in **`api-bridge`**, base `786c033` | 3202d34 (local) | the credit-unit fix (finding 2): `credits`, priced at the live oracle | 29 checks | 57 / 57 test files, lint clean |
+| C | `feat/credits-by-count` in **`api-bridge`**, base `786c033` | 3202d34 (pushed) | the credit-unit fix (finding 2): `credits`, priced at the live oracle | 29 checks | 57 / 57 test files, lint clean |
 
 Every gateway tip: typecheck clean, `eslint src test` 0 errors and **exactly the 96 warnings the baseline has**, the full suite green, and the
 real server (`ROLE=api`, no mocks) booted against the migrated database with all five new operations in its live spec. Mutation checks were run
@@ -95,6 +95,9 @@ exists but is **not enforced**; "push" (the gateway stack and the ledger commit)
    oracle is a named 503. The gateway top-up (branch 6) now sends `credits`, so against a bridge without C it fails and spends nothing. **Decision left to the human:**
    whether provisioning and governance move to `credits` too. That changes what every new identity costs and receives (50,000 credits for 0.5 ACME today; 500 for about 0.005 ACME at this
    oracle), so it was not done unasked. Nothing should be enabled before C is deployed.
+   **B and C conflict, once, and trivially:** both add entries to the `STATUS` table in `src/accumulate-errors.ts` (adjacent lines), so whichever merges second shows one conflict. Keep both
+   blocks (C's `CREDITS_INVALID: 400, CREDITS_ORACLE_INVALID: 503` and B's five `DRIP_*` entries). Checked: merging B into C with exactly that resolution typechecks, lints clean, and passes
+   58 of 58 bridge test files (both new files, 29 and 52 checks, included); `server.ts` and `.env.example` merge without help.
 3. **Provisioning's `addCredits` still uses the retrying client**, so a timeout can pay twice there too. Left alone; the new routes use a client that never retries
    (shown with real sockets: 3 requests against 1).
 4. **The bridge's account deployments do not take the new per-chain sponsor lock**, so a deploy and a drip at the same instant can collide on a nonce (one fails and the
@@ -110,7 +113,9 @@ exists but is **not enforced**; "push" (the gateway stack and the ledger commit)
 2. Deploy the bridge before the gateway (C is what the top-up needs). To use the top-up: `CREDIT_TOPUP_ENABLED=true`. To use the drip: deploy the bridge with `EVM_DRIP_ENABLED`,
    `EVM_DRIP_CHAINS` and `EVM_DRIP_AMOUNT_<id>` first, then `CHAIN_DRIP_ENABLED=true` on the gateway. Both are in `.env.example` with their reasons.
 3. Decide the last part of finding 2 (provisioning and governance onto `credits`). Fund the sponsor: ACME account `acc://64250b1e4f16aa9b10b14106611b6fce2e7bb5acf3a188b9/ACME`
-   (1,656.39 ACME on 2026-10-16) from the Kermit faucet; EVM wallet `0x32422604b797f0a135d8F28B84Ce72EefA185FC8`, the one that pays deployments on all four chains.
+   (1,656.39 ACME at first, 4,086.39 ACME after the human's top-up, oracle 10,000,000) from the Kermit faucet; EVM wallet `0x32422604b797f0a135d8F28B84Ce72EefA185FC8`, the one that pays deployments
+   on all four chains. Read from the bridge's own RPCs on 2026-10-16, against floors of 0.01 ETH and 0.1 TEL: ethereum-sepolia 2.351891, base-sepolia 0.585940, arbitrum-sepolia 0.666441, telcoin-adiri 1.998999.
+   Production at that time: gateway `dc21237` and bridge `786c033` equal to their `origin/main`, every container healthy, only old `.bak` files untracked; nothing was changed on the host.
 4. `npm run spec:refresh` in this repo (human-only), then adopt the routes in the SDK, CLI and MCP.
 5. Run the two Phase 6 MCP tools against the real gateway, and release (SDK first).
 
