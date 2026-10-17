@@ -61,7 +61,7 @@ describe('watch: an intent that has already finished', () => {
     expect(got).toHaveLength(1);
     const body = envelope(r);
     expect(body.ok).toBe(true);
-    expect(Object.keys(body.data!).sort()).toEqual(['receipt', 'saved_to']);
+    expect(Object.keys(body.data!).sort()).toEqual(['destination', 'receipt', 'saved_to']);
     expect(body.data!.receipt.verdict).toBe('partial');
   });
 

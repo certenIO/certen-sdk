@@ -1,6 +1,6 @@
 import {
   assembleReceipt, chainSlug, intentOutcome, readNativeBalance, type CertenClient, type Receipt, type ReceiptRequest, type ReceiptSigner,
-  type RecipientSnapshot, type TransactionResponse,
+  type RecipientSnapshot, type TransactionDestination, type TransactionResponse,
 } from '@certen.io/sdk';
 import { buildReceipt } from '@certen.io/sdk/verify';
 import { CliError, type ExitCode } from './errors.js';
@@ -9,6 +9,7 @@ import { trapSigint, type Interrupt } from './interrupt.js';
 import { sleepUnlessAborted, waitForTransaction, type WaitBudget } from './wait.js';
 import { saveReceipt } from './receipt-store.js';
 import { exitCodeFor, renderReceipt } from './receipt-render.js';
+import { destinationOf } from './destination.js';
 
 /**
  * Following one intent to its receipt: `send` after it signs, `watch` when picking a wait back up, and `receipt` when refreshing one.
@@ -65,6 +66,8 @@ export interface Followed {
   path: string | null;
   /** Set when a saved receipt that establishes MORE than this one was left as it is: why. */
   kept?: string;
+  /** The destination transaction the gateway reported on the read the receipt was built from: the validators' record, not verified. Null when none. */
+  destination: TransactionDestination | null;
   exitCode: ExitCode;
 }
 
@@ -82,9 +85,9 @@ export async function senderBalance(client: CertenClient, identityId: string, ch
   }
 }
 
-function decorate(err: CliError, receipt: Receipt, path: string | null, resume: string): CliError {
+function decorate(err: CliError, receipt: Receipt, path: string | null, resume: string, destination: TransactionDestination | null): CliError {
   return new CliError(err.message, err.code, err.exitCode, err.retryable, {
-    ...(err.details ?? {}), intent_id: receipt.intent_id, receipt, receipt_path: path, resume,
+    ...(err.details ?? {}), intent_id: receipt.intent_id, receipt, receipt_path: path, resume, ...(destination ? { destination } : {}),
   });
 }
 
@@ -162,9 +165,9 @@ export async function followIntent(a: FollowArgs): Promise<Followed> {
         hint('');
         hint(`  The wait ran out; the intent may still complete. Pick it back up: ${a.resumeCommand}`);
       } else {
-        renderReceipt(receipt, { savedTo: path ?? undefined });
+        renderReceipt(receipt, { savedTo: path ?? undefined, destination: destinationOf(last) });
       }
-      throw decorate(err, receipt, path, a.resumeCommand);
+      throw decorate(err, receipt, path, a.resumeCommand, destinationOf(last));
     } finally {
       trap.dispose();
     }
@@ -178,5 +181,5 @@ export async function followIntent(a: FollowArgs): Promise<Followed> {
     ? await senderBalance(a.client, a.request.identity_id, a.request.chain)
     : null;
   const { receipt, path, kept } = await buildAndSave(a, transaction, after);
-  return { receipt, path, ...(kept ? { kept } : {}), exitCode: exitCodeFor(receipt) };
+  return { receipt, path, ...(kept ? { kept } : {}), destination: destinationOf(transaction), exitCode: exitCodeFor(receipt) };
 }

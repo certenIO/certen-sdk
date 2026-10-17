@@ -70,7 +70,7 @@ describe('certen send --json --wait: derives everything, signs what it was asked
   it('exits 4 with ONE envelope on stdout: the proof fixture has unbound page chains, so an honest PARTIAL, never a quiet pass', () => {
     expect(r.code, r.stderr).toBe(4);
     expect(env1.ok).toBe(true);
-    expect(Object.keys(env1.data).sort()).toEqual(['receipt', 'saved_to']);
+    expect(Object.keys(env1.data).sort()).toEqual(['destination', 'receipt', 'saved_to']);
     expect(receipt.verdict).toBe('partial');
     expect(receipt.headline).toMatch(/^PARTIAL: /);
     // The human lines are on stderr, not on the machine channel.

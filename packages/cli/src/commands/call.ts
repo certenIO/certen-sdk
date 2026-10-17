@@ -7,6 +7,7 @@ import { commandPrompter } from '../prompt.js';
 import { followIntent } from '../receipt-flow.js';
 import { parseExpectEvent } from '../flag-parsers.js';
 import { renderReceipt } from '../receipt-render.js';
+import { printTransaction } from '../destination.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
 import { chainArg, uuidArg } from '../next-step.js';
 import { resolveSigner } from '../signer.js';
@@ -310,7 +311,8 @@ export function registerCallCommands(program: Command): void {
         }
       }
 
-      printOutput(isJsonMode() && followed ? { ...final, receipt: followed.receipt, receipt_path: followed.path } : final);
+      if (isJsonMode() && followed) printOutput({ ...final, receipt: followed.receipt, receipt_path: followed.path });
+      else printTransaction(final);
       if (isJsonMode()) {
         if (followed) process.exitCode = followed.exitCode;
         return;

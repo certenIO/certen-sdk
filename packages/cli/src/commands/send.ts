@@ -257,8 +257,8 @@ export function registerSendCommands(program: Command): void {
         snapshot: snapshot ?? null, rpc, sender: { address: fromAddress, before: senderBefore },
         resumeCommand: `certen watch ${sent.intentId}`,
       });
-      renderReceipt(followed.receipt, { savedTo: followed.path ?? undefined });
-      printOutput({ receipt: followed.receipt, saved_to: followed.path } as unknown as Record<string, unknown>, { machineOnly: true });
+      renderReceipt(followed.receipt, { savedTo: followed.path ?? undefined, destination: followed.destination });
+      printOutput({ receipt: followed.receipt, saved_to: followed.path, destination: followed.destination } as unknown as Record<string, unknown>, { machineOnly: true });
       // `--no-wait` returned as soon as the signature was in, exactly as `tx create --no-wait` does: that is a success of the command, with
       // a receipt that says it is pending.
       process.exitCode = !wait && followed.receipt.verdict === 'pending' ? EXIT.OK : followed.exitCode;

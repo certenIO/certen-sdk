@@ -130,14 +130,15 @@ export function registerReceiptCommands(program: Command): void {
         share = { url: made.url ?? null, expires_at: made.expires_at ?? null };
       }
 
-      renderReceipt(followed.receipt, { savedTo: savedTo ?? undefined, explain: opts.explain });
+      renderReceipt(followed.receipt, { savedTo: savedTo ?? undefined, explain: opts.explain, destination: followed.destination });
       if (share) {
         human(`  Share link: ${share.url ?? '(the gateway returned no URL)'}${share.expires_at ? `   (expires ${share.expires_at})` : ''}`);
         human('  Anyone with this link can read the proof and verify it without a CERTEN account. It shows the intent, not your keys.');
         human('');
       }
       printOutput({
-        receipt: followed.receipt, saved_to: savedTo, refreshed: true, ...(followed.kept ? { saved_receipt_kept: followed.kept } : {}), ...(share ? { share } : {}),
+        receipt: followed.receipt, saved_to: savedTo, refreshed: true, destination: followed.destination,
+        ...(followed.kept ? { saved_receipt_kept: followed.kept } : {}), ...(share ? { share } : {}),
       } as unknown as Record<string, unknown>, { machineOnly: true });
       process.exitCode = exitCodeFor(followed.receipt);
     });
@@ -175,9 +176,9 @@ export function registerReceiptCommands(program: Command): void {
       // A watch with no node of yours does not replace a saved receipt that was checked against one.
       const savedTo = followed.path ?? (followed.kept && loaded.state === 'ok' ? loaded.path : null);
       if (followed.kept) hint(`  The saved receipt was left as it is: ${followed.kept}. Run it again with --rpc <node> to refresh that one.`);
-      renderReceipt(followed.receipt, { savedTo: savedTo ?? undefined });
+      renderReceipt(followed.receipt, { savedTo: savedTo ?? undefined, destination: followed.destination });
       printOutput({
-        receipt: followed.receipt, saved_to: savedTo, ...(followed.kept ? { saved_receipt_kept: followed.kept } : {}),
+        receipt: followed.receipt, saved_to: savedTo, destination: followed.destination, ...(followed.kept ? { saved_receipt_kept: followed.kept } : {}),
       } as unknown as Record<string, unknown>, { machineOnly: true });
       process.exitCode = exitCodeFor(followed.receipt);
     });
