@@ -111,6 +111,9 @@ certen receipt [<intent-id>]    # the receipt again: ids, whether the proof hold
 certen status                   # is this identity, on this chain, with this key ready? exit 0 only when it is
 certen watch <intent-id>        # wait for an intent to finish (Ctrl-C stops the wait, not the intent), then show its receipt
 certen gas [--wait]             # the abstract account's gas: address, amount, faucet, wallet link; --wait returns when it arrives
+certen balance <address>        # the native balance of ANY EVM address on --chain, read through the gateway's node (a failed read is an error, never a 0)
+certen quote 0.0001 ETH --to 0x…  # the gateway's ESTIMATE for a send (creates, charges and signs nothing; lists what it did not check)
+certen identity readiness       # the gateway's facts about the identity from one read, section by section; facts only, no "ready" verdict
 certen call --to 0x… --fn 'confirm(bytes32)' --arg 0x… --wait     # a proof-gated contract call (identity, chain and key from context)
 certen proof get <intent-id>
 certen doctor                   # names the one thing blocking you
@@ -129,6 +132,11 @@ certen init                     # signing key, identity, funding; idempotent (se
   never skips the check of what is signed. The receipt's `verdict` is `verified` · `partial` · `failed` · `pending` · `unproven`, with every unestablished thing named in `gaps`; **`send`, `receipt` and `watch`
   exit `0` only for `verified`**, `4` for partial or pending, `5` for no evidence, `130` for Ctrl-C. PARTIAL and NO EVIDENCE are never verified, and the proof's execution layer needs a node you trust
   (`--rpc <url>` or `CERTEN_RPC_URL`) to leave `not_checked`. Shape and codes: `docs/CLI-CONTRACT.md` section 10.
+- **Two commands spend the PLATFORM's money, not yours, and need a person's say-so:** `certen credits topup --credits <n>` (credits for a key page; a count of credits, 1 credit = $0.01, never ACME) and
+  `certen gas --drip` (testnet gas for a short account). Both are off unless the operator enables them (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`). With nobody at a terminal they exit `2` unless `--yes` is
+  passed (`--json` is not consent), so do not pass it unasked. They print the Idempotency-Key they used: **repeat with the same `--idempotency-key`, never a new one** (a new key is a second draw), and treat
+  `CREDIT_TOPUP_UNCONFIRMED` / `DRIP_UNCONFIRMED` (exit `1`) as "may have been applied": read first (`certen identity readiness`, `certen gas --wait`). For them exit `3` does not mean nothing was
+  submitted. `send`, `receipt`, `watch` and `tx status` also show `destination`, the destination transaction **as recorded by the validators; not verified**: not proof. `docs/CLI-CONTRACT.md` section 16.
 - `--timeout` takes units: `90s`, `6m`, `1h` (a bare number is minutes).
 - **`--json` emits exactly one envelope object on stdout**, nothing else. Human output goes to stderr.
   Success is `{"ok":true,"data":{...}}`; failure is `{"ok":false,"error":{"code","message","retryable","next"}}`.

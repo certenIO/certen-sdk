@@ -1,5 +1,48 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — the gateway's newer routes: an address's balance, an estimate, an identity's facts, credits and gas from the platform, and the destination transaction
+
+The CLI now uses the five operations and the one field the gateway added for the CLI UX plan (they are in `@certen.io/sdk` already). **Every existing command and flag keeps its meaning;** what is new is
+additive, with one exception that matters if a script retries: **`credits topup` and `gas --drip` spend the platform's funds, and for them exit `3` means "no response", not "nothing was submitted"**
+(see Added; the safe retry is the same `--idempotency-key`). Both are OFF on most gateways today (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`), and say so plainly. A maintainer versions and publishes this.
+Full detail: `docs/CLI-CONTRACT.md` section 16.
+
+### Added
+- **`certen balance <address> [--chain <chain>]`**: the native balance of ANY EVM address on a chain the gateway serves, as the gateway's node answers it. `certen balance` with no argument is still your
+  gateway balance in dollars. A mistyped address (a checksum that does not hold names the capitalisation it would accept) is `INVALID_ADDRESS`, exit `2`, and **nothing is sent**; a node that did not
+  answer is `BALANCE_UNREADABLE`, exit `1`, retryable, and is **never shown as a zero** (an empty account is `0`, shown as one).
+- **`certen identity readiness [ref] [--chain <chain>]`**: the gateway's facts about an identity from ONE read (its key on its key page, credits, optionally a chain's account and balance, the organization's
+  spendable balance), section by section. **It states facts and says nothing like "ready"**; a section that could not be read is shown as unknown, never as a yes or a zero. The help says how it differs
+  from `certen status` and `certen doctor`, which judge.
+- **`certen quote <amount> <asset> --to <address>`**: the gateway's ESTIMATE for a send, with the inputs of `send` (the intent it asks about is the one `send` opens, pinned by a test). It creates, charges and
+  signs nothing, always says it is an estimate, and lists what it checked and did not. `quote --chain <chain> [--sku <sku>]` (a binding price) is unchanged.
+- **`send`'s confirmation card (and `--dry-run`) shows the same estimate.** If it cannot be had (a gateway without the route, a timeout of 10 seconds, a refusal, an answer that is not an estimate) the card says
+  `estimate  unavailable` and the send is exactly what it was: it never blocks or changes a send. `--dry-run --json` gains `estimate` (the body, or `null` with `estimate_unavailable`).
+  One more request per `send`, made after the readiness checks and before any passphrase.
+- **`certen credits topup --credits <n> [--identity <ref>] [--idempotency-key <key>] [--yes]`**: credits for a key page, **paid by the platform** (1 credit = $0.01; `--credits` is a count of credits, never ACME).
+  A count that is not a whole number of at least 1, or a key the gateway would refuse, is exit `2` with no request. **It never spends unattended:** at a terminal it asks (default no); with nobody to ask it
+  exits `2` (`CONFIRMATION_REQUIRED`) unless `--yes`, and `--json` is not consent. The **Idempotency-Key is printed** (and is `data.idempotency_key`); `--idempotency-key` repeats the same attempt and can never be a
+  second draw. **`unconfirmed` is not a success:** `CREDIT_TOPUP_UNCONFIRMED`, exit `1`, "the credits MAY have been added", with the key and `certen identity readiness` to read them back. `CREDIT_TOPUP_DISABLED` and
+  `CREDIT_TOPUP_LIMIT` are explained and **not retried** (one request).
+- **`certen gas --drip [--yes] [--idempotency-key <key>]`**: when the account on a testnet is short, ask the platform to send gas. Same guard as `credits topup`. Shows `sent` (transaction hash and explorer link),
+  `skipped` and `unconfirmed` (`DRIP_UNCONFIRMED`, exit `1`; with `--wait` the wait for the gas settles it) as they are. `DRIP_DISABLED`, `DRIP_TESTNET_ONLY`, `DRIP_LIMIT`, `DRIP_UNAVAILABLE` and
+  `DRIP_RECIPIENT_REJECTS` get plain messages and the manual funding steps as the fallback. A funded account asks for nothing. **`gas` without `--drip` is unchanged.**
+- **The destination transaction, labelled.** `send`, `receipt`, `watch`, `call` and `tx status` show the transaction an intent made on its destination chain under a `Recorded` row, **always** with
+  "as recorded by the validators; not verified" (the gateway copies it from the validators and does not read the chain; it is not proof, and `receipt`'s own verification is separate). `--json` carries it as
+  `destination` (`data.destination` on `send`, `receipt` and `watch`; in the transaction on `tx status`, which now always has the key, `null` when none). It is `null` until recorded and for an intent on several chains.
+- **Every new error code has an explicit `next:`** (`BALANCE_UNREADABLE`, `CREDIT_TOPUP_*`, `DRIP_*`, `IDEMPOTENCY_KEY_REQUIRED`, `INVALID_CREDITS`, `INVALID_IDEMPOTENCY_KEY`, `PROOF_V2_NOT_AVAILABLE`,
+  `ENDPOINT_NOT_ON_GATEWAY`, and the CLI's own `CREDIT_TOPUP_UNCONFIRMED`, `DRIP_UNCONFIRMED`, `TOPUP_DECLINED`, `DRIP_DECLINED`). `certen errors` reads the live catalogue from the gateway, so it lists the new codes
+  without a change here.
+
+### Changed (additive `--json` fields: a consumer that ignores unknown keys is unaffected)
+- `send`, `receipt` (refreshed) and `watch` envelopes gain `data.destination`; `receipt --offline` and a final receipt shown as saved do not (the gateway was not asked).
+- `tx status` (and `call`) output gains `destination` (always present; `null` when the gateway sent none).
+- `gas --json` gains `drip` only after a drip was requested.
+
+### Not changed, on purpose
+- `balance` with no argument, `quote --chain --sku`, and `gas` without `--drip` are byte for byte what they were. No command retries a spend on its own.
+- **The exit-`3` promise** ("nothing was submitted") holds for every command except `credits topup` and `gas --drip`, where the request may have left before the connection dropped (above).
+
 ## 0.11.1 — the first release of everything below (2026-10-17)
 
 **`0.11.0` was never published.** Its release run failed in the workflow's own test step, before anything was packed or staged: six CLI tests wrote a damaged key file, or a config holding an API key, with the default file mode, and off Windows the CLI refuses a file that group or world can read
