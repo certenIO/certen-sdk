@@ -160,7 +160,7 @@ describe('it never spends unattended', () => {
     expect(g.seen).toHaveLength(0);
   });
 
-  it('refuses before even resolving the credential or the identity', async () => {
+  it('refuses before it resolves the identity, so nothing is read for a spend nobody will confirm', async () => {
     const g = await serve();
     const bare = homeFor(g.url, { identity: false });
     const r = await certen(['--json', 'credits', 'topup', '--credits', '500'], { home: bare, apiUrl: g.url });
