@@ -122,7 +122,10 @@ exists but is **not enforced**; "push" (the gateway stack and the ledger commit)
    one conflict, the top of `packages/sdk/CHANGELOG.md`, resolved by keeping the adoption entry as the Unreleased section above the `0.11.0` section. Still to do: merge `feat/credits-by-count` (bridge PR #34, its conflict with `main` in
    `src/accumulate-errors.ts` is resolved and pushed as `d9656bd`) and redeploy the bridge (the top-up needs it), merge the adoption branch (it goes out in the release after 0.11.0), and tag the 0.11 release:
    `sdk-v0.11.0`, then `cli-v0.11.0`, then `mcp-v0.6.0`, each on the release merge commit `e8afe27` (not on the tip of `main` once the adoption branch has merged, which would put unreleased code under 0.11.0).
-   Publishing is the workflow's staged route, not a local token.
+   Publishing is the workflow's staged route, not a local token. The three tags were pushed on 2026-10-17 (human's go-ahead); `sdk-v0.11.0` and `mcp-v0.6.0` passed and were staged, and `cli-v0.11.0` FAILED in the workflow's
+   own test step on six CLI tests that fail on Linux (below), so nothing was staged for the CLI. The fix is on `fix/cli-tests-posix-modes`, together with the bump to cli `0.11.1` (the human's decision, 2026-10-17, so no pushed tag is moved: `cli-v0.11.0` stays on `e8afe27` with nothing published under it). Once that PR is merged and CI is green on it, tag `cli-v0.11.1` on its merge commit.
+   The bridge PR #34 is merged and the bridge was redeployed by the human (`334d6f3`, container rebuilt 10:07 CEST 2026-10-17); read-only check from the host: the built code has `addCreditsByCount` and the route, the container is healthy, no errors in the last 20 minutes, the drip and top-up flags are unset.
+   The human's decision on provisioning (finding 2): leave it as it is for now (the identity still gets the credits it gets today).
 6. Run the two Phase 6 MCP tools against the real gateway, and release (SDK first).
 
 ### Follow-ups found while adopting (none changed)
@@ -131,7 +134,13 @@ exists but is **not enforced**; "push" (the gateway stack and the ledger commit)
   (`IDEMPOTENCY_KEY_REQUIRED`) and their descriptions say so. A reader of the parameter alone is told the wrong thing.
 - **Gateway, catalogue:** `CREDIT_TOPUP_LIMIT` and `DRIP_LIMIT` are 429s marked `retryable: true`. They are daily and cooldown limits, which an immediate backoff retry cannot clear (the SDK's rule makes
   `PLAN_QUOTA_EXCEEDED` non-retryable for the same reason). The SDK mirrors the catalogue because a test requires the two to agree, so the fix goes in the gateway's registry first.
-- **Provisioning:** still grants 50,000 credits for 0.5 ACME per identity (finding 2); the human's decision.
+- **Provisioning:** still grants 50,000 credits for 0.5 ACME per identity (finding 2). Decided 2026-10-17: leave it unchanged for now (the human judges the current grant to be more than an identity will need); not moved onto `credits`.
+- **CI was red and nobody was told (found 2026-10-17, fixed on `fix/cli-tests-posix-modes`).** `ci.yml` has not been green since run 67 (2026-10-09): every run from 68 to 142 failed, and every gate quoted in this ledger was a Windows run, which cannot see a Linux-only failure.
+  Read from GitHub's public API (`gh` is not installed, but the repository is public: `/actions/workflows/ci.yml/runs`, `/actions/runs/<id>/jobs`, `/check-runs/<job>/annotations`), the causes were three:
+  (1) the `packaging` job ran `npm pack` on the SDK before anything was built, so its type-check could not find `@certen.io/proof-verify`'s output (TS2307), from run 76 on: fixed by building the workspace first, as the test job and `release.yml` do;
+  (2) six CLI tests (`keystore-errors`, `conformance`, `setup`, `setup-interactive`) planted a damaged key file or a config holding an API key with the default file mode, and off Windows the CLI refuses a key file or a config that group or world can read
+  (`KEY_FILE_INSECURE`, `CONFIG_PERMISSIONS`) before it looks inside: they passed on Windows, where the check is skipped, and failed on Linux. Not a product defect (the refusal is the designed behaviour); the fixtures are now owner-only, as the CLI writes its own;
+  (3) an MCP test (`execute-wait`, 5 s) timed out under load on early runs and has passed since. Rule from here: read the CI result for every branch tip before calling a unit done.
 
 ---
 

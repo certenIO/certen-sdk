@@ -80,6 +80,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version-file: .nvmrc, cache: npm }
       - run: npm ci
+      # Build the workspace first, as the test job and the release workflow do: the SDK's own build (its `prepack`) type-checks against
+      # @certen.io/proof-verify's built output, so `npm pack` on a tree that was only installed fails with TS2307 before it packs anything.
+      - run: npm run build
       - name: Pack and consume from a scratch project
         run: |
           cd packages/sdk

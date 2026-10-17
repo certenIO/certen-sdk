@@ -128,7 +128,8 @@ describe('CLI contract: exit codes', () => {
     // The invocation is well-formed and the thing it names exists, but it cannot be used: a key file that is not a key. (This case used to name a key that
     // does not exist, which is a mistake in the invocation and exits 2 like `use key nosuchkey`; see the next case and CLI-CONTRACT section 14.)
     mkdirSync(join(HOME, '.certen', 'keys'), { recursive: true });
-    writeFileSync(join(HOME, '.certen', 'keys', 'damaged.json'), '{ this is not a key file', 'utf8');
+    // Owner-only, as the CLI writes its own key files: off Windows a key file that group or world can read is refused (KEY_FILE_INSECURE) before it is read.
+    writeFileSync(join(HOME, '.certen', 'keys', 'damaged.json'), '{ this is not a key file', { encoding: 'utf8', mode: 0o600 });
     const r = certen(['--json', 'keys', 'show', 'damaged']);
     expect(r.code).toBe(1);
     const env = soleJson(r.stdout);
