@@ -107,7 +107,8 @@ describe('which kind of account', () => {
     const g = await gateway({ acceptedKeys: ['ck_live_other'], fundAfterReads: 1 });
     const m = await load();
     mkdirSync(join(scratch, '.certen'), { recursive: true });
-    writeFileSync(join(scratch, '.certen', 'config.json'), JSON.stringify({ api_key: 'ck_live_stale', storage: 'file' }));
+    // Owner-only, as `auth login` writes it: off Windows a config file holding a key that group or world can read is refused (CONFIG_PERMISSIONS) before the key is used.
+    writeFileSync(join(scratch, '.certen', 'config.json'), JSON.stringify({ api_key: 'ck_live_stale', storage: 'file' }), { mode: 0o600 });
 
     // Questions, in order: the name of the new key, then whether to replace the saved key.
     const declined = scripted(['dev', false]);

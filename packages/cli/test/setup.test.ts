@@ -259,7 +259,8 @@ describe('failures that are not setup\'s to fix', () => {
     const home = newHome();
     const { writeFileSync, mkdirSync } = await import('node:fs');
     mkdirSync(join(home, '.certen'), { recursive: true });
-    writeFileSync(join(home, '.certen', 'config.json'), JSON.stringify({ api_key: 'ck_live_stale', storage: 'file' }));
+    // Owner-only, as `auth login` writes it: off Windows a config file holding a key that group or world can read is refused (CONFIG_PERMISSIONS) before the key is used.
+    writeFileSync(join(home, '.certen', 'config.json'), JSON.stringify({ api_key: 'ck_live_stale', storage: 'file' }), { mode: 0o600 });
 
     const refused = await certen(['--json', 'setup', '--yes', '--no-passphrase', '--no-keyring', ...FAST], { home, apiUrl: g.url });
     expect(refused.code).toBe(1);

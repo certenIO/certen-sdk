@@ -53,6 +53,12 @@ const caughtAsync = async (fn: () => Promise<unknown>): Promise<CliError> => {
   throw new Error('expected the call to throw');
 };
 const keyFile = (name: string): string => join(tmpHome, '.certen', 'keys', `${name}.json`);
+/**
+ * How a test plants a damaged or unusual key file. The key store refuses a key file that group or world can read BEFORE it looks inside, on every platform but
+ * Windows (which has no POSIX modes), so a fixture written with the process's default mode (0644 under the usual umask 022) is `KEY_FILE_INSECURE`, never the
+ * `KEY_FILE_CORRUPT` or `KEY_FILE_UNSUPPORTED` the test is about. These pass on Windows and fail on Linux unless the file is owner-only, as the CLI writes its own.
+ */
+const OWNER_ONLY = { encoding: 'utf-8', mode: 0o600 } as const;
 
 describe('the key store raises typed errors', () => {
   it('an invalid key name is a usage error (INVALID_KEY_NAME, exit 2), and the message is what it was', async () => {
@@ -134,8 +140,8 @@ describe('the key store raises typed errors', () => {
   it('a key file that is not JSON is KEY_FILE_CORRUPT (exit 1), naming the file, and `keys list` still lists the others', async () => {
     const { ks } = await load();
     ks.generateKey('good', null);
-    writeFileSync(keyFile('bad'), '{ this is not json', 'utf-8');
-    writeFileSync(keyFile('empty'), 'null', 'utf-8');
+    writeFileSync(keyFile('bad'), '{ this is not json', OWNER_ONLY);
+    writeFileSync(keyFile('empty'), 'null', OWNER_ONLY);
     for (const name of ['bad', 'empty']) {
       const e = caught(() => ks.getKeyInfo(name));
       expect(e.code, name).toBe('KEY_FILE_CORRUPT');
@@ -150,9 +156,9 @@ describe('the key store raises typed errors', () => {
     const { ks } = await load();
     ks.generateKey('dev', null);
     const stored = JSON.parse(readFileSync(keyFile('dev'), 'utf-8'));
-    writeFileSync(keyFile('v9'), JSON.stringify({ ...stored, name: 'v9', version: 9 }), 'utf-8');
-    writeFileSync(keyFile('rsa'), JSON.stringify({ ...stored, name: 'rsa', algorithm: 'rsa' }), 'utf-8');
-    writeFileSync(keyFile('odd'), JSON.stringify({ ...stored, name: 'odd', privateKey: 'aabbcc' }), 'utf-8');
+    writeFileSync(keyFile('v9'), JSON.stringify({ ...stored, name: 'v9', version: 9 }), OWNER_ONLY);
+    writeFileSync(keyFile('rsa'), JSON.stringify({ ...stored, name: 'rsa', algorithm: 'rsa' }), OWNER_ONLY);
+    writeFileSync(keyFile('odd'), JSON.stringify({ ...stored, name: 'odd', privateKey: 'aabbcc' }), OWNER_ONLY);
     expect(caught(() => ks.getKeyInfo('v9'))).toMatchObject({ code: 'KEY_FILE_UNSUPPORTED', exitCode: EXIT.FAILED });
     expect(caught(() => ks.getKeyInfo('v9')).message).toMatch(/has unsupported version 9 \(this CLI understands 1\)/);
     expect(caught(() => ks.getKeyInfo('rsa'))).toMatchObject({ code: 'KEY_FILE_UNSUPPORTED', exitCode: EXIT.FAILED });
@@ -276,7 +282,7 @@ describe('the built CLI: exit codes, envelopes and `next` for key-store failures
 
   it('a corrupt key file: exit 1, KEY_FILE_CORRUPT (the operation failed; the invocation was fine), next is `certen keys path`', () => {
     mkdirSync(join(cliHome, '.certen', 'keys'), { recursive: true });
-    writeFileSync(join(cliHome, '.certen', 'keys', 'bad.json'), '{ not json', 'utf-8');
+    writeFileSync(join(cliHome, '.certen', 'keys', 'bad.json'), '{ not json', OWNER_ONLY);
     const r = certen(['--json', 'keys', 'show', 'bad']);
     expect(r.code).toBe(1);
     expect(errorOf(r)).toMatchObject({ code: 'KEY_FILE_CORRUPT', retryable: false, next: 'certen keys path' });
