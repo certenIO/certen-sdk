@@ -127,9 +127,18 @@ describe('tool invariants', () => {
     // sometimes as "the `x:read` or `x:write` scope". A read endpoint therefore legitimately
     // mentions :write as an alternative — so the test is "does a :read scope grant access", not
     // "is :write mentioned anywhere". A genuinely write-only endpoint names only :write and fails.
+    //
+    // One kind of endpoint is allowed to name only a write scope: a PREFLIGHT, which rehearses a write and so is gated by the write's scope, but creates nothing.
+    // It is named here with the spec's own words as the evidence, so the only way onto this list is to be an operation the spec says creates nothing; a read tool
+    // cannot join it by accident. (A key without that scope is refused with a 403, which certen_intent_quote's description says.)
+    const PREFLIGHTS: Record<string, RegExp> = { 'POST /v1/transaction/quote': /creates nothing: no transaction, no quote, no hold, no charge/ };
     for (const t of READ_TOOLS) {
       for (const endpoint of [t.endpoint, ...(t.alsoReaches ?? [])]) {
         const description = specOp(endpoint)?.description ?? '';
+        if (PREFLIGHTS[endpoint]) {
+          expect(description, `${t.name} -> ${endpoint} is allowed a write scope only as a preflight`).toMatch(PREFLIGHTS[endpoint]);
+          continue;
+        }
         const scopes = [...description.matchAll(/`?([a-z]+:(?:read|write|admin))`?/g)].map((m) => m[1]);
         if (scopes.length === 0) continue;
         expect(
@@ -203,6 +212,7 @@ describe('tool invariants', () => {
       'certen_doctor', 'certen_chains_list', 'certen_whoami',
       'certen_proof_get', 'certen_proof_receipt', 'certen_proof_verify',
       'certen_readiness', 'certen_receipt',
+      'certen_chain_balance', 'certen_identity_readiness', 'certen_intent_quote',
     ]) {
       const tool = ALL_TOOLS.find((t) => t.name === name);
       expect(tool, name).toBeDefined();
@@ -228,6 +238,84 @@ describe('tool invariants', () => {
   it('the long-running wait tool warns about its duration', () => {
     const wait = ALL_TOOLS.find((t) => t.name === 'certen_execute_wait')!;
     expect(wait.description).toMatch(/60-110 seconds/i);
+  });
+});
+
+describe('the tools for the gateway\'s newer operations', () => {
+  const tool = (name: string) => ALL_TOOLS.find((t) => t.name === name)!;
+
+  it('the two that spend the platform\'s funds are write-tier, mutating, confirm-gated, and not in the default tool list', () => {
+    for (const name of ['certen_credits_topup', 'certen_gas_drip']) {
+      expect(tool(name), name).toBeDefined();
+      expect(tool(name).tier, name).toBe('write');
+      expect(tool(name).mutates, name).toBe(true);
+      expect(READ_TOOLS.map((t) => t.name), name).not.toContain(name);
+      expect(activeTools({} as NodeJS.ProcessEnv).map((t) => t.name), name).not.toContain(name);
+      expect(activeTools({ CERTEN_MCP_ALLOW_WRITES: '1' } as NodeJS.ProcessEnv).map((t) => t.name), name).toContain(name);
+      expect((tool(name).inputSchema.required ?? []), name).toContain('confirm');
+    }
+  });
+
+  it('the three that only look are read-tier and non-mutating', () => {
+    for (const name of ['certen_chain_balance', 'certen_identity_readiness', 'certen_intent_quote']) {
+      expect(tool(name).tier, name).toBe('read');
+      expect(tool(name).mutates, name).toBe(false);
+    }
+  });
+
+  it('the spending tools say whose money it is, what a credit is, and that the drip is for testnets', () => {
+    const topup = tool('certen_credits_topup').description;
+    expect(topup).toMatch(/SPENDS THE PLATFORM'S FUNDS/);
+    expect(topup).toMatch(/1 credit = \$0\.01/);
+    expect(topup).toMatch(/COUNT of credits/);
+    expect(topup).toMatch(/never an amount of ACME/);
+    expect(topup).toMatch(/CREDIT_TOPUP_DISABLED/);
+    expect(topup).toMatch(/UNKNOWN/);
+    expect(topup).toMatch(/idempotency_key/);
+    const drip = tool('certen_gas_drip').description;
+    expect(drip).toMatch(/SPENDS THE PLATFORM'S FUNDS, ON TESTNETS ONLY/);
+    expect(drip).toMatch(/DRIP_DISABLED/);
+    expect(drip).toMatch(/no destination and no amount/);
+    expect(drip).toMatch(/idempotency_key/);
+  });
+
+  it('neither spending tool can be pointed anywhere: no address, amount, recipient or node among the parameters', () => {
+    for (const name of ['certen_credits_topup', 'certen_gas_drip']) {
+      const params = Object.keys(tool(name).inputSchema.properties);
+      expect(params.sort(), name).toEqual(name === 'certen_credits_topup'
+        ? ['confirm', 'credits', 'idempotency_key', 'identity_id']
+        : ['chain', 'confirm', 'idempotency_key', 'identity_id']);
+    }
+  });
+
+  it('the look-alikes tell an agent which to pick: an estimate is not a quote, and facts are not a verdict', () => {
+    const estimate = tool('certen_intent_quote').description;
+    expect(estimate).toMatch(/ESTIMATE/);
+    expect(estimate).toMatch(/not a quote/);
+    expect(estimate).toMatch(/certen_quote/);
+    expect(estimate).toMatch(/not_checked/);
+    expect(estimate).toMatch(/transaction:write/);
+    expect(tool('certen_quote').description).toMatch(/certen_intent_quote/);
+
+    const facts = tool('certen_identity_readiness').description;
+    expect(facts).toMatch(/FACTS and never a verdict/);
+    expect(facts).toMatch(/certen_readiness JUDGES/);
+    expect(facts).toMatch(/certen_platform_ready/);
+    expect(tool('certen_readiness').description).toMatch(/certen_identity_readiness/);
+  });
+
+  it('the balance tool says that zero is a read and an unreadable balance is never zero', () => {
+    const d = tool('certen_chain_balance').description;
+    expect(d).toMatch(/"0"` is a real read/);
+    expect(d).toMatch(/NEVER reported as zero/);
+    expect(d).toMatch(/string/i);
+  });
+
+  it('the transaction tools say that the destination is the validators\' word', () => {
+    for (const name of ['certen_transaction_get', 'certen_execute_wait', 'certen_receipt']) {
+      expect(tool(name).description, name).toMatch(/not verified by the gateway/);
+      expect(tool(name).description, name).toMatch(/destination_note/);
+    }
   });
 });
 

@@ -3,6 +3,7 @@ import {
 } from '@certen.io/sdk';
 import type { CertenClient, Readiness, Receipt, ReceiptRequest } from '@certen.io/sdk';
 import { ALLOW_ANY_CHAIN_ENV_VAR, assertChainUsable, configuredChains, receiptNodeFor } from './chains.js';
+import { receiptDestination } from './destination.js';
 
 /**
  * What `certen_readiness` and `certen_receipt` do around the SDK.
@@ -29,7 +30,7 @@ const HEX_KEY_HASH = /^(0x)?[0-9a-f]{64}$/i;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const TOPIC = /^0x[0-9a-fA-F]{64}$/;
 
-const refuse = (message: string, code: string): CertenError => new CertenError(message, 0, code);
+export const refuse = (message: string, code: string): CertenError => new CertenError(message, 0, code);
 
 /** An argument that would name a node to call, by any of the names an agent reaches for. */
 const NODE_ARGUMENT = /^(rpc|rpcUrl|rpc_url|evmRpc|jsonRpc|accumulateRpc|accumulate_rpc|node|nodeUrl|node_url|url|uri|endpoint|host)$/i;
@@ -41,7 +42,7 @@ const NODE_ARGUMENT = /^(rpc|rpcUrl|rpc_url|evmRpc|jsonRpc|accumulateRpc|accumul
  * says "no node of yours was given" reads like an invitation to try again. So a name that means "call this node" says why it will not, and what to do
  * instead; any other unknown name lists the ones the tool takes. (The same choice `HEADER_FIELDS_UNSUPPORTED` made for header fields: refused, nothing sent.)
  */
-function onlyKnown(tool: string, where: string, args: Record<string, unknown>, known: readonly string[], instead: string): void {
+export function onlyKnown(tool: string, where: string, args: Record<string, unknown>, known: readonly string[], instead: string): void {
   for (const key of Object.keys(args)) {
     if (known.includes(key)) continue;
     const place = where === 'arguments' ? 'argument' : `field in ${where}`;
@@ -53,13 +54,13 @@ function onlyKnown(tool: string, where: string, args: Record<string, unknown>, k
 }
 
 /** An optional argument that was given. A model that sends `null` for "not provided" has not provided it; it is not a malformed value. */
-const given = (value: unknown): boolean => value !== undefined && value !== null;
+export const given = (value: unknown): boolean => value !== undefined && value !== null;
 
 function plain(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-function uuid(args: Record<string, unknown>, key: string, code: string, what: string): string {
+export function uuid(args: Record<string, unknown>, key: string, code: string, what: string): string {
   const v = args[key];
   if (typeof v !== 'string' || !UUID.test(v)) {
     throw refuse(`${key} must be ${what} as a UUID (it looks like 396f863c-879c-4046-8591-3f0405c5f6bd), got ${JSON.stringify(v)}.`, code);
@@ -67,7 +68,7 @@ function uuid(args: Record<string, unknown>, key: string, code: string, what: st
   return v;
 }
 
-function chainName(value: unknown, where: string): string {
+export function chainName(value: unknown, where: string): string {
   if (typeof value !== 'string' || value.trim() === '') throw refuse(`${where} needs a chain, e.g. "base-sepolia".`, 'MISSING_CHAIN');
   return value;
 }
@@ -234,11 +235,16 @@ async function describeIntent(client: CertenClient, args: Record<string, unknown
   };
 }
 
+/** The receipt, plus what the gateway recorded as the intent's destination transaction. See `destination.ts`. */
+export type ReceiptResult = Receipt & ReturnType<typeof receiptDestination>;
+
 /**
  * Everything known about one intent: what happened, the ids to keep, whether the proof holds, and what of the effect is established.
- * The document is the CLI's (`certen receipt`, docs/CLI-CONTRACT.md section 10), unchanged.
+ * The document is the CLI's (`certen receipt`, docs/CLI-CONTRACT.md section 10), with one addition that only this server makes: the gateway's own record of the
+ * destination transaction (`destination`, null when it has none) and, with one, the note that it is the validators' word and not verified. The receipt's
+ * `ids.destination_tx_source` already says where ITS hash came from; `destination` also carries what the validators say became of the transaction (`settlement`).
  */
-export async function runReceiptTool(client: CertenClient, args: Record<string, unknown>, env: Env): Promise<Receipt> {
+export async function runReceiptTool(client: CertenClient, args: Record<string, unknown>, env: Env): Promise<ReceiptResult> {
   onlyKnown('certen_receipt', 'arguments', args, ['intentId', 'header', 'transfer', 'call'], FETCH_THE_HEADER);
   const intentId = uuid(args, 'intentId', 'INVALID_INTENT_ID', 'the intent\'s id');
   // The verifier is loaded on first use: it brings the Accumulate encoder, which the other tools never need.
@@ -257,7 +263,7 @@ export async function runReceiptTool(client: CertenClient, args: Record<string, 
   // A caller's block header decides the proof layer when it gives one (and the node then reads only the recipient); without one the node does both jobs.
   const nodes = node === undefined ? {} : header ? { effectRpc: node } : { rpc: node };
 
-  return buildReceipt(client, intentId, {
+  const receipt = await buildReceipt(client, intentId, {
     transaction,
     header,
     expect: described.expect,
@@ -265,4 +271,5 @@ export async function runReceiptTool(client: CertenClient, args: Record<string, 
     gateway: env.CERTEN_API_URL || DEFAULT_BASE_URL,
     ...nodes,
   });
+  return { ...receipt, ...receiptDestination(transaction) };
 }

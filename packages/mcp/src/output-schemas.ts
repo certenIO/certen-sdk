@@ -347,10 +347,23 @@ export const CUSTOM_OUTPUT_SCHEMAS: Readonly<Record<string, Schema>> = {
         },
       },
       recipient_snapshot: { type: ['object', 'null'], additionalProperties: true },
+      // Added by this server, not part of the CLI's receipt: the gateway's record of the destination transaction (receiptDestination in destination.ts), on the
+      // VALIDATORS' word. The shape is the gateway's own `destination`; the note is present exactly when the object is.
+      destination: {
+        type: ['object', 'null'],
+        properties: {
+          chain_id: { type: 'integer' },
+          tx_hash: str,
+          settlement: { type: ['string', 'null'] },
+          source: { type: 'string', enum: ['validators'] },
+        },
+        additionalProperties: false,
+      },
+      destination_note: str,
     },
     required: [
       'receipt_version', 'intent_id', 'kind', 'created_at', 'updated_at', 'gateway', 'request', 'signed_with', 'status', 'ids', 'links', 'stages',
-      'effect', 'proof', 'verdict', 'headline', 'gaps', 'recipient_snapshot',
+      'effect', 'proof', 'verdict', 'headline', 'gaps', 'recipient_snapshot', 'destination',
     ],
     additionalProperties: false,
   },

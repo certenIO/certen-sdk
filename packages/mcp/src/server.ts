@@ -81,7 +81,8 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
           + '(certen_transaction_open), sign the returned hash_to_sign wherever your key actually '
           + 'lives, then submit that signature (certen_transaction_submit_signature).\n\n'
           + (writesAllowed(env)
-            ? 'Write tools ARE enabled. Each one requires confirm:true and several are irreversible.'
+            ? 'Write tools ARE enabled. Each one requires confirm:true and several are irreversible. certen_credits_topup and certen_gas_drip spend the PLATFORM\'s funds '
+              + '(its sponsor account): use them only when a person has agreed, and keep the idempotency_key they return.'
             : 'Write tools are DISABLED. This server is read-only; set CERTEN_MCP_ALLOW_WRITES=1 to '
               + 'enable them. Do not tell the user to set it without saying what it permits.')
           + '\n\nRead certen://docs/llms.txt before writing code against this API — a proof cycle '
@@ -264,9 +265,12 @@ function redact(args: Record<string, unknown>): Record<string, unknown> {
 const DETAIL_CODES = new Set(['WAIT_TIMEOUT', 'PROOF_NOT_ASSIGNED', 'INTENT_FAILED']);
 
 function extraErrorFields(err: unknown): Record<string, unknown> {
-  const e = err as { guidance?: unknown; reasonCode?: unknown; code?: unknown; details?: unknown };
+  const e = err as { guidance?: unknown; reasonCode?: unknown; code?: unknown; details?: unknown; idempotencyKey?: unknown };
   return {
     ...(typeof e.guidance === 'string' ? { guidance: e.guidance } : {}),
+    // The key a spending call (certen_credits_topup, certen_gas_drip) carried, on its failure too: a call that timed out may have been made, and the retry
+    // that is safe is the one with this key.
+    ...(typeof e.idempotencyKey === 'string' ? { idempotency_key: e.idempotencyKey } : {}),
     ...(e.reasonCode !== undefined ? { reason_code: e.reasonCode } : {}),
     // Read by shape, like the fields above: this package may run against an SDK that predates these errors.
     ...(typeof e.code === 'string' && DETAIL_CODES.has(e.code) && e.details && typeof e.details === 'object' ? { details: e.details } : {}),
