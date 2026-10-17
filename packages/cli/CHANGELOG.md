@@ -1,6 +1,12 @@
 # Changelog — @certen.io/cli
 
-## 0.11.0 — context, readiness, setup and gas, send and receipts, and a CLI that tells you the next step (CLI UX plan, 2026-10-16)
+## 0.11.1 — the first release of everything below (2026-10-17)
+
+**`0.11.0` was never published.** Its release run failed in the workflow's own test step, before anything was packed or staged: six CLI tests wrote a damaged key file, or a config holding an API key, with the default file mode, and off Windows the CLI refuses a file that group or world can read
+(`KEY_FILE_INSECURE`, `CONFIG_PERMISSIONS`) before it looks inside, so on Linux they reported the refusal instead of the error each test is about. The CLI's behaviour is unchanged and was right; only those test fixtures were wrong, and they now write owner-only files as the CLI itself does.
+Everything in the `0.11.0` section below is in this release, and it is the section to read: the exit-code change, the new commands and the signing prompts are all there. Needs `@certen.io/sdk` 0.11.0.
+
+## 0.11.0 — (not published; released as 0.11.1) context, readiness, setup and gas, send and receipts, and a CLI that tells you the next step (CLI UX plan, 2026-10-16)
 
 **Read this if a script branches on exit code `1`:** seven key-store failures move from exit `1` / `UNKNOWN_ERROR` to exit `2` with a code of their own (the table is in `docs/CLI-CONTRACT.md`
 section 14, and the first section below lists them). Everything else is additive: new commands, flags, `--json` fields and codes, and every existing command and flag keeps its meaning.
