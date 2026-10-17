@@ -227,6 +227,14 @@ const STEPS: Record<string, Step> = {
   INVALID_INTENT_ID: 'certen receipt --list',
   PROOF_SERVICE_UNAVAILABLE: 'certen doctor',
 
+  // ── reading an address or an identity ──
+  // A balance the chain's node did not give is not a zero and not a reason to look elsewhere: the same read, again, is the next step.
+  BALANCE_UNREADABLE: 'certen balance <address> --chain <chain>',
+  // The gateway is older than this CLI (the route is not served): nothing about the invocation is wrong, and `doctor` says which gateway answered.
+  ENDPOINT_NOT_ON_GATEWAY: 'certen doctor',
+  // The proof service holds no v2 document for this proof; the bundle route is the other way to read it.
+  PROOF_V2_NOT_AVAILABLE: 'certen proof get <id>',
+
   // ── money ──
   DEPOSIT_NOT_CREDITED: 'certen balance',
   PAYMENT_REQUIRED: 'certen fund <usd>',

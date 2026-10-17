@@ -2,7 +2,8 @@ import { Command } from 'commander';
 import { CertenClient, CertenError, type DepositIntentStatus, type QuoteResponse } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getPortalUrl, getOutputFormat } from '../config.js';
 import { printOutput, human, hint, isJsonMode, usd } from '../output.js';
-import { CliError, EXIT } from '../errors.js';
+import { CliError, UsageError, EXIT } from '../errors.js';
+import { runAddressBalance } from '../address-balance.js';
 import { assertChain } from '../chains.js';
 import { resolveContext, echoFromContext, sourceLabel } from '../context.js';
 import { buildPaymentUri, estimateWait, preciseDuration } from '../payment-uri.js';
@@ -40,9 +41,22 @@ function minutesUntil(iso: string): number {
 
 export function registerBillingCommands(program: Command): void {
   program
-    .command('balance')
-    .description('Show your balance and what pending work has already claimed')
-    .action(async () => {
+    .command('balance [address]')
+    // Two questions share the name, and the argument tells them apart: no address is the organization's balance at the gateway, in dollars, as it
+    // has always been; an address is that address's native balance on a chain, in whole units of the chain's token.
+    .description("Your gateway balance and what pending work has claimed. With an ADDRESS: that address's native balance on a chain (--chain)")
+    .option('--chain <chain>', 'With an address: the chain to read it on, e.g. base-sepolia (default: your context)')
+    .action(async (address: string | undefined, opts: { chain?: string }) => {
+      if (address !== undefined) {
+        await runAddressBalance(address, opts);
+        return;
+      }
+      if (opts.chain !== undefined) {
+        throw new UsageError(
+          '--chain says where to read an address, and there is no address. Give one: certen balance <address> --chain <chain>. With none, the balance is your gateway balance, which is not on a chain.',
+          'USAGE_ERROR',
+        );
+      }
       const client = await getClient();
       // One call. The balance carries `remaining_usd` — spendable minus what pending intents will
       // consume — because either number alone misleads: the balance looks healthy while every cent

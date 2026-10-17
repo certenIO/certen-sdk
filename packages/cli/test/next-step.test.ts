@@ -253,6 +253,8 @@ describe('next-step: the drift gate', () => {
       'USAGE_ERROR', 'UNKNOWN_ERROR', 'NETWORK_ERROR', 'WAIT_TIMEOUT', 'WAIT_ABORTED', 'INTENT_FAILED', 'PROOF_NOT_ASSIGNED', 'FOREIGN_ORIGIN_URL',
       'INVALID_PATH_PARAMETER', 'EVM_RPC_CHAIN_UNKNOWN', 'EVM_RPC_ERROR', 'EVM_RPC_INVALID', 'EVM_RPC_UNREADABLE', 'EVM_RPC_WRONG_CHAIN', 'GAS_UNREADABLE', 'NOT_CONFIRMED', 'NOT_READY', 'UNAUTHORIZED', 'FORBIDDEN', 'PAYMENT_REQUIRED', 'INSUFFICIENT_BALANCE',
       'VALIDATION_ERROR', 'BAD_REQUEST', 'CHAIN_NOT_ENABLED', 'CHAIN_UNRESOLVED', 'UNKNOWN_CHAIN',
+      // What the gateway answers on the reads added with its newer routes (or the SDK, for a route the gateway does not serve).
+      'BALANCE_UNREADABLE', 'ENDPOINT_NOT_ON_GATEWAY', 'PROOF_V2_NOT_AVAILABLE',
       ...HEADER_FIELD_ERROR_CODES,
     ]);
     const stale = [...explicit].filter((c) => !raised.has(c) && !elsewhere.has(c)).sort();

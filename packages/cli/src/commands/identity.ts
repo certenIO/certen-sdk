@@ -13,6 +13,7 @@ import { faucetFor } from '../funding-guard.js';
 import { resolveContext, requireIdentity, requireChain, echoFromContext, sourceLabel } from '../context.js';
 import { resolveCommandIdentity, assertContextKeyExists } from '../command-context.js';
 import { resolveIdentityRef } from '../identity-ref.js';
+import { factsLines } from '../identity-facts.js';
 
 async function getClient(): Promise<CertenClient> {
   return new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
@@ -51,6 +52,15 @@ function printIdentity(response: IdentityResponse): void {
     credit_balance: response.credit_balance,
   });
 }
+
+const FACTS_HELP = `
+How this differs from the checks that judge:
+  identity readiness  ONE read of the gateway's own view, in sections: the key on its key page (as the gateway read it), credits, optionally one
+                      chain's account and balance, and the organization's spendable balance. It states facts and does not say whether you can send.
+  status / doctor     assemble several reads, check the key page against Accumulate itself, and judge the gas for an amount: a verdict.
+
+A section that could not be read says so (it is never shown as a zero or a yes), and the other sections are still good.
+`;
 
 export function registerIdentityCommands(program: Command): void {
   const identity = program.command('identity').description('Identity management');
@@ -300,6 +310,25 @@ export function registerIdentityCommands(program: Command): void {
         hint('Whether this identity can sign is UNKNOWN — its on-chain key page could not be read.');
         hint('Treat it as unusable until that resolves.');
       }
+    });
+
+  identity
+    .command('readiness [ref]')
+    .description('Facts about an identity from ONE gateway read: its key on its key page, credits, optionally a chain account and balance. Facts only, no verdict')
+    .option('--chain <chain>', "Also read this chain's account and native balance (default: the chain from your context, if you set one; none is inferred)")
+    .addHelpText('after', FACTS_HELP)
+    .action(async (ref: string | undefined, opts: { chain?: string }) => {
+      // `inferChain: false`: a chain comes from a flag, the environment or the profile, never worked out from the identity's links. This is a look
+      // at facts, and a chain section nobody asked for is one more read for the gateway and one more thing to read past.
+      const ctx = resolveContext({ identity: ref, chain: opts.chain }, { fields: ['identity', 'chain'], inferChain: false });
+      requireIdentity(ctx);
+      const chain = ctx.chain ? assertChain(ctx.chain.value, sourceLabel(ctx.chain, '--chain')) : undefined;
+      const client = await getClient();
+      const who = await resolveCommandIdentity(ctx, client, 'id');
+      echoFromContext('chain', ctx.chain);
+      const facts = await client.identity.readiness(who.id!, chain ? { chain } : {});
+      printOutput(facts as unknown as Record<string, unknown>, { machineOnly: true });
+      for (const line of factsLines(facts)) human(line);
     });
 
   identity
