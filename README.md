@@ -296,7 +296,7 @@ cd packages/sdk && npm version minor
 git tag sdk-v0.2.0 && git push --follow-tags
 ```
 
-Order: `verify-v0.1.0`, then `sdk-v0.10.0`, then `cli-v0.10.0` and `mcp-v0.5.0` (the tag prefix is the package directory). See
+Order: `verify-v0.1.0` is already published and has not changed since, so it is not tagged again; then `sdk-v0.11.0`, then `cli-v0.11.0` and `mcp-v0.6.0` (the tag prefix is the package directory). See
 [.github/workflows/release.yml](.github/workflows/release.yml). Publishing uses npm trusted publishing (OIDC) with **staged publishing**: the owner
 configures each package on npmjs.com to accept this workflow with "Allow npm publish" unchecked, the tagged run STAGES the version, and a
 maintainer approves it with their own two-factor proof (npmjs.com, or `npm stage list` then `npm stage approve <stage-id>`). Approve each

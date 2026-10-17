@@ -1,6 +1,13 @@
 # Changelog — @certen.io/cli
 
-## Unreleased — the key store speaks in codes; older advice says `setup` (CLI UX, Phase 6 follow-ups)
+## 0.11.0 — context, readiness, setup and gas, send and receipts, and a CLI that tells you the next step (CLI UX plan, 2026-10-16)
+
+**Read this if a script branches on exit code `1`:** seven key-store failures move from exit `1` / `UNKNOWN_ERROR` to exit `2` with a code of their own (the table is in `docs/CLI-CONTRACT.md`
+section 14, and the first section below lists them). Everything else is additive: new commands, flags, `--json` fields and codes, and every existing command and flag keeps its meaning.
+Two things can look different to a person: the signing commands now ask before they sign **when you are at a terminal** (piped, they behave exactly as before), and the funding guard compares
+the balance with the amount and an estimate of the gas, not only with zero (`--force` bypasses it as before). Needs `@certen.io/sdk` 0.11.0.
+
+### Included — the key store speaks in codes; older advice says `setup` (CLI UX, Phase 6 follow-ups)
 
 One exit-code change, on purpose and for a short list of failures, and nothing else that works today changes. A maintainer versions and publishes this.
 
@@ -18,7 +25,7 @@ One exit-code change, on purpose and for a short list of failures, and nothing e
 ### Not changed, on purpose
 - **Where a report goes.** `doctor`, `status`, `gas` and the readiness card print their report on stdout and exit `1` when it is a problem, like `diff` and `grep`; the failure line and `next:` are on stderr. This was reported as a bug in `doctor` alone; it is the behaviour of the whole family and `gas`'s report is its product, so it is documented (section 15) and pinned instead (`doctor.test.ts` gained the table-mode tests it lacked).
 
-## Unreleased — learnability: `next:` on every failure, a help that leads with five commands (CLI UX, Phase 5)
+### Included — learnability: `next:` on every failure, a help that leads with five commands (CLI UX, Phase 5)
 
 Nothing that works today changes. Every command and flag keeps its meaning and its exit code; the `--json` change is one added field, and the human change is one added line at the end of a failure. A maintainer versions and publishes this.
 
@@ -37,7 +44,7 @@ Nothing that works today changes. Every command and flag keeps its meaning and i
 - **The text of existing messages.** Several still say "Run: certen init" or "Check with: certen tx status" (older advice that remains valid); `next:` is the up-to-date, single answer beside them, and the pinned tests keep their wording.
 - **Exit codes, the one-envelope rule, `retryable` and `details`**, and the verdict exits (`4`, `5`, `130`) of `proof verify`, `send`, `receipt` and `watch`. A verdict is not a failure and carries no `error.next`.
 
-## Unreleased — send and receipts (CLI UX, Phase 4)
+### Included — send and receipts (CLI UX, Phase 4)
 
 Nothing that works today changes. Every command and flag keeps its meaning, and every `--json` change is a new command, an added field, a new flag or a new code. The one thing that can look different to a person is that the signing commands now ask before they sign **when you are at a terminal**; piped, they behave exactly as before. A maintainer versions and publishes this.
 
@@ -71,7 +78,7 @@ Nothing that works today changes. Every command and flag keeps its meaning, and 
 - **The fee on the card is an estimate or it says it is not available**: the price book's `proof.execute` entry (platform fee only; gas is priced when it executes) and the chain's gas reserve, which is a planning figure, not a quote. The gateway publishes no per-execution fee; `POST /v1/quote` would create a binding quote, so it is not used.
 - The root `--help` quickstart and the long-form `init` hint still showed the `call` line when this was written; the learnability entry above rewrites them around `setup` / `send` / `receipt`.
 
-## Unreleased — setup and gas (CLI UX, Phase 3)
+### Included — setup and gas (CLI UX, Phase 3)
 
 Nothing that works today changes. Every command and flag keeps its meaning, `init` is untouched in behaviour, output and exit code, and every `--json` change is a new command, an added field or a new code. A maintainer versions and publishes this.
 
@@ -96,7 +103,7 @@ Nothing that works today changes. Every command and flag keeps its meaning, `ini
 - The testnet gas drip and sponsored gas are gateway work (PLAN G1) and do not exist yet: `setup` does not call an endpoint that is not there. The gas amounts are the planning figures from `status` (an estimate, not a quote).
 
 
-## Unreleased — readiness (CLI UX, Phase 2)
+### Included — readiness (CLI UX, Phase 2)
 
 Nothing that works today changes. Every command and flag keeps its meaning, and every `--json` change is an added field or a new command. The one behaviour that gets stricter is the funding guard, below, and it can be bypassed with `--force` exactly as before. A maintainer versions and publishes this.
 
@@ -113,7 +120,7 @@ Nothing that works today changes. Every command and flag keeps its meaning, and 
 ### Fixed
 - `call`'s funding guard now receives `--value` under the field that says its unit (base units), instead of under `amount` (whole units).
 
-## Unreleased — context, profiles and units (CLI UX, Phase 1)
+### Included — context, profiles and units (CLI UX, Phase 1)
 
 Nothing that works today changes. Every command and flag keeps its meaning; required flags only became optional (with a default taken from your context, said on stderr), and every `--json` change is an added field. A maintainer versions and publishes this.
 
