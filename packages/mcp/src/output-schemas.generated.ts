@@ -450,9 +450,111 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
     "type": "object",
     "additionalProperties": true
   },
+  "certen_chain_balance": {
+    "description": "The balance, as the chain's node answered it.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "chain",
+      "chain_id",
+      "address",
+      "balance",
+      "symbol",
+      "read_at"
+    ],
+    "properties": {
+      "chain": {
+        "type": "string",
+        "description": "The registry id of the chain that was read."
+      },
+      "chain_id": {
+        "type": "integer"
+      },
+      "address": {
+        "type": "string",
+        "description": "The address in its EIP-55 checksummed form, whatever case it was sent in."
+      },
+      "balance": {
+        "type": "string",
+        "description": "Whole units of the native token as a decimal string, e.g. `0.25`. `0` is a successful read of an empty account."
+      },
+      "symbol": {
+        "type": "string",
+        "description": "The native token: `ETH`, or `TEL` on Telcoin Adiri."
+      },
+      "read_at": {
+        "type": "string",
+        "description": "When this gateway read the balance (RFC 3339). Not a block time."
+      }
+    }
+  },
   "certen_chains_list": {
     "type": "object",
     "additionalProperties": true
+  },
+  "certen_credits_topup": {
+    "description": "The top-up was recorded and the bridge was asked once. See `status`.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "topup_id",
+      "identity_id",
+      "key_page_url",
+      "credits",
+      "status",
+      "tx_id",
+      "credits_before",
+      "note",
+      "idempotency_key",
+      "next_step"
+    ],
+    "properties": {
+      "topup_id": {
+        "type": "string"
+      },
+      "identity_id": {
+        "type": "string"
+      },
+      "key_page_url": {
+        "type": "string"
+      },
+      "credits": {
+        "type": "integer"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "submitted",
+          "unconfirmed"
+        ],
+        "description": "`submitted`: accepted, not yet confirmed. `unconfirmed`: not known; may have been applied."
+      },
+      "tx_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The Accumulate transaction id the bridge returned; null when it did not return one."
+      },
+      "credits_before": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "description": "The page's credits just before the top-up; null when it could not be read."
+      },
+      "note": {
+        "type": "string"
+      },
+      "idempotency_key": {
+        "type": "string",
+        "description": "The Idempotency-Key this request carried. Pass the same key to repeat the SAME request; a new key is a new draw on the platform's funds."
+      },
+      "next_step": {
+        "type": "string",
+        "description": "What the status means and what to read or do next, in words. `unconfirmed` is not a success."
+      }
+    }
   },
   "certen_errors": {
     "type": "object",
@@ -913,11 +1015,99 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           "reason"
         ],
         "additionalProperties": false
+      },
+      "destination_note": {
+        "type": "string",
+        "description": "Present exactly when `destination` is: it is the validators' record, not verified by the gateway, and not proof."
       }
     },
     "required": [
       "outcome"
     ]
+  },
+  "certen_gas_drip": {
+    "description": "The drip was sent and mined, or the account already held enough and nothing was sent.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "drip_id",
+      "identity_id",
+      "chain",
+      "chain_id",
+      "address",
+      "status",
+      "tx_hash",
+      "amount",
+      "symbol",
+      "explorer_url",
+      "note",
+      "idempotency_key",
+      "next_step"
+    ],
+    "properties": {
+      "drip_id": {
+        "type": "string"
+      },
+      "identity_id": {
+        "type": "string"
+      },
+      "chain": {
+        "type": "string",
+        "description": "The registry id of the chain."
+      },
+      "chain_id": {
+        "type": "integer"
+      },
+      "address": {
+        "type": "string",
+        "description": "The account the gateway recorded for this identity on this chain: the only place the drip can go."
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "sent",
+          "skipped",
+          "unconfirmed"
+        ],
+        "description": "`sent`: mined. `skipped`: the account already held enough, nothing sent. `unconfirmed`: it may have been sent."
+      },
+      "tx_hash": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "amount": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "What the bridge reports it sent, in whole units of the native token. The amount is the operator's, never the caller's."
+      },
+      "symbol": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "explorer_url": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "note": {
+        "type": "string"
+      },
+      "idempotency_key": {
+        "type": "string",
+        "description": "The Idempotency-Key this request carried. Pass the same key to repeat the SAME request; a new key is a new draw on the platform's funds."
+      },
+      "next_step": {
+        "type": "string",
+        "description": "What the status means and what to read or do next, in words. `unconfirmed` is not a success."
+      }
+    }
   },
   "certen_governance_get": {
     "description": "Governance operation status and details.",
@@ -1064,6 +1254,193 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
       }
     }
   },
+  "certen_identity_readiness": {
+    "description": "The facts, one section each.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "identity",
+      "can_sign",
+      "credits",
+      "chain",
+      "org",
+      "read_at"
+    ],
+    "properties": {
+      "identity": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "adi_url": {
+            "type": "string"
+          },
+          "key_page_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "creating, active, suspended, error, revoked or deleted."
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why provisioning failed, when status is `error`."
+          }
+        }
+      },
+      "can_sign": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "unreadable"
+            ]
+          },
+          "value": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Is the identity's key on its key page. Null exactly when `state` is `unreadable`."
+          }
+        }
+      },
+      "credits": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "type": "number",
+            "description": "In credits."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "key_page",
+              "recorded"
+            ],
+            "description": "`recorded` is the stored figure from provisioning, shown when the key page could not be read."
+          }
+        }
+      },
+      "chain": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "description": "Null unless `chain` was asked for.",
+        "additionalProperties": false,
+        "properties": {
+          "chain": {
+            "type": "string"
+          },
+          "chain_id": {
+            "type": "integer"
+          },
+          "account": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "type": "string",
+                "description": "`not_linked`, or the account's status: `deploying`, `deployed`, `failed`."
+              },
+              "address": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          },
+          "balance": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unreadable",
+                  "not_applicable"
+                ]
+              },
+              "balance": {
+                "type": "string",
+                "description": "With `ok`: whole units of the native token as a decimal string. `0` is a successful read of an empty account."
+              },
+              "symbol": {
+                "type": "string",
+                "description": "With `ok`: `ETH`, or `TEL` on Telcoin Adiri."
+              },
+              "read_at": {
+                "type": "string",
+                "description": "With `ok`: when the balance was read."
+              },
+              "code": {
+                "type": "string",
+                "description": "With `unreadable`: the error code (BALANCE_UNREADABLE, BAD_GATEWAY)."
+              },
+              "reason": {
+                "type": "string",
+                "description": "With `not_applicable`: why there is nothing to read."
+              }
+            }
+          }
+        }
+      },
+      "org": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "billing_disabled",
+              "not_permitted",
+              "unreadable"
+            ]
+          },
+          "remaining_usd": {
+            "type": "string",
+            "description": "With `ok`: spendable less what pending intents will consume."
+          },
+          "spendable_usd": {
+            "type": "string",
+            "description": "With `ok`."
+          },
+          "enforcing": {
+            "type": "boolean",
+            "description": "With `ok`: whether a shortfall is refused (true) or only recorded."
+          },
+          "status": {
+            "type": "string",
+            "description": "With `ok`: the organisation's billing account status."
+          },
+          "scope": {
+            "type": "string",
+            "description": "With `not_permitted`: the scope that shows this section."
+          }
+        }
+      },
+      "read_at": {
+        "type": "string",
+        "description": "When this gateway assembled the answer. Each section is as of its own read, moments apart."
+      }
+    }
+  },
   "certen_identity_retire": {
     "description": "The identity was retired. Its quota slot is now free; the on-chain ADI is unaffected.",
     "type": "object",
@@ -1164,6 +1541,164 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
       "pending": {
         "type": "object",
         "additionalProperties": true
+      }
+    }
+  },
+  "certen_intent_quote": {
+    "description": "The estimate. `billing.state` is `priced`, `disabled` or `not_gated`.",
+    "type": "object",
+    "additionalProperties": true,
+    "required": [
+      "estimate",
+      "evaluated_at",
+      "request",
+      "checked",
+      "not_checked",
+      "billing"
+    ],
+    "properties": {
+      "estimate": {
+        "type": "boolean",
+        "enum": [
+          true
+        ],
+        "description": "Always true: this is not a quote and promises nothing."
+      },
+      "evaluated_at": {
+        "type": "string",
+        "description": "RFC 3339. Everything below is as of this moment."
+      },
+      "request": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "description": "What the request is priced on. Null where nothing is priced.",
+        "additionalProperties": true,
+        "properties": {
+          "chains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "chain": {
+            "type": "string",
+            "description": "The primary chain."
+          },
+          "leg_count": {
+            "type": "integer"
+          },
+          "proof_class": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "checked": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "The gates evaluated."
+      },
+      "not_checked": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "What was NOT looked at."
+      },
+      "billing": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "`{state:\"disabled\"}` or `{state:\"not_gated\"}` where nothing is priced; otherwise `state:\"priced\"` with `enforcing`, `price` and `funds`.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "disabled",
+              "not_gated",
+              "priced"
+            ]
+          },
+          "enforcing": {
+            "type": "boolean",
+            "description": "Whether a shortfall is refused (true) or only recorded (false)."
+          },
+          "price": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "sku": {
+                "type": "string"
+              },
+              "total_usd": {
+                "type": "string",
+                "description": "What admission would price this at now."
+              },
+              "platform_fee_usd": {
+                "type": "string"
+              },
+              "gas_usd": {
+                "type": "string",
+                "description": "Zero on a flat-priced chain: its fee is all-in."
+              },
+              "max_total_usd": {
+                "type": "string",
+                "description": "The cap admission would promise."
+              },
+              "gas_basis": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "What the gas figure rests on: class_specific, class_thin, unclassified_fallback or flat_priced."
+              },
+              "price_book_version": {
+                "type": "string"
+              }
+            }
+          },
+          "funds": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "unreadable"
+                ]
+              },
+              "spendable_usd": {
+                "type": "string"
+              },
+              "remaining_usd": {
+                "type": "string",
+                "description": "Spendable less what pending intents will consume: the figure to gate on."
+              },
+              "shortfall_usd": {
+                "type": "string",
+                "description": "How much more would cover this request and what is already committed."
+              },
+              "covered": {
+                "type": "boolean"
+              },
+              "gate": {
+                "type": "string",
+                "enum": [
+                  "passes",
+                  "PAYMENT_REQUIRED",
+                  "COMMITMENT_EXCEEDED"
+                ],
+                "description": "The 402 admission would answer with now, only where that gate enforces; otherwise `passes` (read `covered`)."
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -2040,8 +2575,13 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
             }
           }
         }
+      },
+      "destination_note": {
+        "type": "string",
+        "description": "Present exactly when `destination` is: it is the validators' record, not verified by the gateway, and not proof."
       }
-    }
+    },
+    "required": []
   },
   "certen_transaction_list": {
     "description": "A page of transaction intents with the echoed pagination cursor.",
@@ -2301,6 +2841,10 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           "message"
         ],
         "additionalProperties": false
+      },
+      "destination_note": {
+        "type": "string",
+        "description": "Present exactly when `destination` is: it is the validators' record, not verified by the gateway, and not proof."
       }
     },
     "required": []

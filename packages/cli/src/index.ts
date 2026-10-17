@@ -30,6 +30,7 @@ import { registerGovernanceCommands } from './commands/governance.js';
 import { registerPortfolioCommands } from './commands/portfolio.js';
 import { registerAdminCommands } from './commands/admin.js';
 import { registerBillingCommands } from './commands/billing.js';
+import { registerCreditsCommands } from './commands/credits.js';
 import { registerChainsCommands } from './commands/chains.js';
 import { registerWhoamiCommands } from './commands/whoami.js';
 import { registerDoctorCommands } from './commands/doctor.js';
@@ -87,6 +88,7 @@ export function buildProgram(): Command {
   registerGovernanceCommands(program);
   registerPortfolioCommands(program);
   registerBillingCommands(program);
+  registerCreditsCommands(program);
   registerAdminCommands(program);
   registerWebhookCommands(program);
   registerOAuthClientCommands(program);

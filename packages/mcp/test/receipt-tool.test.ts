@@ -376,7 +376,8 @@ describe('certen_receipt: how a client sees it', () => {
       },
     });
     expect(verified.verdict).toBe('verified');
-    expect(validate(verified), JSON.stringify(validate.errors)).toBe(true);
+    // assembleReceipt is the SDK's document; the tool adds the gateway's destination record beside it (null here: completedTx records none), so that is added to match.
+    expect(validate({ ...verified, destination: null }), JSON.stringify(validate.errors)).toBe(true);
     seen.add(verified.verdict);
     expect([...seen].sort()).toEqual(['failed', 'partial', 'pending', 'unproven', 'verified']);
   });

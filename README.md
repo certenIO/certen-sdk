@@ -79,7 +79,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->2704 tests in 153 files (sdk 910, cli 1231, mcp 306, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->2929 tests in 163 files (sdk 910, cli 1405, mcp 357, verify 257), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 
@@ -296,7 +296,7 @@ cd packages/sdk && npm version minor
 git tag sdk-v0.2.0 && git push --follow-tags
 ```
 
-Order: `verify-v0.1.0` is already published and has not changed since, so it is not tagged again; then `sdk-v0.11.0`, then `cli-v0.11.1` and `mcp-v0.6.0` (the tag prefix is the package directory; `cli-v0.11.0` was tagged first but its run failed on tests, so nothing was published under it and the CLI's first release is 0.11.1). See
+Order: `verify-v0.1.0` is already published and has not changed since, so it is not tagged again; then `sdk-v0.12.0`, then `cli-v0.12.0` and `mcp-v0.7.0` (the tag prefix is the package directory). See
 [.github/workflows/release.yml](.github/workflows/release.yml). Publishing uses npm trusted publishing (OIDC) with **staged publishing**: the owner
 configures each package on npmjs.com to accept this workflow with "Allow npm publish" unchecked, the tagged run STAGES the version, and a
 maintainer approves it with their own two-factor proof (npmjs.com, or `npm stage list` then `npm stage approve <stage-id>`). Approve each

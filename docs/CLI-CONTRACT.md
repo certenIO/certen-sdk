@@ -157,6 +157,12 @@ parsing prose:
 The distinction between `2` and `3` is the one that matters most: `3` guarantees no request was
 accepted, so a retry cannot double-execute.
 
+> **LOUD, additive exception to that guarantee: `credits topup` and `gas --drip` (section 16).** They spend the **platform's** funds, and for them exit `3`
+> means *no response was received*, **not** that nothing was submitted: a connection that drops after the request left may have been acted on. The
+> failure says so, carries `error.details.idempotency_key`, and the safe retry is the SAME key (`--idempotency-key`), which can never be a second
+> draw. A retry with a new key can. These two commands also exit `1` with `CREDIT_TOPUP_UNCONFIRMED` / `DRIP_UNCONFIRMED` when the gateway itself does not
+> know whether it acted (section 16). No other command's exit codes change.
+
 Exit `3` is exactly the SDK's `NETWORK_ERROR`. Other SDK errors also carry `status: 0` because they were
 raised locally, and they are **not** "unreachable": `WAIT_TIMEOUT`, `INTENT_FAILED` and `PROOF_NOT_ASSIGNED`
 are about an intent the gateway already holds, so they exit `1`; retrying the command by opening the
@@ -571,7 +577,11 @@ key; `--from-wallet` prints the transfer to make from a wallet you control.
 ```
 certen gas [--chain <chain>] [--identity <ref>] [--amount <whole units>] [--gas-reserve <amount|none>]
            [--wait] [--from-wallet] [--timeout <duration>] [--poll-interval <interval>]
+           [--drip [--yes] [--idempotency-key <key>]]
 ```
+
+`--drip` (and its `--yes` and `--idempotency-key`) asks the platform to send gas; it spends the platform's funds and is specified in section 16. Without it nothing
+in this section changes.
 
 Which identity and chain comes from the context (section 7), echoed on stderr. **Exit `0` only when the account has enough** (the `gas` check of
 section 8 is `ok` or `warn`). Otherwise `1`, with `error.code` the check's code (`ABSTRACT_ACCOUNT_UNFUNDED`, `ABSTRACT_ACCOUNT_UNDERFUNDED`,
@@ -623,6 +633,10 @@ signature authorises exactly this: it was rebuilt from the gateway's bytes and m
   fee only; a `quoted` entry adds gas when it executes, up to a ceiling) plus the chain's gas reserve (the same planning figure as readiness, section 8).
   A price book that cannot be read, or has no such entry, prints `Not available: …`, never a number. `send` always reads it; the other four commands read it
   only when a person is going to see the question (a script does not pay for a request it will not read).
+- **`send`'s card also carries the gateway's own estimate** (an `estimate` row under the fee; section 16): the same estimate `certen quote <amount> <asset> --to <address>`
+  prints, asked after the readiness checks and before the passphrase. It is always labelled an estimate and lists what it checked and what it did not. **It can never block or
+  change a send**: a gateway without the route (`ENDPOINT_NOT_ON_GATEWAY`), a timeout (10 seconds, one attempt), a refusal or an answer that is not an estimate prints
+  `estimate  unavailable: <reason>. Sending is not affected.` and everything else is exactly as it was. Only `send` asks; the other four commands' cards are unchanged.
 
 #### `certen send`
 
@@ -657,8 +671,12 @@ order:
                   "from": "0xE293…cAcB", "to": "0x2222…2222", "amount": "0.0001", "asset": "ETH", "contract_call": null },
      "fee": { "state": "estimated", "sku": "proof.execute", "chain": "base-sepolia", "platform_fee_usd": "0.040000", "mode": "quoted", "max_charge_usd": "0.500000",
               "gas_reserve": "0.0001", "gas_symbol": "ETH", "price_book_version": "2026-10-15", "note": "An estimate from the price book: the platform fee only. Gas is priced when it executes, up to a ceiling." },
+     "estimate": { "estimate": true, "evaluated_at": "2026-10-16T00:00:00Z", "checked": [ ], "not_checked": [ ], "billing": { } },
      "readiness": { "ready": true, "state": "ready", "first_blocker": null, "context": { }, "checks": [ ] } }
    ```
+
+   `estimate` (additive) is the gateway's body, whole; when none could be had it is `null` and `estimate_unavailable` is `{ "code", "reason" }` (it is only present then). It is
+   asked for after the readiness checks, so a send that fails them never asks.
 4. **The recipient's balance, if you gave a node.** With `--rpc`, the node's `eth_chainId` is checked against the chain (a node on another network is refused, `EVM_RPC_WRONG_CHAIN`) and the
    recipient's balance is read **before** the value moves. A node that cannot be used stops the send here, with nothing signed (exit `1`, the `EVM_RPC_*` code): someone who asked for an
    independent check should not discover it was not made after the value has gone.
@@ -684,8 +702,18 @@ So `0` is "done **and** checked", never merely "done": a script that reads `0` a
 On a finished wait, one envelope on stdout (the card, the progress and the human receipt are stderr in `--json` mode):
 
 ```json
-{ "ok": true, "data": { "receipt": { }, "saved_to": "/home/me/.certen/receipts/7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13.json" } }
+{ "ok": true, "data": { "receipt": { }, "saved_to": "/home/me/.certen/receipts/7c1e3b0a-5d2f-4c6e-9a1b-0e8f2d4a6b13.json",
+                        "destination": { "chain_id": 84532, "tx_hash": "0x…", "settlement": "settled", "source": "validators" } } }
 ```
+
+**`destination` (additive) is the transaction the intent made on its destination chain, AS THE VALIDATORS RECORDED IT. Nothing verified it.** The gateway copies it from the
+validators' record and does not read the chain, so it is **not evidence that the transfer happened**; the receipt's own `proof` and `effect` are what are checked here, and they are
+separate. It is the gateway's `destination` object for that read, unchanged (`chain_id`, `tx_hash`, `settlement`: `settled`, `reverted`, `unobserved`, `none` or `null`, and
+`source: "validators"`). It is `null` until the validators have recorded one, and for an intent on several chains (it names one transaction and does not guess). In table mode it is
+printed under its own `Recorded` row, **always** with the words *as recorded by the validators; not verified*, and nothing is printed for none. It is not part of the saved receipt, so
+`receipt --offline`, and a final receipt shown as saved without asking the gateway, carry **no** `destination` key (the gateway was not asked); every other read of the gateway has it.
+`tx status`, `tx create --wait` and `call` print the transaction as the gateway sent it, with `destination` in it (`null` when the gateway sent none, so a script never probes for the key),
+and in table mode show it the same labelled way instead of as a raw JSON row.
 
 (`saved_to` is `null` only for `receipt` when a saved file this version cannot read is left alone; see below.) When the wait **ends in an error** the receipt is saved from the last
 thing the gateway said and travels in the error, so the ids are not lost with the terminal:
@@ -696,7 +724,7 @@ thing the gateway said and travels in the error, so the ids are not lost with th
     "receipt": { }, "receipt_path": "/home/me/.certen/receipts/7c1e3b0a-….json", "resume": "certen watch 7c1e3b0a-…" } } }
 ```
 
-`TX_FAILED` (`reason_code`, `reason`) and `INTERRUPTED` (exit `130`; `last_status`) carry the same three additions. If Ctrl-C arrives before the first reading there is nothing to save and the
+`TX_FAILED` (`reason_code`, `reason`) and `INTERRUPTED` (exit `130`; `last_status`) carry the same three additions, and `destination` (above) when the last reading had one. If Ctrl-C arrives before the first reading there is nothing to save and the
 error carries only what it already had. Ctrl-C stops the **wait**, not the intent: the handler exists for the length of the wait and no longer, and `resume` is the command that continues.
 
 #### `certen receipt` and `certen watch`
@@ -720,13 +748,13 @@ shown, not only one this machine sent; a receipt for one it did not send has no 
 - **`--share`**: `proof.share` on the receipt's `ids.proof_id`: a link a counterparty opens to verify the proof with no CERTEN account. `data.share` is `{ "url", "expires_at" }`.
   A receipt without a proof id is `NOTHING_TO_SHARE` (exit `1`).
 
-`data` is `{ "receipt", "saved_to", "refreshed": true }` (plus `share`, and `saved_receipt_kept`, below).
+`data` is `{ "receipt", "saved_to", "refreshed": true, "destination" }` (plus `share`, and `saved_receipt_kept`, below). `destination` is as above and is absent from `--offline` and from a final receipt shown as saved.
 
 **A saved receipt is never silently made weaker.** If this read establishes *less* than the saved receipt because less was asked, the saved receipt was compared with a node of yours (`proof.node_checked`) or had read the recipient's balance and this read did neither, the read is shown but the file is **left as it is**: `saved_to` is the existing file, `saved_receipt_kept` says why (`"it was compared with a node of yours and this read was not"`), and stderr says `The saved receipt was left as it is`. Run it again with `--rpc` to refresh that one. A *contradiction* (a proof layer that now fails) is news and is always saved. `watch` follows the same rule. **A saved receipt that this version cannot use** (not JSON, another intent's, or a `receipt_version` newer than this CLI reads) is reported on
 stderr, a fresh receipt is built from the gateway, and **the file is left as it is** (`saved_to: null`): it is never overwritten.
 
 **`watch <intent>`** waits (in `--json` mode too: `watch` exists to wait), then shows the receipt. It reads the intent once first, so one that has already finished is not waited for. It
-picks up where Ctrl-C or a timeout left off: `send`, `watch` and `receipt` share one implementation and cannot disagree about what they believe. `data` is `{ "receipt", "saved_to" }`; same exit codes and
+picks up where Ctrl-C or a timeout left off: `send`, `watch` and `receipt` share one implementation and cannot disagree about what they believe. `data` is `{ "receipt", "saved_to", "destination" }`; same exit codes and
 error details as above. `--timeout` and `--poll-interval` take `90s`, `6m`, `1h` (a bare number is minutes / seconds) and default to the proof-cycle budget used everywhere.
 
 #### The receipt document
@@ -1005,6 +1033,9 @@ Where it differs, and why (each is a rule of the MCP server, tested in `packages
 - **An argument the tool does not have is refused by name, not ignored.** `UNKNOWN_ARGUMENT` lists the ones it takes; `NODE_ARGUMENT_REFUSED` is the same for a name that means "call this node" (`rpc`, `accumulateRpc`, `url`,
   `endpoint`, `node`, …) and says what to do instead. Ignoring it would let an agent believe the node was used. This holds inside `transfer`, `call` and `call.expect` too.
 - **It writes nothing.** The result is the record; keep it if you want it.
+- **`certen_receipt` adds the gateway's destination record.** Two fields beside the receipt, which only the MCP tool has: `destination` (the gateway's `destination`: `chain_id`, `tx_hash`, `settlement`, `source: "validators"`; `null` when it has none)
+  and, exactly when there is one, `destination_note`: *as recorded by the validators; not verified by the gateway*, and not proof. `ids.destination_tx_source` still says whether the receipt's own hash came from the verified `proof` or only from the
+  `validators`; `destination` also carries what the validators say became of the transaction (`settlement`, e.g. `reverted`), which the receipt does not. The verdict never rests on either. Everything else is the section 10 document.
 
 ### 14. Key store errors: typed, and the exit codes that changed
 
@@ -1038,6 +1069,87 @@ line (`Error [CODE]: …`) and the one command to run next (`  next: …`, the l
 This is the convention of `diff` and `grep`: a non-zero exit there is a finding, not a malfunction, so `certen doctor | tee report.txt` and `certen gas > send.txt` keep working when the news is bad, and the report is never printed twice. A
 command that fails for any other reason (a usage error, an unreachable gateway) has no report to give, and says what went wrong on stderr. Table output is not a contract (rule 1); this section describes what the tests pin
 (`doctor.test.ts`, `status.test.ts`, `gas.test.ts`).
+
+### 16. An address's balance, an estimate, an identity's facts, and the platform's funds
+
+Five additions that follow the gateway's newer routes. Three are reads (`balance <address>`, `quote <amount> <asset> --to`, `identity readiness`); **two spend the PLATFORM's money,
+not yours** (`credits topup`, `gas --drip`) and are guarded accordingly. All are additive: no existing command's behaviour changed, and `balance` with no argument and `quote --chain --sku`
+are exactly what they were (the arguments tell the two meanings of each name apart).
+
+#### Reads
+
+```
+certen balance <address> [--chain <chain>]
+certen identity readiness [<ref>] [--chain <chain>]
+certen quote <amount> <asset> --to <address> [--chain <chain>] [--identity <ref>] [--proof-class on_demand|on_cadence]
+```
+
+- **`balance <address>`** is the native balance of **any** EVM address on a chain the gateway serves (`GET /v1/chains/{id}/addresses/{address}/balance`). `data` is the gateway's answer:
+  `{ "chain", "chain_id", "address" (checksummed), "balance" (whole units, a decimal string), "symbol", "read_at" }`. The chain defaults from the context (section 7), echoed on stderr.
+  **Bad input costs no request:** an address that is not an EVM address, or whose EIP-55 checksum does not hold (the message names the correct capitalisation), is `INVALID_ADDRESS`, exit `2`,
+  raised before the context, the credential or the network. **A balance of `"0"` is a successful read of an empty account. A node that did not answer is `BALANCE_UNREADABLE`
+  (exit `1`, `retryable: true`, `status` 503): it is never rendered, in either mode, as a zero.** The figure is the gateway's reading through its own node, not an independent check.
+- **`identity readiness`** prints the gateway's facts about an identity from ONE read (`GET /v1/identity/{id}/readiness`): `data` is the gateway's object (`identity`, `can_sign`, `credits`,
+  `chain` (null unless asked), `org`, `read_at`), and every section carries its own `state`. **It reports facts and says nothing like "ready"**; a section that could not be read says so
+  (`unreadable`) and is not a failure of the command (exit `0`). It is **not** `certen status` / `doctor` (section 8), which assemble several reads, check the key page against Accumulate itself
+  and judge the gas for an amount. The chain comes from `--chain`, `CERTEN_CHAIN` or the profile; it is never inferred from the identity's links.
+- **`quote <amount> <asset> --to`** is the gateway's **estimate** for that send (`POST /v1/transaction/quote`) with the inputs of `send` (the intent it asks about is the one `send` opens, field for
+  field). It creates, charges and signs nothing, needs no key, and **exit `0` means the gateway answered**, including when its balance does not cover the request (`billing.funds.covered: false` is a fact
+  in `data`, not a failure). `data` is the gateway's body whole (`estimate: true`, `evaluated_at`, `checked`, `not_checked`, `billing`). In table mode every figure is printed with *AN ESTIMATE …
+  it creates, charges and signs nothing, and promises nothing* and both lists. Errors are the command's own (`ENDPOINT_NOT_ON_GATEWAY` on a gateway without the route, exit `1`), unlike on `send`'s card
+  (section 10). Given none of an amount, an asset, `--to` or `--identity` it is the older `quote --chain <chain> [--sku <sku>] | --id <quote-id>` (a binding price), unchanged; mixing the two kinds
+  of argument is `CONFLICTING_QUOTE_ARGS` (exit `2`). An amount without an asset or a recipient is `MISSING_VALUE` (exit `2`).
+
+#### Spending the platform's funds: `credits topup`, `gas --drip`
+
+```
+certen credits topup --credits <n> [--identity <ref>] [--idempotency-key <key>] [--yes]
+certen gas --drip [--yes] [--idempotency-key <key>] [--wait] [...]
+```
+
+Both draw on a sponsor account the operator funds, which is why the gateway ships them **off** (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`), limits them per request, identity, organisation and day, and refuses to
+run them without an `Idempotency-Key`. What the CLI does about that is a contract:
+
+1. **Bad input costs no request.** `--credits` is a **count of credits, never ACME** (1 credit = $0.01): digits only, at least 1, no sign, exponent, separator or leading zero, and a number JSON carries
+   exactly (`INVALID_CREDITS`, exit `2`). `--idempotency-key` must be 1 to 255 characters from `A-Z a-z 0-9 _ . : -` (`INVALID_IDEMPOTENCY_KEY`, exit `2`). `--yes` or `--idempotency-key` on `gas` without
+   `--drip` is `CONFLICTING_FLAGS` (exit `2`): they mean nothing there.
+2. **Nothing spends unattended.** At a terminal the person is asked, and the default answer is **no** (`TOPUP_DECLINED` / `DRIP_DECLINED`, exit `1`; nothing was sent or charged). With no terminal and no `--yes`
+   the command exits `2` with `CONFIRMATION_REQUIRED` **before it reads a credential or sends anything**. **`--json` is not consent** here, unlike on the commands that sign: a machine that asked for an
+   envelope has not agreed to spend someone else's money. The question and what is about to be spent (the count, the account, the key) are on stderr in both modes.
+3. **The Idempotency-Key is reported and reusable.** One is generated (`certen-<uuid>`) when none is given. It is printed on stderr before the request and in the result: `data.idempotency_key` on success,
+   `error.details.idempotency_key` on every failure whose outcome is unknown, and `data.drip.idempotency_key` for `gas --drip`. Passing it back with `--idempotency-key` sends **the same key**, and the
+   gateway never draws twice for one key (a replay returns the stored answer, including an `unconfirmed` one).
+4. **One attempt; limits and switches are explained, not retried.** The client used here does not retry on its own. `CREDIT_TOPUP_DISABLED` and `DRIP_DISABLED` (not retryable: an operator turns them on),
+   `CREDIT_TOPUP_LIMIT`, `DRIP_LIMIT`, `DRIP_UNAVAILABLE`, `DRIP_TESTNET_ONLY` and `DRIP_RECIPIENT_REJECTS` each fail with exit `1` and a plain message that says nothing was spent and what to do instead; for
+   `gas --drip` the manual funding plan rides in `error.details` (section 9). `error.retryable` is still the SDK's (section 4): for the two limit codes it is `true` and means *after the window the message
+   gives*, not now.
+5. **`unconfirmed` is not a success and is not hidden.** If the gateway does not know whether it acted, the answer is an **error**: `CREDIT_TOPUP_UNCONFIRMED` / `DRIP_UNCONFIRMED`, exit `1`
+   (the `TX_WAIT_TIMEOUT` precedent: neither success nor failure), `retryable: false`, a message that says the credits (or gas) **MAY** already be there and not to repeat with a new key,
+   `error.details` with the gateway's whole answer (`result`, or `drip`) and `idempotency_key`, and `error.next` the command that settles it: `certen identity readiness <id>` to read the credits
+   back, `certen gas --chain <chain> --wait` to watch for the gas. A status the CLI does not know is treated the same way for `credits topup`. With `gas --drip --wait` an unconfirmed drip is instead
+   reported and the existing wait for the gas decides: exit `0` only if the gas arrived.
+6. **Exit `3` here does not promise that nothing was submitted** (the exception in section 3). A dropped connection says the spend **may** have happened and hands over the key; repeat with it.
+
+`credits topup` `data` on success (exit `0`, `status: "submitted"`: accepted, **not yet confirmed**): the gateway's answer (`topup_id`, `identity_id`, `key_page_url`, `credits`, `status`, `tx_id`, `credits_before`,
+`note`) plus `idempotency_key`.
+
+`gas --drip` only requests a drip when the gas check says the account is short and the gap is one gas can fix; a funded account is reported funded and **nothing is sent** (no `drip` key in the envelope).
+After a drip it reads the account again: if the gas is there the exit is `0`; otherwise the usual `ABSTRACT_ACCOUNT_UNFUNDED` (exit `1`, or the wait with `--wait`). Every envelope after a drip was requested
+carries `drip`: `{ "requested": true, …the gateway's answer (drip_id, chain, address, status: sent | skipped | unconfirmed, tx_hash, amount, symbol, explorer_url, note), "idempotency_key" }`. `sent` shows the
+transaction hash and the explorer link; `skipped` says the gateway found the account already holding enough and sent nothing.
+
+| Exit | `error.code` | When |
+|:--:|---|---|
+| `0` | (success) | `credits topup`: submitted. `gas --drip`: the account has the gas. `balance`, `quote`, `identity readiness`: the gateway answered |
+| `1` | `BALANCE_UNREADABLE` | the chain's node did not answer. Retryable; not a zero |
+| `1` | `CREDIT_TOPUP_UNCONFIRMED`, `DRIP_UNCONFIRMED` | the gateway does not know whether it acted: **may have been applied**. Read before repeating (point 5) |
+| `1` | `CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`, `CREDIT_TOPUP_LIMIT`, `DRIP_LIMIT`, `DRIP_UNAVAILABLE`, `DRIP_TESTNET_ONLY`, `DRIP_RECIPIENT_REJECTS` | refused by the gateway; nothing was spent (point 4) |
+| `1` | `TOPUP_DECLINED`, `DRIP_DECLINED` | a person answered no at the terminal |
+| `1` | `ENDPOINT_NOT_ON_GATEWAY` | the gateway is older than this CLI and does not serve the route |
+| `2` | `INVALID_ADDRESS`, `INVALID_CREDITS`, `INVALID_IDEMPOTENCY_KEY`, `CONFIRMATION_REQUIRED`, `CONFLICTING_FLAGS`, `CONFLICTING_QUOTE_ARGS`, `MISSING_VALUE`, `MISSING_CHAIN` | a mistake in the invocation, raised before any request |
+| `3` | `NETWORK_ERROR` | no response. For `credits topup` and `gas --drip` the spend **may** have happened: repeat with the same key |
+
+Every one of these codes has an explicit `error.next` (section 11). Nothing here prints the API key, a passphrase or a node URL, on either channel.
 
 ## Example: a correct retry loop
 

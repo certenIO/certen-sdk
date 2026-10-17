@@ -2,7 +2,7 @@
 
 TypeScript client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) —
 proof-gated cross-chain execution on Accumulate. An npm workspaces monorepo publishing
-`@certen.io/sdk` (v0.11.0), `@certen.io/cli` (v0.11.1), `@certen.io/mcp` (v0.6.0) and
+`@certen.io/sdk` (v0.12.0), `@certen.io/cli` (v0.12.0), `@certen.io/mcp` (v0.7.0) and
 `@certen.io/proof-verify` (v0.1.0). A release that bumps one of these edits this line;
 `packages/cli/test/agents-md.test.ts` fails until it does.
 
@@ -31,7 +31,7 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->2704 tests in 153 files (sdk 910, cli 1231, mcp 306, verify 257), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->2929 tests in 163 files (sdk 910, cli 1405, mcp 357, verify 257), 0 skipped<!-- test-counts:end --> | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
 | `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |

@@ -1,6 +1,6 @@
 # CERTEN TypeScript SDK
 
-> Proof-gated cross-chain execution on Accumulate. Package: `@certen.io/sdk` (v0.11.0).
+> Proof-gated cross-chain execution on Accumulate. Package: `@certen.io/sdk` (v0.12.0).
 
 ## Install
 ```
@@ -111,6 +111,9 @@ certen receipt [<intent-id>]    # the receipt again: ids, whether the proof hold
 certen status                   # is this identity, on this chain, with this key ready? exit 0 only when it is
 certen watch <intent-id>        # wait for an intent to finish (Ctrl-C stops the wait, not the intent), then show its receipt
 certen gas [--wait]             # the abstract account's gas: address, amount, faucet, wallet link; --wait returns when it arrives
+certen balance <address>        # the native balance of ANY EVM address on --chain, read through the gateway's node (a failed read is an error, never a 0)
+certen quote 0.0001 ETH --to 0x…  # the gateway's ESTIMATE for a send (creates, charges and signs nothing; lists what it did not check)
+certen identity readiness       # the gateway's facts about the identity from one read, section by section; facts only, no "ready" verdict
 certen call --to 0x… --fn 'confirm(bytes32)' --arg 0x… --wait     # a proof-gated contract call (identity, chain and key from context)
 certen proof get <intent-id>
 certen doctor                   # names the one thing blocking you
@@ -129,6 +132,11 @@ certen init                     # signing key, identity, funding; idempotent (se
   never skips the check of what is signed. The receipt's `verdict` is `verified` · `partial` · `failed` · `pending` · `unproven`, with every unestablished thing named in `gaps`; **`send`, `receipt` and `watch`
   exit `0` only for `verified`**, `4` for partial or pending, `5` for no evidence, `130` for Ctrl-C. PARTIAL and NO EVIDENCE are never verified, and the proof's execution layer needs a node you trust
   (`--rpc <url>` or `CERTEN_RPC_URL`) to leave `not_checked`. Shape and codes: `docs/CLI-CONTRACT.md` section 10.
+- **Two commands spend the PLATFORM's money, not yours, and need a person's say-so:** `certen credits topup --credits <n>` (credits for a key page; a count of credits, 1 credit = $0.01, never ACME) and
+  `certen gas --drip` (testnet gas for a short account). Both are off unless the operator enables them (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`). With nobody at a terminal they exit `2` unless `--yes` is
+  passed (`--json` is not consent), so do not pass it unasked. They print the Idempotency-Key they used: **repeat with the same `--idempotency-key`, never a new one** (a new key is a second draw), and treat
+  `CREDIT_TOPUP_UNCONFIRMED` / `DRIP_UNCONFIRMED` (exit `1`) as "may have been applied": read first (`certen identity readiness`, `certen gas --wait`). For them exit `3` does not mean nothing was
+  submitted. `send`, `receipt`, `watch` and `tx status` also show `destination`, the destination transaction **as recorded by the validators; not verified**: not proof. `docs/CLI-CONTRACT.md` section 16.
 - `--timeout` takes units: `90s`, `6m`, `1h` (a bare number is minutes).
 - **`--json` emits exactly one envelope object on stdout**, nothing else. Human output goes to stderr.
   Success is `{"ok":true,"data":{...}}`; failure is `{"ok":false,"error":{"code","message","retryable","next"}}`.
@@ -156,6 +164,21 @@ every tool that changes something needs `confirm: true`. Two read tools answer t
   (`CERTEN_RPC_URL_<CHAIN>`; `certen_chains_enabled` reports `receiptNode`), in which case the server reads the recipient and compares the proof's block header itself and a transfer can be `confirmed`. It keeps no state and writes nothing.
 The Accumulate endpoint for the key page read is the gateway's own advertisement, or the operator's `CERTEN_ACCUMULATE_RPC`; neither tool has an `rpc` argument. **No tool lets a caller choose a host the server connects to:**
 a proof share link given to `certen_proof_verify` is opened only on the server's own gateway or an origin its operator listed in `CERTEN_SHARE_ORIGINS`. Read `certen://docs/llms.txt` first.
+
+Three more read tools look before you act, and two write tools spend the **platform's** funds (CERTEN's sponsor account, never the organization's balance):
+- `certen_chain_balance { chain, address }` — the native balance of ANY EVM address on a chain the server enables. `balance` is a decimal string and `"0"` is a real read; a balance that could not be read is the
+  error `BALANCE_UNREADABLE`, never a zero.
+- `certen_identity_readiness { identity_id, chain? }` — the gateway's one-read FACTS about an identity (key on its key page, credits, optionally one chain's account and balance, the organization's spendable balance). It
+  reports facts and never "ready"; an `unreadable` section is unknown. `certen_readiness` is the one that judges.
+- `certen_intent_quote { intent, proof_class? }` — an ESTIMATE of an intent's price and admission, with nothing created or charged; `estimate` is always true and `not_checked` says what was not looked at. It is not `certen_quote`,
+  the price-book quote that returns a binding `quote_id`.
+- `certen_credits_topup { identity_id, credits, idempotency_key?, confirm }` (write tier) — credits for an identity's key page. 1 credit = $0.01 and `credits` is a count of credits, never ACME. `submitted` is not confirmed;
+  `unconfirmed` means the credits MAY have been applied: read them back with `certen_identity_readiness` and do not top up again with a new key.
+- `certen_gas_drip { identity_id, chain, idempotency_key?, confirm }` (write tier) — a small fixed amount of native token to the identity's own account on a TESTNET. No destination and no amount to choose.
+  `sent`, `skipped` (nothing sent) and `unconfirmed` (it may have been sent: read `certen_chain_balance`) are all answers.
+Both spending tools are off on most deployments (`CREDIT_TOPUP_DISABLED`, `DRIP_DISABLED`: the operator has not switched them on, so retrying cannot help), always carry an Idempotency-Key, and **return the key they used**
+(`idempotency_key`, also on a failure): a repeat with the same key is never a second draw, a new key is. A transaction's `destination` (hash, chain, `settlement`) is **as the validators recorded it, not verified by the gateway and
+not proof**; `destination_note` says so beside it.
 
 ## Resources
 - Full API digest: `llms-full.txt`

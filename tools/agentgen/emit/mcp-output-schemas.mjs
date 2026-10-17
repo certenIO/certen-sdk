@@ -57,9 +57,22 @@ const SIGNING_ADDITIONS = {
     additionalProperties: false,
   },
 };
+// `destination` is the validators' record of the destination transaction. Wherever a tool returns it, the tool adds this note beside it (and only when there is a
+// destination to caveat): packages/mcp/src/destination.ts. The transaction list's rows carry it too, but those rows are open objects, so the page schema is unchanged.
+const DESTINATION_ADDITIONS = {
+  destination_note: { type: 'string', description: 'Present exactly when `destination` is: it is the validators\' record, not verified by the gateway, and not proof.' },
+};
+// What the two tools that spend the platform's funds add to the gateway's answer: the key the request carried (so a retry can reuse it) and what the status means.
+const SPEND_ADDITIONS = {
+  idempotency_key: { type: 'string', description: 'The Idempotency-Key this request carried. Pass the same key to repeat the SAME request; a new key is a new draw on the platform\'s funds.' },
+  next_step: { type: 'string', description: 'What the status means and what to read or do next, in words. `unconfirmed` is not a success.' },
+};
 export const EXTENDED_TOOLS = {
-  certen_execute_wait: { add: { outcome: INTENT_OUTCOME_SCHEMA }, required: ['outcome'] },
-  certen_transaction_open: { add: SIGNING_ADDITIONS, required: [] },
+  certen_credits_topup: { add: SPEND_ADDITIONS, required: ['idempotency_key', 'next_step'] },
+  certen_execute_wait: { add: { outcome: INTENT_OUTCOME_SCHEMA, ...DESTINATION_ADDITIONS }, required: ['outcome'] },
+  certen_gas_drip: { add: SPEND_ADDITIONS, required: ['idempotency_key', 'next_step'] },
+  certen_transaction_get: { add: DESTINATION_ADDITIONS, required: [] },
+  certen_transaction_open: { add: { ...SIGNING_ADDITIONS, ...DESTINATION_ADDITIONS }, required: [] },
   certen_sign_create: { add: SIGNING_ADDITIONS, required: [] },
 };
 

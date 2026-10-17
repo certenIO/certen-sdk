@@ -36,11 +36,14 @@ owner's yes, exactly as the consent rules below say**; one that only reads (`sta
 
 An identity costs money. Every proof-gated action costs money and moves the owner's funds. So:
 
-1. Quote first: `certen quote --chain <chain> --json` and `certen balance --json`.
+1. Quote first: `certen quote --chain <chain> --json` and `certen balance --json`. For a send, `certen quote <amount> <asset> --to <address> --json` is the gateway's **estimate** of that very send
+   (it creates and charges nothing, and lists what it did not check: show the owner those lists with the figure).
 2. Show the owner the cost and the balance.
 3. Ask, in plain words, whether to proceed. Do not proceed on silence.
-4. Only then run the action. Never run `setup`, `send`, `identity create`, `call`, `tx create`, or `governance
-   *` without an explicit yes for that specific action.
+4. Only then run the action. Never run `setup`, `send`, `identity create`, `call`, `tx create`, `governance
+   *`, `credits topup` or `gas --drip` without an explicit yes for that specific action. The last two spend the **platform's** money, not the owner's: they refuse to run without `--yes` when nobody
+   is at a terminal, and `--yes` is the owner's word, not yours. They print an Idempotency-Key: to repeat one, pass the same `--idempotency-key`, never a new one, and treat
+   `CREDIT_TOPUP_UNCONFIRMED` / `DRIP_UNCONFIRMED` as "may have been applied" (read with `certen identity readiness` / `certen gas --wait` first).
 
 If the owner has not told you which chain, use `base-sepolia` on testnet. It is the cheapest
 chain CERTEN runs and every command here works on it. `telcoin-adiri` (chain 2017) is Telcoin's

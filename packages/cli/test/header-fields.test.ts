@@ -145,6 +145,8 @@ describe('flag parsing', () => {
   it('tx status output always carries the outcome fields', () => {
     expect(withOutcomeFields({ intent_id: 'i', status: 'pending' })).toEqual({
       intent_id: 'i', status: 'pending', reason_code: null, completion_basis: null, expires_at: null, additional_authorities: null,
+      // The destination transaction the validators recorded: null until they have, and always a key.
+      destination: null,
     });
     expect(withOutcomeFields({ reason_code: 'expired' }).reason_code).toBe('expired');
   });

@@ -19,6 +19,8 @@ const MUTATING: Record<string, { destructive: boolean; idempotent: boolean; why:
   certen_identity_create: { destructive: false, idempotent: false, why: 'provisions; a repeat is a new attempt' },
   certen_identity_update: { destructive: true, idempotent: true, why: 'overwrites chains / webhook url' },
   certen_identity_retire: { destructive: true, idempotent: true, why: 'retires; retiring a retired identity changes nothing' },
+  certen_credits_topup: { destructive: false, idempotent: false, why: 'adds credits from the platform\'s funds; with no key given each call makes its own, and is its own draw' },
+  certen_gas_drip: { destructive: false, idempotent: false, why: 'sends native token from the platform\'s funds; with no key given each call makes its own, and is its own drip' },
   certen_transaction_open: { destructive: false, idempotent: false, why: 'opens an intent that can move value' },
   certen_transaction_submit_signature: { destructive: true, idempotent: false, why: 'the point of no return: executes on chain' },
   certen_sign_create: { destructive: false, idempotent: false, why: 'creates a signing request' },
@@ -70,7 +72,8 @@ describe('annotationsFor', () => {
   });
 
   it('never claims a tool is idempotent when it opens, signs or delivers', () => {
-    for (const name of ['certen_transaction_open', 'certen_transaction_submit_signature', 'certen_sign_submit_signature', 'certen_governance_submit_signature', 'certen_webhook_redeliver']) {
+    // The two that spend the platform's funds are here because a client that reads `idempotentHint: true` may retry on its own, and a retry with a new key is a second draw.
+    for (const name of ['certen_transaction_open', 'certen_transaction_submit_signature', 'certen_sign_submit_signature', 'certen_governance_submit_signature', 'certen_webhook_redeliver', 'certen_credits_topup', 'certen_gas_drip']) {
       expect(MUTATING[name].idempotent, name).toBe(false);
     }
   });
