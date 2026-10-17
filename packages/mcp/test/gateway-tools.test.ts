@@ -128,6 +128,15 @@ describe('the two tools that spend the platform\'s funds are behind CERTEN_MCP_A
     expect(h.seen).toHaveLength(0);
   });
 
+  it('tells a client, in the server\'s instructions, that two write tools spend the platform\'s funds, and only when writes are on', async () => {
+    const withWrites = createHandlers({ env: { CERTEN_API_KEY: SECRET, ...WRITES } as NodeJS.ProcessEnv });
+    const readOnly = createHandlers({ env: { CERTEN_API_KEY: SECRET } as NodeJS.ProcessEnv });
+    const ask = async (handlers: ReturnType<typeof createHandlers>): Promise<string> =>
+      ((await dispatch({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: { _meta: { [PV]: '2026-07-28', [CAPS]: {} } } }, handlers)) as any).result.instructions;
+    expect(await ask(withWrites)).toMatch(/certen_credits_topup and certen_gas_drip spend the PLATFORM's funds/);
+    expect(await ask(readOnly)).not.toMatch(/certen_credits_topup/);
+  });
+
   it('asks for confirm:true even when writes are on, and sends nothing until it has it', async () => {
     const h = await harness(() => ({ status: 202, body: TOPUP }));
     for (const [name, args] of [['certen_credits_topup', { identity_id: IDENTITY, credits: 300 }], ['certen_gas_drip', { identity_id: IDENTITY, chain: 'base-sepolia' }]] as const) {
@@ -149,7 +158,7 @@ describe('certen_chain_balance', () => {
     expect(r.isError, r.text).toBe(false);
     expect(h.seen).toHaveLength(1);
     expect(h.seen[0]).toMatchObject({ method: 'GET', path: `/v1/chains/base-sepolia/addresses/${ADDRESS}/balance` });
-    expect(h.seen[0]!.headers['x-api-key']).toBe(SECRET); // the key was used...
+    expect(h.seen[0]!.headers['x-api-key']).toBe(SECRET); // the key does go on the wire to the gateway (and the last describe checks it comes back in no output)
     expect(r.body).toEqual(BALANCE);
     expect(r.body.balance).toBe('0');
     expect(typeof r.body.balance).toBe('string');
