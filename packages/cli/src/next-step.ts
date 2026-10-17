@@ -117,6 +117,9 @@ const USAGE_CODES = [
   'EVM_RPC_CHAIN_UNKNOWN', 'EVM_RPC_ERROR', 'EVM_RPC_INVALID', 'EVM_RPC_UNREADABLE', 'EVM_RPC_WRONG_CHAIN',
   // The gateway's "your request is malformed" family: the command's help is where the flag is.
   'VALIDATION_ERROR', 'BAD_REQUEST',
+  // The commands that spend the platform's funds: a credit count that is not a whole number of at least 1, an Idempotency-Key the gateway would
+  // refuse (or its own refusal for none, which the CLI never sends).
+  'INVALID_CREDITS', 'INVALID_IDEMPOTENCY_KEY', 'IDEMPOTENCY_KEY_REQUIRED',
 ] as const;
 
 const STEPS: Record<string, Step> = {
@@ -234,6 +237,25 @@ const STEPS: Record<string, Step> = {
   ENDPOINT_NOT_ON_GATEWAY: 'certen doctor',
   // The proof service holds no v2 document for this proof; the bundle route is the other way to read it.
   PROOF_V2_NOT_AVAILABLE: 'certen proof get <id>',
+
+  // ── the platform's funds: credits for a key page ──
+  // Whatever happened to a top-up, the facts about the credits are the next thing to read: that is what settles an unconfirmed one, and what shows
+  // whether one is needed when the feature is off or limited.
+  CREDIT_TOPUP_DISABLED: 'certen identity readiness',
+  CREDIT_TOPUP_LIMIT: 'certen identity readiness',
+  CREDIT_TOPUP_UNCONFIRMED: 'certen identity readiness',
+  TOPUP_DECLINED: 'certen identity readiness',
+
+  // ── the platform's funds: gas for an account ──
+  // Whatever became of a drip, the account still needs gas or is waiting for it, and `gas --wait` is the command that watches for it (the manual
+  // steps are in its output). An account that cannot take a transfer at all is shown its address instead, which is what support asks for.
+  DRIP_DISABLED: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
+  DRIP_TESTNET_ONLY: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
+  DRIP_LIMIT: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
+  DRIP_UNAVAILABLE: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
+  DRIP_UNCONFIRMED: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
+  DRIP_DECLINED: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
+  DRIP_RECIPIENT_REJECTS: (c) => `certen gas --chain ${chainOf(c.details)}`,
 
   // ── money ──
   DEPOSIT_NOT_CREDITED: 'certen balance',

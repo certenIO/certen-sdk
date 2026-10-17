@@ -255,6 +255,10 @@ describe('next-step: the drift gate', () => {
       'VALIDATION_ERROR', 'BAD_REQUEST', 'CHAIN_NOT_ENABLED', 'CHAIN_UNRESOLVED', 'UNKNOWN_CHAIN',
       // What the gateway answers on the reads added with its newer routes (or the SDK, for a route the gateway does not serve).
       'BALANCE_UNREADABLE', 'ENDPOINT_NOT_ON_GATEWAY', 'PROOF_V2_NOT_AVAILABLE',
+      // The refusals of the two routes that spend the platform's funds (credits for a key page, gas for an account), as the gateway states them.
+      'CREDIT_TOPUP_DISABLED', 'CREDIT_TOPUP_LIMIT', 'DRIP_DISABLED', 'DRIP_LIMIT', 'DRIP_RECIPIENT_REJECTS', 'DRIP_TESTNET_ONLY', 'DRIP_UNAVAILABLE',
+      // The gateway's refusal of a spend with no Idempotency-Key, which the CLI never sends without one; it is explained all the same.
+      'IDEMPOTENCY_KEY_REQUIRED',
       ...HEADER_FIELD_ERROR_CODES,
     ]);
     const stale = [...explicit].filter((c) => !raised.has(c) && !elsewhere.has(c)).sort();
@@ -269,6 +273,8 @@ describe('next-step: the drift gate', () => {
       'command-context.ts err.code',
       'commands/gas.ts check.code ?? \'ABSTRACT_ACCOUNT_UNFUNDED\'',
       'commands/gas.ts check.code ?? \'GAS_UNREADABLE\'',
+      // A refusal of a drip, carried on with the plan attached (the same code, so the ladder places it as it would have).
+      'commands/gas.ts err.code',
       'commands/proof-verify.ts err.code',
       'commands/proof-verify.ts err.code',
       'commands/proof-verify.ts err.code',
@@ -280,6 +286,8 @@ describe('next-step: the drift gate', () => {
       'duration.ts code',
       'header-flags.ts code',
       'receipt-flow.ts err.code',
+      // The gateway's refusal of a spend, said in plain words under the code it came with.
+      'spend.ts err.code',
     ].sort());
   });
 
@@ -300,6 +308,45 @@ describe('next-step: the drift gate', () => {
     for (const code of ['NETWORK_ERROR', 'WAIT_TIMEOUT', 'WAIT_ABORTED', 'INTENT_FAILED', 'PROOF_NOT_ASSIGNED', 'FOREIGN_ORIGIN_URL', 'INVALID_PATH_PARAMETER', 'EVM_RPC_CHAIN_UNKNOWN', 'EVM_RPC_ERROR', 'EVM_RPC_INVALID', 'EVM_RPC_UNREADABLE', 'EVM_RPC_WRONG_CHAIN', ...HEADER_FIELD_ERROR_CODES]) {
       expect(explicit.has(code), code).toBe(true);
     }
+  });
+
+  it('every code the gateway\'s newer routes add (and the SDK\'s own for them) has an EXPLICIT entry, not only the catalogue\'s fallback', () => {
+    for (const code of [
+      'BALANCE_UNREADABLE', 'CREDIT_TOPUP_DISABLED', 'CREDIT_TOPUP_LIMIT', 'DRIP_DISABLED', 'DRIP_LIMIT', 'DRIP_RECIPIENT_REJECTS', 'DRIP_TESTNET_ONLY',
+      'DRIP_UNAVAILABLE', 'IDEMPOTENCY_KEY_REQUIRED', 'INVALID_ADDRESS', 'PROOF_V2_NOT_AVAILABLE', 'INVALID_CREDITS', 'ENDPOINT_NOT_ON_GATEWAY',
+    ]) {
+      expect(explicit.has(code), code).toBe(true);
+    }
+  });
+});
+
+describe('next-step: the commands that read an address, estimate, or spend the platform\'s funds', () => {
+  const chain = { chain: 'base-sepolia' };
+
+  it('a balance that could not be read is read again; a gateway without a route is diagnosed', () => {
+    expect(nextStepFor(new CertenError('x', 503, 'BALANCE_UNREADABLE'), ['balance'])).toBe('certen balance <address> --chain <chain>');
+    expect(nextStepFor(new CertenError('x', 404, 'ENDPOINT_NOT_ON_GATEWAY'), ['quote'])).toBe('certen doctor');
+    expect(nextStepFor(new CertenError('x', 404, 'PROOF_V2_NOT_AVAILABLE'), ['proof', 'verify'])).toBe('certen proof get <id>');
+  });
+
+  it('whatever became of a credit top-up, the credits are the next thing to read', () => {
+    for (const code of ['CREDIT_TOPUP_DISABLED', 'CREDIT_TOPUP_LIMIT', 'CREDIT_TOPUP_UNCONFIRMED', 'TOPUP_DECLINED']) {
+      expect(nextStepFor({ code }, ['credits', 'topup']), code).toBe('certen identity readiness');
+    }
+  });
+
+  it('whatever became of a drip, the wait for the gas names the chain it is about (and only a plain token of it)', () => {
+    for (const code of ['DRIP_DISABLED', 'DRIP_TESTNET_ONLY', 'DRIP_LIMIT', 'DRIP_UNAVAILABLE', 'DRIP_UNCONFIRMED', 'DRIP_DECLINED']) {
+      expect(nextStepFor({ code, details: chain }, ['gas']), code).toBe('certen gas --chain base-sepolia --wait');
+      expect(nextStepFor({ code, details: { chain: '$(whoami)' } }, ['gas']), code).toBe('certen gas --chain <chain> --wait');
+    }
+    expect(nextStepFor({ code: 'DRIP_RECIPIENT_REJECTS', details: chain }, ['gas'])).toBe('certen gas --chain base-sepolia');
+  });
+
+  it('a count of credits or a key that is refused is answered by the help of the command it was typed to', () => {
+    expect(nextStepFor({ code: 'INVALID_CREDITS' }, ['credits', 'topup'])).toBe('certen credits topup --help');
+    expect(nextStepFor({ code: 'INVALID_IDEMPOTENCY_KEY' }, ['gas'])).toBe('certen gas --help');
+    expect(nextStepFor({ code: 'IDEMPOTENCY_KEY_REQUIRED' }, ['credits', 'topup'])).toBe('certen credits topup --help');
   });
 });
 

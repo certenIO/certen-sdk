@@ -52,7 +52,7 @@ const GROUPS: Group[] = [
   {
     title: 'Money',
     blurb: 'what it costs, how to pay, and what you were charged',
-    commands: ['balance', 'fund', 'pricing', 'quote', 'payers', 'ledger', 'receipts', 'verify'],
+    commands: ['balance', 'fund', 'credits', 'pricing', 'quote', 'payers', 'ledger', 'receipts', 'verify'],
   },
   {
     title: 'Advanced',
