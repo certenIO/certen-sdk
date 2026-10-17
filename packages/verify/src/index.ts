@@ -21,3 +21,4 @@ export type { Layer, LayerVerdict, Overall, Verification, VerifyOptions } from '
 export { verifySigningData, reconstructSigning, SigningDataMismatch, SigningDataAbsent, SIGNING_DATA_MISMATCH, SIGNING_DATA_ABSENT } from './signing.js';
 export type { SigningData, SigningSummary, SummaryLeg, Expectation, ExpectedLeg, ExpectedEvent, ExpectedOperation, Reconstruction } from './signing.js';
 export { encodeCall, parseSignature, AbiUnsupported } from './abi.js';
+export * from './sigtypes/index.js';
