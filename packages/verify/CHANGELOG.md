@@ -1,5 +1,20 @@
 # Changelog — @certen.io/proof-verify
 
+## Unreleased — RB8 Phase C: every key-signature type Accumulate accepts (2026-10-17)
+
+### Added
+- `verifyKeySignature`, `decodeSignature`, `decodeTransaction`, `unwrap`, `publicKeyHash`, `eip712Hash`, `transactionHash`, `checkExecutorGate` and the typed refusals: verification of
+  `ed25519`, `legacyED25519`, `rcd1`, `btc`, `btclegacy`, `eth`, `rsaSha256`, `ecdsaSha256` and `typedData` key signatures, directly or delegated, from Accumulate's binary encoding,
+  reaching the verdict, key hash and digest form of the validator's Go `govsig` package on its 154 shared vectors (G-42). Until now the only key-signature verifier here was the
+  Directory spine's, which refused every type but `ed25519`, `rcd1` and `legacyED25519` by name.
+- Accumulate's binary reader and writer (`decodeObject`, `encodeNode`) over the SDK's field metadata, its URL parser and writer, and the executor-version gate with Kermit's
+  activation table - each checked against Accumulate's own output (EIP-712 digests over all 23 user transaction bodies that reach EIP-712; 3,077 URL strings; byte-level mutations of
+  the 154 vectors' signatures and of the EIP-712 corpus's transactions, 5,891 in all).
+- Direct dependencies `@noble/curves` 1.9.7 and `@noble/hashes` 1.8.0, pinned exactly (both already in the lockfile through `accumulate-sdk-opendlt`).
+
+### Not changed
+- The spine's `verifySignature` and every existing verdict, hash and golden.
+
 ## 0.1.0 — RB7b: verify what you trust, sign what you see (2026-10-09)
 
 The offline verifier for Certen proofs: a proof v2 portable document (`certen-proof-v2-accumulate-portable/1`) or a proof bundle, checked layer by layer with no network and no gateway, and the signing check a client runs before it signs.
