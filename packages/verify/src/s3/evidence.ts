@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Evidence 2.1 as the verifier holds it, and the import of a portable proof into it (validator pkg/proof/v2: evidence.go, page.go,
  * crosspartition.go, portable.go Import).
  *
@@ -281,7 +281,11 @@ export interface Imported {
 }
 
 /** portable.go Import (the evidence part; the genesis and the archive are read by the shared 2.0 code). */
-export function importEvidence(doc: Record<string, unknown>): Evidence {
+/**
+ * Import of a portable document's evidence. With held, a refusal of the set check's accounts (network, globals, routing) is not thrown but kept in
+ * held.refusal and the account left out: the 2.0 verifier reports its stages in order and the set check is the last of them (portable20.ts).
+ */
+export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: Error }): Evidence {
   const e = struct(doc.evidence, ['version', 'account', 'txHash', 'receipt', 'majors', 'certify', 'anchor', 'pages', 'anchors', 'votes', 'transaction', 'check'], 'PortableEvidence');
   const anchorS = struct(e.anchor, ['message', 'receipt'], 'PortableEvidence.anchor');
   const ev: Evidence = {
@@ -322,9 +326,18 @@ export function importEvidence(doc: Record<string, unknown>): Evidence {
   ev.check.hops = hops.map((m) => m.canonical);
   ev.check.hopsBin = hops.map((m) => m.bin);
   ev.check.incarnation = str(c.incarnation, 'check.incarnation');
-  ev.check.network = importCheckAccount(c.network as Record<string, unknown>, 'NetworkDefinition', 'set check network');
-  ev.check.globals = importCheckAccount(c.globals as Record<string, unknown>, 'NetworkGlobals', 'set check globals');
-  if (c.routing !== undefined && c.routing !== null) ev.check.routing = importCheckAccount(c.routing as Record<string, unknown>, 'RoutingTable', 'set check routing');
+  const account = (raw: unknown, cls: string, label: string): CheckAccount => {
+    if (!held) return importCheckAccount(raw as Record<string, unknown>, cls, label);
+    try {
+      return importCheckAccount(raw as Record<string, unknown>, cls, label);
+    } catch (err) {
+      held.refusal ??= err as Error;
+      return undefined as unknown as CheckAccount;
+    }
+  };
+  ev.check.network = account(c.network, 'NetworkDefinition', 'set check network');
+  ev.check.globals = account(c.globals, 'NetworkGlobals', 'set check globals');
+  if (c.routing !== undefined && c.routing !== null) ev.check.routing = account(c.routing, 'RoutingTable', 'set check routing');
   return ev;
 }
 

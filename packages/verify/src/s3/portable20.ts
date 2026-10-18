@@ -1,4 +1,4 @@
-/**
+﻿/**
  * A portable document of evidence 2.0 as Go's Import reads it, written back in the spelling the 2.0 verifier (src/proof-v2) reads.
  *
  * Go decodes the whole document before it verifies any of it (portable.go Import): the genesis records, every major block, the receipts, the
@@ -74,17 +74,10 @@ export function canonicalize20(doc: Rec): Rec & { [SET_CHECK_REFUSAL]?: Error } 
   const majors = ((doc.majors as unknown[] | null) ?? []).map((m, i) => majorFromJson(m, `major ${i + 1}`));
 
   // The evidence, imported as Go imports it: every member decoded, or the document refused.
-  let ev: Evidence;
-  let held: Error | undefined;
-  try {
-    ev = importEvidence(doc);
-  } catch (err) {
-    // only a refusal of the set check's accounts is held; any other member Go refuses is refused now
-    const e2 = err as Error;
-    if (!/^set check (network|globals)/.test(e2.message)) throw err;
-    held = e2;
-    ev = importEvidence({ ...doc, evidence: { ...(doc.evidence as Rec), check: { ...((doc.evidence as Rec).check as Rec), network: undefined, globals: undefined } } });
-  }
+  // only a refusal of the set check's accounts is held; any other member Go refuses is refused now
+  const holder: { refusal?: Error } = {};
+  const ev: Evidence = importEvidence(doc, holder);
+  const held = holder.refusal;
   const e = doc.evidence as Rec;
   const pagesIn = (e.pages as Rec[] | null) ?? [];
   const out: Rec = {
