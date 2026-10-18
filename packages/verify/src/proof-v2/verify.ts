@@ -9,6 +9,8 @@ import { accumulateSetRoot, validatorsOf } from './accset.js';
 import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
 import { anchorBody, anchorMessage, hex32, list, optList, rec, str, uint, type Rec } from './shapes.js';
+import { decodePortable } from '../s3/gotree.js';
+import { canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
 export const VERSION = '2.0';
@@ -96,9 +98,24 @@ export function computeIncarnation(genesis: unknown, networkRecord: Uint8Array, 
 export type Stage = 'trust_base' | 'spine' | 'receipt' | 'anchor' | 'pages' | 'set';
 export type Trace = (stage: Stage, facts: Record<string, unknown>) => void;
 
+/**
+ * VerifyPortable for evidence 2.0 from a parsed document. The document is first decoded as Go decodes the text it was parsed from into
+ * Portable (src/s3/gotree.ts): every member has the type it has in Go, keys are matched as encoding/json matches them, a repeated or null member
+ * is read as Go reads it. verifyPortableAnyBytes (src/s3) is the entry for a document received as text, which also keeps number literals.
+ */
 export function verifyPortable(document: unknown, trace: Trace = () => {}): Report {
-  const doc = document && typeof document === 'object' ? (document as Rec) : undefined;
-  if (!doc || doc.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(doc?.format)} is not ${PORTABLE_FORMAT}`);
+  const text = JSON.stringify(document);
+  if (text === undefined) fail('portable proof is not JSON');
+  return verifyPortableDecoded(decodePortable(text), trace);
+}
+
+/** VerifyPortable over a document already decoded by decodePortable. */
+export function verifyPortableDecoded(document: unknown, trace: Trace = () => {}): Report {
+  const decoded = document && typeof document === 'object' ? (document as Rec) : undefined;
+  if (!decoded || decoded.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(decoded?.format)} is not ${PORTABLE_FORMAT}`);
+  // Import (portable.go): the whole document is decoded, by the decoders Go decodes with, before any of it is verified; what is read below is
+  // the document those decoders made, in Accumulate's own spelling.
+  const doc = canonicalize20(decoded);
   const ev = doc.evidence && typeof doc.evidence === 'object' ? (doc.evidence as Rec) : undefined;
   if (!ev || ev.version !== VERSION) fail('not a v2 Accumulate proof');
   const pin = hexBytes(doc.pin, 'pin', 32);
@@ -129,7 +146,9 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
   refuseMembersOf21(ev);
 
   // S1-S2: the receipt from the transaction to a certified root.
-  const cert = at.get(evMajors)!.clone();
+  const certified = at.get(evMajors);
+  if (!certified) fail(`certify: evidence.majors ${evMajors} is not a major block of the archive`);
+  const cert = certified.clone();
   const certify = optList(ev.certify, 'evidence.certify');
   if (certify.length === 0) fail('certify: no minor-root run');
   certify.forEach((run, i) => cert.advanceEpoch(run, `certify run ${i}`));
@@ -191,12 +210,16 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
     }
     chk = cert.clone();
   } else {
-    chk = at.get(checkMajors)!.clone();
+    const start = at.get(checkMajors);
+    if (!start) fail(`set check: check.majors ${checkMajors} is not a major block of the archive`);
+    chk = start.clone();
   }
   hops.forEach((h: unknown, i: number) => chk.advanceEpoch(h, `set check hop ${i}`));
   if (chk.lastMinorBlock < cert.lastMinorBlock) {
     fail(`the set is checked at DN ${chk.lastMinorBlock}, before the certified DN ${cert.lastMinorBlock}: updates between are unaccounted`);
   }
+  const refusal = (doc as { [SET_CHECK_REFUSAL]?: Error })[SET_CHECK_REFUSAL];
+  if (refusal) throw refusal;
   const net = provenAccount(check.network, 'network');
   const glob = provenAccount(check.globals, 'globals');
   const verdict = setVerdict(check, net, glob, chk.stateTreeAnchor, pin);

@@ -50,23 +50,26 @@ export function uvarint(v: number | bigint): Uint8Array {
 }
 
 /**
- * merkle.State: a sparse list of subtree roots. AddEntry and Anchor mirror state.go exactly, including pad(); the
- * Count field the Go struct also carries is metadata the root never depends on, so it is not modelled.
+ * merkle.State: a sparse list of subtree roots and the count of entries. AddEntry and Anchor mirror state.go exactly, including pad() and
+ * the rule that a state whose Count is 0 has no anchor, whatever its pending list holds.
  */
 export class MerkleState {
   pending: (Uint8Array | null)[];
-  constructor(pending: (Uint8Array | null)[] = []) {
+  count: number;
+  constructor(pending: (Uint8Array | null)[] = [], count = 0) {
     this.pending = [...pending];
+    this.count = count;
   }
 
-  static fromJSON(pending: unknown, label: string): MerkleState {
-    if (pending === undefined || pending === null) return new MerkleState();
+  static fromJSON(pending: unknown, label: string, count = 0): MerkleState {
+    if (pending === undefined || pending === null) return new MerkleState([], count);
     if (!Array.isArray(pending)) fail(`${label}: pending is not a list`);
-    return new MerkleState(pending.map((p, i) => (p === null ? null : hexBytes(p, `${label}.pending[${i}]`, 32))));
+    return new MerkleState(pending.map((p, i) => (p === null ? null : hexBytes(p, `${label}.pending[${i}]`, 32))), count);
   }
 
   addEntry(h: Uint8Array): void {
     let hash = h;
+    this.count++;
     if (this.pending.length === 0 || this.pending[this.pending.length - 1] !== null) this.pending.push(null);
     for (let i = 0; i < this.pending.length; i++) {
       const v = this.pending[i];
@@ -79,8 +82,9 @@ export class MerkleState {
     }
   }
 
-  /** merkle.State.Anchor: nil when nothing was added. */
+  /** merkle.State.Anchor: nil when the count is 0. */
   anchor(): Uint8Array | undefined {
+    if (this.count === 0) return undefined;
     let anchor: Uint8Array | undefined;
     for (const v of this.pending) {
       if (anchor === undefined) {
@@ -150,17 +154,24 @@ export function receiptPrefixTo(r: Receipt, value: Uint8Array): Receipt | undefi
   }
 }
 
+/** merkle.State.Count (int64): absent or null is 0, and anything but a whole number is not a count. */
+function merkleCount(v: unknown, label: string): number {
+  if (v === undefined || v === null) return 0;
+  if (typeof v !== 'number' || !Number.isInteger(v)) fail(`${label}: count is not a whole number`);
+  return v;
+}
+
 /** merkle.ReceiptList.Validate. */
 export function receiptListValid(j: unknown, label: string): { start: Uint8Array; anchor: Uint8Array; end: Uint8Array } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const rl = j as Record<string, unknown>;
   const ms = rl.merkleState as Record<string, unknown> | undefined;
   if (!ms || !rl.receipt) fail(`${label}: incomplete root proof`);
-  const state = MerkleState.fromJSON(ms.pending, `${label}.merkleState`);
+  const state = MerkleState.fromJSON(ms.pending, `${label}.merkleState`, merkleCount(ms.count, `${label}.merkleState`));
   const start = state.anchor();
   const elements = rl.elements;
   if (!Array.isArray(elements) || elements.length === 0) fail(`${label}: invalid root proof`);
-  const work = new MerkleState(state.pending);
+  const work = new MerkleState(state.pending, state.count);
   let last: Uint8Array | undefined;
   for (const [i, e] of elements.entries()) {
     last = hexBytes(e, `${label}.elements[${i}]`);

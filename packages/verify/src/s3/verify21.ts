@@ -23,10 +23,12 @@ import { goHex } from './gojson.js';
 import {
   accountUrl,
   authoritiesOf,
+  bodyType,
   decodeAccount,
   delegatorPages,
   isFullAccount,
   nodesOf,
+  requireAuthorization,
   urlOf,
   KeyPage,
   type WireNode,
@@ -333,6 +335,11 @@ function deriveRoles(ev: Evidence, byURL: Map<string, ProvenAcct>, anchors: Map<
     if (!a.disabled) allDisabled = false;
     addRoot(a.url, Role.AuthorityBook, Role.AuthorityPage);
   }
+  // The all-authorities-disabled rule (the executor accepts any authority's vote then) is not the rule of a transaction type that requires
+  // authorization (UpdateAccountAuth); evaluateTimeline applies the same carve-out, so the pages a document needs are derived by the rule that
+  // judges its votes: the authority of a vote outside the list is not a root there (RB9-K-F1, a vector of xpartition6). Without the transaction
+  // its type is not known and the rule stands.
+  if (txn && requireAuthorization(bodyType(txn))) allDisabled = false;
   // The books the carried transaction names are roots whether or not they are listed authorities (their header-authority role is added when
   // each is expanded). Without a transaction the role is only a recorded fact and the books the pages record are expanded.
   for (const h of headerURLs) if (!roots.has(lk(h))) addRoot(h, Role.HeaderAuthority, Role.HeaderAuthority);

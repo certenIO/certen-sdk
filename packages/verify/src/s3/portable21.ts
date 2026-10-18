@@ -6,7 +6,7 @@
  * 2.1 verifier itself. The order of the checks is Go's, so a document that is wrong in two ways is refused for the same one.
  */
 import { createHash } from 'node:crypto';
-import { equal, fail, hexBytes, receiptPrefixTo, receiptValid, toHex } from '../proof-v2/bytes.js';
+import { equal, fail, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { genesisGlobals, Spine } from '../proof-v2/spine.js';
 import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
@@ -20,6 +20,7 @@ import { VERSION_21 } from './states.js';
 import type { Report21, XIn } from './xtypes.js';
 import { verify21 } from './verify21.js';
 import { struct } from './gojson.js';
+import { recordBytes } from './jsonwire.js';
 
 /**
  * The spine after each starting point, walked from the genesis through the first `need` major blocks. It is a pure function of the genesis
@@ -89,6 +90,16 @@ export function verifyPortable21(document: unknown): Report21 {
   const g = struct(doc.genesis, ['minorBlockIndex', 'rootChainAnchor', 'stateTreeAnchor', 'timeUnix', 'networkRecord', 'globalsRecord', 'network', 'globals'], 'PortableGenesis');
   const networkRecord = hexBytes(g.networkRecord ?? '', 'genesis.networkRecord');
   const globalsRecord = hexBytes(g.globalsRecord ?? '', 'genesis.globalsRecord');
+  // sameEncoding (portable.go): the genesis JSON is decoded by the generated unmarshalers and must write exactly the record the incarnation commits to.
+  for (const [what, cls, json, record] of [['network', 'NetworkDefinition', g.network, networkRecord], ['globals', 'NetworkGlobals', g.globals, globalsRecord]] as const) {
+    let enc: Uint8Array;
+    try {
+      enc = recordBytes(cls, json, `genesis ${what}`);
+    } catch (e) {
+      throw new VerifyError(`genesis ${what}: ${(e as Error).message}`);
+    }
+    if (!equal(enc, record)) fail(`genesis ${what}: the JSON does not re-encode to the record`);
+  }
   const genesis = genesisGlobals(g.network, networkRecord, g.globals, globalsRecord);
   const majors = optList(doc.majors, 'majors');
   const ev = importEvidence(doc);
@@ -111,7 +122,9 @@ export function verifyPortable21(document: unknown): Report21 {
 /** verifyFrom checks everything after the spine's starting points: at holds the spine after ev.majors and after ev.check.majors major blocks. */
 function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Uint8Array): Report21 {
   // S1-S2: the receipt from the transaction to a certified root.
-  const cert = at.get(ev.majors)!.clone();
+  const certified = at.get(ev.majors);
+  if (!certified) fail(`certify: evidence.majors ${ev.majors} is not a major block of the archive`);
+  const cert = certified.clone();
   if (ev.certify.length === 0) fail('certify: no minor-root run');
   ev.certify.forEach((run, i) => cert.advanceEpoch(run, `certify run ${i}`));
   const r = ev.receipt;
@@ -150,7 +163,9 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
     }
     chk = cert.clone();
   } else {
-    chk = at.get(ev.check.majors)!.clone();
+    const start = at.get(ev.check.majors);
+    if (!start) fail(`set check: check.majors ${ev.check.majors} is not a major block of the archive`);
+    chk = start.clone();
   }
   ev.check.hops.forEach((h, i) => chk.advanceEpoch(h, `set check hop ${i}`));
   if (chk.lastMinorBlock < cert.lastMinorBlock) {

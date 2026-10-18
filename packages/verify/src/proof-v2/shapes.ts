@@ -33,9 +33,8 @@ export function str(v: unknown, label: string): string {
   return v;
 }
 
-/** A whole number >= 0 that a double holds exactly. */
+/** A whole number >= 0 that a double holds exactly: a JSON number, as Go reads a uint64 (never a numeric string). */
 export function uint(v: unknown, label: string): number {
-  if (typeof v === 'string' && /^\d+$/.test(v)) v = Number(v);
   if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 0) fail(`${label}: missing or not a whole non-negative number`);
   return v;
 }
