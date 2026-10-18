@@ -6,7 +6,7 @@
 import { VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
 import { encodeNode } from '../sigtypes/wire.js';
-import { afterLastNull, Occ } from './occ.js';
+import { afterLastNull, mergedPairs, Occ, occurrences } from './occ.js';
 import { goHex, i64big, JsonError, jsonList, strptr, struct, u64 } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
@@ -156,6 +156,11 @@ function unionList(v: unknown, label: string): unknown[] | undefined {
 
 function keySignatures(v: unknown, label: string): { bin: Uint8Array; canonical: Record<string, unknown> }[] {
   return (unionList(v, label) ?? []).map((x, i) => {
+    // The generated unmarshaler of a key signature hands its transactionHash member to ChainFromJSON, which dereferences the pointer a JSON null
+    // leaves nil: Go's recovery refuses the document as one Accumulate's codec cannot decode (RB9-L).
+    const pairs = x !== null && typeof x === 'object' && !Array.isArray(x) ? mergedPairs(x) : undefined;
+    const th = pairs === undefined ? [] : occurrences(pairs, 'transactionHash');
+    if (th.length > 0 && th[th.length - 1] === null) throw new JsonError("a value Accumulate's codec cannot decode (a member it needs is null or absent)");
     const n = unionFromJson('Signature', x, `${label}.signatures[${i}]`);
     if (!n || !KEY_SIGNATURES.has(n.cls)) throw new JsonError(`${label}.signatures[${i}]: ${n?.cls ?? 'nil'} is not a key signature`);
     return { bin: encodeNode(n), canonical: nodeToJson(n, 'Signature') };

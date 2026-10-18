@@ -440,7 +440,9 @@ function deriveRoles(ev: Evidence, byURL: Map<string, ProvenAcct>, anchors: Map<
       } catch (e) {
         throw new VerifyError(`vote of ${v.authority}: key signature: ${(e as Error).message}`);
       }
-      const path = sig ? delegatorPages(sig) : [];
+      // Accumulate's decoder answers neither a signature nor an error for bytes that hold no type (a run of zeros): Go refuses it here (RB9-L)
+      if (!sig) throw new VerifyError(`vote of ${v.authority}: key signature: it holds no signature`);
+      const path = delegatorPages(sig);
       if (path.length > DELEGATION_DEPTH_LIMIT) {
         throw refusal21(State.DelegationDepthExceeded, '', 0, `the vote of ${v.authority} was signed through ${path.length} delegators, the limit is ${DELEGATION_DEPTH_LIMIT}`);
       }
