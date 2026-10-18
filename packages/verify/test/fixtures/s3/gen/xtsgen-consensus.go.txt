@@ -1,0 +1,230 @@
+package main
+
+// The decode of a certificate's proof v2 (pkg/consensus evidence_decode.go: UnmarshalCertifiedEvidence) and the evidence-2.0 view of it
+// (evidence20_view.go: Evidence20View), exactly as judgeProofV2 uses them: the document text, the Evidence it decodes to as json.Marshal
+// writes it, and the same Evidence's 2.0 view.
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/certen/independant-validator/pkg/consensus"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+)
+
+type DecodeOut struct {
+	Err  string `json:"err,omitempty"`
+	Ev   string `json:"ev,omitempty"`
+	View string `json:"view,omitempty"`
+	// EvSha and ViewSha are sha256 of Ev and View: the mutations record these in place of the (large) documents
+	EvSha   string `json:"evSha,omitempty"`
+	ViewSha string `json:"viewSha,omitempty"`
+}
+
+func judgeDecode(doc []byte) (out DecodeOut, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			lastPanic = fmt.Sprintf("%v | %s", r, topFrames(stackNow(), 6))
+			ok = false
+		}
+	}()
+	ev, err := proofv2.UnmarshalCertifiedEvidence(doc)
+	if err != nil {
+		return DecodeOut{Err: err.Error()}, true
+	}
+	a, err := json.Marshal(ev)
+	if err != nil {
+		return DecodeOut{Err: "marshal: " + err.Error()}, true
+	}
+	b, err := json.Marshal(consensus.Evidence20View(ev))
+	if err != nil {
+		return DecodeOut{Err: "marshal view: " + err.Error()}, true
+	}
+	sa, sb := sha256.Sum256(a), sha256.Sum256(b)
+	return DecodeOut{Ev: string(a), View: string(b), EvSha: hex.EncodeToString(sa[:]), ViewSha: hex.EncodeToString(sb[:])}, true
+}
+
+type DecodeMutation struct {
+	ID      string    `json:"id"`
+	Base    int       `json:"base"`
+	Op      string    `json:"op"`
+	Patches []Patch   `json:"patches"`
+	Expect  DecodeOut `json:"expect"`
+}
+
+type DecodeFile struct {
+	Format      string           `json:"format"`
+	Description string           `json:"description"`
+	BaseNames   []string         `json:"baseNames"`
+	Bases       []any            `json:"bases"`
+	BaseExpect  []DecodeOut      `json:"baseExpect"`
+	Raw         []RawDecode      `json:"raw"`
+	Mutations   []DecodeMutation `json:"mutations"`
+	Skipped     struct {
+		Panics int `json:"panics"`
+		Flaky  int `json:"flaky"`
+	} `json:"skipped"`
+}
+
+// RawDecode is a document given as text (what a tree cannot say: null, a scalar, an array, trailing data, duplicate keys).
+type RawDecode struct {
+	Name   string    `json:"name"`
+	Text   string    `json:"text"`
+	Expect DecodeOut `json:"expect"`
+}
+
+var suites = []string{"xpartition", "xpartition2", "xpartition2b", "xpartition3", "xpartition3b", "xpartition4", "xpartition5"}
+
+func decodeCorpus(validator, fixtures, out string, per int) error {
+	f := &DecodeFile{Format: "certen-sdk/s3-decode-corpus/v1",
+		Description: "A certificate's proof v2 text decoded by consensus.UnmarshalCertifiedEvidence (2.1 in full, every other claim into the rules v14 member set) and viewed by Evidence20View, both as json.Marshal writes them, over evidence of the shared vectors under each version claim, raw texts, and mutations."}
+	addBase := func(name string, evidence any) {
+		f.BaseNames = append(f.BaseNames, name)
+		f.Bases = append(f.Bases, evidence)
+	}
+	for _, suite := range suites {
+		ents, err := os.ReadDir(filepath.Join(fixtures, suite))
+		if err != nil {
+			return err
+		}
+		var names []string
+		for _, e := range ents {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".json") {
+				names = append(names, e.Name())
+			}
+		}
+		sort.Strings(names)
+		taken := 0
+		for _, n := range names {
+			raw, err := os.ReadFile(filepath.Join(fixtures, suite, n))
+			if err != nil {
+				return err
+			}
+			p := new(proofv2.Portable)
+			if json.Unmarshal(raw, p) != nil {
+				continue
+			}
+			ev, _, _, _, err := proofv2.Import(p)
+			if err != nil {
+				continue
+			}
+			var tree any
+			if err := json.Unmarshal(mustJSON(ev), &tree); err != nil {
+				return err
+			}
+			for _, claim := range []string{"2.1", "2.0", "3.0", ""} {
+				t := deepCopy(tree).(map[string]any)
+				t["version"] = claim
+				addBase(suite+"/"+n+" claims "+fmt.Sprintf("%q", claim), t)
+			}
+			taken++
+			if taken == 2 {
+				break
+			}
+		}
+	}
+	{
+		r, err := loadReal21(validator)
+		if err != nil {
+			return err
+		}
+		var tree any
+		if err := json.Unmarshal(mustJSON(r.ev), &tree); err != nil {
+			return err
+		}
+		for _, claim := range []string{"2.1", "2.0"} {
+			t := deepCopy(tree).(map[string]any)
+			t["version"] = claim
+			addBase("real claims "+fmt.Sprintf("%q", claim), t)
+		}
+	}
+	for i, b := range f.Bases {
+		e, ok := judgeDecode(mustJSON(b))
+		if !ok {
+			return fmt.Errorf("base %s: no verdict", f.BaseNames[i])
+		}
+		if e.Err != "" {
+			return fmt.Errorf("base %s: %s", f.BaseNames[i], e.Err)
+		}
+		f.BaseExpect = append(f.BaseExpect, e)
+	}
+	for _, t := range []struct{ name, text string }{
+		{"null", "null"}, {"empty", ""}, {"number", "7"}, {"string", `"2.1"`}, {"array", "[]"}, {"empty object", "{}"}, {"trailing data", `{"version":"2.1"} x`},
+		{"truncated", `{"version":"2.1"`}, {"duplicate keys", `{"version":"2.1","version":"2.0","account":"a","account":"b"}`}, {"upper case keys", `{"VERSION":"2.1","Account":"x"}`},
+		{"version not a string", `{"version":21,"account":"x"}`}, {"version null", `{"version":null,"account":"x"}`}, {"2.0 with a 2.1 member of the wrong type", `{"version":"2.0","votes":7,"anchors":"x","pages":[{"url":"u","roles":5,"partition":9}]}`},
+		{"2.1 with a member of the wrong type", `{"version":"2.1","votes":7}`}, {"2.0 carrying 2.1 members", `{"version":"2.0","anchors":{"acc://a":{"message":"00","receipt":"01"}},"votes":[{"authority":"a"}],"transaction":"00","pages":[{"url":"u","partition":"p","roles":["voter"],"history":{"entries":[],"index":[]}}],"check":{"majors":1,"hops":[],"set":{},"routing":{}}}`},
+		{"page null", `{"version":"2.0","pages":[null]}`}, {"deep nesting", strings.Repeat("[", 20000) + strings.Repeat("]", 20000)}, {"BOM", "\xef\xbb\xbf{\"version\":\"2.1\"}"}, {"big number", `{"version":"2.1","majors":18446744073709551616}`},
+		{"u64 max", `{"version":"2.1","majors":18446744073709551615}`}, {"negative", `{"version":"2.1","majors":-1}`}, {"fraction", `{"version":"2.1","majors":1.5}`}, {"exponent", `{"version":"2.1","majors":1e2}`},
+	} {
+		o, ok := judgeDecode([]byte(t.text))
+		if !ok {
+			return fmt.Errorf("raw %s: no verdict", t.name)
+		}
+		f.Raw = append(f.Raw, RawDecode{t.name, t.text, o})
+	}
+	for bi, base := range f.Bases {
+		var nodes []node
+		collect(base, nil, &nodes)
+		perBase := per
+		if strings.HasPrefix(f.BaseNames[bi], "real") {
+			perBase = per / 2
+		}
+		for k := 0; k < perBase; k++ {
+			r := rand.New(rand.NewSource(seedOf("decode", f.BaseNames[bi], fmt.Sprint(k))))
+			count := 1
+			if r.Intn(4) == 0 {
+				count = 2
+			}
+			var ps []Patch
+			var ops []string
+			for c := 0; c < count; c++ {
+				t := nodes[r.Intn(len(nodes))]
+				for tries := 0; tries < 4; tries++ {
+					switch t.v.(type) {
+					case map[string]any, []any:
+						if r.Intn(3) != 0 {
+							t = nodes[r.Intn(len(nodes))]
+							continue
+						}
+					}
+					break
+				}
+				p, name := mutate(r, t, "")
+				ps = append(ps, p)
+				ops = append(ops, name+"@"+pathString(p.Path))
+			}
+			mutated, ok := applyPatches(base, ps)
+			if !ok {
+				continue
+			}
+			docBytes, err := json.Marshal(mutated)
+			if err != nil {
+				continue
+			}
+			lastPanic = ""
+			a, ok := judgeDecode(docBytes)
+			if !ok {
+				if lastPanic != "" {
+					f.Skipped.Panics++
+					fmt.Fprintf(os.Stderr, "PANIC decode/%s#%02d [%s]: %s\n", f.BaseNames[bi], k, strings.Join(ops, " + "), lastPanic)
+				}
+				continue
+			}
+			b, ok := judgeDecode(docBytes)
+			if !ok || a != b {
+				f.Skipped.Flaky++
+				continue
+			}
+			a.Ev, a.View = "", ""
+			f.Mutations = append(f.Mutations, DecodeMutation{ID: fmt.Sprintf("decode/%s#%02d", f.BaseNames[bi], k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: a})
+		}
+	}
+	return writeGz(filepath.Join(out, "decode-cases.json.gz"), mustJSON(f))
+}

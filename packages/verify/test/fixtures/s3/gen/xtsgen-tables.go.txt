@@ -1,0 +1,201 @@
+package main
+
+// The pinned tables and the route function: the executor-version activation table (KermitExecutorActivations, ExecutorFloorAt,
+// NormalizeExecutorPartition), the executor-override table (HasExecutorOverride) and RoutePartition, as the validator answers them.
+
+import (
+	"fmt"
+	"math/rand"
+	"path/filepath"
+	"sort"
+
+	"github.com/certen/independant-validator/pkg/proof"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type ActivationOut struct {
+	Version uint64 `json:"version"`
+	Block   uint64 `json:"block"`
+}
+
+type FloorCase struct {
+	Partition string `json:"partition"`
+	Block     uint64 `json:"block"`
+	Floor     uint64 `json:"floor"`
+	OK        bool   `json:"ok"`
+}
+
+type NormCase struct {
+	In  string `json:"in"`
+	Out string `json:"out"`
+}
+
+type OverrideCase struct {
+	Type uint64 `json:"type"`
+	Name string `json:"name"`
+	Has  bool   `json:"has"`
+}
+
+type RouteOut struct {
+	Length    uint64 `json:"length"`
+	Value     string `json:"value"` // decimal: a uint64 does not fit a double
+	Partition string `json:"partition"`
+}
+type OverrideOut struct {
+	Account   string `json:"account"` // "" for a nil account
+	Partition string `json:"partition"`
+}
+type TableOut struct {
+	Routes    []RouteOut    `json:"routes"`
+	Overrides []OverrideOut `json:"overrides"`
+}
+type RouteCase struct {
+	Table     int    `json:"table"`
+	Account   string `json:"account"`
+	Partition string `json:"partition,omitempty"`
+	Err       string `json:"err,omitempty"`
+}
+
+type TablesFile struct {
+	Format      string                   `json:"format"`
+	Activations map[string]ActivationOut `json:"activations"`
+	Floors      []FloorCase              `json:"floors"`
+	Normalize   []NormCase               `json:"normalize"`
+	Overrides   []OverrideCase           `json:"overrides"`
+	Tables      []TableOut               `json:"tables"`
+	Routes      []RouteCase              `json:"routes"`
+}
+
+func (t TableOut) protocol() *protocol.RoutingTable {
+	rt := &protocol.RoutingTable{}
+	for _, r := range t.Routes {
+		var v uint64
+		fmt.Sscan(r.Value, &v)
+		rt.Routes = append(rt.Routes, protocol.Route{Length: r.Length, Value: v, Partition: r.Partition})
+	}
+	for _, o := range t.Overrides {
+		ov := protocol.RouteOverride{Partition: o.Partition}
+		if o.Account != "" {
+			ov.Account = url.MustParse(o.Account)
+		}
+		rt.Overrides = append(rt.Overrides, ov)
+	}
+	return rt
+}
+
+// split builds a prefix-free routing table by splitting the space: every leaf routes to a partition.
+func split(r *rand.Rand, parts []string, length uint64, value uint64, depth int, out *[]RouteOut) {
+	if length > 0 && (depth == 0 || r.Intn(3) == 0) {
+		*out = append(*out, RouteOut{length, fmt.Sprint(value), parts[r.Intn(len(parts))]})
+		return
+	}
+	split(r, parts, length+1, value<<1, depth-1, out)
+	split(r, parts, length+1, value<<1|1, depth-1, out)
+}
+
+func tablesCorpus(out string) error {
+	f := &TablesFile{Format: "certen-sdk/s3-tables-corpus/v1", Activations: map[string]ActivationOut{}}
+	for k, v := range proofv2.KermitExecutorActivations() {
+		f.Activations[k] = ActivationOut{uint64(v.Version), v.Block}
+	}
+	// the floor at, and around, every activation block under every spelling of the partition
+	var names []string
+	for k := range f.Activations {
+		names = append(names, k)
+	}
+	sort.Strings(names)
+	spellings := func(k string) []string {
+		out := []string{k, "acc://" + k + ".acme", "ACC://" + k + ".ACME/", " " + k + " "}
+		switch k {
+		case "directory":
+			out = append(out, "dn", "DN", "dn.acme", "acc://dn.acme", "Directory")
+		default:
+			out = append(out, "bvn-"+k, "acc://bvn-"+k+".acme", "BVN-"+k, "acc://bvn-"+k+".acme/")
+		}
+		return out
+	}
+	for _, k := range names {
+		act := f.Activations[k].Block
+		for _, sp := range spellings(k) {
+			for _, b := range []uint64{0, 1, act - 1, act, act + 1, act + 1000, 1 << 40, 1 << 52} {
+				v, ok := proofv2.ExecutorFloorAt(sp, b)
+				f.Floors = append(f.Floors, FloorCase{sp, b, uint64(v), ok})
+			}
+		}
+	}
+	for _, sp := range []string{"", "bvn4", "acc://bvn-BVN9.acme", "unknown", "acc://x.acme", "bvn-", "acc://", ".acme", "directory2", "dn.acme/x"} {
+		for _, b := range []uint64{0, 12600000} {
+			v, ok := proofv2.ExecutorFloorAt(sp, b)
+			f.Floors = append(f.Floors, FloorCase{sp, b, uint64(v), ok})
+		}
+	}
+	for _, sp := range []string{"", "acc://bvn-BVN1.acme", "bvn-BVN1", "BVN1", "bvn1", "dn", "directory", "dn.acme", "acc://dn.acme", " Acc://BVN-bvn2.ACME/ ", "acc://x/", "bvn-bvn-bvn1", "acc://acc://bvn1", "BVN-BVN3.acme.acme"} {
+		f.Normalize = append(f.Normalize, NormCase{sp, proofv2.NormalizeExecutorPartition(sp)})
+	}
+	// the override table over every transaction type a body can have
+	for t := uint64(0); t < 0x400; t++ {
+		tt := protocol.TransactionType(t)
+		f.Overrides = append(f.Overrides, OverrideCase{t, tt.String(), proofv2.HasExecutorOverride(tt)})
+	}
+	// routing
+	parts := []string{"Directory", "BVN1", "BVN2", "BVN3", "BVN4"}
+	accounts := []string{"acc://a.acme", "acc://a.acme/b/c", "ACC://A.ACME", "acc://a.acme/", "acc://unknown", "acc://unknown/x", "acc://dn.acme", "acc://dn.acme/network", "acc://bvn-BVN1.acme/anchors",
+		"acc://3cf1b4ba3f1b0d3c9a7e1f3e0b1d4a8e7c6b5a49", "acc://3cf1b4ba3f1b0d3c9a7e1f3e0b1d4a8e7c6b5a49/ACME", "acc://3cf1b4ba3f1b0d3c9a7e1f3e0b1d4a8e7c6b5a49d3c2b1a0/acme",
+		"acc://certen-protocol.acme/billing-receipts", "acc://pv2-cust-5.acme/data", "acc://pv2-bank-5.acme/book/1", "acc://erp.acme/book/1", "acc://cust.acme/payments",
+		"acc://a.acme?x=1", "acc://a.acme#frag", "acc://a%20b.acme", "acc://é.acme", "acc://a..acme", "acc://a.acme//b", "acc://-a.acme", "acc://a.acme/ b",
+		"a.acme", "not a url", "", "acc://", "acc:/a.acme", "http://a.acme", "acc://a.acme:80/x", "acc://@a.acme", "acc://a.acme@b", "acc://a@b.acme/c",
+		"acc://x1.acme", "acc://x2.acme", "acc://x3.acme", "acc://x4.acme", "acc://x5.acme", "acc://x6.acme", "acc://x7.acme", "acc://x8.acme", "acc://x9.acme"}
+	var tables []TableOut
+	for i := 0; i < 30; i++ {
+		r := rand.New(rand.NewSource(seedOf("routes", fmt.Sprint(i))))
+		t := TableOut{Routes: []RouteOut{}, Overrides: []OverrideOut{}}
+		split(r, parts, 0, 0, 2+r.Intn(5), &t.Routes)
+		if i%3 == 1 {
+			for k := 0; k < 1+r.Intn(4); k++ {
+				t.Overrides = append(t.Overrides, OverrideOut{accounts[r.Intn(17)], parts[r.Intn(len(parts))]})
+			}
+		}
+		switch {
+		case i%10 == 7 && len(t.Routes) > 1: // overlapping: one more route inside an existing prefix
+			t.Routes = append(t.Routes, RouteOut{t.Routes[0].Length + 1, fmt.Sprint(mustUint(t.Routes[0].Value) << 1), "BVN9"})
+		case i%10 == 8 && len(t.Routes) > 2: // a gap
+			t.Routes = t.Routes[1:]
+		case i%10 == 9:
+			t.Routes = append(t.Routes, RouteOut{[]uint64{0, 65, 64}[i%3], "1", "BVN8"})
+		case i%10 == 6:
+			t.Overrides = append(t.Overrides, OverrideOut{"", "BVN7"})
+		}
+		tables = append(tables, t)
+	}
+	tables = append(tables, TableOut{Routes: []RouteOut{}, Overrides: []OverrideOut{}})
+	tables = append(tables, TableOut{Routes: []RouteOut{{1, "0", "BVN1"}, {1, "1", "BVN2"}}, Overrides: []OverrideOut{{"acc://a.acme", "Directory"}, {"acc://a.acme/other", "BVN3"}}})
+	f.Tables = tables
+	for ti, t := range tables {
+		pt := t.protocol()
+		for _, a := range accounts {
+			func() {
+				defer func() {
+					if x := recover(); x != nil {
+						lastPanic = fmt.Sprintf("%v | %s", x, topFrames(stackNow(), 6))
+						fmt.Printf("PANIC route table %d %q: %s\n", ti, a, lastPanic)
+					}
+				}()
+				p, err := proof.RoutePartition(pt, a)
+				if err != nil {
+					f.Routes = append(f.Routes, RouteCase{Table: ti, Account: a, Err: err.Error()})
+					return
+				}
+				f.Routes = append(f.Routes, RouteCase{Table: ti, Account: a, Partition: p})
+			}()
+		}
+	}
+	return writeJSON(filepath.Join(out, "tables-cases.json"), f)
+}
+
+func mustUint(s string) uint64 {
+	var v uint64
+	fmt.Sscan(s, &v)
+	return v
+}

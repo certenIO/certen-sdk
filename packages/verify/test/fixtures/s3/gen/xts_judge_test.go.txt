@@ -1,0 +1,323 @@
+package consensus
+
+// Scratch generator for the TypeScript parity corpus of judgeProofV2 (certen-sdk packages/verify/test/fixtures/s3/go-written/judge-cases.json).
+// It is not a test of the validator: it runs the real judgeProofV2 over scenarios built from the intent corpus's synthetic base and writes
+// the verdicts. Run with XTS_FIXTURES=<certen-sdk>/packages/verify/test/fixtures/s3 go test ./pkg/consensus -run TestXtsJudgeCorpus -count=1.
+
+import (
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/certen/independant-validator/pkg/ledger"
+	govproof "github.com/certen/independant-validator/pkg/proof"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type xChain struct {
+	URL        string `json:"url"`
+	Bound      bool   `json:"bound"`
+	MainHeight uint64 `json:"mainHeight"`
+}
+type xProven struct {
+	URL       string   `json:"url"`
+	Partition string   `json:"partition"`
+	Block     uint64   `json:"block"`
+	Roles     []string `json:"roles"`
+	Declared  []string `json:"declared"`
+}
+type xNamed struct {
+	Code      string `json:"code"`
+	Partition string `json:"partition"`
+	Block     uint64 `json:"block"`
+	Detail    string `json:"detail"`
+}
+type xReport struct {
+	Partition             string    `json:"partition"`
+	AnchorBlock           uint64    `json:"anchorBlock"`
+	CertifiedBlock        uint64    `json:"certifiedBlock"`
+	SetVerdict            string    `json:"setVerdict"`
+	Incarnation           string    `json:"incarnation"`
+	CertifiedRoot         string    `json:"certifiedRoot"`
+	TxHash                string    `json:"txHash"`
+	AnchorTxHash          string    `json:"anchorTxHash"`
+	AnchorStateRoot       string    `json:"anchorStateRoot"`
+	AnchorRootChainAnchor string    `json:"anchorRootChainAnchor"`
+	AccumulateSetRoot     string    `json:"accumulateSetRoot"`
+	Pages                 []string  `json:"pages"`
+	PageChains            []xChain  `json:"pageChains"`
+	Proven                []xProven `json:"proven"`
+	Unproven              []xNamed  `json:"unproven"`
+	Disclosures           []xNamed  `json:"disclosures"`
+}
+type xEvPage struct {
+	URL       string   `json:"url"`
+	State     string   `json:"state"`
+	Partition string   `json:"partition"`
+	Roles     []string `json:"roles"`
+}
+type xEvidence struct {
+	Version string         `json:"version"`
+	Account string         `json:"account"`
+	Pages   []xEvPage      `json:"pages"`
+	Votes   []proofv2.Vote `json:"votes"`
+}
+type xG0 struct {
+	EntryHashExec string `json:"entryHashExec"`
+	ReceiptStart  string `json:"receiptStart"`
+	ExecWitness   string `json:"execWitness"`
+	ExecMBI       int64  `json:"execMBI"`
+}
+type xCase struct {
+	Mode         string          `json:"mode"`
+	Report       xReport         `json:"report"`
+	Evidence     xEvidence       `json:"evidence"`
+	G0           xG0             `json:"g0"`
+	G1Page       string          `json:"g1Page"`
+	KeyPage      string          `json:"keyPage"`
+	KeyBook      string          `json:"keyBook"`
+	VoteEvidence json.RawMessage `json:"voteEvidence,omitempty"`
+}
+
+func xtsA32(s string) [32]byte {
+	var o [32]byte
+	b, err := hex.DecodeString(s)
+	if err != nil || len(b) != 32 {
+		panic("not a hash: " + s)
+	}
+	copy(o[:], b)
+	return o
+}
+
+func xtsRoles(in []string) []proofv2.PageRole {
+	var out []proofv2.PageRole
+	for _, r := range in {
+		out = append(out, proofv2.PageRole(r))
+	}
+	return out
+}
+
+func (c *xCase) values() (*proofv2.Report, *proofv2.Evidence, *govproof.G0Result, *govproof.G1Result) {
+	rep := &proofv2.Report{Partition: c.Report.Partition, AnchorBlock: c.Report.AnchorBlock, CertifiedBlock: c.Report.CertifiedBlock, SetVerdict: govproof.Verdict(c.Report.SetVerdict),
+		Incarnation: xtsA32(c.Report.Incarnation), CertifiedRoot: xtsA32(c.Report.CertifiedRoot), TxHash: xtsA32(c.Report.TxHash), AnchorTxHash: xtsA32(c.Report.AnchorTxHash),
+		AnchorStateRoot: xtsA32(c.Report.AnchorStateRoot), AnchorRootChainAnchor: xtsA32(c.Report.AnchorRootChainAnchor), AccumulateSetRoot: xtsA32(c.Report.AccumulateSetRoot)}
+	for _, s := range c.Report.Pages {
+		b, _ := hex.DecodeString(s)
+		a, err := protocol.UnmarshalAccount(b)
+		if err != nil {
+			panic(err)
+		}
+		rep.Pages = append(rep.Pages, a)
+	}
+	for _, p := range c.Report.PageChains {
+		rep.PageChains = append(rep.PageChains, proofv2.PageChain{URL: p.URL, Bound: p.Bound, MainHeight: p.MainHeight})
+	}
+	for _, p := range c.Report.Proven {
+		rep.Proven = append(rep.Proven, proofv2.ProvenPage{URL: p.URL, Partition: p.Partition, Block: p.Block, Roles: xtsRoles(p.Roles), Declared: xtsRoles(p.Declared)})
+	}
+	for _, n := range c.Report.Unproven {
+		rep.Unproven = append(rep.Unproven, proofv2.NamedState{Code: n.Code, Partition: n.Partition, Block: n.Block, Detail: n.Detail})
+	}
+	ev := &proofv2.Evidence{Version: c.Evidence.Version, Account: c.Evidence.Account, Votes: c.Evidence.Votes}
+	for _, p := range c.Evidence.Pages {
+		ev.Pages = append(ev.Pages, proofv2.PageState{URL: p.URL, State: p.State, Partition: p.Partition, Roles: xtsRoles(p.Roles)})
+	}
+	g0 := &govproof.G0Result{EntryHashExec: c.G0.EntryHashExec, ExecWitness: c.G0.ExecWitness, ExecMBI: c.G0.ExecMBI}
+	g0.Receipt.Start = c.G0.ReceiptStart
+	g1 := &govproof.G1Result{}
+	g1.AuthoritySnapshot.Page = c.G1Page
+	return rep, ev, g0, g1
+}
+
+type judgeScenario struct {
+	Name         string `json:"name"`
+	Claim        string `json:"claim"`        // the version the certificate's proof v2 claims
+	Nil          bool   `json:"nil"`          // the certificate carries no proof v2
+	Required     bool   `json:"required"`     // the cross-partition activation is in force
+	VerifyErr    string `json:"verifyErr"`    // the verifier refuses with this message
+	SetRootOther bool   `json:"setRootOther"` // the report carries another set root than the L4 leg's
+	VoteEvidence string `json:"voteEvidence"` // base | empty | null | other-principal | malformed
+	Unproven     bool   `json:"unproven"`     // the report names an unproven entry
+	KeyPage      string `json:"keyPage"`      // "" keeps the base's
+	Shape20      bool   `json:"shape20"`      // the report and the evidence are those of evidence 2.0: no proven records, roles, partitions or votes
+}
+
+type judgeVerdict struct {
+	Kind        string `json:"kind"` // ok | ErrIntent... | other
+	Msg         string `json:"msg,omitempty"`
+	VerifyInput string `json:"verifyInput,omitempty"` // json.Marshal of the document the verifier was handed ("" when it was not called)
+	Called      bool   `json:"called"`
+	GovRoot     string `json:"govRoot,omitempty"`
+}
+
+type judgeCase struct {
+	judgeScenario
+	Expect judgeVerdict `json:"expect"`
+}
+
+func xtsReadGz(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := gzip.NewReader(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(z)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestXtsJudgeCorpus(t *testing.T) {
+	dir := os.Getenv("XTS_FIXTURES")
+	if dir == "" {
+		t.Fatal("XTS_FIXTURES must name the certen-sdk fixtures directory: this is a corpus generator, run by name")
+	}
+	var f struct {
+		Bases     []xCase  `json:"bases"`
+		BaseNames []string `json:"baseNames"`
+	}
+	if err := json.Unmarshal(xtsReadGz(t, filepath.Join(dir, "go-written", "intent-cases.json.gz")), &f); err != nil {
+		t.Fatal(err)
+	}
+	var base *xCase
+	for i, n := range f.BaseNames {
+		if n == "synthetic-root" {
+			base = &f.Bases[i]
+		}
+	}
+	if base == nil {
+		t.Fatal("no synthetic-root base")
+	}
+	var scenarios []judgeScenario
+	for _, claim := range []string{"2.1", "2.0", "", "3.0"} {
+		for _, req := range []bool{true, false} {
+			scenarios = append(scenarios,
+				judgeScenario{Name: "ok", Claim: claim, Required: req, VoteEvidence: "base"},
+				judgeScenario{Name: "no proof", Claim: claim, Required: req, Nil: true, VoteEvidence: "base"},
+				judgeScenario{Name: "the verifier refuses", Claim: claim, Required: req, VerifyErr: "spine: major 3: the anchor is not signed by the validator set", VoteEvidence: "base"},
+				judgeScenario{Name: "another set root", Claim: claim, Required: req, SetRootOther: true, VoteEvidence: "base"},
+				judgeScenario{Name: "vote evidence missing", Claim: claim, Required: req, VoteEvidence: "empty"},
+				judgeScenario{Name: "vote evidence null", Claim: claim, Required: req, VoteEvidence: "null"},
+				judgeScenario{Name: "vote evidence malformed", Claim: claim, Required: req, VoteEvidence: "malformed"},
+				judgeScenario{Name: "vote evidence of another principal", Claim: claim, Required: req, VoteEvidence: "other-principal"},
+				judgeScenario{Name: "an unproven entry", Claim: claim, Required: req, Unproven: true, VoteEvidence: "base"},
+				judgeScenario{Name: "another certified page", Claim: claim, Required: req, KeyPage: "acc://other.acme/book/1", VoteEvidence: "base"},
+				judgeScenario{Name: "ok, as evidence 2.0 reports it", Claim: claim, Required: req, VoteEvidence: "base", Shape20: true},
+				judgeScenario{Name: "another set root, as evidence 2.0 reports it", Claim: claim, Required: req, SetRootOther: true, VoteEvidence: "base", Shape20: true},
+				judgeScenario{Name: "another certified page, as evidence 2.0 reports it", Claim: claim, Required: req, KeyPage: "acc://other.acme/book/1", VoteEvidence: "base", Shape20: true},
+				judgeScenario{Name: "the verifier refuses, as evidence 2.0 reports it", Claim: claim, Required: req, VerifyErr: "certify: no minor-root run", VoteEvidence: "base", Shape20: true},
+			)
+		}
+	}
+	var out []judgeCase
+	for _, sc := range scenarios {
+		c := *base
+		rep, ev, g0, g1 := c.values()
+		ev.Version = sc.Claim
+		if sc.Shape20 {
+			rep.Proven = nil
+			rep.Unproven = nil
+			ev.Votes = nil
+			for i := range ev.Pages {
+				ev.Pages[i].Partition, ev.Pages[i].Roles = "", nil
+			}
+		}
+		if sc.Unproven {
+			rep.Unproven = append(rep.Unproven, proofv2.NamedState{Code: proofv2.StateCompletenessUnproven, Partition: rep.Partition, Block: rep.AnchorBlock, Detail: "appended"})
+		}
+		accRoot := rep.AccumulateSetRoot
+		if sc.SetRootOther {
+			accRoot[0] ^= 1
+		}
+		cert := &IntentCertificateEvidence{KeyPageURL: c.KeyPage, KeyBookURL: c.KeyBook}
+		if sc.KeyPage != "" {
+			cert.KeyPageURL = sc.KeyPage
+		}
+		switch sc.VoteEvidence {
+		case "base":
+			cert.VoteEvidence = c.VoteEvidence
+		case "empty":
+		case "null":
+			cert.VoteEvidence = json.RawMessage("null")
+		case "malformed":
+			cert.VoteEvidence = json.RawMessage(`{"version":7}`)
+		case "other-principal":
+			var m map[string]any
+			_ = json.Unmarshal(c.VoteEvidence, &m)
+			m["account"] = "acc://someone.acme/else"
+			b, _ := json.Marshal(m)
+			cert.VoteEvidence = b
+		}
+		if !sc.Nil {
+			cert.ProofV2 = ev
+		}
+		var g1rec *ledger.G1ActivationRecord
+		if sc.Required {
+			g1rec = &ledger.G1ActivationRecord{Version: 1, Height: 100, ID: "x"}
+		}
+		verdict := judgeVerdict{}
+		verify := func(doc *proofv2.Evidence, _ *ledger.AccumulateSpineLog, _ [32]byte) (*proofv2.Report, error) {
+			verdict.Called = true
+			b, _ := json.Marshal(doc)
+			verdict.VerifyInput = string(b)
+			if sc.VerifyErr != "" {
+				return nil, errors.New(sc.VerifyErr)
+			}
+			return rep, nil
+		}
+		root, _, err := judgeProofV2(cert, g0, g1, &govproof.G2Result{}, [32]byte{}, [32]byte{7}, accRoot, nil, g1rec, verify)
+		switch {
+		case err == nil:
+			verdict.Kind = "ok"
+			verdict.GovRoot = hex.EncodeToString(root[:])
+		default:
+			verdict.Kind = "other"
+			for _, e := range []error{ErrIntentProofV2Missing, ErrIntentProofV21NotInForce, ErrIntentProofV21Missing, ErrIntentProofV2Invalid, ErrIntentAccumulateSetMismatch, ErrIntentGovRootMismatch} {
+				if errors.Is(err, e) {
+					verdict.Kind = e.Error()
+					break
+				}
+			}
+			verdict.Msg = err.Error()
+		}
+		out = append(out, judgeCase{sc, verdict})
+	}
+	// the governance levels' hashes ProofV2Root commits (sha256 of each level's canonical v2 JSON), for the same g0, g1 and an empty g2
+	_, _, g0, g1 := base.values()
+	g2 := &govproof.G2Result{}
+	j0, err := govproof.CanonicalG0JSONV2(g0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j1, err := govproof.CanonicalG1JSONV2(g1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j2, err := govproof.CanonicalG2JSONV2(g2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h0, h1, h2 := sha256.Sum256(j0), sha256.Sum256(j1), sha256.Sum256(j2)
+	op := [32]byte{7}
+	hashes := map[string]string{"g0Hash": hex.EncodeToString(h0[:]), "g1Hash": hex.EncodeToString(h1[:]), "g2Hash": hex.EncodeToString(h2[:]), "operationId": hex.EncodeToString(op[:])}
+	b, err := json.Marshal(map[string]any{"format": "certen-sdk/s3-judge-corpus/v1", "base": base, "hashes": hashes, "cases": out})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go-written", "judge-cases.json"), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -1,0 +1,244 @@
+package main
+
+// GoverningFactsFromVoteEvidence over vote-evidence documents: the JSON text of a govvote.Evidence is decoded with encoding/json, then the
+// facts are read; the TypeScript port reads the same text with its Go-faithful decoder. Mutations are generic (any member, any type).
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/certen/independant-validator/accumulate-lite-client-2/liteclient/proof/govvote"
+	"github.com/certen/independant-validator/pkg/intentcert"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+type FactsOut struct {
+	V     string    `json:"v"` // ok | named | plain | decode
+	Facts *XFacts   `json:"facts,omitempty"`
+	State *NamedOut `json:"state,omitempty"`
+	Msg   string    `json:"msg,omitempty"`
+}
+
+func factsOut(f *intentcert.GoverningFacts) *XFacts {
+	x := &XFacts{Principal: f.Principal, Type: uint64(f.Type), TxHash: hx(f.TxHash), Authorities: []XAuthority{}, HeaderAuthorities: append([]string{}, f.HeaderAuthorities...),
+		Initiators: append([]string{}, f.Initiators...), InitiatorPath: append([]string{}, f.InitiatorPath...), Signatures: []XSig{}, Votes: []XVote{}, Arrivals: []XArrival{}}
+	for _, a := range f.Authorities {
+		x.Authorities = append(x.Authorities, XAuthority{a.URL, a.Disabled})
+	}
+	for _, s := range f.Signatures {
+		x.Signatures = append(x.Signatures, XSig{s.Signer, s.Block})
+	}
+	for _, v := range f.Votes {
+		x.Votes = append(x.Votes, XVote{v.Authority, v.Origin, v.Block})
+	}
+	for _, a := range f.Arrivals {
+		x.Arrivals = append(x.Arrivals, XArrival{a.Page, a.Origin, append([]string{}, a.Path...), a.Block})
+	}
+	return x
+}
+
+func judgeFacts(doc []byte) (out FactsOut, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			lastPanic = fmt.Sprintf("%v | %s", r, topFrames(stackNow(), 6))
+			ok = false
+		}
+	}()
+	var gev govvote.Evidence
+	if err := json.Unmarshal(doc, &gev); err != nil {
+		return FactsOut{V: "decode", Msg: err.Error()}, true
+	}
+	f, err := intentcert.GoverningFactsFromVoteEvidence(&gev)
+	if err != nil {
+		var ns *proofv2.NamedState
+		if errors.As(err, &ns) {
+			return FactsOut{V: "named", State: &NamedOut{ns.Code, ns.Partition, ns.Block, ns.Detail}, Msg: err.Error()}, true
+		}
+		return FactsOut{V: "plain", Msg: err.Error()}, true
+	}
+	return FactsOut{V: "ok", Facts: factsOut(f)}, true
+}
+
+// factsTestEvidence is the evidence of TestGoverningFactsFromVoteEvidence: a delegated initiating signature, two authorities (one
+// disabled), an extra header authority, a recorded vote and a delegated arrival with its path.
+func factsTestEvidence() govvote.Evidence {
+	txn := &protocol.Transaction{Body: &protocol.SendTokens{To: []*protocol.TokenRecipient{{Url: mustURL("acc://to.acme/tokens"), Amount: *bigOne()}}}}
+	txn.Header.Principal = mustURL(xPrincipal)
+	txn.Header.Authorities = append(txn.Header.Authorities, mustURL(xHdrBook))
+	inner := &protocol.ED25519Signature{PublicKey: keyHash(1), Signature: keyHash(2), Signer: mustURL(xERPDeleg), SignerVersion: 1, Timestamp: 5}
+	initiating := &protocol.DelegatedSignature{Signature: inner, Delegator: mustURL(xERP)}
+	copy(txn.Header.Initiator[:], initiating.Metadata().Hash())
+	other := &protocol.ED25519Signature{PublicKey: keyHash(3), Signature: keyHash(4), Signer: mustURL(xBook1), SignerVersion: 1, Timestamp: 6}
+	enc := func(s protocol.Signature) string {
+		b, err := s.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		return hex.EncodeToString(b)
+	}
+	tb, err := txn.MarshalBinary()
+	if err != nil {
+		panic(err)
+	}
+	return govvote.Evidence{
+		Version: govvote.EvidenceVersion, Account: xPrincipal, Transaction: hex.EncodeToString(tb),
+		Authorities: []govvote.AccountAuthority{{URL: xBook}, {URL: "acc://off.acme/book", Disabled: true}},
+		Extra:       []string{"acc://extra.acme/book"},
+		Signatures: []govvote.SignatureEvidence{
+			{Fact: govvote.SigFact{ID: "a", Signer: canon(xBook1), Block: 7}, Signature: enc(other)},
+			{Fact: govvote.SigFact{ID: "b", Signer: canon(xERPDeleg), Path: []string{canon(xERP)}, Block: 9}, Signature: enc(initiating)},
+		},
+		Votes:    []govvote.VoteEvidence{{Fact: govvote.RecordedVote{ID: "v", Authority: canon(xBook), Origin: canon(xBook1), Block: 3}}},
+		Arrivals: []govvote.ArrivalEvidence{{Fact: govvote.ArrivalFact{ID: "r", Page: canon(xBook2), Origin: canon(xDelPage), Path: []string{canon(xERP)}, Block: 4}}},
+	}
+}
+
+type FactsMutation struct {
+	ID      string   `json:"id"`
+	Base    int      `json:"base"`
+	Op      string   `json:"op"`
+	Patches []Patch  `json:"patches"`
+	Expect  FactsOut `json:"expect"`
+}
+
+type FactsFile struct {
+	Format      string          `json:"format"`
+	Description string          `json:"description"`
+	Bases       []any           `json:"bases"`
+	BaseNames   []string        `json:"baseNames"`
+	BaseExpect  []FactsOut      `json:"baseExpect"`
+	Mutations   []FactsMutation `json:"mutations"`
+	Skipped     struct {
+		Panics int `json:"panics"`
+		Flaky  int `json:"flaky"`
+	} `json:"skipped"`
+}
+
+func factsCorpus(validator, out string, per int) error {
+	f := &FactsFile{Format: "certen-sdk/s3-facts-corpus/v1",
+		Description: "JSON documents read as a govvote.Evidence (encoding/json) and then by GoverningFactsFromVoteEvidence; mutations of three bases, each verdict the validator's own. decode: the document is not a govvote.Evidence (the message is Go's; only the class is compared)."}
+	add := func(name string, raw []byte) error {
+		var tree any
+		if err := json.Unmarshal(raw, &tree); err != nil {
+			return err
+		}
+		f.Bases = append(f.Bases, tree)
+		f.BaseNames = append(f.BaseNames, name)
+		return nil
+	}
+	te := factsTestEvidence()
+	if err := add("facts-test", mustJSON(te)); err != nil {
+		return err
+	}
+	_, base := syntheticBase()
+	if err := add("synthetic", base.VoteEvidence); err != nil {
+		return err
+	}
+	if rb, err := realIntentBase(validator); err != nil {
+		return err
+	} else if err := add("real", rb.VoteEvidence); err != nil {
+		return err
+	}
+	for i, b := range f.Bases {
+		e, ok := judgeFacts(mustJSON(b))
+		if !ok || e.V != "ok" {
+			return fmt.Errorf("base %s: %+v", f.BaseNames[i], e)
+		}
+		f.BaseExpect = append(f.BaseExpect, e)
+	}
+	// named cases: the refusals of the test
+	var extra []struct {
+		name string
+		doc  any
+	}
+	{
+		noInit := te
+		noInit.Signatures = noInit.Signatures[:1]
+		other := te
+		other.Account = "acc://someone.acme/else"
+		var t1, t2 any
+		json.Unmarshal(mustJSON(noInit), &t1)
+		json.Unmarshal(mustJSON(other), &t2)
+		extra = append(extra, struct {
+			name string
+			doc  any
+		}{"no initiating signature", t1}, struct {
+			name string
+			doc  any
+		}{"another principal", t2})
+	}
+	for _, e := range extra {
+		if err := add("named: "+e.name, mustJSON(e.doc)); err != nil {
+			return err
+		}
+		o, ok := judgeFacts(mustJSON(e.doc))
+		if !ok {
+			return fmt.Errorf("named case %s has no verdict", e.name)
+		}
+		f.BaseExpect = append(f.BaseExpect, o)
+	}
+	for bi, base := range f.Bases {
+		var nodes []node
+		collect(base, nil, &nodes)
+		perBase := per
+		if f.BaseNames[bi] == "real" {
+			perBase = per / 3
+		}
+		for k := 0; k < perBase; k++ {
+			r := rand.New(rand.NewSource(seedOf("facts", f.BaseNames[bi], fmt.Sprint(k))))
+			count := 1
+			if r.Intn(4) == 0 {
+				count = 2
+			}
+			var ps []Patch
+			var ops []string
+			for c := 0; c < count; c++ {
+				t := nodes[r.Intn(len(nodes))]
+				for tries := 0; tries < 4; tries++ {
+					switch t.v.(type) {
+					case map[string]any, []any:
+						if r.Intn(3) != 0 {
+							t = nodes[r.Intn(len(nodes))]
+							continue
+						}
+					}
+					break
+				}
+				p, name := mutate(r, t, "")
+				ps = append(ps, p)
+				ops = append(ops, name+"@"+pathString(p.Path))
+			}
+			mutated, ok := applyPatches(base, ps)
+			if !ok {
+				continue
+			}
+			docBytes, err := json.Marshal(mutated)
+			if err != nil {
+				continue
+			}
+			lastPanic = ""
+			a, ok := judgeFacts(docBytes)
+			if !ok {
+				if lastPanic != "" {
+					f.Skipped.Panics++
+					fmt.Fprintf(os.Stderr, "PANIC facts/%s#%02d [%s]: %s\n", f.BaseNames[bi], k, strings.Join(ops, " + "), lastPanic)
+				}
+				continue
+			}
+			b, ok := judgeFacts(docBytes)
+			if !ok || a.V != b.V || a.Msg != b.Msg {
+				f.Skipped.Flaky++
+				continue
+			}
+			f.Mutations = append(f.Mutations, FactsMutation{ID: fmt.Sprintf("facts/%s#%02d", f.BaseNames[bi], k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: a})
+		}
+	}
+	return writeGz(filepath.Join(out, "facts-cases.json.gz"), mustJSON(f))
+}

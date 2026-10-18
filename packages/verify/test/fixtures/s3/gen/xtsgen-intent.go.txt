@@ -1,0 +1,851 @@
+package main
+
+// The intent corpora (RB9 Phase D): BindProofV21, GoverningFactsFromVoteEvidence and govRoot v4 (pages root, votes root, EncodeVoteV4) over
+// scenarios, and the decode / view of a certificate's proof v2. Every scenario is a JSON value; the validator's own functions give its verdict;
+// the TypeScript tests apply the same value to their port and must agree on every field.
+
+import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/certen/independant-validator/accumulate-lite-client-2/liteclient/proof/govvote"
+	"github.com/certen/independant-validator/pkg/intentcert"
+	"github.com/certen/independant-validator/pkg/proof"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the scenario
+
+type NamedOut struct {
+	Code      string `json:"code"`
+	Partition string `json:"partition"`
+	Block     uint64 `json:"block"`
+	Detail    string `json:"detail"`
+}
+
+type XReport struct {
+	Partition             string      `json:"partition"`
+	AnchorBlock           uint64      `json:"anchorBlock"`
+	CertifiedBlock        uint64      `json:"certifiedBlock"`
+	SetVerdict            string      `json:"setVerdict"`
+	Incarnation           string      `json:"incarnation"`
+	CertifiedRoot         string      `json:"certifiedRoot"`
+	TxHash                string      `json:"txHash"`
+	AnchorTxHash          string      `json:"anchorTxHash"`
+	AnchorStateRoot       string      `json:"anchorStateRoot"`
+	AnchorRootChainAnchor string      `json:"anchorRootChainAnchor"`
+	AccumulateSetRoot     string      `json:"accumulateSetRoot"`
+	Pages                 []string    `json:"pages"`
+	PageChains            []ChainOut  `json:"pageChains"`
+	Proven                []ProvenOut `json:"proven"`
+	Unproven              []NamedOut  `json:"unproven"`
+	Disclosures           []NamedOut  `json:"disclosures"`
+}
+
+type XEvPage struct {
+	URL       string   `json:"url"`
+	State     string   `json:"state"`
+	Partition string   `json:"partition"`
+	Roles     []string `json:"roles"`
+}
+
+type XEvidence struct {
+	Version string         `json:"version"`
+	Account string         `json:"account"`
+	Pages   []XEvPage      `json:"pages"`
+	Votes   []proofv2.Vote `json:"votes"`
+}
+
+type XG0 struct {
+	EntryHashExec string `json:"entryHashExec"`
+	ReceiptStart  string `json:"receiptStart"`
+	ExecWitness   string `json:"execWitness"`
+	ExecMBI       int64  `json:"execMBI"`
+}
+
+type XAuthority struct {
+	URL      string `json:"url"`
+	Disabled bool   `json:"disabled"`
+}
+type XSig struct {
+	Signer string `json:"signer"`
+	Block  int64  `json:"block"`
+}
+type XVote struct {
+	Authority string `json:"authority"`
+	Origin    string `json:"origin"`
+	Block     int64  `json:"block"`
+}
+type XArrival struct {
+	Page   string   `json:"page"`
+	Origin string   `json:"origin"`
+	Path   []string `json:"path"`
+	Block  int64    `json:"block"`
+}
+type XFacts struct {
+	Principal         string       `json:"principal"`
+	Type              uint64       `json:"type"`
+	TxHash            string       `json:"txHash"`
+	Authorities       []XAuthority `json:"authorities"`
+	HeaderAuthorities []string     `json:"headerAuthorities"`
+	Initiators        []string     `json:"initiators"`
+	InitiatorPath     []string     `json:"initiatorPath"`
+	Signatures        []XSig       `json:"signatures"`
+	Votes             []XVote      `json:"votes"`
+	Arrivals          []XArrival   `json:"arrivals"`
+}
+
+type XHashes struct {
+	G0Hash      string `json:"g0Hash"`
+	G1Hash      string `json:"g1Hash"`
+	G2Hash      string `json:"g2Hash"`
+	OperationID string `json:"operationId"`
+}
+
+// RootCase is one scenario. Mode "bind" runs BindProofV21 over Facts; "root" is the 2.1 branch of ProofV2Root (the facts read from
+// VoteEvidence, BindProofV21, govRoot v4 over the hashes); "govroot" is GovRootV4FromPortable alone.
+type RootCase struct {
+	Mode         string          `json:"mode"`
+	Report       XReport         `json:"report"`
+	Evidence     XEvidence       `json:"evidence"`
+	G0           XG0             `json:"g0"`
+	G1Page       string          `json:"g1Page"`
+	KeyPage      string          `json:"keyPage"`
+	KeyBook      string          `json:"keyBook"`
+	Facts        XFacts          `json:"facts"`
+	VoteEvidence json.RawMessage `json:"voteEvidence,omitempty"`
+	Hashes       XHashes         `json:"hashes"`
+}
+
+type RootOut struct {
+	V         string            `json:"v"` // ok | named | plain
+	Root      string            `json:"root,omitempty"`
+	PagesRoot string            `json:"pagesRoot,omitempty"`
+	VotesRoot string            `json:"votesRoot,omitempty"`
+	Slots     map[string]string `json:"slots,omitempty"`
+	Bind      bool              `json:"bind,omitempty"`
+	State     *NamedOut         `json:"state,omitempty"`
+	Msg       string            `json:"msg,omitempty"`
+}
+
+func hexN(s string, n int) ([]byte, bool) {
+	b, err := hex.DecodeString(s)
+	return b, err == nil && len(b) == n
+}
+
+func a32(s string) ([32]byte, bool) {
+	var o [32]byte
+	b, ok := hexN(s, 32)
+	if ok {
+		copy(o[:], b)
+	}
+	return o, ok
+}
+
+func namedOuts(in []proofv2.NamedState) []NamedOut {
+	out := []NamedOut{}
+	for _, s := range in {
+		out = append(out, NamedOut{s.Code, s.Partition, s.Block, s.Detail})
+	}
+	return out
+}
+
+func rolesOut(in []proofv2.PageRole) []string {
+	out := []string{}
+	for _, r := range in {
+		out = append(out, string(r))
+	}
+	return out
+}
+
+func rolesIn(in []string) []proofv2.PageRole {
+	var out []proofv2.PageRole
+	for _, r := range in {
+		out = append(out, proofv2.PageRole(r))
+	}
+	return out
+}
+
+// caseOf writes a report, its evidence and the governing inputs as a scenario.
+func caseOf(rep *proofv2.Report, ev *proofv2.Evidence, g0 *proof.G0Result, g1Page, keyPage, keyBook string, facts *intentcert.GoverningFacts, ve json.RawMessage, h XHashes, mode string) *RootCase {
+	c := &RootCase{Mode: mode, G0: XG0{g0.EntryHashExec, g0.Receipt.Start, g0.ExecWitness, g0.ExecMBI}, G1Page: g1Page, KeyPage: keyPage, KeyBook: keyBook, VoteEvidence: ve, Hashes: h}
+	c.Report = XReport{Partition: rep.Partition, AnchorBlock: rep.AnchorBlock, CertifiedBlock: rep.CertifiedBlock, SetVerdict: string(rep.SetVerdict),
+		Incarnation: hx(rep.Incarnation), CertifiedRoot: hx(rep.CertifiedRoot), TxHash: hx(rep.TxHash), AnchorTxHash: hx(rep.AnchorTxHash),
+		AnchorStateRoot: hx(rep.AnchorStateRoot), AnchorRootChainAnchor: hx(rep.AnchorRootChainAnchor), AccumulateSetRoot: hx(rep.AccumulateSetRoot),
+		Pages: []string{}, PageChains: []ChainOut{}, Proven: []ProvenOut{}, Unproven: namedOuts(rep.Unproven), Disclosures: namedOuts(rep.Disclosures)}
+	for _, a := range rep.Pages {
+		b, err := a.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		c.Report.Pages = append(c.Report.Pages, hex.EncodeToString(b))
+	}
+	for _, p := range rep.PageChains {
+		c.Report.PageChains = append(c.Report.PageChains, ChainOut{p.URL, p.Bound, p.MainHeight})
+	}
+	for _, p := range rep.Proven {
+		c.Report.Proven = append(c.Report.Proven, ProvenOut{p.URL, p.Partition, p.Block, rolesOut(p.Roles), rolesOut(p.Declared)})
+	}
+	c.Evidence = XEvidence{Version: ev.Version, Account: ev.Account, Votes: ev.Votes}
+	for _, p := range ev.Pages {
+		c.Evidence.Pages = append(c.Evidence.Pages, XEvPage{p.URL, p.State, p.Partition, rolesOut(p.Roles)})
+	}
+	if facts != nil {
+		c.Facts = XFacts{Principal: facts.Principal, Type: uint64(facts.Type), TxHash: hx(facts.TxHash), Authorities: []XAuthority{}, HeaderAuthorities: append([]string{}, facts.HeaderAuthorities...),
+			Initiators: append([]string{}, facts.Initiators...), InitiatorPath: append([]string{}, facts.InitiatorPath...), Signatures: []XSig{}, Votes: []XVote{}, Arrivals: []XArrival{}}
+		for _, a := range facts.Authorities {
+			c.Facts.Authorities = append(c.Facts.Authorities, XAuthority{a.URL, a.Disabled})
+		}
+		for _, s := range facts.Signatures {
+			c.Facts.Signatures = append(c.Facts.Signatures, XSig{s.Signer, s.Block})
+		}
+		for _, v := range facts.Votes {
+			c.Facts.Votes = append(c.Facts.Votes, XVote{v.Authority, v.Origin, v.Block})
+		}
+		for _, a := range facts.Arrivals {
+			c.Facts.Arrivals = append(c.Facts.Arrivals, XArrival{a.Page, a.Origin, append([]string{}, a.Path...), a.Block})
+		}
+	} else {
+		c.Facts = XFacts{TxHash: strings.Repeat("00", 32)}
+	}
+	return c
+}
+
+// decodeCase rebuilds the validator's values from a scenario. ok is false when the scenario is not one the validator's types can hold
+// (a mutation then has no verdict: it is not recorded).
+func decodeCase(c *RootCase) (rep *proofv2.Report, ev *proofv2.Evidence, g0 *proof.G0Result, g1 *proof.G1Result, facts *intentcert.GoverningFacts, ok bool) {
+	rep = &proofv2.Report{Partition: c.Report.Partition, AnchorBlock: c.Report.AnchorBlock, CertifiedBlock: c.Report.CertifiedBlock, SetVerdict: proof.Verdict(c.Report.SetVerdict)}
+	for _, f := range []struct {
+		s   string
+		out *[32]byte
+	}{{c.Report.Incarnation, &rep.Incarnation}, {c.Report.CertifiedRoot, &rep.CertifiedRoot}, {c.Report.TxHash, &rep.TxHash}, {c.Report.AnchorTxHash, &rep.AnchorTxHash},
+		{c.Report.AnchorStateRoot, &rep.AnchorStateRoot}, {c.Report.AnchorRootChainAnchor, &rep.AnchorRootChainAnchor}, {c.Report.AccumulateSetRoot, &rep.AccumulateSetRoot}} {
+		v, good := a32(f.s)
+		if !good {
+			return nil, nil, nil, nil, nil, false
+		}
+		*f.out = v
+	}
+	for _, s := range c.Report.Pages {
+		b, err := hex.DecodeString(s)
+		if err != nil {
+			return nil, nil, nil, nil, nil, false
+		}
+		a, err := protocol.UnmarshalAccount(b)
+		if err != nil {
+			return nil, nil, nil, nil, nil, false
+		}
+		rep.Pages = append(rep.Pages, a)
+	}
+	for _, p := range c.Report.PageChains {
+		rep.PageChains = append(rep.PageChains, proofv2.PageChain{URL: p.URL, Bound: p.Bound, MainHeight: p.MainHeight})
+	}
+	for _, p := range c.Report.Proven {
+		rep.Proven = append(rep.Proven, proofv2.ProvenPage{URL: p.URL, Partition: p.Partition, Block: p.Block, Roles: rolesIn(p.Roles), Declared: rolesIn(p.Declared)})
+	}
+	for _, n := range c.Report.Unproven {
+		rep.Unproven = append(rep.Unproven, proofv2.NamedState{Code: n.Code, Partition: n.Partition, Block: n.Block, Detail: n.Detail})
+	}
+	for _, n := range c.Report.Disclosures {
+		rep.Disclosures = append(rep.Disclosures, proofv2.NamedState{Code: n.Code, Partition: n.Partition, Block: n.Block, Detail: n.Detail})
+	}
+	ev = &proofv2.Evidence{Version: c.Evidence.Version, Account: c.Evidence.Account, Votes: c.Evidence.Votes}
+	for _, p := range c.Evidence.Pages {
+		ev.Pages = append(ev.Pages, proofv2.PageState{URL: p.URL, State: p.State, Partition: p.Partition, Roles: rolesIn(p.Roles)})
+	}
+	g0 = &proof.G0Result{EntryHashExec: c.G0.EntryHashExec, ExecWitness: c.G0.ExecWitness, ExecMBI: c.G0.ExecMBI}
+	g0.Receipt.Start = c.G0.ReceiptStart
+	g1 = &proof.G1Result{}
+	g1.AuthoritySnapshot.Page = c.G1Page
+	facts = &intentcert.GoverningFacts{Principal: c.Facts.Principal, Type: protocol.TransactionType(c.Facts.Type), HeaderAuthorities: c.Facts.HeaderAuthorities,
+		Initiators: c.Facts.Initiators, InitiatorPath: c.Facts.InitiatorPath}
+	th, good := a32(c.Facts.TxHash)
+	if !good {
+		return nil, nil, nil, nil, nil, false
+	}
+	facts.TxHash = th
+	for _, a := range c.Facts.Authorities {
+		facts.Authorities = append(facts.Authorities, govvote.AccountAuthority{URL: a.URL, Disabled: a.Disabled})
+	}
+	for _, s := range c.Facts.Signatures {
+		facts.Signatures = append(facts.Signatures, intentcert.SignatureRef{Signer: s.Signer, Block: s.Block})
+	}
+	for _, v := range c.Facts.Votes {
+		facts.Votes = append(facts.Votes, intentcert.VoteRef{Authority: v.Authority, Origin: v.Origin, Block: v.Block})
+	}
+	for _, a := range c.Facts.Arrivals {
+		facts.Arrivals = append(facts.Arrivals, intentcert.ArrivalRef{Page: a.Page, Origin: a.Origin, Path: a.Path, Block: a.Block})
+	}
+	return rep, ev, g0, g1, facts, true
+}
+
+// runCase judges a scenario with the validator's functions. ok is false when Go panics or the scenario cannot be held.
+func runCase(c *RootCase) (out RootOut, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			lastPanic = fmt.Sprintf("%v | %s", r, topFrames(stackNow(), 6))
+			ok = false
+		}
+	}()
+	rep, ev, g0, g1, facts, good := decodeCase(c)
+	if !good {
+		return out, false
+	}
+	fail := func(err error, isBind bool) (RootOut, bool) {
+		o := RootOut{Bind: isBind, Msg: err.Error()}
+		var ns *proofv2.NamedState
+		if errors.As(err, &ns) {
+			o.V, o.State = "named", &NamedOut{ns.Code, ns.Partition, ns.Block, ns.Detail}
+		} else {
+			o.V = "plain"
+		}
+		return o, true
+	}
+	hashes := &proofv2.PortableGovRootV3Inputs{G0Hash: c.Hashes.G0Hash, G1Hash: c.Hashes.G1Hash, G2Hash: c.Hashes.G2Hash, KeyPageURL: c.KeyPage, KeyBookURL: c.KeyBook, OperationID: c.Hashes.OperationID}
+	root := func() (RootOut, bool) {
+		r, slots, err := intentcert.GovRootV4FromPortable(rep, ev, hashes)
+		if err != nil {
+			return fail(err, false)
+		}
+		o := RootOut{V: "ok", Root: hx(r), Slots: map[string]string{"L1": hx(slots.L1AccountHash), "L2": hx(slots.L2BPTRoot), "L3": hx(slots.L3BlockHash), "L4": hx(slots.L4ConsensusProofH),
+			"G0": hx(slots.G0CanonicalHash), "G1": hx(slots.G1CanonicalHash), "G2": hx(slots.G2CanonicalHash), "keyPage": hx(slots.KeypageURLHash), "keyBook": hx(slots.KeybookURLHash), "operationId": hx(slots.OperationID)}}
+		if p, err := intentcert.PagesRootV4(rep, ev); err == nil {
+			o.PagesRoot = hx(p)
+		}
+		if v, err := intentcert.VotesRootV4(ev.Votes); err == nil {
+			o.VotesRoot = hx(v)
+		}
+		return o, true
+	}
+	switch c.Mode {
+	case "govroot":
+		return root()
+	case "bind":
+		if err := intentcert.BindProofV21(rep, g0, g1, c.KeyPage, c.KeyBook, facts); err != nil {
+			return fail(err, false)
+		}
+		return RootOut{V: "ok"}, true
+	case "root":
+		// ProofV2Root, evidence 2.1: the facts of the intent's own vote evidence, BindProofV21, govRoot v4 (over the governance hashes given).
+		switch ev.Version {
+		case proofv2.Version21:
+		case proofv2.Version:
+			// Evidence 2.0: BindProofV2, then govRoot v3 over the same hashes.
+			if err := intentcert.BindProofV2(rep, g0, g1, c.KeyPage); err != nil {
+				return fail(fmt.Errorf("%w: %w", intentcert.ErrBind, err), true)
+			}
+			r, slots, err := intentcert.GovRootV3FromPortable(rep, ev, hashes)
+			if err != nil {
+				return fail(err, false)
+			}
+			o := RootOut{V: "ok", Root: hx(r), Slots: map[string]string{"L1": hx(slots.L1AccountHash), "L2": hx(slots.L2BPTRoot), "L3": hx(slots.L3BlockHash), "L4": hx(slots.L4ConsensusProofH),
+				"G0": hx(slots.G0CanonicalHash), "G1": hx(slots.G1CanonicalHash), "G2": hx(slots.G2CanonicalHash), "keyPage": hx(slots.KeypageURLHash), "keyBook": hx(slots.KeybookURLHash), "operationId": hx(slots.OperationID)}}
+			if p, err := intentcert.PagesRootV3(rep, ev); err == nil {
+				o.PagesRoot = hx(p)
+			}
+			return o, true
+		default:
+			return fail(fmt.Errorf("proof v2 root: evidence version %q is neither %s nor %s", ev.Version, proofv2.Version, proofv2.Version21), false)
+		}
+		var gev govvote.Evidence
+		if len(c.VoteEvidence) == 0 || json.Unmarshal(c.VoteEvidence, &gev) != nil {
+			return fail(fmt.Errorf("proof v2 root: evidence 2.1 is bound to the intent's vote evidence, which is missing or malformed"), false)
+		}
+		fs, err := intentcert.GoverningFactsFromVoteEvidence(&gev)
+		if err != nil {
+			return fail(fmt.Errorf("%w: %w", intentcert.ErrBind, err), true)
+		}
+		if err := intentcert.BindProofV21(rep, g0, g1, c.KeyPage, c.KeyBook, fs); err != nil {
+			return fail(fmt.Errorf("%w: %w", intentcert.ErrBind, err), true)
+		}
+		return root()
+	}
+	panic("unknown mode " + c.Mode)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the bases
+
+func hashesOf(b byte) XHashes { return XHashes{hx32(b), hx32(b + 1), hx32(b + 2), hx32(b + 3)} }
+
+// ve builds the vote evidence of the fixture intent: the facts it yields are those of the fixture's governing set.
+func x21VoteEvidence(f *x21) (govvote.Evidence, [32]byte, error) {
+	txn := &protocol.Transaction{Body: &protocol.SendTokens{To: []*protocol.TokenRecipient{{Url: mustURL("acc://to.acme/tokens"), Amount: *bigOne()}}}}
+	txn.Header.Principal = mustURL(xPrincipal)
+	txn.Header.Authorities = append(txn.Header.Authorities, mustURL(xHdrBook))
+	inner := &protocol.ED25519Signature{PublicKey: keyHash(1), Signature: keyHash(2), Signer: mustURL(xERPDeleg), SignerVersion: 1, Timestamp: 5}
+	initiating := &protocol.DelegatedSignature{Signature: inner, Delegator: mustURL(xERP)}
+	copy(txn.Header.Initiator[:], initiating.Metadata().Hash())
+	other := &protocol.ED25519Signature{PublicKey: keyHash(3), Signature: keyHash(4), Signer: mustURL(xDelPage), SignerVersion: 1, Timestamp: 6}
+	enc := func(s protocol.Signature) string {
+		b, err := s.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		return hex.EncodeToString(b)
+	}
+	tb, err := txn.MarshalBinary()
+	if err != nil {
+		return govvote.Evidence{}, [32]byte{}, err
+	}
+	ev := govvote.Evidence{
+		Version: govvote.EvidenceVersion, Account: xPrincipal, Transaction: hex.EncodeToString(tb),
+		Authorities: []govvote.AccountAuthority{{URL: xBook}},
+		Signatures: []govvote.SignatureEvidence{
+			{Fact: govvote.SigFact{ID: "a", Signer: canon(xDelPage), Block: blkY3 - 10}, Signature: enc(other)},
+			{Fact: govvote.SigFact{ID: "b", Signer: canon(xERPDeleg), Path: []string{canon(xERP)}, Block: blkY3 - 5}, Signature: enc(initiating)},
+		},
+		Votes:    []govvote.VoteEvidence{{Fact: govvote.RecordedVote{ID: "v", Authority: canon(xBook), Origin: canon(xBook2), Block: blkX - 4}}},
+		Arrivals: []govvote.ArrivalEvidence{{Fact: govvote.ArrivalFact{ID: "r", Page: canon(xBook2), Origin: canon(xDelPage), Block: blkY2 - 6}}},
+	}
+	var h [32]byte
+	copy(h[:], txn.GetHash())
+	return ev, h, nil
+}
+
+// syntheticBase is the fixture intent with its transaction's real hash: facts from its vote evidence bind to its report.
+func syntheticBase() (*x21, *RootCase) {
+	f := newX21()
+	ve, th, err := x21VoteEvidence(f)
+	if err != nil {
+		panic(err)
+	}
+	facts, err := intentcert.GoverningFactsFromVoteEvidence(&ve)
+	if err != nil {
+		panic(err)
+	}
+	f.facts = *facts
+	rep, g0, g1, kp := f.report()
+	rep.TxHash = th
+	g0.EntryHashExec, g0.Receipt.Start = hx(th), hx(th)
+	ev := f.evidence(rep)
+	raw, _ := json.Marshal(ve)
+	return f, caseOf(rep, ev, g0, g1.AuthoritySnapshot.Page, kp, xERPBook, facts, raw, hashesOf(40), "root")
+}
+
+func mustRun(c *RootCase, want string) RootOut {
+	o, ok := runCase(c)
+	if !ok || o.V != want {
+		panic(fmt.Sprintf("base case (%s) is %+v, want %s", c.Mode, o, want))
+	}
+	return o
+}
+
+// base20 is the fixture intent as evidence 2.0 reports it: every page of the transaction's partition, no proven records, no roles, no votes.
+func base20(b *RootCase) *RootCase {
+	c := *b
+	c.Mode = "root"
+	c.Report.Proven = []ProvenOut{}
+	c.Report.Unproven = []NamedOut{}
+	c.Report.Disclosures = []NamedOut{}
+	c.Evidence.Version = proofv2.Version
+	c.Evidence.Votes = nil
+	pages := make([]XEvPage, len(c.Evidence.Pages))
+	for i, p := range c.Evidence.Pages {
+		pages[i] = XEvPage{URL: p.URL, State: p.State}
+	}
+	c.Evidence.Pages = pages
+	return &c
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the named scenarios: the cases of pkg/intentcert/bind_v21_test.go, run by BindProofV21 over the fixture's facts
+
+type namedCase struct {
+	Name string
+	C    *RootCase
+	Out  RootOut
+}
+
+func bindOf(f *x21) *RootCase {
+	rep, g0, g1, kp := f.report()
+	ev := f.evidence(rep)
+	facts := f.facts
+	return caseOf(rep, ev, g0, g1.AuthoritySnapshot.Page, kp, xERPBook, &facts, nil, hashesOf(40), "bind")
+}
+
+func chainOf(n int) *x21 {
+	f := newX21()
+	f.facts.Arrivals, f.facts.Votes = nil, nil
+	f.drop(xDelBook).drop(xDelPage)
+	f.add(page(xBook2, "acc://d0.acme/book"), partBVN2, blkY2, proofv2.RoleAuthorityPage)
+	for i := 0; i < n; i++ {
+		b, p := fmt.Sprintf("acc://d%d.acme/book", i), fmt.Sprintf("acc://d%d.acme/book/1", i)
+		next := fmt.Sprintf("acc://d%d.acme/book", i+1)
+		f.add(book(b, 1), partBVN3, blkY3, proofv2.RoleDelegateBook)
+		f.add(page(p, next), partBVN3, blkY3, proofv2.RoleDelegatePage)
+	}
+	return f
+}
+
+func namedScenarios() []namedCase {
+	var out []namedCase
+	add := func(name string, c *RootCase) {
+		o, ok := runCase(c)
+		if !ok {
+			panic("named scenario " + name + " has no verdict")
+		}
+		out = append(out, namedCase{name, c, o})
+	}
+	add("complete governing set", bindOf(newX21()))
+	add("harbor: initiator page not proven", bindOf(newX21().drop(xERP)))
+	add("harbor: certified but not as initiator", bindOf(newX21().roles(xERP, proofv2.RoleVoter)))
+	add("harbor: initiator but not certified", bindOf(newX21().declare(xERP)))
+	{
+		f := newX21()
+		rep, g0, g1, kp := f.report()
+		for i := range rep.Proven {
+			if canon(rep.Proven[i].URL) == canon(xERP) {
+				rep.Proven[i].Roles, rep.Proven[i].Declared = []proofv2.PageRole{proofv2.RoleInitiatorSigner}, nil
+			}
+		}
+		ev := f.evidence(rep)
+		facts := f.facts
+		add("harbor: in the pages list only", caseOf(rep, ev, g0, g1.AuthoritySnapshot.Page, kp, xERPBook, &facts, nil, hashesOf(40), "bind"))
+	}
+	for _, c := range []struct {
+		name string
+		f    *x21
+	}{
+		{"principal not proven", newX21().drop(xPrincipal)},
+		{"principal chain role missing", newX21().roles(xPrincipal, proofv2.RoleAuthorityPage)},
+		{"principal chain on another partition", newX21().place(xPrincipal, partBVN2, blkY2)},
+		{"authority book not proven", newX21().drop(xBook)},
+		{"authority book without its role", newX21().roles(xBook, proofv2.RoleVoter)},
+		{"authority page 1 not proven", newX21().drop(xBook1)},
+		{"authority page 2 not proven", newX21().drop(xBook2)},
+		{"authority page without its role", newX21().roles(xBook1, proofv2.RoleVoter)},
+		{"header authority book not proven", newX21().drop(xHdrBook)},
+		{"header authority page not proven", newX21().drop(xHdrPage)},
+		{"header authority without its role", newX21().roles(xHdrBook, proofv2.RoleAuthorityBook)},
+		{"delegate book not proven", newX21().drop(xDelBook)},
+		{"delegate page not proven", newX21().drop(xDelPage)},
+		{"delegate book without its role", newX21().roles(xDelBook, proofv2.RoleAuthorityBook)},
+		{"voter page without the voter role", newX21().roles(xBook2, proofv2.RoleAuthorityPage)},
+		{"delegated vote's origin without the voter role", newX21().roles(xDelPage, proofv2.RoleDelegatePage)},
+		{"initiator page without its role", newX21().roles(xERP, proofv2.RoleVoter)},
+		{"initiating signature's delegator not proven", newX21().drop(xERPDeleg)},
+		{"certified key page not proven", newX21().drop(xERP)},
+		{"page with no partition", newX21().place(xBook1, "", blkY2)},
+		{"page with no block", newX21().place(xBook1, partBVN2, 0)},
+		{"page on the transaction's partition at another block", newX21().place(xPrincipal, partBVN1, blkX+1)},
+	} {
+		add(c.name, bindOf(c.f))
+	}
+	{
+		f := newX21()
+		f.facts.Signatures[0].Block = blkY3 + 1
+		add("signature after the page's block", bindOf(f))
+		f = newX21()
+		f.facts.Arrivals[0].Block = blkY2 + 1
+		add("delegated vote after the page's block", bindOf(f))
+		f = newX21()
+		f.facts.Votes[0].Block = blkX + 1
+		add("vote after the anchor block", bindOf(f))
+		f = newX21()
+		f.facts.Signatures[0].Block = blkY3 - 1
+		add("signature earlier than its page's own block", bindOf(f))
+	}
+	{
+		c := bindOf(newX21())
+		c.G0.ExecMBI++
+		add("G0 execution block", c)
+		c = bindOf(newX21())
+		c.G1Page = "acc://other.acme/book/1"
+		add("G1 page", c)
+		c = bindOf(newX21())
+		c.Report.Proven = c.Report.Proven[:2]
+		add("proven records that do not describe the pages", c)
+		c = bindOf(newX21())
+		c.Report.Unproven = []NamedOut{{Code: proofv2.StateCompletenessUnproven, Partition: partBVN1, Block: blkX, Detail: "appended"}}
+		add("an unproven entry", c)
+		c = bindOf(newX21())
+		c.Report.Disclosures = []NamedOut{{Code: proofv2.StateVoteProductionUnbound, Partition: partBVN2, Block: blkY2, Detail: "unbound"}}
+		add("a vote production not bound to the vote's message", c)
+		c = bindOf(newX21())
+		c.Report.Disclosures = []NamedOut{{Code: proofv2.StateAuthorityNotReady, Partition: partBVN2, Block: blkY2, Detail: "another disclosure"}}
+		add("a disclosure that is not a refusal", c)
+		c = bindOf(newX21())
+		c.Facts.TxHash = hx32(99)
+		add("another transaction's facts", c)
+		c = bindOf(newX21())
+		c.KeyBook = "acc://other.acme/book"
+		add("another declared book", c)
+		c = bindOf(newX21())
+		c.KeyPage = "ACC://ERP.ACME/BOOK/1/"
+		add("the certified page in another spelling", c)
+	}
+	add("level-20 delegate chain", bindOf(chainOf(20)))
+	add("books beyond level 20 present too", bindOf(chainOf(23)))
+	add("level 21 book only", bindOf(chainOf(21)))
+	add("level 20 book missing", bindOf(chainOf(20).drop("acc://d19.acme/book")))
+	add("level 20 page missing", bindOf(chainOf(20).drop("acc://d19.acme/book/1")))
+	add("level 3 book missing", bindOf(chainOf(20).drop("acc://d2.acme/book")))
+	add("level 21 book missing", bindOf(chainOf(21).drop("acc://d20.acme/book")))
+	{
+		f := chainOf(4)
+		f.add(page("acc://d3.acme/book/1", xBook, "acc://d1.acme/book"), partBVN3, blkY3, proofv2.RoleDelegatePage)
+		add("a delegation cycle", bindOf(f))
+	}
+	add("an unknown role", bindOf(newX21().roles(xHdrPage, proofv2.RoleHeaderAuthority, proofv2.PageRole("owner"))))
+	{
+		f := newX21()
+		for _, u := range []string{xPrincipal, xBook, xBook1, xBook2, xHdrBook, xHdrPage, xDelBook, xDelPage, xERPDeleg} {
+			f.drop(u)
+		}
+		add("only the certified page", bindOf(f))
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// mutation of scenarios
+
+type IntentMutation struct {
+	ID      string  `json:"id"`
+	Base    int     `json:"base"`
+	Op      string  `json:"op"`
+	Patches []Patch `json:"patches"`
+	Expect  RootOut `json:"expect"`
+}
+
+type IntentFile struct {
+	Format      string           `json:"format"`
+	Description string           `json:"description"`
+	Source      string           `json:"source"`
+	Bases       []*RootCase      `json:"bases"`
+	BaseNames   []string         `json:"baseNames"`
+	BaseExpect  []RootOut        `json:"baseExpect"`
+	Named       []NamedFileEntry `json:"named"`
+	Mutations   []IntentMutation `json:"mutations"`
+	Skipped     struct {
+		Panics    int `json:"panics"`
+		NoVerdict int `json:"noVerdict"`
+		Flaky     int `json:"flaky"`
+	} `json:"skipped"`
+}
+
+type NamedFileEntry struct {
+	Name   string    `json:"name"`
+	Case   *RootCase `json:"case"`
+	Expect RootOut   `json:"expect"`
+}
+
+// decodeStrict decodes a mutated scenario the way the TypeScript adapter reads it: no unknown member, every type as declared.
+func decodeStrict(tree any) (*RootCase, bool) {
+	raw, err := json.Marshal(tree)
+	if err != nil {
+		return nil, false
+	}
+	var c RootCase
+	d := json.NewDecoder(bytes.NewReader(raw))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&c); err != nil {
+		return nil, false
+	}
+	return &c, true
+}
+
+// protectedIntent names the members a mutation does not touch: the account states of the report (the account decoder is exercised by the
+// 2.1 corpus; here a flipped byte would only test it again) and the mode.
+func protectedIntent(path []any) bool {
+	if len(path) >= 2 && path[0] == "report" && path[1] == "pages" {
+		return true
+	}
+	if len(path) >= 1 && path[0] == "mode" {
+		return true
+	}
+	return false
+}
+
+func mutateIntent(r *rand.Rand, n node) (Patch, string, bool) {
+	// the vote evidence is read with Go's decoder on both sides: every kind of mutation is a legitimate input there; elsewhere keep to the types
+	free := len(n.path) >= 1 && n.path[0] == "voteEvidence"
+	for tries := 0; tries < 6; tries++ {
+		p, name := mutate(r, n, "")
+		if p.Op == "rename" && !free {
+			continue
+		}
+		return p, name, true
+	}
+	return Patch{}, "", false
+}
+
+func intentMutations(bases []*RootCase, names []string, per int, f *IntentFile) error {
+	for bi, base := range bases {
+		raw, _ := json.Marshal(base)
+		var tree any
+		if err := json.Unmarshal(raw, &tree); err != nil {
+			return err
+		}
+		var nodes []node
+		collect(tree, nil, &nodes)
+		var usable []node
+		for _, n := range nodes {
+			if len(n.path) == 0 || protectedIntent(n.path) {
+				continue
+			}
+			usable = append(usable, n)
+		}
+		for k := 0; k < per; k++ {
+			r := rand.New(rand.NewSource(seedOf(names[bi], fmt.Sprint(k))))
+			count := 1
+			if r.Intn(4) == 0 {
+				count = 2
+			}
+			var ps []Patch
+			var ops []string
+			for c := 0; c < count; c++ {
+				t := usable[r.Intn(len(usable))]
+				for tries := 0; tries < 4; tries++ {
+					switch t.v.(type) {
+					case map[string]any, []any:
+						if r.Intn(3) != 0 {
+							t = usable[r.Intn(len(usable))]
+							continue
+						}
+					}
+					break
+				}
+				p, name, good := mutateIntent(r, t)
+				if !good {
+					continue
+				}
+				ps = append(ps, p)
+				ops = append(ops, name+"@"+pathString(p.Path))
+			}
+			if len(ps) == 0 {
+				continue
+			}
+			mutated, ok := applyPatches(tree, ps)
+			if !ok {
+				continue
+			}
+			c, ok := decodeStrict(mutated)
+			if !ok {
+				f.Skipped.NoVerdict++
+				continue
+			}
+			lastPanic = ""
+			a, ok := runCase(c)
+			if !ok {
+				if lastPanic != "" {
+					f.Skipped.Panics++
+					fmt.Fprintf(os.Stderr, "PANIC %s#%02d [%s]: %s\n", names[bi], k, strings.Join(ops, " + "), lastPanic)
+				} else {
+					f.Skipped.NoVerdict++
+				}
+				continue
+			}
+			b, ok := runCase(c)
+			if !ok || a.V != b.V || (a.V != "plain" && a.Msg != b.Msg) {
+				f.Skipped.Flaky++
+				continue
+			}
+			f.Mutations = append(f.Mutations, IntentMutation{ID: fmt.Sprintf("%s#%02d", names[bi], k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: a})
+		}
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the command
+
+func intentCorpus(validator, out string, per int) error {
+	f := &IntentFile{Format: "certen-sdk/s3-intent-corpus/v1", Source: "validator " + sourceCommit(validator),
+		Description: "Scenarios of the evidence 2.1 binding and the govRoot v4 computation (mode bind: BindProofV21 over the facts; root: the 2.1 branch of ProofV2Root with the facts read from the intent's vote evidence; govroot: GovRootV4FromPortable alone), their named cases from pkg/intentcert/bind_v21_test.go, and typed mutations of the bases. Each verdict is the validator's own."}
+	syn, base := syntheticBase()
+	_ = syn
+	mustRun(base, "ok")
+	// the golden: govRoot v4 of the fixture with the golden's governance hashes is the committed golden's
+	gold := &RootCase{}
+	{
+		_, c := syntheticBase()
+		gf := newX21()
+		rep, g0, g1, kp := gf.report()
+		ev := gf.evidence(rep)
+		facts := gf.facts
+		h := XHashes{}
+		raw, err := os.ReadFile(filepath.Join(validator, "pkg", "intentcert", "testdata", "govroot_v4", "cross_partition_golden.json"))
+		if err != nil {
+			return err
+		}
+		var g struct {
+			Inputs    map[string]string `json:"inputs"`
+			GovRoot   string            `json:"govRootV4"`
+			PagesRoot string            `json:"pagesRoot"`
+			VotesRoot string            `json:"votesRoot"`
+		}
+		if err := json.Unmarshal(raw, &g); err != nil {
+			return err
+		}
+		h = XHashes{g.Inputs["g0Hash"], g.Inputs["g1Hash"], g.Inputs["g2Hash"], g.Inputs["operationId"]}
+		gold = caseOf(rep, ev, g0, g1.AuthoritySnapshot.Page, kp, g.Inputs["keyBook"], &facts, c.VoteEvidence, h, "govroot")
+		gold.KeyPage = g.Inputs["keyPage"]
+		o := mustRun(gold, "ok")
+		if o.Root != g.GovRoot || o.PagesRoot != g.PagesRoot || o.VotesRoot != g.VotesRoot {
+			return fmt.Errorf("the fixture's govRoot v4 %s / %s / %s is not the golden's %s / %s / %s", o.Root, o.PagesRoot, o.VotesRoot, g.GovRoot, g.PagesRoot, g.VotesRoot)
+		}
+	}
+	govBase := *base
+	govBase.Mode = "govroot"
+	mustRun(&govBase, "ok")
+	f.Bases = []*RootCase{base, &govBase, gold}
+	f.BaseNames = []string{"synthetic-root", "synthetic-govroot", "golden-govroot"}
+	b20 := base20(base)
+	mustRun(b20, "ok")
+	f.Bases = append(f.Bases, b20)
+	f.BaseNames = append(f.BaseNames, "synthetic-root-20")
+	bindBase := bindOf(newX21())
+	mustRun(bindBase, "ok")
+	f.Bases = append(f.Bases, bindBase)
+	f.BaseNames = append(f.BaseNames, "synthetic-bind")
+	if realBase, err := realIntentBase(validator); err != nil {
+		return err
+	} else if realBase != nil {
+		mustRun(realBase, "ok")
+		rg := *realBase
+		rg.Mode = "govroot"
+		mustRun(&rg, "ok")
+		f.Bases = append(f.Bases, realBase, &rg)
+		f.BaseNames = append(f.BaseNames, "real-root", "real-govroot")
+	}
+	for _, b := range f.Bases {
+		o, _ := runCase(b)
+		f.BaseExpect = append(f.BaseExpect, o)
+	}
+	for _, n := range namedScenarios() {
+		f.Named = append(f.Named, NamedFileEntry{n.Name, n.C, n.Out})
+	}
+	if err := intentMutations(f.Bases, f.BaseNames, per, f); err != nil {
+		return err
+	}
+	return writeGz(filepath.Join(out, "intent-cases.json.gz"), mustJSON(f))
+}
+
+func mustJSON(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func sourceCommit(validator string) string {
+	b, err := os.ReadFile(filepath.Join(validator, ".git"))
+	_ = b
+	_ = err
+	return "origin/main 3419863"
+}
+
+var _ = url.Parse
