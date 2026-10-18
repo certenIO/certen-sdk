@@ -6,7 +6,7 @@
  * form Accumulate's writer emits. Every URL the verifier reads from a document is parsed by Accumulate's parser first, and one that does
  * not parse is a refusal, exactly as `url.Parse` returning an error is in Go.
  */
-import { sha256 } from '../proof-v2/bytes.js';
+import { goLower, sha256 } from '../proof-v2/bytes.js';
 import { binaryBytes, binaryString, canonicalAccUrl } from '../sigtypes/gourl.js';
 
 /** The delegation depth limit of Accumulate (protocol.DelegationDepthLimit). */
@@ -24,23 +24,13 @@ export function goStringCompare(a: string, b: string): number {
   return Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8'));
 }
 
-/** unicode.ToLower of one code point, as Go's strings.ToLower applies it (JavaScript's full mapping differs for U+0130). */
-function lowerRune(ch: string): string {
-  return ch.codePointAt(0) === 0x130 ? 'i' : ch.toLowerCase();
-}
-
-/** strings.ToLower. */
-export function goLower(s: string): string {
-  let out = '';
-  for (const ch of s) out += lowerRune(ch);
-  return out;
-}
+export { goLower };
 
 /** The simple-folding class of one code point (unicode.SimpleFold's orbit, by the case mappings JavaScript has). */
 function foldRune(ch: string): string {
   const up = ch.toUpperCase();
   const base = [...up].length === 1 ? up : ch;
-  return lowerRune(base);
+  return goLower(base);
 }
 
 /** strings.EqualFold. */

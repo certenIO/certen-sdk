@@ -6,7 +6,7 @@
  * 2.1 verifier itself. The order of the checks is Go's, so a document that is wrong in two ways is refused for the same one.
  */
 import { createHash } from 'node:crypto';
-import { equal, fail, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
+import { equal, fail, goHexStrict, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { genesisGlobals, Spine } from '../proof-v2/spine.js';
 import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
@@ -88,10 +88,10 @@ export function verifyPortable21(document: unknown): Report21 {
   if (!doc || doc.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(doc?.format)} is not ${PORTABLE_FORMAT}`);
 
   // Import (portable.go): the pin, the genesis, the archive, the evidence. Every failure here is a plain refusal.
-  const pin = hexBytes(doc.pin, 'pin', 32);
+  const pin = goHexStrict(doc.pin, 'pin', 32);
   const g = struct(doc.genesis, ['minorBlockIndex', 'rootChainAnchor', 'stateTreeAnchor', 'timeUnix', 'networkRecord', 'globalsRecord', 'network', 'globals'], 'PortableGenesis');
-  const networkRecord = hexBytes(g.networkRecord ?? '', 'genesis.networkRecord');
-  const globalsRecord = hexBytes(g.globalsRecord ?? '', 'genesis.globalsRecord');
+  const networkRecord = goHexStrict(g.networkRecord ?? '', 'genesis.networkRecord');
+  const globalsRecord = goHexStrict(g.globalsRecord ?? '', 'genesis.globalsRecord');
   // sameEncoding (portable.go): the genesis JSON is decoded by the generated unmarshalers and must write exactly the record the incarnation commits to.
   const spelled: Record<string, unknown> = {};
   for (const [what, cls, json, record] of [['network', 'NetworkDefinition', g.network, networkRecord], ['globals', 'NetworkGlobals', g.globals, globalsRecord]] as const) {

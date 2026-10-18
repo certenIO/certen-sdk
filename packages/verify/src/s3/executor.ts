@@ -3,7 +3,7 @@
  * decides who may sign by a rule the default authorization model does not describe (validator xexecutor.go, xexecutor_table.go,
  * xoverride.go, xauthdiff.go).
  */
-import { equal } from '../proof-v2/bytes.js';
+import { equal, goTrimSpace } from '../proof-v2/bytes.js';
 import { executorFloor, KERMIT_ACTIVATIONS, normalizePartition } from '../sigtypes/gate.js';
 import { AccUrl, goEqualFold, goLower, LEDGER, partitionUrl } from './acc.js';
 import { accountUrl, bigOf, nodesOf, urlOf, type KeyPage, type WireNode } from './model.js';
@@ -37,7 +37,7 @@ export function kermitExecutorActivations(): Record<string, ExecutorActivation> 
 
 /** NormalizeExecutorPartition: "acc://bvn-BVN2.acme", "BVN2" and "bvn2" are one partition; the Directory is "directory". */
 export function normalizeExecutorPartition(p: string): string {
-  let s = p.trim().toLowerCase();
+  let s = goLower(goTrimSpace(p));
   if (s.startsWith('acc://')) s = s.slice('acc://'.length);
   if (s.endsWith('/')) s = s.slice(0, -1);
   if (s.endsWith('.acme')) s = s.slice(0, -'.acme'.length);

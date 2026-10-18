@@ -5,7 +5,7 @@
  * zero.
  */
 import { account, encodeObject, keccak256 } from './accumulate.js';
-import { equal, fail, merkleHashList, sha256, toHex } from './bytes.js';
+import { equal, fail, goTrimSpace, merkleHashList, sha256, toHex } from './bytes.js';
 import { rec, type Rec } from './shapes.js';
 import type { Report } from './verify.js';
 
@@ -82,25 +82,6 @@ function reportHash(v: unknown, name: string): Uint8Array {
 /** keccak256(tag || ":" || payload) (GovRootV3SlotHash). */
 export function govRootV3SlotHash(tag: string, payload: Uint8Array): Uint8Array {
   return keccak256(Buffer.concat([Buffer.from(tag + ':'), payload]));
-}
-
-/**
- * Go's unicode.IsSpace, which strings.TrimSpace trims: JavaScript's trim() also trims U+FEFF and not U+0085, so it is
- * not used.
- */
-const GO_SPACE = new Set([
-  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x20, 0x85, 0xa0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007,
-  0x2008, 0x2009, 0x200a, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
-]);
-
-/** strings.TrimSpace. */
-function goTrimSpace(s: string): string {
-  const cps = [...s];
-  let a = 0;
-  let b = cps.length;
-  while (a < b && GO_SPACE.has(cps[a].codePointAt(0)!)) a++;
-  while (b > a && GO_SPACE.has(cps[b - 1].codePointAt(0)!)) b--;
-  return cps.slice(a, b).join('');
 }
 
 /**

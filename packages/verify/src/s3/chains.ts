@@ -8,7 +8,7 @@
  * block exactly when they recompute that second sibling. Every hex string is read with Go's helpers: a hash must be 64 hex characters, a
  * pending hash may carry a 0x prefix and spaces (hexBytes), and nothing else is tolerated.
  */
-import { VerifyError, equal, merkleHashList, sha256, toHex } from '../proof-v2/bytes.js';
+import { VerifyError, equal, goTrimSpace, merkleHashList, sha256, toHex } from '../proof-v2/bytes.js';
 import type { ChainRoot } from './evidence.js';
 import { goHex } from './gojson.js';
 
@@ -25,19 +25,7 @@ export function mustHex32(s: string, label: string): Uint8Array {
   return b;
 }
 
-/** The characters strings.TrimSpace removes (Unicode White_Space); String.prototype.trim differs (it removes U+FEFF and keeps U+0085). */
-function isGoSpace(c: number): boolean {
-  return (c >= 0x09 && c <= 0x0d) || c === 0x20 || c === 0x85 || c === 0xa0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x3000;
-}
-
-/** strings.TrimSpace. */
-export function goTrimSpace(s: string): string {
-  let a = 0;
-  let b = s.length;
-  while (a < b && isGoSpace(s.charCodeAt(a))) a++;
-  while (b > a && isGoSpace(s.charCodeAt(b - 1))) b--;
-  return s.slice(a, b);
-}
+export { goTrimSpace };
 
 /** pkg/proof hexBytes: trimmed (strings.TrimSpace), lower-cased, an optional 0x prefix removed, then hex.DecodeString. */
 export function hexBytesLoose(s: string, label: string): Uint8Array {
@@ -54,13 +42,16 @@ function hexReceiptStep(s: string): Uint8Array | undefined {
   return goHex(t.startsWith('0x') ? t.slice(2) : t);
 }
 
+/** Go's `count |= 1 << uint(i)` on a uint64: bit i, and a shift of 64 or more is 0 (a double holds 53 bits). */
+export const bit = (i: number): bigint => (i < 64 ? 1n << BigInt(i) : 0n);
+
 /** ChainRoot.compute: the height and the DAG root from the pending list alone. */
-function compute(c: ChainRoot): { count: number; anchor: Uint8Array } {
-  let count = 0;
+function compute(c: ChainRoot): { count: bigint; anchor: Uint8Array } {
+  let count = 0n;
   let anchor: Uint8Array | undefined;
   (c.pending ?? []).forEach((v, i) => {
     if (v === null) return;
-    count += 2 ** i;
+    count |= bit(i);
     let h: Uint8Array;
     try {
       h = hexBytesLoose(v, 'chain pending entry');
@@ -76,13 +67,13 @@ function compute(c: ChainRoot): { count: number; anchor: Uint8Array } {
 /** ChainRoot.derive: the restated count and anchor must agree with the pending list. */
 export function deriveChain(c: ChainRoot): { count: number; anchor: Uint8Array } {
   const { count, anchor } = compute(c);
-  if (count !== c.count) fail(`chain ${JSON.stringify(c.name)}: restated count ${c.count} but its merkle state says ${count} - the height is not what the proof claims`);
+  if (count !== c.countBig) fail(`chain ${JSON.stringify(c.name)}: restated count ${c.countBig} but its merkle state says ${count} - the height is not what the proof claims`);
   // strings.ToLower(strings.TrimPrefix(c.Anchor, "0x")): the prefix is removed BEFORE the lower-casing, so a "0X" prefix stays and never matches
   const restated = (c.anchor.startsWith('0x') ? c.anchor.slice(2) : c.anchor).toLowerCase();
   if (restated !== '' && count > 0 && toHex(anchor) !== restated) {
     fail(`chain ${JSON.stringify(c.name)}: restated anchor does not match its merkle state: computed=${toHex(anchor).slice(0, 16)} restated=${restated.slice(0, 16)}`);
   }
-  return { count, anchor };
+  return { count: Number(count), anchor };
 }
 
 /** MainChainHeight: the height of the first chain named main, when there is one and it derives. */

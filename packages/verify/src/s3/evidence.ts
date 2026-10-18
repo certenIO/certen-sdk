@@ -10,7 +10,7 @@
 import { equal, toHex } from '../proof-v2/bytes.js';
 import { accountState } from './jsonwire.js';
 import { importCheckAccount, type CheckAccount } from './setcheck.js';
-import { list, map, str, strList, struct, u64 } from './gojson.js';
+import { list, map, str, strList, struct, u64, u64big } from './gojson.js';
 import { minorRootFromJson } from './minorroot.js';
 import { importReceipt, importSequenced, type Rcpt, type SeqMsg } from './rcpt.js';
 import type { PageRole } from './states.js';
@@ -82,6 +82,8 @@ export interface ChainRoot {
   /** undefined is Go's nil slice (absent or null). */
   pending: (string | null)[] | undefined;
   count: number;
+  /** The restated count exactly (count is its nearest double above 2^53): Go compares the uint64. */
+  countBig: bigint;
   anchor: string;
 }
 export interface PageState {
@@ -261,6 +263,7 @@ export function importChains(v: unknown, label: string): ChainRoot[] {
       name: str(s.name, `${label}[${i}].name`),
       pending: pl?.map((p, k) => (p === null ? null : str(p, `${label}[${i}].pending[${k}]`))),
       count: u64(s.count, `${label}[${i}].count`),
+      countBig: u64big(s.count, `${label}[${i}].count`),
       anchor: str(s.anchor, `${label}[${i}].anchor`),
     };
   });

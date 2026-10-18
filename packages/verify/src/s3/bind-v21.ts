@@ -6,7 +6,7 @@
  * unproven is not a verified S3 at all. A governing fact the report cannot show is a named state carrying the partition and block it was
  * judged at.
  */
-import { VerifyError, equal, toHex } from '../proof-v2/bytes.js';
+import { VerifyError, equal, goTrimSpace, toHex } from '../proof-v2/bytes.js';
 import { canonicalAccSpelling } from '../proof-v2/govroot-v3.js';
 import { AccUrl, DELEGATION_DEPTH_LIMIT, formatKeyPageUrl, goEqualFold, goStringCompare } from './acc.js';
 import { executorFloorAt, normalizeExecutorPartition, baikonurEnabled } from './executor.js';
@@ -192,7 +192,7 @@ function missing(p: ProvenView, r: PageRole): string {
 const ns = (code: string, partition: string, block: number, detail: string): NamedState => refusal21(code, partition, block, detail);
 
 function samePartition(a: string, c: string): boolean {
-  const t = (s: string): string => s.trim().replace(/\/$/, '');
+  const t = (s: string): string => goTrimSpace(s).replace(/\/$/, '');
   return goEqualFold(t(a), t(c));
 }
 

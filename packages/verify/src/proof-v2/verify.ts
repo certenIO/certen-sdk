@@ -6,11 +6,11 @@
  */
 import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sameUrl, sequencedMessage, transactionHash } from './accumulate.js';
 import { accumulateSetRoot, validatorsOf } from './accset.js';
-import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
+import { equal, fail, goHexStrict, goTrimSpace, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
-import { anchorBody, anchorMessage, hex32, list, optList, rec, str, uint, type Rec } from './shapes.js';
-import { decodePortable } from '../s3/gotree.js';
-import { goTrimSpace, mustHex32 } from '../s3/chains.js';
+import { anchorBody, anchorMessage, list, optList, rec, str, uint, type Rec } from './shapes.js';
+import { BadNum, decodePortable } from '../s3/gotree.js';
+import { bit, mustHex32 } from '../s3/chains.js';
 import { canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
@@ -74,8 +74,8 @@ function u64be(n: number | bigint): Uint8Array {
 /** pkg/proof ComputeIncarnation. */
 export function computeIncarnation(genesis: unknown, networkRecord: Uint8Array, globalsRecord: Uint8Array): Uint8Array {
   const g = rec(genesis, 'genesis');
-  const root = hexBytes(g.rootChainAnchor, 'genesis.rootChainAnchor', 32);
-  const state = hexBytes(g.stateTreeAnchor, 'genesis.stateTreeAnchor', 32);
+  const root = goHexStrict(g.rootChainAnchor, 'genesis.rootChainAnchor', 32);
+  const state = goHexStrict(g.stateTreeAnchor, 'genesis.stateTreeAnchor', 32);
   const minorBlockIndex = uint(g.minorBlockIndex, 'genesis.minorBlockIndex');
   const timeUnix = uint(g.timeUnix, 'genesis.timeUnix');
   if (minorBlockIndex !== GENESIS_BLOCK) fail(`incarnation: the genesis anchor is for block ${minorBlockIndex}, not the genesis block ${GENESIS_BLOCK}`);
@@ -119,12 +119,12 @@ export function verifyPortableDecoded(document: unknown, trace: Trace = () => {}
   const doc = canonicalize20(decoded);
   const ev = doc.evidence && typeof doc.evidence === 'object' ? (doc.evidence as Rec) : undefined;
   if (!ev || ev.version !== VERSION) fail('not a v2 Accumulate proof');
-  const pin = hexBytes(doc.pin, 'pin', 32);
+  const pin = goHexStrict(doc.pin, 'pin', 32);
 
   // The trust base: the genesis values, bound to the pin by the incarnation identity.
   const g = doc.genesis ? rec(doc.genesis, 'genesis') : fail('no genesis');
-  const networkRecord = hexBytes(g.networkRecord, 'genesis.networkRecord');
-  const globalsRecord = hexBytes(g.globalsRecord, 'genesis.globalsRecord');
+  const networkRecord = goHexStrict(g.networkRecord, 'genesis.networkRecord');
+  const globalsRecord = goHexStrict(g.globalsRecord, 'genesis.globalsRecord');
   const id = computeIncarnation(g, networkRecord, globalsRecord);
   if (!equal(id, pin)) fail(`incarnation evidence is for ${toHex(id)}, not the pinned ${toHex(pin)}`);
   const genesis = genesisGlobals(g.network, networkRecord, g.globals, globalsRecord);
@@ -155,7 +155,7 @@ export function verifyPortableDecoded(document: unknown, trace: Trace = () => {}
   certify.forEach((run, i) => cert.advanceEpoch(run, `certify run ${i}`));
   trace('spine', { majors: need, certifiedBlock: cert.lastMinorBlock, certifiedRoot: toHex(cert.rootChainAnchor), validators: cert.validators().length, threshold: cert.directoryThreshold(), networkUpdatesApplied: cert.applied.length });
   const r = receiptFromJSON(ev.receipt, 'receipt');
-  const tx = hex32(ev.txHash, 'txHash');
+  const tx = goHexStrict(ev.txHash, 'txHash', 32);
   if (!equal(r.start, tx)) fail(`receipt starts at ${toHex(r.start)}, not the transaction ${toHex(tx)}`);
   if (!equal(r.anchor, cert.rootChainAnchor)) fail(`receipt ends at ${toHex(r.anchor)}, not the root ${toHex(cert.rootChainAnchor)} certified at DN ${cert.lastMinorBlock}`);
   if (!receiptValid(r)) fail('receipt does not validate');
@@ -366,22 +366,22 @@ function pageChain(p: Rec, r: Receipt): PageChain {
 
 /** ChainRoot.derive: count and anchor from Pending alone; the restated values must agree. */
 function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array } {
-  let count = 0;
+  let count = 0n;
   let anchor: Uint8Array | undefined;
   for (const [i, v] of optList(c.pending, `${label}.pending`).entries()) {
     if (v === null || v === undefined) continue;
-    count += 2 ** i;
+    count |= bit(i); // Go: count |= 1 << uint(i) on a uint64
     // ChainRoot.derive trims the entry before it decodes it (strings.TrimSpace)
     const h = hexBytes(typeof v === 'string' ? goTrimSpace(v) : v, `${label}.pending[${i}]`, 32);
     anchor = anchor === undefined ? h : sha256(h, anchor);
   }
   const a = anchor ?? new Uint8Array(32);
-  if (count !== optUintLocal(c.count, `${label}.count`)) fail(`chain ${String(c.name)}: restated count ${String(c.count)} but its merkle state says ${count} - the height is not what the proof claims`);
+  if (count !== restatedCount(c.count, `${label}.count`)) fail(`chain ${String(c.name)}: restated count ${String(c.count)} but its merkle state says ${count} - the height is not what the proof claims`);
   // ChainRoot.derive: strings.ToLower(strings.TrimPrefix(c.Anchor, "0x")): the prefix is removed BEFORE the lower-casing, so "0X" never matches
   const anchorText = String(c.anchor ?? '');
   const restated = (anchorText.startsWith('0x') ? anchorText.slice(2) : anchorText).toLowerCase();
   if (restated !== '' && count > 0 && restated !== toHex(a)) fail(`chain ${String(c.name)}: restated anchor does not match its merkle state`);
-  return { count, anchor: a };
+  return { count: Number(count), anchor: a };
 }
 
 /** ValidatorSetProof.Verify steps 11-17, with the asserted set being the derived one (as proofv2.Verify passes it). */
@@ -406,8 +406,18 @@ function setVerdict(check: Rec, net: Proven, glob: Proven, bound: Uint8Array, pi
   if (net.mainHeight !== 1) return 'validator_set_asserted';
   // 17. the incarnation.
   if (!check.incarnation) return 'incarnation_unknown';
-  if (!equal(hexBytes(check.incarnation, 'incarnation', 32), pin)) return 'foreign_incarnation';
+  if (!equal(mustHex32(String(check.incarnation), 'incarnation'), pin)) return 'foreign_incarnation';
   return 'verified';
+}
+
+/** A restated uint64 count exactly: a double, or the literal gotree kept for a value above 2^53 (a BadNum); absent or null is 0. */
+function restatedCount(v: unknown, label: string): bigint {
+  if (v instanceof BadNum) {
+    const n = BigInt(v.text);
+    if (n < 0n || n > 0xffffffffffffffffn) fail(`${label}: not a uint64`);
+    return n;
+  }
+  return BigInt(optUintLocal(v, label));
 }
 
 function optUintLocal(v: unknown, label: string): number {

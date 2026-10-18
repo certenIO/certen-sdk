@@ -14,7 +14,7 @@ import { decodeObject, type WireNode } from '../sigtypes/wire.js';
 import { AccUrl, goEqualFold } from './acc.js';
 import { mustHex32, verifyAccountState, type ChainedReceipt } from './chains.js';
 import type { ChainRoot } from './evidence.js';
-import { bool, list, str, struct, u64 } from './gojson.js';
+import { bool, list, str, struct, u64, u64big } from './gojson.js';
 import { accountState, recordBytes } from './jsonwire.js';
 import { bigOf, bytesOf, decodeAccount, nodesOf, urlOf } from './model.js';
 
@@ -46,6 +46,7 @@ function chainRoots(v: unknown, label: string): ChainRoot[] {
       name: str(s.name, `${label}[${i}].name`),
       pending: pl?.map((p, k) => (p === null ? null : str(p, `${label}[${i}].pending[${k}]`))),
       count: u64(s.count, `${label}[${i}].count`),
+      countBig: u64big(s.count, `${label}[${i}].count`),
       anchor: str(s.anchor, `${label}[${i}].anchor`),
     };
   });

@@ -27,6 +27,40 @@ export function hexBytes(s: unknown, label: string, len?: number): Uint8Array {
   return b;
 }
 
+/**
+ * encoding/hex.DecodeString and nothing else: an even number of hex digits of either case, no 0x prefix, no space, no trim. Go reads the
+ * document members evidence.txHash, pin, genesis.rootChainAnchor / stateTreeAnchor and the like with it (hex.DecodeString, then len == 32).
+ * `hexBytes` above is Go's more tolerant `pkg/proof hexBytes` (lower-cases, strips one 0x); a member Go reads strictly must not use it.
+ */
+export function goHexStrict(s: unknown, label: string, len?: number): Uint8Array {
+  if (typeof s !== 'string') fail(`${label}: not a hex string`);
+  if (s.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(s)) fail(`${label}: invalid hex: encoding/hex: invalid byte or odd length`);
+  const b = new Uint8Array(Buffer.from(s, 'hex'));
+  if (len !== undefined && b.length !== len) fail(`${label}: ${b.length} bytes, want ${len}`);
+  return b;
+}
+
+/** The characters strings.TrimSpace removes (Unicode White_Space); String.prototype.trim differs (it removes U+FEFF and keeps U+0085). */
+function isGoSpace(c: number): boolean {
+  return (c >= 0x09 && c <= 0x0d) || c === 0x20 || c === 0x85 || c === 0xa0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x3000;
+}
+
+/** strings.TrimSpace. The one copy: every TrimSpace in this package is this function, never String.prototype.trim. */
+export function goTrimSpace(s: string): string {
+  let a = 0;
+  let b = s.length;
+  while (a < b && isGoSpace(s.charCodeAt(a))) a++;
+  while (b > a && isGoSpace(s.charCodeAt(b - 1))) b--;
+  return s.slice(a, b);
+}
+
+/** strings.ToLower: unicode.ToLower one code point at a time (JavaScript's full mapping differs for U+0130, which Go lowers to "i"). */
+export function goLower(s: string): string {
+  let out = '';
+  for (const ch of s) out += ch.codePointAt(0) === 0x130 ? 'i' : ch.toLowerCase();
+  return out;
+}
+
 export function toHex(b: Uint8Array): string {
   return Buffer.from(b).toString('hex');
 }
