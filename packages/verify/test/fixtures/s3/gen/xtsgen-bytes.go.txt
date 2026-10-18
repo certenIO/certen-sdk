@@ -725,3 +725,159 @@ func firstSiblingCorpus(fixtures, out string) error {
 	}
 	return writeGz(filepath.Join(out, "bytes-cases-firstsibling.json.gz"), mustJSON(f))
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// every hex spelling the state-receipt check reads as a STRING or as bytes. validator_set_proof.go compares strings in several places
+// (strings.ToLower(Entries[0].Hash) with the 64-character secondaryHash, hex(H(chains||pending)) with strings.ToLower(Entries[1].Hash),
+// hex(sha256(state)) with MustHex32Lower(start), the recomputed root with MustHex32Lower(anchor), and the chain's restated anchor with
+// ToLower(TrimPrefix(anchor, "0x")), which leaves a "0X" prefix in place) and decodes bytes in others (recomputeReceipt, which lower-cases
+// before it trims "0x"; hexBytes, which trims space; the pending entries). A TypeScript port that compares decoded bytes where Go compares
+// the string gives a verdict Go does not. This pass is systematic: for EVERY "stateReceipt" object of EVERY base document it spells start,
+// anchor and entries[k].hash for EVERY k, and, for the AccountStateProof that carries them, secondaryHash, pendingHash, every chain
+// pending[i] and every chain anchor, and records what the validator says. Separate command (receiptspell) and file; earlier corpora unchanged.
+
+var receiptHexRe = regexp.MustCompile(`"(start|anchor|hash)"\s*:\s*"([0-9a-fA-F]{64})"`)
+var stateReceiptKeyRe = regexp.MustCompile(`"stateReceipt"\s*:\s*\{`)
+var accountHexRe = regexp.MustCompile(`"(secondaryHash|pendingHash)"\s*:\s*"([0-9a-fA-F]{64})"`)
+var pendingListRe = regexp.MustCompile(`"pending"\s*:\s*\[([^\]\[]*)\]`)
+var pendingEntryRe = regexp.MustCompile(`"([0-9a-fA-F]{64})"`)
+var chainAnchorRe = regexp.MustCompile(`"pending"\s*:\s*\[[^\]\[]*\][^{}\[\]]*?"anchor"\s*:\s*"([0-9a-fA-F]{64})"`)
+
+// objectEnd returns the index just past the JSON object that opens at doc[open] ('{'), or -1.
+func objectEnd(doc []byte, open int) int {
+	depth, inStr := 0, false
+	for i := open; i < len(doc); i++ {
+		c := doc[i]
+		if inStr {
+			if c == 0x5c {
+				i++
+			} else if c == '"' {
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
+}
+
+type spellSite struct {
+	name       string
+	start, end int
+	wide       bool // also spell with space padding and a "0X" prefix
+}
+
+func receiptSpellSites(doc []byte) []spellSite {
+	var sites []spellSite
+	seen := map[int]bool{}
+	add := func(name string, s, e int, wide bool) {
+		if seen[s] {
+			return
+		}
+		seen[s] = true
+		sites = append(sites, spellSite{name, s, e, wide})
+	}
+	for ri, loc := range stateReceiptKeyRe.FindAllIndex(doc, -1) {
+		open := loc[1] - 1
+		end := objectEnd(doc, open)
+		if end < 0 {
+			continue
+		}
+		k := 0
+		for _, m := range receiptHexRe.FindAllSubmatchIndex(doc[open:end], -1) {
+			key := string(doc[open+m[2] : open+m[3]])
+			name := fmt.Sprintf("receipt%d.%s", ri, key)
+			if key == "hash" {
+				name = fmt.Sprintf("receipt%d.entries[%d]", ri, k)
+				k++
+			}
+			add(name, open+m[4], open+m[5], false)
+		}
+	}
+	for _, m := range accountHexRe.FindAllSubmatchIndex(doc, -1) {
+		add(string(doc[m[2]:m[3]]), m[4], m[5], true)
+	}
+	for li, m := range pendingListRe.FindAllSubmatchIndex(doc, -1) {
+		for pi, p := range pendingEntryRe.FindAllSubmatchIndex(doc[m[2]:m[3]], -1) {
+			add(fmt.Sprintf("chain%d.pending[%d]", li, pi), m[2]+p[2], m[2]+p[3], true)
+		}
+	}
+	for ci, m := range chainAnchorRe.FindAllSubmatchIndex(doc, -1) {
+		add(fmt.Sprintf("chain%d.anchor", ci), m[2], m[3], true)
+	}
+	sort.Slice(sites, func(i, j int) bool { return sites[i].start < sites[j].start })
+	return sites
+}
+
+func receiptSpellCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Every 64-hex spelling the state-receipt check reads: start, anchor and entries[k].hash of every stateReceipt for every k, and secondaryHash, pendingHash, every chain pending[i] and every chain anchor, each spelled with a 0x prefix, upper-cased, both (and, for the account fields, with a 0X prefix and padded with spaces), judged by VerifyPortable from the text."}
+	bases, err := bytesBases(fixtures)
+	if err != nil {
+		return err
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStable(raw)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	// XTS_SHARD=i/n judges only every n-th (site, spelling) from the i-th, into bytes-cases-receiptspell-<i>.json.gz, so the cases can be judged by
+	// n processes at once; the shards are merged, ordered by id, into bytes-cases-receiptspell.json.gz (the Skipped counts added).
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	n, seq := 0, 0
+	for bi, bpath := range bases {
+		for _, site := range receiptSpellSites(docs[bi]) {
+			h := string(docs[bi][site.start:site.end])
+			spells := []struct{ name, text string }{{"0x", "0x" + h}, {"upper", strings.ToUpper(h)}, {"0x upper", "0x" + strings.ToUpper(h)}, {"0X", "0X" + h}}
+			if site.wide {
+				spells = append(spells, struct{ name, text string }{"space", " " + h + " "})
+			}
+			for _, v := range spells {
+				if seq++; (seq-1)%shards != shard {
+					continue
+				}
+				edits := []ByteEdit{{site.start, site.end - site.start, ins(v.text)}}
+				text := applyEdits(docs[bi], edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeStableCounting(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s %s [%s]\n", bpath, site.name, v.name)
+					continue
+				}
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("receiptspell:%s:%s:%s", bpath, site.name, v.name), Base: bi, Op: "receiptspell " + v.name, Edits: edits, Expect: ex})
+				if n++; n%2000 == 0 {
+					fmt.Fprintf(os.Stderr, "receiptspell: %d cases judged\n", n)
+				}
+			}
+		}
+	}
+	name := "bytes-cases-receiptspell.json.gz"
+	if shards > 1 {
+		name = fmt.Sprintf("bytes-cases-receiptspell-%d.json.gz", shard)
+	}
+	return writeGz(filepath.Join(out, name), mustJSON(f))
+}

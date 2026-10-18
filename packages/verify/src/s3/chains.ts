@@ -25,9 +25,23 @@ export function mustHex32(s: string, label: string): Uint8Array {
   return b;
 }
 
-/** pkg/proof hexBytes: trimmed, lower-cased, an optional 0x prefix removed, then hex.DecodeString. */
+/** The characters strings.TrimSpace removes (Unicode White_Space); String.prototype.trim differs (it removes U+FEFF and keeps U+0085). */
+function isGoSpace(c: number): boolean {
+  return (c >= 0x09 && c <= 0x0d) || c === 0x20 || c === 0x85 || c === 0xa0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x3000;
+}
+
+/** strings.TrimSpace. */
+export function goTrimSpace(s: string): string {
+  let a = 0;
+  let b = s.length;
+  while (a < b && isGoSpace(s.charCodeAt(a))) a++;
+  while (b > a && isGoSpace(s.charCodeAt(b - 1))) b--;
+  return s.slice(a, b);
+}
+
+/** pkg/proof hexBytes: trimmed (strings.TrimSpace), lower-cased, an optional 0x prefix removed, then hex.DecodeString. */
 export function hexBytesLoose(s: string, label: string): Uint8Array {
-  let t = s.trim().toLowerCase();
+  let t = goTrimSpace(s).toLowerCase();
   if (t.startsWith('0x')) t = t.slice(2);
   const b = goHex(t);
   if (!b) return fail(`${label}: invalid hex: encoding/hex: invalid byte`);
@@ -63,7 +77,8 @@ function compute(c: ChainRoot): { count: number; anchor: Uint8Array } {
 export function deriveChain(c: ChainRoot): { count: number; anchor: Uint8Array } {
   const { count, anchor } = compute(c);
   if (count !== c.count) fail(`chain ${JSON.stringify(c.name)}: restated count ${c.count} but its merkle state says ${count} - the height is not what the proof claims`);
-  const restated = c.anchor.toLowerCase().replace(/^0x/, '');
+  // strings.ToLower(strings.TrimPrefix(c.Anchor, "0x")): the prefix is removed BEFORE the lower-casing, so a "0X" prefix stays and never matches
+  const restated = (c.anchor.startsWith('0x') ? c.anchor.slice(2) : c.anchor).toLowerCase();
   if (restated !== '' && count > 0 && toHex(anchor) !== restated) {
     fail(`chain ${JSON.stringify(c.name)}: restated anchor does not match its merkle state: computed=${toHex(anchor).slice(0, 16)} restated=${restated.slice(0, 16)}`);
   }

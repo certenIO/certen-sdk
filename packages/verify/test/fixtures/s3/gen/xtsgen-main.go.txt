@@ -11,6 +11,13 @@
 //	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written -per 100 real intent facts decode tables votes
 //	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written -per 12 mutations bytes fold
 //
+// The two receipt-spelling corpora are separate commands writing their own files (the earlier corpora stay as they were judged):
+//
+//	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written firstsibling
+//	GOWORK=off go build -trimpath -o xtsgen ./cmd/xtsgen && for i in 0 1 2 3 4 5 6 7 8 9 10; do
+//	  XTS_SHARD=$i/11 ./xtsgen -fixtures $S3 -out <dir> receiptspell & done; wait
+//	node $S3/gen/merge-receiptspell.mjs <dir>   # writes <dir>/bytes-cases-receiptspell.json.gz (30475 cases); copy it to $S3/go-written
+//
 // (mutations.json, bytes-cases.json.gz and fold-orbits.json are written at -per 12: a larger -per writes a different, larger mutations.json.
 // At a larger -per three intent refusals differ from the checked-in corpus only in the binary decoder's wording, one facts case in the wording
 // of a URL percent escape, and one votes case is a harness applyPatches TypeError on a null parent: the verdict and the bytes are the same.)
@@ -859,6 +866,8 @@ func main() {
 			err = replay(*fixtures, *out, *id)
 		case "bytes":
 			err = bytesCorpus(*fixtures, *out, *per)
+		case "receiptspell":
+			err = receiptSpellCorpus(*fixtures, *out)
 		case "firstsibling":
 			err = firstSiblingCorpus(*fixtures, *out)
 		case "fold":

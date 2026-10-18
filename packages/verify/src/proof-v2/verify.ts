@@ -10,7 +10,7 @@ import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, r
 import { genesisGlobals, Spine } from './spine.js';
 import { anchorBody, anchorMessage, hex32, list, optList, rec, str, uint, type Rec } from './shapes.js';
 import { decodePortable } from '../s3/gotree.js';
-import { mustHex32 } from '../s3/chains.js';
+import { goTrimSpace, mustHex32 } from '../s3/chains.js';
 import { canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
@@ -297,13 +297,18 @@ function provenAccount(proven: unknown, label: string): Proven {
 
   // 11. the state hashes to the leaf being proven; 12. the path validates.
   const r = receiptFromJSON(pa.stateReceipt, `set check ${label} stateReceipt`);
+  // Go reads start and anchor through MustHex32Lower (exactly 64 hex characters, so no 0x prefix) and compares the strings.
+  const rawReceipt = pa.stateReceipt as Record<string, unknown>;
+  mustHex32(String(rawReceipt.start), `validatorSetProof.${label}: stateReceipt.start`);
   if (!equal(sha256(state), r.start)) fail(`validatorSetProof.${label}: accountState does not hash to the proven leaf`);
   if (!receiptValid(r)) fail(`validatorSetProof.${label}: state receipt does not recompute`);
+  mustHex32(String(rawReceipt.anchor), `validatorSetProof.${label}: stateReceipt.anchor`);
 
   // 13. the chain history is bound.
   const rawSteps = (pa.stateReceipt as Record<string, unknown>).entries;
   const firstHash = Array.isArray(rawSteps) && rawSteps.length > 0 ? (rawSteps[0] as Record<string, unknown>).hash : undefined;
-  const mainHeight = chainBinding(r, firstHash, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
+  const secondHash = Array.isArray(rawSteps) && rawSteps.length > 1 ? (rawSteps[1] as Record<string, unknown>).hash : undefined;
+  const mainHeight = chainBinding(r, firstHash, secondHash, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
   return { root: r.anchor, entry, record: rec(pa.record, `set check ${label} record`), mainHeight };
 }
 
@@ -312,9 +317,10 @@ function provenAccount(proven: unknown, label: string): Proven {
  * first sibling is the secondary component and its second H(merkle(chain anchors) || pending). Returns the height of
  * the chain named main, when there is one. Go keeps the receipt's steps as the strings the document spells and compares the STRING
  * strings.ToLower(Entries[0].Hash) with the 64-character secondaryHash, so firstHash is the document's own spelling of the first
- * step: a "0x" spelling is refused although recomputeReceipt accepts it.
+ * step: a "0x" spelling is refused although recomputeReceipt accepts it. The second sibling is compared the same way: Go lower-cases the
+ * STRING Entries[1].Hash and compares it with hex(H(chains || pending)), so secondHash is the document's own spelling of the second step.
  */
-function chainBinding(r: Receipt, firstHash: unknown, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
+function chainBinding(r: Receipt, firstHash: unknown, secondHash: unknown, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
   if (r.entries.length < 2) fail(`${label}: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
   if (!secondaryHash || !pendingHash) {
     fail(`${label}: secondaryHash and pendingHash are required: the receipt's second step is H(chains || pending), so the chain roots alone cannot be checked`);
@@ -331,8 +337,10 @@ function chainBinding(r: Receipt, firstHash: unknown, chains: unknown, secondary
     if (c.name === 'main' && mainHeight === undefined) mainHeight = count;
     leaves.push(count === 0 ? new Uint8Array(32) : anchor);
   }
-  const pend = hexBytes(pendingHash, `${label}.pendingHash`, 32);
-  if (!equal(sha256(merkleHashList(leaves), pend), r.entries[1].hash)) {
+  // pkg/proof hexBytes: strings.TrimSpace, lower-case, an optional 0x prefix removed
+  const pend = hexBytes(typeof pendingHash === 'string' ? goTrimSpace(pendingHash) : pendingHash, `${label}.pendingHash`, 32);
+  const combined = toHex(sha256(merkleHashList(leaves), pend));
+  if (String(secondHash).toLowerCase() !== combined) {
     fail(`${label}: H(chains||pending) is not the receipt's second sibling - the chain heights are NOT bound`);
   }
   return mainHeight;
@@ -351,13 +359,10 @@ function pageChain(p: Rec, r: Receipt): PageChain {
   }
   if (r.entries.length < 2) fail(`page: ${url}: chains: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
   // page.go verifyPage passes toChainedReceipt(r): a merkle.Receipt, whose steps are bytes, spelled lower-case hex by Go.
-  const h = chainBinding(r, toHex(r.entries[0].hash), p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
+  const h = chainBinding(r, toHex(r.entries[0].hash), toHex(r.entries[1].hash), p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
   if (h === undefined) fail(`page: ${url}: no main chain among the bound chains`);
   return { url, bound: true, mainHeight: h };
 }
-
-/** The characters strings.TrimSpace removes (Unicode White_Space). */
-const GO_SPACE = /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
 
 /** ChainRoot.derive: count and anchor from Pending alone; the restated values must agree. */
 function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array } {
@@ -367,12 +372,14 @@ function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array }
     if (v === null || v === undefined) continue;
     count += 2 ** i;
     // ChainRoot.derive trims the entry before it decodes it (strings.TrimSpace)
-    const h = hexBytes(typeof v === 'string' ? v.replace(GO_SPACE, '') : v, `${label}.pending[${i}]`, 32);
+    const h = hexBytes(typeof v === 'string' ? goTrimSpace(v) : v, `${label}.pending[${i}]`, 32);
     anchor = anchor === undefined ? h : sha256(h, anchor);
   }
   const a = anchor ?? new Uint8Array(32);
   if (count !== optUintLocal(c.count, `${label}.count`)) fail(`chain ${String(c.name)}: restated count ${String(c.count)} but its merkle state says ${count} - the height is not what the proof claims`);
-  const restated = String(c.anchor ?? '').toLowerCase().replace(/^0x/, '');
+  // ChainRoot.derive: strings.ToLower(strings.TrimPrefix(c.Anchor, "0x")): the prefix is removed BEFORE the lower-casing, so "0X" never matches
+  const anchorText = String(c.anchor ?? '');
+  const restated = (anchorText.startsWith('0x') ? anchorText.slice(2) : anchorText).toLowerCase();
   if (restated !== '' && count > 0 && restated !== toHex(a)) fail(`chain ${String(c.name)}: restated anchor does not match its merkle state`);
   return { count, anchor: a };
 }
