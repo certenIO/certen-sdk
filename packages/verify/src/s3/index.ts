@@ -46,8 +46,11 @@ function versionOf(ev: Record<string, unknown> | undefined): string | undefined 
 
 export { govRootV4FromHashes, govRootV4FromPortable, computeGovRootV4, govRootV4G1, govRootV4G2, encodeVoteV4, votesRootV4, pagesRootV4, pagesRootInputs, pageCounts, voteWire, GOVROOT_V4_DOMAIN, GOVROOT_V4_TAGS, VOTE_RECORD_TAG_V4 } from './govroot-v4.js';
 export type { GovRootV4, GovRootV4Inputs, GovRootV4Slots, GovRootReport, VoteWire, PagesRootPage, PageCounts } from './govroot-v4.js';
-export { bindProofV21, bindG0, governingFactsFromVoteEvidence } from './bind-v21.js';
+export { bindProofV21, bindProofV2, bindG0, governingFactsFromVoteEvidence } from './bind-v21.js';
+export { govRootV3FromHashes } from './govroot-v3.js';
+export { proofV2Root } from './proofroot.js';
+export type { ProofRoot, ProofRootInputs } from './proofroot.js';
 export type { GoverningFacts, G0Result, G1Result, VoteEvidenceView } from './bind-v21.js';
 export { decodeVoteEvidence } from './voteevidence.js';
-export { unmarshalCertifiedEvidence, evidence20View, marshalEvidence, judgeProofV2, IntentProofError, BindError } from './consensus.js';
+export { unmarshalCertifiedEvidence, decodeEvidenceFull, evidence20View, marshalEvidence, judgeProofV2, IntentProofError, BindError } from './consensus.js';
 export type { EvidenceVal, JudgeInputs } from './consensus.js';
