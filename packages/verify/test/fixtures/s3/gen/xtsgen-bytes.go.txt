@@ -674,3 +674,54 @@ func bytesCorpus(fixtures, out string, per int) error {
 	}
 	return writeGz(filepath.Join(out, "bytes-cases.json.gz"), mustJSON(f))
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the first sibling of every state receipt: AccountStateProof.verifyChainBinding compares the STRING strings.ToLower(Entries[0].Hash) with
+// the 64-character secondaryHash, so a "0x" spelling (and a "0x" spelling of an upper-cased one) can never be the first sibling, while an
+// upper-cased one is. The random operators reach entries[0].hash only by chance (hexstring hits any hex token), so this pass is systematic:
+// for EVERY "stateReceipt" in EVERY base document (the set check's network and globals accounts of evidence 2.0 and 2.1, and the page
+// receipts that carry one) it records three spellings of the receipt's first sibling, each judged by the validator. It is a separate
+// command (firstsibling) writing its own file, so the earlier corpora stay as they were judged.
+
+var firstSiblingRe = regexp.MustCompile(`"stateReceipt"\s*:\s*\{[^{}]*?"entries"\s*:\s*\[\s*\{\s*"hash"\s*:\s*"([0-9a-fA-F]{64})"`)
+
+func firstSiblingCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "The first sibling (entries[0].hash) of every stateReceipt of every base document - the set check's network and globals accounts of evidence 2.0 and 2.1 and the page receipts - spelled with a 0x prefix, upper-cased, and both, judged by VerifyPortable from the text. Go compares the lower-cased STRING with the 64-character secondaryHash, so the 0x spellings are refused as 'secondaryHash is not the receipt's first sibling'."}
+	bases, err := bytesBases(fixtures)
+	if err != nil {
+		return err
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStable(raw)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	for bi, bpath := range bases {
+		for k, loc := range firstSiblingRe.FindAllSubmatchIndex(docs[bi], -1) {
+			s, e := loc[2], loc[3]
+			h := string(docs[bi][s:e])
+			for _, v := range []struct{ name, text string }{{"0x", "0x" + h}, {"upper", strings.ToUpper(h)}, {"0x upper", "0x" + strings.ToUpper(h)}} {
+				edits := []ByteEdit{{s, e - s, ins(v.text)}}
+				text := applyEdits(docs[bi], edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeStableCounting(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s receipt %d [%s]\n", bpath, k, v.name)
+					continue
+				}
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("firstsibling:%s#%d:%s", bpath, k, v.name), Base: bi, Op: "firstsibling " + v.name, Edits: edits, Expect: ex})
+			}
+		}
+	}
+	return writeGz(filepath.Join(out, "bytes-cases-firstsibling.json.gz"), mustJSON(f))
+}

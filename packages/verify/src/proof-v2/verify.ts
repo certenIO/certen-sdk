@@ -301,23 +301,28 @@ function provenAccount(proven: unknown, label: string): Proven {
   if (!receiptValid(r)) fail(`validatorSetProof.${label}: state receipt does not recompute`);
 
   // 13. the chain history is bound.
-  const mainHeight = chainBinding(r, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
+  const rawSteps = (pa.stateReceipt as Record<string, unknown>).entries;
+  const firstHash = Array.isArray(rawSteps) && rawSteps.length > 0 ? (rawSteps[0] as Record<string, unknown>).hash : undefined;
+  const mainHeight = chainBinding(r, firstHash, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
   return { root: r.anchor, entry, record: rec(pa.record, `set check ${label} record`), mainHeight };
 }
 
 /**
  * AccountStateProof.verifyChainBinding: the state hasher is [main, secondaryState, chains, pending], so the receipt's
  * first sibling is the secondary component and its second H(merkle(chain anchors) || pending). Returns the height of
- * the chain named main, when there is one.
+ * the chain named main, when there is one. Go keeps the receipt's steps as the strings the document spells and compares the STRING
+ * strings.ToLower(Entries[0].Hash) with the 64-character secondaryHash, so firstHash is the document's own spelling of the first
+ * step: a "0x" spelling is refused although recomputeReceipt accepts it.
  */
-function chainBinding(r: Receipt, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
+function chainBinding(r: Receipt, firstHash: unknown, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
   if (r.entries.length < 2) fail(`${label}: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
   if (!secondaryHash || !pendingHash) {
     fail(`${label}: secondaryHash and pendingHash are required: the receipt's second step is H(chains || pending), so the chain roots alone cannot be checked`);
   }
   if (typeof secondaryHash !== 'string') fail(`${label}.secondaryHash: not a hex string`);
   const sec = mustHex32(secondaryHash as string, `${label}.secondaryHash`);
-  if (!equal(r.entries[0].hash, sec)) fail(`${label}: secondaryHash is not the receipt's first sibling`);
+  const first = String(firstHash).toLowerCase();
+  if (first !== toHex(sec)) fail(`${label}: secondaryHash is not the receipt's first sibling: got=${toHex(sec).slice(0, 16)} want=${first.slice(0, 16)}`);
   let mainHeight: number | undefined;
   const leaves: Uint8Array[] = [];
   for (const [i, chain] of optList(chains, `${label}.chains`).entries()) {
@@ -345,7 +350,8 @@ function pageChain(p: Rec, r: Receipt): PageChain {
     return { url, bound: false, mainHeight: 0, note };
   }
   if (r.entries.length < 2) fail(`page: ${url}: chains: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
-  const h = chainBinding(r, p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
+  // page.go verifyPage passes toChainedReceipt(r): a merkle.Receipt, whose steps are bytes, spelled lower-case hex by Go.
+  const h = chainBinding(r, toHex(r.entries[0].hash), p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
   if (h === undefined) fail(`page: ${url}: no main chain among the bound chains`);
   return { url, bound: true, mainHeight: h };
 }
