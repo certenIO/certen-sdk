@@ -34,6 +34,12 @@ export function hexBytesLoose(s: string, label: string): Uint8Array {
   return b;
 }
 
+/** validator_set_proof.go recomputeReceipt: lower-cased, an optional 0x prefix removed, then hex.DecodeString - space is not trimmed. */
+function hexReceiptStep(s: string): Uint8Array | undefined {
+  const t = s.toLowerCase();
+  return goHex(t.startsWith('0x') ? t.slice(2) : t);
+}
+
 /** ChainRoot.compute: the height and the DAG root from the pending list alone. */
 function compute(c: ChainRoot): { count: number; anchor: Uint8Array } {
   let count = 0;
@@ -111,21 +117,12 @@ export function verifyChainBinding(r: ChainedReceipt, chains: ChainRoot[], secon
 
 /** recomputeReceipt: the root a chained receipt's path reaches from its start. */
 function recomputeReceipt(r: ChainedReceipt): Uint8Array {
-  let cur: Uint8Array;
-  try {
-    cur = hexBytesLoose(r.start, 'receipt.start');
-  } catch {
-    return fail('receipt.start must be 32 bytes of hex');
-  }
-  if (cur.length !== 32) fail('receipt.start must be 32 bytes of hex');
+  const start = hexReceiptStep(r.start);
+  if (start === undefined || start.length !== 32) return fail('receipt.start must be 32 bytes of hex');
+  let cur: Uint8Array = start;
   r.entries.forEach((e, i) => {
-    let h: Uint8Array;
-    try {
-      h = hexBytesLoose(e.hash, 'receipt entry');
-    } catch {
-      return fail(`receipt.entries[${i}].hash must be 32 bytes of hex`);
-    }
-    if (h.length !== 32) fail(`receipt.entries[${i}].hash must be 32 bytes of hex`);
+    const h = hexReceiptStep(e.hash);
+    if (h === undefined || h.length !== 32) return fail(`receipt.entries[${i}].hash must be 32 bytes of hex`);
     cur = e.right ? sha256(cur, h) : sha256(h, cur);
   });
   return cur;

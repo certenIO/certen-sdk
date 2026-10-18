@@ -10,6 +10,7 @@ import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, r
 import { genesisGlobals, Spine } from './spine.js';
 import { anchorBody, anchorMessage, hex32, list, optList, rec, str, uint, type Rec } from './shapes.js';
 import { decodePortable } from '../s3/gotree.js';
+import { mustHex32 } from '../s3/chains.js';
 import { canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
@@ -314,7 +315,8 @@ function chainBinding(r: Receipt, chains: unknown, secondaryHash: unknown, pendi
   if (!secondaryHash || !pendingHash) {
     fail(`${label}: secondaryHash and pendingHash are required: the receipt's second step is H(chains || pending), so the chain roots alone cannot be checked`);
   }
-  const sec = hexBytes(secondaryHash, `${label}.secondaryHash`, 32);
+  if (typeof secondaryHash !== 'string') fail(`${label}.secondaryHash: not a hex string`);
+  const sec = mustHex32(secondaryHash as string, `${label}.secondaryHash`);
   if (!equal(r.entries[0].hash, sec)) fail(`${label}: secondaryHash is not the receipt's first sibling`);
   let mainHeight: number | undefined;
   const leaves: Uint8Array[] = [];

@@ -53,6 +53,9 @@ const UNION_ENUM: Readonly<Record<string, string>> = {
 };
 
 /** The enum a non-discriminating field names. */
+/** The struct-valued members the protocol's generated types hold by pointer (protocol.NetworkGlobals: FeeSchedule *FeeSchedule, Limits *NetworkLimits). */
+const POINTER_STRUCTS: ReadonlySet<string> = new Set(['NetworkGlobals.feeSchedule', 'NetworkGlobals.limits']);
+
 function enumOf(cls: string, field: string): string | undefined {
   if (field === 'vote') return 'VoteType';
   const k = `${cls}.${field}`;
@@ -347,7 +350,18 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
     }
     if (d.kind === 'reference') {
       // a struct field: the objects of every occurrence decode into the one struct
-      const objs = vals.filter((v) => v !== undefined && v !== null);
+      // A member Go holds by pointer is set to nil by a null: only what follows the last null decodes (into a fresh struct), and what came
+      // before it is still decoded, so a wrongly typed one stays an error.
+      let live = vals;
+      if (POINTER_STRUCTS.has(`${cls}.${d.name}`)) {
+        const at = vals.lastIndexOf(null);
+        if (at >= 0) {
+          const earlier = vals.slice(0, at).filter((v) => v !== undefined && v !== null);
+          if (earlier.length > 0) element(cls, d, earlier.length === 1 ? earlier[0] : new Occ(earlier), lab);
+          live = vals.slice(at + 1);
+        }
+      }
+      const objs = live.filter((v) => v !== undefined && v !== null);
       if (objs.length === 0) continue;
       const x = element(cls, d, objs.length === 1 ? objs[0] : new Occ(objs), lab);
       if (x !== null) node.fields.set(d.name, x);

@@ -76,3 +76,19 @@ export function exactKey(v: unknown): string {
   if (Array.isArray(v)) return '[' + v.map(exactKey).join(',') + ']';
   return '{' + pairsOf(v as object).map(([k, x]) => JSON.stringify(k) + ':' + exactKey(x)).join(',') + '}';
 }
+
+/**
+ * The occurrences of a member that Go reads into a pointer to a struct, after all of them: a null sets the pointer to nil, so only what follows
+ * the last null decodes (into a fresh struct). undefined when the member ends in a null or has no occurrence; the occurrences before the last
+ * null are in `before`, for the caller to decode so that a wrongly typed one is still an error.
+ */
+export function afterLastNull(v: unknown): { value: unknown; before: unknown } {
+  if (!(v instanceof Occ)) return { value: v === null ? undefined : v, before: undefined };
+  let k = v.vals.length;
+  while (k > 0 && v.vals[k - 1] !== null) k--;
+  const pick = (xs: unknown[]): unknown => {
+    const live = xs.filter((x) => x !== undefined && x !== null);
+    return live.length === 0 ? undefined : live.length === 1 ? live[0] : new Occ(live);
+  };
+  return { value: pick(v.vals.slice(k)), before: k === 0 ? undefined : pick(v.vals.slice(0, k)) };
+}

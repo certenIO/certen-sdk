@@ -6,6 +6,7 @@
 import { VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
 import { encodeNode } from '../sigtypes/wire.js';
+import { afterLastNull, Occ } from './occ.js';
 import { goHex, i64big, JsonError, jsonList, strptr, struct, u64 } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
@@ -70,12 +71,21 @@ function stateFromJson(j: unknown): State {
   return { bin: Uint8Array.from(out), canonical: { count: Number(count), pending: kept, hashList: hashes.map(hx) } };
 }
 
+/** A member Go reads into a pointer: what follows its last null (a null sets the pointer to nil); the occurrences before that null are still decoded. */
+function ptr(v: unknown, decode: (x: unknown) => unknown): unknown {
+  const { value, before } = afterLastNull(v);
+  if (before !== undefined) decode(before);
+  return value;
+}
+
 function receiptListFromJson(j: unknown): State {
   const s = struct(j, ['merkleState', 'elements', 'receipt', 'continuedReceipt'], 'merkle.ReceiptList');
   const out: number[] = [];
   const canonical: Record<string, unknown> = {};
-  if (s.merkleState !== undefined && s.merkleState !== null) {
-    const st = stateFromJson(s.merkleState);
+  // merkle.ReceiptList holds its state and both receipts by pointer: a null clears them (what came before it is still decoded)
+  const ms = ptr(s.merkleState, stateFromJson);
+  if (ms !== undefined) {
+    const st = stateFromJson(ms);
     app(out, field(1, st.bin));
     canonical.merkleState = st.canonical;
   }
@@ -93,13 +103,15 @@ function receiptListFromJson(j: unknown): State {
     elements.push(Buffer.from(b).toString('hex'));
   }
   canonical.elements = elements;
-  if (s.receipt !== undefined && s.receipt !== null) {
-    const r = importReceipt(s.receipt, 'rootProof.receipt');
+  const rc = ptr(s.receipt, (x) => importReceipt(x, 'rootProof.receipt'));
+  if (rc !== undefined) {
+    const r = importReceipt(rc, 'rootProof.receipt');
     app(out, field(3, r.bin));
     canonical.receipt = canonReceipt(r);
   }
-  if (s.continuedReceipt !== undefined && s.continuedReceipt !== null) {
-    const r = importReceipt(s.continuedReceipt, 'rootProof.continuedReceipt');
+  const cr = ptr(s.continuedReceipt, (x) => importReceipt(x, 'rootProof.continuedReceipt'));
+  if (cr !== undefined) {
+    const r = importReceipt(cr, 'rootProof.continuedReceipt');
     app(out, field(4, r.bin));
     canonical.continuedReceipt = canonReceipt(r);
   }
@@ -114,8 +126,36 @@ export interface MinorRoot {
   anchor?: SeqMsg;
 }
 
+/**
+ * encoding.JsonUnmarshalListWith (a list of an interface type): a later list is written over the elements already read, index by index, and
+ * never shortens what an earlier one made; a single value replaces the whole list and a null drops it. Every element of every occurrence is
+ * decoded in turn, so a wrongly typed one is an error even when a later list overwrites it.
+ */
+function unionList(v: unknown, label: string): unknown[] | undefined {
+  let out: unknown[] | undefined;
+  for (const x of v instanceof Occ ? v.vals : [v]) {
+    if (x === undefined) continue;
+    if (x === null) {
+      out = undefined;
+      continue;
+    }
+    const els = Array.isArray(x) ? x : [x];
+    els.forEach((el, i) => unionFromJson('Signature', el, `${label}.signatures[${i}]`));
+    if (!Array.isArray(x)) {
+      out = els;
+      continue;
+    }
+    const next = out === undefined ? [] : out.slice();
+    els.forEach((el, i) => {
+      next[i] = el;
+    });
+    out = next;
+  }
+  return out;
+}
+
 function keySignatures(v: unknown, label: string): { bin: Uint8Array; canonical: Record<string, unknown> }[] {
-  return (jsonList(v, 'Signatures') ?? []).map((x, i) => {
+  return (unionList(v, label) ?? []).map((x, i) => {
     const n = unionFromJson('Signature', x, `${label}.signatures[${i}]`);
     if (!n || !KEY_SIGNATURES.has(n.cls)) throw new JsonError(`${label}.signatures[${i}]: ${n?.cls ?? 'nil'} is not a key signature`);
     return { bin: encodeNode(n), canonical: nodeToJson(n, 'Signature') };
@@ -159,8 +199,9 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
     updates.push(cu);
   }
   canonical.updates = updates;
-  if (s.rootProof !== undefined && s.rootProof !== null) {
-    const rp = receiptListFromJson(s.rootProof);
+  const rootProof = ptr(s.rootProof, receiptListFromJson);
+  if (rootProof !== undefined) {
+    const rp = receiptListFromJson(rootProof);
     app(out, field(4, rp.bin));
     canonical.rootProof = rp.canonical;
   }
