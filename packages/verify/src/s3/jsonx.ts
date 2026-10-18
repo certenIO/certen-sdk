@@ -1,0 +1,393 @@
+/**
+ * Go's encoding/json for the shapes of a certificate's proof v2, in both directions: a strict parser that keeps number literals and the order
+ * of keys (Go decodes a document key by key), a schema-driven decode into a struct (the rules of json.Unmarshal: case-insensitive key
+ * matching, unknown keys ignored, null a no-op, a wrongly typed value an error) and the matching json.Marshal (field order, omitempty,
+ * HTML-safe escapes). The consensus decode of a certificate's evidence (pkg/proof/v2 evidence_decode.go) and the offline judgements are
+ * defined by exactly what these two do, so they are reproduced rather than approximated.
+ */
+import { VerifyError } from '../proof-v2/bytes.js';
+import { goJsonString } from './budget.js';
+import { JsonError } from './gojson.js';
+
+// --------------------------------------------------------------------------------------------------------------------------------
+// the parser
+
+/** A JSON number as written: Go reads an integer field from the literal, so the literal is what is kept. */
+export class JNum {
+  constructor(readonly lit: string) {}
+}
+export class JObj {
+  constructor(readonly pairs: [string, JVal][]) {}
+}
+export type JVal = null | boolean | string | JNum | JVal[] | JObj;
+
+const WS = new Set([0x20, 0x09, 0x0a, 0x0d]);
+
+/** encoding/json's quoteChar: the byte as a rune, quoted by strconv.Quote with single quotes. */
+export function quoteChar(c: number): string {
+  const bs = String.fromCharCode(92);
+  if (c === 0x27) return `'${bs}''`;
+  if (c === 0x22) return `'"'`;
+  const esc: Record<number, string> = { 7: 'a', 8: 'b', 9: 't', 10: 'n', 11: 'v', 12: 'f', 13: 'r', 0x5c: bs };
+  if (esc[c] !== undefined) return `'${bs}${esc[c]}'`;
+  if (c < 0x20 || c === 0x7f) return `'${bs}x${c.toString(16).padStart(2, '0')}'`;
+  if (c >= 0x80 && (c <= 0xa0 || c === 0xad)) return `'${bs}u${c.toString(16).padStart(4, '0')}'`;
+  return `'${String.fromCharCode(c)}'`;
+}
+
+/** encoding/json's syntax: RFC 8259, nothing else; invalid UTF-8 in a string is read as U+FFFD. */
+export function parseGoJson(input: Uint8Array | string): JVal {
+  const b = typeof input === 'string' ? new TextEncoder().encode(input) : input;
+  let i = 0;
+  const bad = (what: string): never => {
+    if (i >= b.length) throw new JsonError('unexpected end of JSON input');
+    throw new JsonError(`invalid character ${quoteChar(b[i]!)} ${what}`);
+  };
+  const ws = (): void => {
+    while (i < b.length && WS.has(b[i]!)) i++;
+  };
+  const lit = (word: string, v: JVal): JVal => {
+    for (let k = 0; k < word.length; k++) {
+      if (b[i] !== word.charCodeAt(k)) bad(`in literal ${word} (expecting ${JSON.stringify(word[k])})`);
+      i++;
+    }
+    return v;
+  };
+  const hex4 = (): number => {
+    let v = 0;
+    for (let k = 0; k < 4; k++) {
+      const c = b[i];
+      let d: number;
+      if (c !== undefined && c >= 0x30 && c <= 0x39) d = c - 0x30;
+      else if (c !== undefined && c >= 0x41 && c <= 0x46) d = c - 0x41 + 10;
+      else if (c !== undefined && c >= 0x61 && c <= 0x66) d = c - 0x61 + 10;
+      else return bad('in \\u hexadecimal character escape');
+      v = v * 16 + d;
+      i++;
+    }
+    return v;
+  };
+  const str = (): string => {
+    i++; // the opening quote
+    const bytes: number[] = [];
+    let out = '';
+    const flush = (): void => {
+      if (bytes.length > 0) {
+        out += new TextDecoder('utf-8').decode(Uint8Array.from(bytes));
+        bytes.length = 0;
+      }
+    };
+    for (;;) {
+      if (i >= b.length) bad('');
+      const c = b[i]!;
+      if (c === 0x22) {
+        i++;
+        flush();
+        return out;
+      }
+      if (c < 0x20) bad('in string literal');
+      if (c === 0x5c) {
+        i++;
+        const e = b[i];
+        flush();
+        switch (e) {
+          case 0x22: out += '"'; i++; break;
+          case 0x5c: out += '\\'; i++; break;
+          case 0x2f: out += '/'; i++; break;
+          case 0x62: out += '\b'; i++; break;
+          case 0x66: out += '\f'; i++; break;
+          case 0x6e: out += '\n'; i++; break;
+          case 0x72: out += '\r'; i++; break;
+          case 0x74: out += '\t'; i++; break;
+          case 0x75: {
+            i++;
+            let r = hex4();
+            if (r >= 0xd800 && r < 0xdc00) {
+              // a high surrogate pairs with a following \u low surrogate; alone it is U+FFFD
+              if (b[i] === 0x5c && b[i + 1] === 0x75) {
+                const save = i;
+                i += 2;
+                const r2 = hex4();
+                if (r2 >= 0xdc00 && r2 < 0xe000) r = 0x10000 + ((r - 0xd800) << 10) + (r2 - 0xdc00);
+                else {
+                  i = save;
+                  r = 0xfffd;
+                }
+              } else r = 0xfffd;
+            } else if (r >= 0xdc00 && r < 0xe000) r = 0xfffd;
+            out += String.fromCodePoint(r);
+            break;
+          }
+          default:
+            bad('in string escape code');
+        }
+        continue;
+      }
+      bytes.push(c);
+      i++;
+    }
+  };
+  const num = (): JNum => {
+    const start = i;
+    if (b[i] === 0x2d) i++;
+    if (b[i] === 0x30) i++;
+    else if (b[i] !== undefined && b[i]! >= 0x31 && b[i]! <= 0x39) {
+      while (b[i] !== undefined && b[i]! >= 0x30 && b[i]! <= 0x39) i++;
+    } else bad('in numeric literal');
+    if (b[i] === 0x2e) {
+      i++;
+      if (!(b[i] !== undefined && b[i]! >= 0x30 && b[i]! <= 0x39)) bad('after decimal point in numeric literal');
+      while (b[i] !== undefined && b[i]! >= 0x30 && b[i]! <= 0x39) i++;
+    }
+    if (b[i] === 0x65 || b[i] === 0x45) {
+      i++;
+      if (b[i] === 0x2b || b[i] === 0x2d) i++;
+      if (!(b[i] !== undefined && b[i]! >= 0x30 && b[i]! <= 0x39)) bad('in exponent of numeric literal');
+      while (b[i] !== undefined && b[i]! >= 0x30 && b[i]! <= 0x39) i++;
+    }
+    return new JNum(new TextDecoder().decode(b.subarray(start, i)));
+  };
+  /** One value, with an explicit stack: a document nested to Go's limit (10000 containers) is read, not a stack overflow. */
+  type Frame = { obj: true; pairs: [string, JVal][]; key: string } | { obj: false; arr: JVal[] };
+  const parseValue = (): JVal => {
+    const stack: Frame[] = [];
+    for (;;) {
+      // begin a value
+      ws();
+      if (i >= b.length) bad('');
+      const c = b[i]!;
+      let v: JVal;
+      if (c === 0x7b) {
+        if (stack.length >= 10000) bad('exceeded max depth');
+        i++;
+        ws();
+        if (b[i] === 0x7d) {
+          i++;
+          v = new JObj([]);
+        } else {
+          if (b[i] !== 0x22) bad('looking for beginning of object key string');
+          const k = str();
+          ws();
+          if (b[i] !== 0x3a) bad('after object key');
+          i++;
+          stack.push({ obj: true, pairs: [], key: k });
+          continue;
+        }
+      } else if (c === 0x5b) {
+        if (stack.length >= 10000) bad('exceeded max depth');
+        i++;
+        ws();
+        if (b[i] === 0x5d) {
+          i++;
+          v = [];
+        } else {
+          stack.push({ obj: false, arr: [] });
+          continue;
+        }
+      } else if (c === 0x22) v = str();
+      else if (c === 0x74) v = lit('true', true);
+      else if (c === 0x66) v = lit('false', false);
+      else if (c === 0x6e) v = lit('null', null);
+      else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) v = num();
+      else return bad('looking for beginning of value');
+      // a value is complete: attach it to its container and close every container it ends
+      for (;;) {
+        const f = stack[stack.length - 1];
+        if (f === undefined) return v;
+        if (f.obj) {
+          f.pairs.push([f.key, v]);
+          ws();
+          if (b[i] === 0x2c) {
+            i++;
+            ws();
+            if (b[i] !== 0x22) bad('looking for beginning of object key string');
+            f.key = str();
+            ws();
+            if (b[i] !== 0x3a) bad('after object key');
+            i++;
+            break;
+          }
+          if (b[i] === 0x7d) {
+            i++;
+            stack.pop();
+            v = new JObj(f.pairs);
+            continue;
+          }
+          bad('after object key:value pair');
+        } else {
+          f.arr.push(v);
+          ws();
+          if (b[i] === 0x2c) {
+            i++;
+            break;
+          }
+          if (b[i] === 0x5d) {
+            i++;
+            stack.pop();
+            v = f.arr;
+            continue;
+          }
+          bad('after array element');
+        }
+      }
+    }
+  };
+  const v = parseValue();
+  ws();
+  if (i < b.length) bad('after top-level value');
+  return v;
+}
+
+// --------------------------------------------------------------------------------------------------------------------------------
+// schemas
+
+/** A Go type of the proof's JSON: scalars, a nullable string, a raw value, slices, maps, structs and pointers to structs. */
+export type Sch = 'string' | 'strptr' | 'u64' | 'i64' | 'vote' | 'bool' | { list: Sch } | { map: Sch } | { struct: StructDef } | { ptr: StructDef };
+export interface FieldDef {
+  /** The Go field name (the key of the decoded value). */
+  name: string;
+  json: string;
+  sch: Sch;
+  omitempty?: boolean;
+}
+export type StructDef = FieldDef[];
+
+/** A decoded Go value: strings, bigints, booleans, nil as null, slices, maps and structs by Go field name. */
+export type GoVal = string | bigint | boolean | null | GoVal[] | Map<string, GoVal> | { [field: string]: GoVal };
+
+const typeOf = (v: JVal): string => (v === null ? 'null' : typeof v === 'string' ? 'string' : typeof v === 'boolean' ? 'bool' : v instanceof JNum ? 'number' : Array.isArray(v) ? 'array' : 'object');
+
+function mismatch(v: JVal, want: string, label: string): never {
+  throw new JsonError(`json: cannot unmarshal ${typeOf(v)} into Go struct field ${label} of type ${want}`);
+}
+
+function isStruct(s: Sch): s is { struct: StructDef } {
+  return typeof s === 'object' && 'struct' in s;
+}
+function isPtr(s: Sch): s is { ptr: StructDef } {
+  return typeof s === 'object' && 'ptr' in s;
+}
+
+/** The zero Go value of a schema. */
+export function zero(s: Sch): GoVal {
+  if (s === 'string') return '';
+  if (s === 'strptr') return null;
+  if (s === 'u64' || s === 'i64' || s === 'vote') return 0n;
+  if (s === 'bool') return false;
+  if (isStruct(s)) return zeroStruct(s.struct);
+  return null; // slices, maps and pointers are nil
+}
+function zeroStruct(def: StructDef): { [field: string]: GoVal } {
+  const o: { [field: string]: GoVal } = {};
+  for (const f of def) o[f.name] = zero(f.sch);
+  return o;
+}
+
+function foldEq(a: string, b: string): boolean {
+  return a.length === b.length && a.toLowerCase() === b.toLowerCase();
+}
+
+const U64_MAX = (1n << 64n) - 1n;
+const I64_MAX = (1n << 63n) - 1n;
+
+/** decode one JSON value into the schema's Go value; `into` is the value already there (struct decoding merges into it). */
+export function decodeVal(s: Sch, v: JVal, label: string, into?: GoVal): GoVal {
+  if (s === 'string') {
+    if (v === null) return (into as string | undefined) ?? '';
+    if (typeof v !== 'string') mismatch(v, 'string', label);
+    return v as string;
+  }
+  if (s === 'strptr') {
+    if (v === null) return null;
+    if (typeof v !== 'string') mismatch(v, '*string', label);
+    return v as string;
+  }
+  if (s === 'u64') {
+    if (v === null) return (into as bigint | undefined) ?? 0n;
+    if (!(v instanceof JNum) || !/^[0-9]+$/.test(v.lit)) mismatch(v, 'uint64', label);
+    const n = BigInt((v as JNum).lit);
+    if (n > U64_MAX) throw new JsonError(`json: cannot unmarshal number ${(v as JNum).lit} into Go struct field ${label} of type uint64`);
+    return n;
+  }
+  if (s === 'i64') {
+    if (v === null) return (into as bigint | undefined) ?? 0n;
+    if (!(v instanceof JNum) || !/^-?[0-9]+$/.test(v.lit)) mismatch(v, 'int64', label);
+    const n = BigInt((v as JNum).lit);
+    if (n > I64_MAX || n < -I64_MAX - 1n) throw new JsonError(`json: cannot unmarshal number ${(v as JNum).lit} into Go struct field ${label} of type int64`);
+    return n;
+  }
+  if (s === 'vote') {
+    // protocol.VoteType.UnmarshalJSON: a name, case-insensitively; it is called for null too, which is not a name.
+    if (typeof v !== 'string') throw new JsonError(`json: cannot unmarshal ${typeOf(v)} into Go value of type string`);
+    const i = ['accept', 'reject', 'abstain', 'suggest'].indexOf((v as string).toLowerCase());
+    if (i < 0) throw new JsonError(`invalid Vote Type ${JSON.stringify(v)}`);
+    return BigInt(i);
+  }
+  if (s === 'bool') {
+    if (v === null) return (into as boolean | undefined) ?? false;
+    if (typeof v !== 'boolean') mismatch(v, 'bool', label);
+    return v as boolean;
+  }
+  if ('list' in s) {
+    if (v === null) return null;
+    if (!Array.isArray(v)) mismatch(v, 'slice', label);
+    return (v as JVal[]).map((e, i) => decodeVal(s.list, e, `${label}[${i}]`, zero(s.list)));
+  }
+  if ('map' in s) {
+    if (v === null) return null;
+    if (!(v instanceof JObj)) mismatch(v, 'map', label);
+    const m = new Map<string, GoVal>();
+    for (const [k, e] of (v as JObj).pairs) m.set(k, decodeVal(s.map, e, `${label}.${k}`, zero(s.map)));
+    return m;
+  }
+  const def = isStruct(s) ? s.struct : s.ptr;
+  if (v === null) return isPtr(s) ? null : ((into as GoVal | undefined) ?? zeroStruct(def));
+  if (!(v instanceof JObj)) mismatch(v, 'struct', label);
+  const out: { [field: string]: GoVal } = into && typeof into === 'object' && !Array.isArray(into) && !(into instanceof Map) ? (into as { [field: string]: GoVal }) : zeroStruct(def);
+  for (const [k, e] of (v as JObj).pairs) {
+    const f = def.find((x) => x.json === k) ?? def.find((x) => foldEq(x.json, k));
+    if (!f) continue;
+    out[f.name] = decodeVal(f.sch, e, `${label}.${f.name}`, out[f.name]);
+  }
+  return out;
+}
+
+// --------------------------------------------------------------------------------------------------------------------------------
+// marshal
+
+const isEmpty = (s: Sch, v: GoVal): boolean => {
+  if (s === 'string') return v === '';
+  if (s === 'u64' || s === 'i64' || s === 'vote') return v === 0n;
+  if (s === 'bool') return v === false;
+  if (s === 'strptr') return v === null;
+  if (typeof s === 'object' && ('list' in s || 'map' in s)) return v === null || (Array.isArray(v) ? v.length === 0 : v instanceof Map && v.size === 0);
+  if (isPtr(s)) return v === null;
+  return false; // a struct is never omitted
+};
+
+/** json.Marshal of a decoded value: field order, omitempty, nil slices and maps as null, map keys sorted bytewise. */
+export function marshalVal(s: Sch, v: GoVal): string {
+  if (s === 'string') return goJsonString(v as string);
+  if (s === 'strptr') return v === null ? 'null' : goJsonString(v as string);
+  if (s === 'u64' || s === 'i64') return (v as bigint).toString();
+  if (s === 'vote') return goJsonString(['accept', 'reject', 'abstain', 'suggest'][Number(v as bigint)] ?? `VoteType:${v}`);
+  if (s === 'bool') return v ? 'true' : 'false';
+  if ('list' in s) return v === null ? 'null' : `[${(v as GoVal[]).map((e) => marshalVal(s.list, e)).join(',')}]`;
+  if ('map' in s) {
+    if (v === null) return 'null';
+    const keys = [...(v as Map<string, GoVal>).keys()].sort((a, b) => Buffer.compare(Buffer.from(a, 'utf8'), Buffer.from(b, 'utf8')));
+    return `{${keys.map((k) => `${goJsonString(k)}:${marshalVal(s.map, (v as Map<string, GoVal>).get(k)!)}`).join(',')}}`;
+  }
+  const def = isStruct(s) ? s.struct : s.ptr;
+  if (isPtr(s) && v === null) return 'null';
+  const o = v as { [field: string]: GoVal };
+  const parts: string[] = [];
+  for (const f of def) {
+    const fv = o[f.name]!;
+    if (f.omitempty && isEmpty(f.sch, fv)) continue;
+    parts.push(`${goJsonString(f.json)}:${marshalVal(f.sch, fv)}`);
+  }
+  return `{${parts.join(',')}}`;
+}
+
+void VerifyError;

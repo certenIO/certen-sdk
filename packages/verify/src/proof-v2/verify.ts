@@ -126,6 +126,8 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
     if (i + 1 === evMajors || i + 1 === checkMajors) at.set(i + 1, sp.clone());
   }
 
+  refuseMembersOf21(ev);
+
   // S1-S2: the receipt from the transaction to a certified root.
   const cert = at.get(evMajors)!.clone();
   const certify = optList(ev.certify, 'evidence.certify');
@@ -228,6 +230,23 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
     anchorStateRoot: toHex(stateRoot),
     accumulateSetRoot: setRoot,
   };
+}
+
+/**
+ * evidence.go verifyFrom: a 2.0 document carries none of the evidence 2.1 members; one that does would have them silently ignored, so it
+ * is refused. The test is on what Go's Import produces: a non-empty "anchors" object, a non-empty "votes" list, a routing proof, and a
+ * page with a partition or a roles list (an empty list is a non-nil slice there; null and absent are nil).
+ */
+function refuseMembersOf21(ev: Rec): void {
+  const nonEmptyMap = (v: unknown): boolean => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0;
+  const check = ev.check && typeof ev.check === 'object' && !Array.isArray(ev.check) ? (ev.check as Rec) : {};
+  const routing = check.routing !== undefined && check.routing !== null;
+  const votes = Array.isArray(ev.votes) && ev.votes.length > 0;
+  if (nonEmptyMap(ev.anchors) || votes || routing) fail('evidence 2.0 carries 2.1 members (anchors, votes or a routing proof)');
+  for (const p of optList(ev.pages, 'evidence.pages')) {
+    const page = p && typeof p === 'object' && !Array.isArray(p) ? (p as Rec) : {};
+    if ((typeof page.partition === 'string' && page.partition !== '') || Array.isArray(page.roles)) fail(`evidence 2.0 page ${String(page.url)} carries a partition or roles`);
+  }
 }
 
 interface Proven {

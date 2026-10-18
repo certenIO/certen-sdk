@@ -22,3 +22,4 @@ export { verifySigningData, reconstructSigning, SigningDataMismatch, SigningData
 export type { SigningData, SigningSummary, SummaryLeg, Expectation, ExpectedLeg, ExpectedEvent, ExpectedOperation, Reconstruction } from './signing.js';
 export { encodeCall, parseSignature, AbiUnsupported } from './abi.js';
 export * from './sigtypes/index.js';
+export * from './s3/index.js';

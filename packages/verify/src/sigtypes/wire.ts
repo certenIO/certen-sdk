@@ -110,7 +110,7 @@ function ctorOf(cls: string): Ctor {
   return c as Ctor;
 }
 
-const hasClass = (cls: string): boolean => cls === FACTOM || Object.prototype.hasOwnProperty.call(EXTRA_CLASSES, cls) || typeof classes[cls] === 'function';
+export const hasClass = (cls: string): boolean => cls === FACTOM || Object.prototype.hasOwnProperty.call(EXTRA_CLASSES, cls) || typeof classes[cls] === 'function';
 
 /**
  * TransactionType.String() for every value Accumulate defines. The SDK's own enum lacks some (setLiteAccountDelegate, the
@@ -236,7 +236,7 @@ export function flatFields(cls: string): FieldDesc[] {
 }
 
 /** Accumulate's registry type of a field ("ExpireOptions", "Signature", "KeyPageOperation[]" ...), without the array suffix. */
-function registryType(cls: string, field: string): string | undefined {
+export function registryType(cls: string, field: string): string | undefined {
   const extra = Object.prototype.hasOwnProperty.call(EXTRA_CLASSES, cls) ? EXTRA_CLASSES[cls]!.refs?.[field] : undefined;
   if (extra) return extra;
   const def = SCHEMA[cls];
@@ -245,7 +245,7 @@ function registryType(cls: string, field: string): string | undefined {
 }
 
 /** The member class of a union value with the given type tag. */
-function unionMember(union: string, tag: bigint): string {
+export function unionMember(union: string, tag: bigint): string {
   const u = classes[union] as { fromObject?: (o: unknown) => object } | undefined;
   if (!u || typeof u.fromObject !== 'function') bad(`${union} is not a union of accumulate-sdk-opendlt`);
   try {
