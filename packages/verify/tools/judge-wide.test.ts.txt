@@ -1,0 +1,17 @@
+﻿// Judges go-written/bytes-cases-wide.json.gz (xtsgen -per 40 bytes, 5017 cases, validator 3419863) and writes the differences to WIDE_OUT. Copy to test/zz-wide.test.ts and run: WIDE_OUT=<file> npx vitest run test/zz-wide.test.ts --testTimeout=900000
+import { readFileSync, writeFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { it } from 'vitest';
+import { applyEdits, baseBytes, bytesDifferences, type BytesFile } from './helpers/s3-bytes.js';
+it('fresh', () => {
+  const file = JSON.parse(gunzipSync(readFileSync(new URL('./fixtures/s3/go-written/bytes-cases-wide.json.gz', import.meta.url))).toString('utf8')) as BytesFile;
+  const out: string[] = [];
+  let n = 0;
+  for (const k of file.cases) {
+    let d: string[];
+    try { d = bytesDifferences(k.expect, applyEdits(baseBytes(file.bases[k.base]!), k.edits)); } catch (e) { d = ['THROW ' + String(e)]; }
+    if (d.length) { n++; out.push(k.id + ' [' + k.op + ']: ' + d.join(' | ').slice(0, 500)); }
+  }
+  writeFileSync(process.env.WIDE_OUT ?? 'wide-diffs.txt', 'DIFFS ' + n + ' of ' + file.cases.length + ' skipped ' + JSON.stringify(file.skipped) + '\n' + out.join('\n'));
+}, 900000);
+

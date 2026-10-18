@@ -1,0 +1,7 @@
+DIFFS 6 of 5017 skipped {"panics":6,"flaky":0}
+xpartition2b/timeline-delegated-vote.json#32 [dupcase]: Go plain (genesis globals: the JSON does not re-encode to the record's bytes); here verified
+xpartition2b/timeline-without-transaction.json#39 [hexstring]: Go plain (set check: validatorSetProof.network: receipt.entries[2].hash must be 32 bytes of hex); here verified
+xpartition3/d2b-directory-anchor-under-a-bvn-key.json#27 [newline + hexstring]: Go plain (set check: validatorSetProof.globals: receipt.entries[3].hash must be 32 bytes of hex); here named g1_foreign_partition_mismatch{Directory,70}
+proofv2/network-update.json.gz#264 [hexstring]: Go plain (set check: validatorSetProof.globals: secondaryHash: expected 64 hex chars (32 bytes), got len=66 ("0x2942068a19c408b031a2d219568310f70ebedcc31abd99ba9dbe94e2cb74e876")); here verified
+proofv2/network-update.json.gz#326 [dupafter]: Go plain (certify run 0: incomplete root proof); here verified
+go-written/real-bvn1-billing-receipts.portable.json.gz#27 [dupcase]: Go verified; here plain (spine: major 17: quorum not met: 0 of 2 validator signatures)
