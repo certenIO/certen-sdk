@@ -59,3 +59,20 @@ export function occurrences(pairs: [string, unknown][], name: string): unknown[]
 export function oneOf(vals: unknown[]): unknown {
   return vals.length === 0 ? undefined : vals.length === 1 ? vals[0] : new Occ(vals);
 }
+
+/**
+ * A text that tells two decoded trees apart exactly: every key in document order (repeats and case variants included), every number by its
+ * literal (a BadNum by its text, -0 apart from 0), every string as JSON writes it. JSON.stringify of a tree is not that - it forgets a
+ * repeated key's earlier value and spells -0 as 0 - so a cache keyed on it would hand one document the verdict of another.
+ */
+export function exactKey(v: unknown): string {
+  if (v === null) return 'n';
+  if (v === undefined) return 'u';
+  if (v instanceof BadNum) return 'N' + v.text + ';';
+  if (v instanceof Occ) return 'O[' + v.vals.map(exactKey).join(',') + ']';
+  if (typeof v === 'string') return JSON.stringify(v);
+  if (typeof v === 'number') return Object.is(v, -0) ? '-0' : String(v);
+  if (typeof v === 'boolean') return v ? 't' : 'f';
+  if (Array.isArray(v)) return '[' + v.map(exactKey).join(',') + ']';
+  return '{' + pairsOf(v as object).map(([k, x]) => JSON.stringify(k) + ':' + exactKey(x)).join(',') + '}';
+}

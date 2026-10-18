@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Accumulate's JSON, read the way Go reads it, into the wire objects the binary encoder writes (validator portable.go Import:
  * protocol.UnmarshalAccountJSON, Transaction.UnmarshalJSON, the generated <Type>.UnmarshalJSON of every record, then MarshalBinary).
  *
@@ -212,15 +212,31 @@ export function unionFromJson(union: string, j: unknown, label: string): WireNod
 /** The scalar a member holds after all its occurrences: each is decoded (and so checked) in turn, a null leaves the value as it was. */
 function lastScalar(cls: string, d: FieldDesc, vals: unknown[], label: string): Value | undefined {
   let out: Value | undefined;
+  // The generated unmarshaler reads binary, hash and big-integer members into *string and urls into *url.URL: a null clears the pointer
+  // (the member is then empty), and of several strings only the last is decoded (each is only type-checked); an url is parsed each time.
+  const asString = d.kind === 'bytes' || d.kind === 'hash' || d.kind === 'bigint';
+  const pointer = asString || d.kind === 'url' || d.kind === 'txid';
+  let pending: unknown;
   for (const x of vals) {
     if (x === null) {
       // an enum held by value: its UnmarshalJSON is called with null and refuses it
       if (d.kind === 'enum' && !d.repeatable) return bad(`invalid ${enumOf(cls, d.name) ?? 'enum'} ""`);
+      if (pointer) {
+        out = undefined;
+        pending = undefined;
+      }
       continue;
     }
     if (x === undefined) continue;
+    if (asString) {
+      if (typeof x !== 'string') scalar(cls, d, x, label);
+      pending = x;
+      out = undefined;
+      continue;
+    }
     out = scalar(cls, d, x, label);
   }
+  if (pending !== undefined) out = scalar(cls, d, pending, label);
   return out;
 }
 

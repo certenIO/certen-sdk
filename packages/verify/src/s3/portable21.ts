@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Verifying a portable proof of evidence 2.1 from the incarnation's genesis (validator portable.go VerifyPortable, evidence.go
  * Verify21FromGenesis / verifyFromGenesis / verifyFrom). The shared front half - the incarnation, the spine, the receipt into a certified
  * root, the validator set - is the verifier of evidence 2.0 (proof-v2/verify.ts); what differs for 2.1 is exactly what the Go code
@@ -20,7 +20,9 @@ import { VERSION_21 } from './states.js';
 import type { Report21, XIn } from './xtypes.js';
 import { verify21 } from './verify21.js';
 import { struct } from './gojson.js';
-import { recordBytes } from './jsonwire.js';
+import { exactKey } from './occ.js';
+import { nodeFromJson, recordBytes } from './jsonwire.js';
+import { nodeToJson } from './nodejson.js';
 
 /**
  * The spine after each starting point, walked from the genesis through the first `need` major blocks. It is a pure function of the genesis
@@ -91,16 +93,19 @@ export function verifyPortable21(document: unknown): Report21 {
   const networkRecord = hexBytes(g.networkRecord ?? '', 'genesis.networkRecord');
   const globalsRecord = hexBytes(g.globalsRecord ?? '', 'genesis.globalsRecord');
   // sameEncoding (portable.go): the genesis JSON is decoded by the generated unmarshalers and must write exactly the record the incarnation commits to.
+  const spelled: Record<string, unknown> = {};
   for (const [what, cls, json, record] of [['network', 'NetworkDefinition', g.network, networkRecord], ['globals', 'NetworkGlobals', g.globals, globalsRecord]] as const) {
     let enc: Uint8Array;
     try {
       enc = recordBytes(cls, json, `genesis ${what}`);
+      // the SDK reads the JSON below with exact keys: it is handed the document the generated unmarshaler made, as MarshalJSON writes it
+      spelled[what] = nodeToJson(nodeFromJson(cls, json, `genesis ${what}`));
     } catch (e) {
       throw new VerifyError(`genesis ${what}: ${(e as Error).message}`);
     }
     if (!equal(enc, record)) fail(`genesis ${what}: the JSON does not re-encode to the record`);
   }
-  const genesis = genesisGlobals(g.network, networkRecord, g.globals, globalsRecord);
+  const genesis = genesisGlobals(spelled.network, networkRecord, spelled.globals, globalsRecord);
   const majors = optList(doc.majors, 'majors');
   const ev = importEvidence(doc);
 
@@ -114,7 +119,7 @@ export function verifyPortable21(document: unknown): Report21 {
   // The spine to the larger of the two starting points, keeping the state at each.
   const need = Math.max(ev.majors, ev.check.majors);
   if (need === 0 || need > majors.length) fail(`evidence builds on ${need} major blocks; the archive has ${majors.length}`);
-  const at = spineStates(genesis, majors, need, [ev.majors, ev.check.majors], createHash('sha256').update(JSON.stringify([g, majors])).digest('hex'));
+  const at = spineStates(genesis, majors, need, [ev.majors, ev.check.majors], createHash('sha256').update(exactKey([g, majors])).digest('hex'));
   rep.majors = need;
   return verifyFrom(ev, rep, at, pin);
 }

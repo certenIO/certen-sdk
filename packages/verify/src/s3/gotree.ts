@@ -1,4 +1,4 @@
-/**
+﻿/**
  * A portable document from its TEXT, the way Go reads it. json.Unmarshal into Portable fixes what each member may be (a uint64 is a whole number
  * literal - 65.0, 6.5e1 and 2^64 are errors -, a string is a string, null leaves a value in place), takes duplicate and differently cased keys in
  * document order, and replaces invalid UTF-8 byte by byte; a tree from JSON.parse has already lost every one of those facts. This module
@@ -61,7 +61,12 @@ export function toTree(s: Sch, v: GoVal): unknown {
   // the members of Portable's own types are read as doubles (blocks, counts, positions: the values a chain of this size holds); the nearest
   // double of a uint64 above 2^53 compares as Go compares it against every value a verifier derives, and an exact value is only needed inside
   // the raw members, which keep their literals.
-  if (s === 'u64' || s === 'i64' || s === 'vote') return Number(v as bigint);
+  // above 2^53 the literal is kept exactly (a BadNum), so that a reader of the integer still takes the value Go decoded: a uint64 count of
+  // 2^64-1 is a valid document in Go and its nearest double is not.
+  if (s === 'u64' || s === 'i64' || s === 'vote') {
+    const n = v as bigint;
+    return n > MAX_EXACT || n < -MAX_EXACT ? new BadNum(n.toString()) : Number(n);
+  }
   if (typeof s !== 'object') return v;
   if ('list' in s) return v === null ? null : (v as GoVal[]).map((e) => toTree(s.list, e));
   if ('map' in s) {
