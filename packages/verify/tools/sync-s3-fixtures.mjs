@@ -4,6 +4,10 @@
  * test/fixtures/s3 BYTE FOR BYTE and writes test/fixtures/s3/MANIFEST.json, which pins every file by sha256.
  *
  *   node tools/sync-s3-fixtures.mjs <validator-checkout> <commit>
+ *   node tools/sync-s3-fixtures.mjs <validator-checkout> <commit> --suites xpartition6 --out s3-rb9k --no-goldens
+ *
+ * The second form copies the named suites of ANOTHER commit (a branch whose suite the main line does not carry yet) into its own fixture
+ * directory beside the first, with its own MANIFEST.json, so neither manifest hash moves.
  *
  * The bytes are read with `git show <commit>:<path>`, never from the working tree, so a checkout with core.autocrlf cannot change
  * them. Each Go suite carries its own MANIFEST.sha256 (the hash of its manifest.json); this tool refuses to copy a suite whose
@@ -16,13 +20,25 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const [, , checkout, commit] = process.argv;
+const args = process.argv.slice(2);
+const take = (name) => {
+  const i = args.indexOf(name);
+  if (i < 0) return undefined;
+  const v = args[i + 1];
+  args.splice(i, 2);
+  return v;
+};
+const onlySuites = take('--suites')?.split(',');
+const outDir = take('--out') ?? 's3';
+const noGoldens = args.includes('--no-goldens');
+if (noGoldens) args.splice(args.indexOf('--no-goldens'), 1);
+const [checkout, commit] = args;
 if (!checkout || !commit) {
-  console.error('usage: node tools/sync-s3-fixtures.mjs <validator-checkout> <commit>');
+  console.error('usage: node tools/sync-s3-fixtures.mjs <validator-checkout> <commit> [--suites a,b] [--out dir] [--no-goldens]');
   process.exit(2);
 }
 const here = dirname(fileURLToPath(import.meta.url));
-const dest = join(here, '..', 'test', 'fixtures', 's3');
+const dest = join(here, '..', 'test', 'fixtures', outDir);
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const git = (...args) => execFileSync('git', ['-C', checkout, ...args], { maxBuffer: 1 << 28 });
 
@@ -35,7 +51,7 @@ mkdirSync(dest, { recursive: true });
 writeFileSync(join(dest, '.gitattributes'), GITATTRIBUTES);
 const out = { format: 'certen:s3-vectors-manifest:v1', validatorCommit: git('rev-parse', commit).toString('utf8').trim(), suites: [], goldens: [] };
 
-for (const s of SUITES) {
+for (const s of onlySuites ?? SUITES) {
   const base = `pkg/proof/v2/testdata/${s}`;
   const names = git('ls-tree', '-r', '--name-only', commit, base).toString('utf8').split('\n').filter(Boolean);
   const files = [];
@@ -61,7 +77,7 @@ for (const s of SUITES) {
   }
   out.suites.push(suite);
 }
-for (const g of GOLDENS) {
+for (const g of noGoldens ? [] : GOLDENS) {
   const bytes = git('show', `${commit}:${g.from}`);
   const path = join(dest, g.to);
   mkdirSync(dirname(path), { recursive: true });

@@ -850,6 +850,10 @@ func main() {
 			err = realDocument(*validator, *out)
 		case "replay":
 			err = replay(*fixtures, *out, *id)
+		case "bytes":
+			err = bytesCorpus(*fixtures, *out, *per)
+		case "fold":
+			err = foldCorpus(*out)
 		case "tables":
 			err = tablesCorpus(*out)
 		case "votes":

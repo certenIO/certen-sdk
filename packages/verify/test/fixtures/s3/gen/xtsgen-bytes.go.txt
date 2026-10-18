@@ -1,0 +1,676 @@
+package main
+
+// The byte-level corpus: a portable document is judged from its TEXT, as Go's json.Unmarshal into Portable and VerifyPortable judge it, so
+// what a parsed tree cannot say is covered - number literals (65.0, 1e0, 2^64), duplicate keys (a wrongly typed one before a good one, a null
+// after a value), keys in another case or in a Unicode fold (U+017F, the Kelvin sign), a hex string with a trailing newline or a prefix, a
+// number written as a string, invalid UTF-8 and lone surrogates in strings, whitespace, trailing data. Each case is a list of byte edits of a
+// base file; the verdict is the validator's own (judge, as the mutation corpus uses it).
+
+import (
+	"bytes"
+	"encoding/base64"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+type ByteEdit struct {
+	At  int    `json:"at"`
+	Del int    `json:"del,omitempty"`
+	Ins string `json:"ins,omitempty"` // base64 of the bytes written in place of the deleted ones
+}
+
+type ByteCase struct {
+	ID     string     `json:"id"`
+	Base   int        `json:"base"`
+	Op     string     `json:"op"`
+	Edits  []ByteEdit `json:"edits"`
+	Expect Expect     `json:"expect"`
+}
+
+type ByteFile struct {
+	Format      string     `json:"format"`
+	Description string     `json:"description"`
+	Bases       []string   `json:"bases"`
+	BaseExpect  []Expect   `json:"baseExpect"`
+	Cases       []ByteCase `json:"cases"`
+	Skipped     struct {
+		Panics int `json:"panics"`
+		Flaky  int `json:"flaky"`
+	} `json:"skipped"`
+}
+
+func ins(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+func applyEdits(b []byte, edits []ByteEdit) []byte {
+	es := append([]ByteEdit(nil), edits...)
+	sort.Slice(es, func(i, j int) bool { return es[i].At > es[j].At })
+	out := append([]byte(nil), b...)
+	for _, e := range es {
+		raw, _ := base64.StdEncoding.DecodeString(e.Ins)
+		out = append(append(append([]byte(nil), out[:e.At]...), raw...), out[e.At+e.Del:]...)
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// a scanner over the text of a JSON document
+
+type tok struct {
+	kind byte // 'n' number, 'v' string value, 'k' key, 'l' true/false/null, '{' '[' open
+	s, e int
+}
+
+func scanTokens(b []byte) []tok {
+	var out []tok
+	for i := 0; i < len(b); {
+		c := b[i]
+		switch {
+		case c == '"':
+			j := i + 1
+			for j < len(b) && b[j] != '"' {
+				if b[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			j++
+			k := j
+			for k < len(b) && (b[k] == ' ' || b[k] == '\n' || b[k] == '\t' || b[k] == '\r') {
+				k++
+			}
+			kind := byte('v')
+			if k < len(b) && b[k] == ':' {
+				kind = 'k'
+			}
+			out = append(out, tok{kind, i, j})
+			i = j
+		case c == '-' || (c >= '0' && c <= '9'):
+			j := i + 1
+			for j < len(b) && (b[j] == '.' || b[j] == 'e' || b[j] == 'E' || b[j] == '+' || b[j] == '-' || (b[j] >= '0' && b[j] <= '9')) {
+				j++
+			}
+			out = append(out, tok{'n', i, j})
+			i = j
+		case c == 't' || c == 'f' || c == 'n':
+			j := i
+			for j < len(b) && b[j] >= 'a' && b[j] <= 'z' {
+				j++
+			}
+			out = append(out, tok{'l', i, j})
+			i = j
+		case c == '{' || c == '[':
+			out = append(out, tok{c, i, i + 1})
+			i++
+		default:
+			i++
+		}
+	}
+	return out
+}
+
+// valueEnd is the end of the JSON value that starts at i.
+func valueEnd(b []byte, i int) int {
+	for i < len(b) && (b[i] == ' ' || b[i] == '\n' || b[i] == '\t' || b[i] == '\r') {
+		i++
+	}
+	if i >= len(b) {
+		return i
+	}
+	switch b[i] {
+	case '"':
+		j := i + 1
+		for j < len(b) && b[j] != '"' {
+			if b[j] == '\\' {
+				j++
+			}
+			j++
+		}
+		return j + 1
+	case '{', '[':
+		depth := 0
+		for j := i; j < len(b); j++ {
+			switch b[j] {
+			case '"':
+				j++
+				for j < len(b) && b[j] != '"' {
+					if b[j] == '\\' {
+						j++
+					}
+					j++
+				}
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+				if depth == 0 {
+					return j + 1
+				}
+			}
+		}
+		return len(b)
+	default:
+		j := i
+		for j < len(b) && b[j] != ',' && b[j] != '}' && b[j] != ']' && b[j] != ' ' && b[j] != '\n' {
+			j++
+		}
+		return j
+	}
+}
+
+type member struct {
+	ks, ke int // the key token, quotes included
+	vs, ve int // the value
+}
+
+func members(b []byte, toks []tok) []member {
+	var out []member
+	for _, t := range toks {
+		if t.kind != 'k' {
+			continue
+		}
+		j := t.e
+		for j < len(b) && b[j] != ':' {
+			j++
+		}
+		j++
+		for j < len(b) && (b[j] == ' ' || b[j] == '\n' || b[j] == '\t' || b[j] == '\r') {
+			j++
+		}
+		out = append(out, member{t.s, t.e, j, valueEnd(b, j)})
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the operators
+
+var dupValues = []string{"5", "1.5", `"x"`, "true", "null", "{}", "[]", "-1", `"0"`}
+var numForms = []string{"%s.0", "%se0", "%sE0", "%s.5", "-0", "18446744073709551616", "9007199254740993", "1e2", "0%s", "-%s", "%s000000000000000000000", "+%s"}
+
+var hexRe = regexp.MustCompile(`^"[0-9a-fA-F]{2,}"$`)
+
+type opFn func(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string)
+
+func pick[T any](r *rand.Rand, xs []T) (T, bool) {
+	var z T
+	if len(xs) == 0 {
+		return z, false
+	}
+	return xs[r.Intn(len(xs))], true
+}
+
+func ofKind(toks []tok, kind byte) []tok {
+	var out []tok
+	for _, t := range toks {
+		if t.kind == kind {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func opNumber(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	t, ok := pick(r, ofKind(toks, 'n'))
+	if !ok {
+		return nil, ""
+	}
+	form := numForms[r.Intn(len(numForms))]
+	lit := string(b[t.s:t.e])
+	nv := form
+	if strings.Contains(form, "%s") {
+		nv = fmt.Sprintf(form, lit)
+	}
+	return []ByteEdit{{t.s, t.e - t.s, ins(nv)}}, "num:" + form
+}
+
+func opNumString(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	t, ok := pick(r, ofKind(toks, 'n'))
+	if !ok {
+		return nil, ""
+	}
+	return []ByteEdit{{t.s, t.e - t.s, ins(`"` + string(b[t.s:t.e]) + `"`)}}, "numstring"
+}
+
+func opDup(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	m, ok := pick(r, ms)
+	if !ok {
+		return nil, ""
+	}
+	key := string(b[m.ks:m.ke])
+	v := dupValues[r.Intn(len(dupValues))]
+	if r.Intn(5) == 0 {
+		v = string(b[m.vs:m.ve])
+	}
+	switch r.Intn(4) {
+	case 0: // a wrongly typed or null value before
+		return []ByteEdit{{m.ks, 0, ins(key + ":" + v + ",")}}, "dupbefore"
+	case 1: // after
+		return []ByteEdit{{m.ve, 0, ins("," + key + ":" + v)}}, "dupafter"
+	case 2: // after, in another case
+		return []ByteEdit{{m.ve, 0, ins("," + foldKey(r, key) + ":" + v)}}, "dupcase"
+	default: // the whole member twice
+		return []ByteEdit{{m.ve, 0, ins("," + key + ":" + string(b[m.vs:m.ve]))}}, "dupsame"
+	}
+}
+
+// foldKey writes a key in another case or with a character of its Unicode fold set (U+017F for s, U+212A for k).
+func foldKey(r *rand.Rand, key string) string {
+	inner := key[1 : len(key)-1]
+	switch r.Intn(5) {
+	case 0:
+		if strings.Contains(inner, "s") {
+			return `"` + strings.Replace(inner, "s", "ſ", 1) + `"`
+		}
+	case 1:
+		if strings.Contains(inner, "k") {
+			return `"` + strings.Replace(inner, "k", "K", 1) + `"`
+		}
+	case 2:
+		if strings.Contains(inner, "s") {
+			return `"` + strings.Replace(inner, "s", `ſ`, 1) + `"`
+		}
+	case 3:
+		return `"` + strings.ToUpper(inner) + `"`
+	}
+	if inner == "" {
+		return key
+	}
+	return `"` + strings.ToUpper(inner[:1]) + inner[1:] + `"`
+}
+
+func opKeyFold(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	t, ok := pick(r, ofKind(toks, 'k'))
+	if !ok {
+		return nil, ""
+	}
+	return []ByteEdit{{t.s, t.e - t.s, ins(foldKey(r, string(b[t.s:t.e])))}}, "keyfold"
+}
+
+func opHexString(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	var hs []tok
+	for _, t := range toks {
+		if t.kind == 'v' && hexRe.Match(b[t.s:t.e]) {
+			hs = append(hs, t)
+		}
+	}
+	t, ok := pick(r, hs)
+	if !ok {
+		return nil, ""
+	}
+	inner := string(b[t.s+1 : t.e-1])
+	var nv string
+	switch r.Intn(6) {
+	case 0:
+		nv = inner + `\n`
+	case 1:
+		nv = inner + " "
+	case 2:
+		nv = "0x" + inner
+	case 3:
+		nv = strings.ToUpper(inner)
+	case 4:
+		nv = inner[:len(inner)-1]
+	default:
+		nv = inner + `\u0000`
+	}
+	return []ByteEdit{{t.s, t.e - t.s, ins(`"` + nv + `"`)}}, "hexstring"
+}
+
+func opUTF8(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	cands := append(ofKind(toks, 'v'), ofKind(toks, 'k')...)
+	t, ok := pick(r, cands)
+	if !ok {
+		return nil, ""
+	}
+	pool := []string{"\xe2\x82", "\xf0\x9f\x98", "\xff", "\xc0\x80", `\ud800`, `\udc00`, `\ud800A`, "\xed\xa0\x80", "\xef\xbf\xbd"}
+	return []ByteEdit{{t.s + 1, 0, ins(pool[r.Intn(len(pool))])}}, "utf8"
+}
+
+func opWhitespace(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	t, ok := pick(r, toks)
+	if !ok {
+		return nil, ""
+	}
+	ws := []string{" ", "\n", "\t", "\r\n", "  \n  "}
+	return []ByteEdit{{t.s, 0, ins(ws[r.Intn(len(ws))])}}, "whitespace"
+}
+
+func opCount(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	var cs []member
+	for _, m := range ms {
+		if string(b[m.ks:m.ke]) == `"count"` {
+			cs = append(cs, m)
+		}
+	}
+	m, ok := pick(r, cs)
+	if !ok {
+		return nil, ""
+	}
+	v := []string{"0", "2", "3", "9", "18446744073709551615"}[r.Intn(5)]
+	return []ByteEdit{{m.vs, m.ve - m.vs, ins(v)}}, "count"
+}
+
+func opGarbage(r *rand.Rand, b []byte, toks []tok, ms []member) ([]ByteEdit, string) {
+	switch r.Intn(5) {
+	case 0:
+		return []ByteEdit{{len(b), 0, ins(" x")}}, "trailing"
+	case 1:
+		return []ByteEdit{{0, 0, ins("\xef\xbb\xbf")}}, "bom"
+	case 2:
+		return []ByteEdit{{len(b), 0, ins("\n")}}, "newline"
+	case 3:
+		return []ByteEdit{{len(b), 0, ins("{}")}}, "twodocs"
+	default:
+		return []ByteEdit{{len(b) / 2, len(b) - len(b)/2, ""}}, "truncate"
+	}
+}
+
+var byteOps = []struct {
+	w  int
+	fn opFn
+}{{22, opNumber}, {18, opDup}, {12, opKeyFold}, {10, opHexString}, {8, opUTF8}, {6, opNumString}, {8, opWhitespace}, {6, opCount}, {4, opGarbage}}
+
+func chooseOp(r *rand.Rand) opFn {
+	total := 0
+	for _, o := range byteOps {
+		total += o.w
+	}
+	n := r.Intn(total)
+	for _, o := range byteOps {
+		if n < o.w {
+			return o.fn
+		}
+		n -= o.w
+	}
+	return byteOps[0].fn
+}
+
+func overlap(a, b ByteEdit) bool {
+	return a.At < b.At+b.Del+1 && b.At < a.At+a.Del+1
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the repros: the cases that a parsed tree cannot express, each named
+
+type repro struct {
+	id, base string
+	edit     func(b []byte) []ByteEdit
+}
+
+// after is the offset of the first match of pat at or after the first occurrence of anchor in b (anchor "" for the start).
+func after(b []byte, anchor string, pat *regexp.Regexp) (int, int, bool) {
+	from := 0
+	if anchor != "" {
+		i := bytes.Index(b, []byte(anchor))
+		if i < 0 {
+			return 0, 0, false
+		}
+		from = i
+	}
+	loc := pat.FindIndex(b[from:])
+	if loc == nil {
+		return 0, 0, false
+	}
+	return from + loc[0], from + loc[1], true
+}
+
+func tokenRepro(id, base, anchor, pat, repl string) repro {
+	re := regexp.MustCompile(pat)
+	return repro{id, base, func(b []byte) []ByteEdit {
+		s, e, ok := after(b, anchor, re)
+		if !ok {
+			return nil
+		}
+		return []ByteEdit{{s, e - s, ins(repl)}}
+	}}
+}
+
+func insertAt(id, base, anchor string, off int, text string) repro {
+	return repro{id, base, func(b []byte) []ByteEdit {
+		i := bytes.Index(b, []byte(anchor))
+		if i < 0 {
+			return nil
+		}
+		return []ByteEdit{{i + off, 0, ins(text)}}
+	}}
+}
+
+func repros() []repro {
+	vmp := "xpartition2/valid-mixed-partition.json"
+	var out []repro
+	for _, f := range []struct{ n, lit string }{{"float", "65.0"}, {"exp", "6.5e1"}, {"exp0", "65e0"}, {"2^64", "18446744073709551616"}, {"2^53+1", "9007199254740993"}, {"neg", "-65"}, {"str", `"65"`}} {
+		out = append(out, tokenRepro("block="+f.n, vmp, `"pages"`, `"block":65`, `"block":`+f.lit))
+	}
+	for _, f := range []string{"1.0", "1e0", "1E0", "01", "-0", `"1"`} {
+		out = append(out, tokenRepro("majors="+f, vmp, `"evidence"`, `"majors":1`, `"majors":`+f))
+		out = append(out, tokenRepro("anchor number="+f, vmp, `"acc://bvn-BVN3.acme"`, `"number":1`, `"number":`+f))
+	}
+	out = append(out,
+		insertAt("version dup number first", vmp, `"version":"2.1"`, 0, `"version":5,`),
+		insertAt("version dup null after", vmp, `"version":"2.1"`, len(`"version":"2.1"`), `,"version":null`),
+		insertAt("version dup fold first", vmp, `"version":"2.1"`, 0, `"VERSION":{},`),
+		insertAt("roles fold long s", vmp, `"pages":[{`, len(`"pages":[{`), `"roleſ":null,`),
+		insertAt("roles fold long s escaped", vmp, `"pages":[{`, len(`"pages":[{`), `"roleſ":null,`),
+		insertAt("roles upper dup null", vmp, `"pages":[{`, len(`"pages":[{`), `"ROLES":null,`),
+		insertAt("partition kelvin-free upper", vmp, `"pages":[{`, len(`"pages":[{`), `"PARTITION":"bvn-BVN2.acme",`),
+	)
+	// the receipt hash and the set check's secondaryHash, given a later null
+	out = append(out, repro{"hash dup null after", vmp, func(b []byte) []ByteEdit {
+		o := bytes.Index(b, []byte(`"receipt"`))
+		if o < 0 {
+			return nil
+		}
+		loc := regexp.MustCompile(`"hash":"[0-9a-f]{64}"`).FindIndex(b[o:])
+		if loc == nil {
+			return nil
+		}
+		return []ByteEdit{{o + loc[1], 0, ins(`,"hash":null`)}}
+	}})
+	out = append(out, repro{"secondaryHash fold null after", vmp, func(b []byte) []ByteEdit {
+		re := regexp.MustCompile(`"secondaryHash":"[0-9a-f]{64}"`)
+		loc := re.FindIndex(b)
+		if loc == nil {
+			return nil
+		}
+		return []ByteEdit{{loc[1], 0, ins(`,"SecondaryHash":null`)}}
+	}})
+	// 2.0 documents carrying 2.1 members (the 2.0 verifier refuses them as Go does), in every case the document allows
+	v20 := "proofv2/valid.json.gz"
+	for _, k := range []struct{ id, anchor, text string }{
+		{"20 Anchors", `"evidence":{`, `"Anchors":{"acc://bvn-BVN1.acme":{"message":{},"receipt":{}}},`},
+		{"20 anchors empty", `"evidence":{`, `"anchors":{},`},
+		{"20 anchors null", `"evidence":{`, `"anchors":null,`},
+		{"20 VOTES", `"evidence":{`, `"VOTES":[{"authority":"a"}],`},
+		{"20 votes empty", `"evidence":{`, `"votes":[],`},
+		{"20 votes string", `"evidence":{`, `"votes":"x",`},
+		{"20 anchors array", `"evidence":{`, `"anchors":[1],`},
+		{"20 transaction number", `"evidence":{`, `"transaction":5,`},
+		{"20 transaction string", `"evidence":{`, `"transaction":"00",`},
+		{"20 Transaction string", `"evidence":{`, `"Transaction":"00",`},
+		{"20 routing", `"check":{`, `"routing":{},`},
+		{"20 Routing", `"check":{`, `"Routing":{"accountUrl":"acc://dn.acme/routing"},`},
+		{"20 routing null", `"check":{`, `"routing":null,`},
+		{"20 page Partition", `"pages":[{`, `"Partition":"bvn1",`},
+		{"20 page partition number", `"pages":[{`, `"partition":5,`},
+		{"20 page partition empty", `"pages":[{`, `"partition":"",`},
+		{"20 page ROLES", `"pages":[{`, `"ROLES":["voter"],`},
+		{"20 page roles empty", `"pages":[{`, `"roles":[],`},
+		{"20 page roles null", `"pages":[{`, `"roles":null,`},
+		{"20 page roles string", `"pages":[{`, `"roles":"voter",`},
+		{"20 page history number", `"pages":[{`, `"history":7,`},
+		{"20 page history", `"pages":[{`, `"history":{"entries":[],"index":[]},`},
+		{"20 page History null", `"pages":[{`, `"History":null,`},
+	} {
+		k := k
+		out = append(out, insertAt(k.id, v20, k.anchor, len(k.anchor), k.text))
+	}
+	// D4 and D5: the spine's records and the genesis
+	tl := "xpartition2b/timeline-valid.json"
+	out = append(out,
+		tokenRepro("rootProof count 0", tl, `"rootProof"`, `"count":1`, `"count":0`),
+		tokenRepro("rootProof count 2", tl, `"rootProof"`, `"count":1`, `"count":2`),
+		tokenRepro("rootProof count float", tl, `"rootProof"`, `"count":1`, `"count":1.0`),
+	)
+	ra := "xpartition2/routing-absent.json"
+	out = append(out,
+		repro{"genesis publicKeyHash newline", ra, func(b []byte) []ByteEdit {
+			re := regexp.MustCompile(`"publicKeyHash":"[0-9a-f]+"`)
+			ls := re.FindAllIndex(b, -1)
+			if len(ls) < 3 {
+				return nil
+			}
+			return []ByteEdit{{ls[2][1] - 1, 0, ins(`\n`)}}
+		}},
+		repro{"genesis publicKeyHash object dup", ra, func(b []byte) []ByteEdit {
+			re := regexp.MustCompile(`"publicKeyHash":"[0-9a-f]+"`)
+			ls := re.FindAllIndex(b, -1)
+			if len(ls) < 3 {
+				return nil
+			}
+			return []ByteEdit{{ls[2][0], 0, ins(`"publicKeyHash":{},`)}}
+		}},
+		tokenRepro("genesis timeUnix string", ra, `"genesis"`, `"timeUnix":1700000000`, `"timeUnix":"1700000000"`),
+		tokenRepro("genesis timeUnix float", ra, `"genesis"`, `"timeUnix":1700000000`, `"timeUnix":1700000000.0`),
+		tokenRepro("genesis minorBlockIndex exp", ra, `"genesis"`, `"minorBlockIndex":1`, `"minorBlockIndex":1e0`),
+		insertAt("genesis fold key dup", ra, `"genesis":{`, len(`"genesis":{`), `"TimeUnix":"x",`),
+	)
+	// invalid UTF-8 in a name a refusal prints
+	out = append(out,
+		insertAt("utf8 in a partition", vmp, `"partition":"`, len(`"partition":"`), "\xe2\x82"),
+		insertAt("utf8 in a partition 4-byte", vmp, `"partition":"`, len(`"partition":"`), "\xf0\x9f\x98"),
+		insertAt("surrogate in a partition", vmp, `"partition":"`, len(`"partition":"`), `\ud800`),
+	)
+	return out
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+func bytesBases(fixtures string) ([]string, error) {
+	var bases []string
+	for _, suite := range []string{"xpartition", "xpartition2", "xpartition2b", "xpartition3", "xpartition3b", "xpartition4", "xpartition5"} {
+		ents, err := os.ReadDir(filepath.Join(fixtures, suite))
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range ents {
+			n := e.Name()
+			if e.IsDir() || n == "manifest.json" || n == "MANIFEST.sha256" || n == ".gitattributes" {
+				continue
+			}
+			if strings.HasSuffix(n, ".json") || strings.HasSuffix(n, ".json.gz") {
+				bases = append(bases, suite+"/"+n)
+			}
+		}
+	}
+	bases = append(bases, "proofv2/valid.json.gz", "proofv2/network-update.json.gz", "go-written/real-bvn1-billing-receipts.portable.json.gz")
+	return bases, nil
+}
+
+func baseDoc(fixtures, base string) ([]byte, error) {
+	if strings.HasPrefix(base, "proofv2/") {
+		return readDoc(filepath.Join(fixtures, "..", base))
+	}
+	return readDoc(filepath.Join(fixtures, base))
+}
+
+func bytesCorpus(fixtures, out string, per int) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Portable documents judged from their text by json.Unmarshal into Portable and VerifyPortable: byte edits of the shared vectors, both 2.0 fixtures and the real document - number literals, duplicate and fold-equivalent keys, hex with a newline, strings given for numbers, invalid UTF-8, whitespace - and named repros. A document on which Go panics or answers differently on repeated runs is not recorded."}
+	bases, err := bytesBases(fixtures)
+	if err != nil {
+		return err
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStable(raw)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	record := func(id string, bi int, op string, edits []ByteEdit) {
+		text := applyEdits(docs[bi], edits)
+		lastPanic, lastFlaky = "", ""
+		e, ok := judgeStableCounting(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+		if !ok {
+			if lastPanic != "" {
+				fmt.Fprintf(os.Stderr, "PANIC %s [%s]: %s\n", id, op, lastPanic)
+			} else {
+				fmt.Fprintf(os.Stderr, "FLAKY %s [%s]: %s\n", id, op, lastFlaky)
+			}
+			return
+		}
+		f.Cases = append(f.Cases, ByteCase{ID: id, Base: bi, Op: op, Edits: edits, Expect: e})
+	}
+	for bi, bpath := range bases {
+		toks := scanTokens(docs[bi])
+		ms := members(docs[bi], toks)
+		n := per
+		if strings.HasPrefix(bpath, "go-written/") {
+			n = per * 2
+		}
+		if strings.HasPrefix(bpath, "proofv2/") {
+			n = per * 10 // the 2.0 fixtures are two documents: the share of the corpus that tests evidence 2.0 is made here
+		}
+		for k := 0; k < n; k++ {
+			r := rand.New(rand.NewSource(seedOf("bytes", bpath, fmt.Sprint(k))))
+			var edits []ByteEdit
+			var names []string
+			count := 1
+			if r.Intn(4) == 0 {
+				count = 2
+			}
+			for c := 0; c < count; c++ {
+				es, name := chooseOp(r)(r, docs[bi], toks, ms)
+				if es == nil {
+					continue
+				}
+				clash := false
+				for _, e := range edits {
+					for _, x := range es {
+						if overlap(e, x) {
+							clash = true
+						}
+					}
+				}
+				if clash {
+					continue
+				}
+				edits = append(edits, es...)
+				names = append(names, name)
+			}
+			if len(edits) == 0 {
+				continue
+			}
+			record(fmt.Sprintf("%s#%02d", bpath, k), bi, strings.Join(names, " + "), edits)
+		}
+	}
+	for _, rp := range repros() {
+		bi := -1
+		for i, b := range bases {
+			if b == rp.base {
+				bi = i
+			}
+		}
+		if bi < 0 {
+			return fmt.Errorf("repro %s: base %s is not a base", rp.id, rp.base)
+		}
+		edits := rp.edit(docs[bi])
+		if edits == nil {
+			return fmt.Errorf("repro %s: the pattern does not occur in %s", rp.id, rp.base)
+		}
+		record("repro:"+rp.id, bi, "repro", edits)
+	}
+	return writeGz(filepath.Join(out, "bytes-cases.json.gz"), mustJSON(f))
+}

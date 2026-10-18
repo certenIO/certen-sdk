@@ -1,0 +1,51 @@
+package main
+
+// The Unicode fold sets encoding/json matches keys with: every rune that has a fold set other than itself, with the smallest rune of its set
+// (encoding/json fold.go foldRune over unicode.SimpleFold). The TypeScript port generates src/s3/fold-table.ts from this file
+// (tools/gen-fold-table.mjs); nothing in the table is written by hand.
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"unicode"
+)
+
+type FoldFile struct {
+	Format  string   `json:"format"`
+	Go      string   `json:"go"`
+	Unicode string   `json:"unicode"`
+	Folded  [][2]int `json:"folded"` // [rune, the smallest rune of its fold set], for every rune that is not that rune
+}
+
+func foldRuneGo(r rune) rune {
+	for {
+		r2 := unicode.SimpleFold(r)
+		if r2 <= r {
+			return r2
+		}
+		r = r2
+	}
+}
+
+func foldCorpus(out string) error {
+	f := &FoldFile{Format: "certen-sdk/s3-fold-orbits/v1", Go: runtime.Version(), Unicode: unicode.Version}
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		if r >= 0xd800 && r < 0xe000 {
+			continue
+		}
+		if m := foldRuneGo(r); m != r {
+			f.Folded = append(f.Folded, [2]int{int(r), int(m)})
+		}
+	}
+	if len(f.Folded) == 0 {
+		return fmt.Errorf("no fold sets")
+	}
+	b, err := json.Marshal(f)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(out, "fold-orbits.json"), b, 0o644)
+}
