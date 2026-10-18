@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Verify a proof v2 Accumulate proof in portable form (certen-validator pkg/proof/v2: portable.go, evidence.go
  * VerifyFromGenesis, page.go, and pkg/proof ValidatorSetProof.Verify). Each step names the Go code it mirrors. Any
  * failure throws VerifyError; there is no weaker answer for the transaction, its certification or its pages. The
@@ -348,6 +348,9 @@ function pageChain(p: Rec, r: Receipt): PageChain {
   return { url, bound: true, mainHeight: h };
 }
 
+/** The characters strings.TrimSpace removes (Unicode White_Space). */
+const GO_SPACE = /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+
 /** ChainRoot.derive: count and anchor from Pending alone; the restated values must agree. */
 function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array } {
   let count = 0;
@@ -355,7 +358,8 @@ function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array }
   for (const [i, v] of optList(c.pending, `${label}.pending`).entries()) {
     if (v === null || v === undefined) continue;
     count += 2 ** i;
-    const h = hexBytes(v, `${label}.pending[${i}]`, 32);
+    // ChainRoot.derive trims the entry before it decodes it (strings.TrimSpace)
+    const h = hexBytes(typeof v === 'string' ? v.replace(GO_SPACE, '') : v, `${label}.pending[${i}]`, 32);
     anchor = anchor === undefined ? h : sha256(h, anchor);
   }
   const a = anchor ?? new Uint8Array(32);

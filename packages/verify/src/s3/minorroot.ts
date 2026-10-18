@@ -1,4 +1,4 @@
-/**
+﻿/**
  * An api.MinorRootRecord (a certify run, a set-check hop) and an api.MajorHeaderRecord (a record of the spine) from their JSON, as Go's
  * Import reads them: the binary form Go's MarshalBinary writes for a minor-root record (the evidence document carries it as hex and the
  * evidence budget measures it), and the canonical JSON - exact keys, canonical names, lower-case hex - that the spine's walk reads.
@@ -63,7 +63,11 @@ function stateFromJson(j: unknown): State {
   app(out, uvarint(hashes.length));
   for (const h of hashes) app(out, bytesWithLen(h ?? new Uint8Array(0)));
   const hx = (b: Uint8Array | null): string | null => (b === null ? null : Buffer.from(b).toString('hex'));
-  return { bin: Uint8Array.from(out), canonical: { count: Number(count), pending: pending.map(hx), hashList: hashes.map(hx) } };
+  // The record is written in binary and read back (Import does so): the sparse list keeps a hash only where a bit of the count is set, and is as
+  // long as the count has bits - the state the walk reads is that one, not the list the JSON carried.
+  const kept: (string | null)[] = [];
+  for (let i = 0; (count >> BigInt(i)) > 0n; i++) kept.push(((count >> BigInt(i)) & 1n) === 1n && pending[i] && pending[i]!.length > 0 ? hx(pending[i]!) : null);
+  return { bin: Uint8Array.from(out), canonical: { count: Number(count), pending: kept, hashList: hashes.map(hx) } };
 }
 
 function receiptListFromJson(j: unknown): State {

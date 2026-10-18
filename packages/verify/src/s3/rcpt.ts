@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Receipts and sequenced messages from their portable JSON, with the binary encodings Go's Import computes (portable.go receiptHex,
  * importSequenced): the bytes are what the document commits to wherever it carries the value (govRoot v4's vote encoding, the budget).
  */
 import { type Receipt } from '../proof-v2/bytes.js';
+import { Occ } from './occ.js';
 import { encodeNode, type WireNode } from '../sigtypes/wire.js';
-import { bool, goHex, i64big, JsonError, jsonList, strptr, struct } from './gojson.js';
+import { bool, goHex, i64big, JsonError, strptr, struct } from './gojson.js';
 
 // --------------------------------------------------------------------------------------------------------------------------------
 // receipts
@@ -35,11 +36,20 @@ export function importReceipt(j: unknown, label: string): Rcpt {
   const startIndex = i64big(s.startIndex, `${label}.startIndex`);
   const endIndex = i64big(s.endIndex, `${label}.endIndex`);
   // merkle.Receipt.Entries is an encoding.JsonList: a list, or a single entry.
-  const entryList = jsonList(s.entries, `${label}.entries`) ?? [];
-  const entries = entryList.map((e, i) => {
+  // Every occurrence of the member is decoded in turn (a wrong one is an error although a later one replaces it); a null clears the list.
+  const decodeEntry = (e: unknown, i: number): { right: boolean; hash: Uint8Array; extra: Uint8Array } => {
     const es = struct(e, ['right', 'hash', '$epilogue'], `merkle.ReceiptEntry (${label}.entries[${i}])`);
     return { right: bool(es.right, `${label}.entries[${i}].right`), hash: bytesJson(es.hash, `${label}.entries[${i}].hash`), extra: epilogue(es.$epilogue, `${label}.entries[${i}]`) };
-  });
+  };
+  let entries: { right: boolean; hash: Uint8Array; extra: Uint8Array }[] = [];
+  for (const x of s.entries instanceof Occ ? s.entries.vals : [s.entries]) {
+    if (x === undefined) continue;
+    if (x === null) {
+      entries = [];
+      continue;
+    }
+    entries = (Array.isArray(x) ? x : [x]).map(decodeEntry);
+  }
   const extra = epilogue(s.$epilogue, label);
   const node: WireNode = {
     cls: 'merkle.Receipt',

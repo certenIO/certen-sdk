@@ -247,6 +247,13 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
   const pairs = mergedPairs(j);
   if (pairs === undefined) return bad(`json: cannot unmarshal ${describe(j)} into Go value of type ${cls}`);
   if (!hasClass(cls)) return bad(`${label}: ${cls} is not a class this verifier reads from JSON`);
+  if (cls === 'KeyPage') {
+    // KeyBook is a *url.URL of the generated unmarshaler's struct (derived on write, never stored): every occurrence is still parsed.
+    for (const x of occurrences(pairs, 'keyBook')) {
+      if (x === undefined || x === null) continue;
+      scalar(cls, { name: 'keyBook', kind: 'url' } as unknown as FieldDesc, x, `${label}.keyBook`);
+    }
+  }
   for (const d of flatFields(cls)) {
     if (d.name === 'type' && member_) continue;
     const vals = occurrences(pairs, d.name);
