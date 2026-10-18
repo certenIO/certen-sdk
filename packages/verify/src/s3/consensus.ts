@@ -18,7 +18,7 @@ const S = 'string' as const;
 const U = 'u64' as const;
 const f = (name: string, json: string, sch: Sch, omitempty = false): FieldDef => ({ name, json, sch, omitempty });
 
-const CHAIN_ROOT: StructDef = [f('Name', 'name', S), f('Pending', 'pending', { list: 'strptr' }), f('Count', 'count', U), f('Anchor', 'anchor', S)];
+export const CHAIN_ROOT: StructDef = [f('Name', 'name', S), f('Pending', 'pending', { list: 'strptr' }), f('Count', 'count', U), f('Anchor', 'anchor', S)];
 const PARTITION_ANCHOR: StructDef = [f('Message', 'message', S), f('Receipt', 'receipt', S)];
 const INDEX_PROOF: StructDef = [f('Position', 'position', U), f('Entry', 'entry', S), f('Receipt', 'receipt', S)];
 const ARRIVAL: StructDef = [f('Before', 'before', { ptr: INDEX_PROOF }, true), f('At', 'at', { struct: INDEX_PROOF })];
@@ -38,7 +38,7 @@ const VOTE: StructDef = [
   f('Produced', 'produced', { ptr: PRODUCTION }, true),
 ];
 const HISTORY_ENTRY: StructDef = [f('Transaction', 'transaction', S), f('Initiator', 'initiator', S, true)];
-const PAGE_HISTORY: StructDef = [f('Entries', 'entries', { list: { struct: HISTORY_ENTRY } }), f('Index', 'index', { list: S })];
+export const PAGE_HISTORY: StructDef = [f('Entries', 'entries', { list: { struct: HISTORY_ENTRY } }), f('Index', 'index', { list: S })];
 const PAGE_STATE: StructDef = [
   f('URL', 'url', S),
   f('State', 'state', S),

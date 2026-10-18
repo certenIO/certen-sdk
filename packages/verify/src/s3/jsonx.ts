@@ -7,6 +7,7 @@
  */
 import { VerifyError } from '../proof-v2/bytes.js';
 import { goJsonString } from './budget.js';
+import { foldEqual } from './fold.js';
 import { JsonError } from './gojson.js';
 
 // --------------------------------------------------------------------------------------------------------------------------------
@@ -22,6 +23,41 @@ export class JObj {
 export type JVal = null | boolean | string | JNum | JVal[] | JObj;
 
 const WS = new Set([0x20, 0x09, 0x0a, 0x0d]);
+
+/**
+ * The string Go's unquote makes of raw bytes: a valid UTF-8 sequence is itself, each byte that is not part of one becomes its own U+FFFD
+ * (utf8.DecodeRune reports width 1 for it; TextDecoder replaces a whole maximal subpart by one).
+ */
+export function decodeGoUtf8(b: readonly number[]): string {
+  let out = '';
+  for (let i = 0; i < b.length; ) {
+    const c = b[i]!;
+    let n = 0;
+    let cp = 0;
+    const cont = (k: number, lo = 0x80, hi = 0xbf): boolean => i + k < b.length && b[i + k]! >= lo && b[i + k]! <= hi;
+    if (c < 0x80) {
+      n = 1;
+      cp = c;
+    } else if (c >= 0xc2 && c <= 0xdf && cont(1)) {
+      n = 2;
+      cp = ((c & 0x1f) << 6) | (b[i + 1]! & 0x3f);
+    } else if (c >= 0xe0 && c <= 0xef && cont(1, c === 0xe0 ? 0xa0 : 0x80, c === 0xed ? 0x9f : 0xbf) && cont(2)) {
+      n = 3;
+      cp = ((c & 0x0f) << 12) | ((b[i + 1]! & 0x3f) << 6) | (b[i + 2]! & 0x3f);
+    } else if (c >= 0xf0 && c <= 0xf4 && cont(1, c === 0xf0 ? 0x90 : 0x80, c === 0xf4 ? 0x8f : 0xbf) && cont(2) && cont(3)) {
+      n = 4;
+      cp = ((c & 0x07) << 18) | ((b[i + 1]! & 0x3f) << 12) | ((b[i + 2]! & 0x3f) << 6) | (b[i + 3]! & 0x3f);
+    }
+    if (n === 0) {
+      out += String.fromCharCode(0xfffd);
+      i++;
+    } else {
+      out += String.fromCodePoint(cp);
+      i += n;
+    }
+  }
+  return out;
+}
 
 /** encoding/json's quoteChar: the byte as a rune, quoted by strconv.Quote with single quotes. */
 export function quoteChar(c: number): string {
@@ -73,7 +109,7 @@ export function parseGoJson(input: Uint8Array | string): JVal {
     let out = '';
     const flush = (): void => {
       if (bytes.length > 0) {
-        out += new TextDecoder('utf-8').decode(Uint8Array.from(bytes));
+        out += decodeGoUtf8(bytes);
         bytes.length = 0;
       }
     };
@@ -242,7 +278,7 @@ export function parseGoJson(input: Uint8Array | string): JVal {
 // schemas
 
 /** A Go type of the proof's JSON: scalars, a nullable string, a raw value, slices, maps, structs and pointers to structs. */
-export type Sch = 'string' | 'strptr' | 'u64' | 'i64' | 'vote' | 'bool' | { list: Sch } | { map: Sch } | { struct: StructDef } | { ptr: StructDef };
+export type Sch = 'string' | 'strptr' | 'u64' | 'i64' | 'vote' | 'bool' | 'raw' | { list: Sch } | { map: Sch } | { struct: StructDef } | { ptr: StructDef };
 export interface FieldDef {
   /** The Go field name (the key of the decoded value). */
   name: string;
@@ -253,7 +289,12 @@ export interface FieldDef {
 export type StructDef = FieldDef[];
 
 /** A decoded Go value: strings, bigints, booleans, nil as null, slices, maps and structs by Go field name. */
-export type GoVal = string | bigint | boolean | null | GoVal[] | Map<string, GoVal> | { [field: string]: GoVal };
+/** A json.RawMessage: the value as the document wrote it (undefined: the member was absent). */
+export class Raw {
+  constructor(readonly v: JVal | undefined) {}
+}
+
+export type GoVal = string | bigint | boolean | null | Raw | GoVal[] | Map<string, GoVal> | { [field: string]: GoVal };
 
 const typeOf = (v: JVal): string => (v === null ? 'null' : typeof v === 'string' ? 'string' : typeof v === 'boolean' ? 'bool' : v instanceof JNum ? 'number' : Array.isArray(v) ? 'array' : 'object');
 
@@ -274,6 +315,7 @@ export function zero(s: Sch): GoVal {
   if (s === 'strptr') return null;
   if (s === 'u64' || s === 'i64' || s === 'vote') return 0n;
   if (s === 'bool') return false;
+  if (s === 'raw') return new Raw(undefined);
   if (isStruct(s)) return zeroStruct(s.struct);
   return null; // slices, maps and pointers are nil
 }
@@ -283,15 +325,12 @@ function zeroStruct(def: StructDef): { [field: string]: GoVal } {
   return o;
 }
 
-function foldEq(a: string, b: string): boolean {
-  return a.length === b.length && a.toLowerCase() === b.toLowerCase();
-}
-
 const U64_MAX = (1n << 64n) - 1n;
 const I64_MAX = (1n << 63n) - 1n;
 
 /** decode one JSON value into the schema's Go value; `into` is the value already there (struct decoding merges into it). */
 export function decodeVal(s: Sch, v: JVal, label: string, into?: GoVal): GoVal {
+  if (s === 'raw') return new Raw(v);
   if (s === 'string') {
     if (v === null) return (into as string | undefined) ?? '';
     if (typeof v !== 'string') mismatch(v, 'string', label);
@@ -345,7 +384,7 @@ export function decodeVal(s: Sch, v: JVal, label: string, into?: GoVal): GoVal {
   if (!(v instanceof JObj)) mismatch(v, 'struct', label);
   const out: { [field: string]: GoVal } = into && typeof into === 'object' && !Array.isArray(into) && !(into instanceof Map) ? (into as { [field: string]: GoVal }) : zeroStruct(def);
   for (const [k, e] of (v as JObj).pairs) {
-    const f = def.find((x) => x.json === k) ?? def.find((x) => foldEq(x.json, k));
+    const f = def.find((x) => x.json === k) ?? def.find((x) => foldEqual(x.json, k));
     if (!f) continue;
     out[f.name] = decodeVal(f.sch, e, `${label}.${f.name}`, out[f.name]);
   }
@@ -367,6 +406,7 @@ const isEmpty = (s: Sch, v: GoVal): boolean => {
 
 /** json.Marshal of a decoded value: field order, omitempty, nil slices and maps as null, map keys sorted bytewise. */
 export function marshalVal(s: Sch, v: GoVal): string {
+  if (s === 'raw') throw new JsonError('a raw message is not marshalled by this port');
   if (s === 'string') return goJsonString(v as string);
   if (s === 'strptr') return v === null ? 'null' : goJsonString(v as string);
   if (s === 'u64' || s === 'i64') return (v as bigint).toString();

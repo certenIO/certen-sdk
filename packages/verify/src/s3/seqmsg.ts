@@ -5,6 +5,7 @@
  * unmarshalers (jsonwire.ts), their binary encoding is the generated MarshalBinary: the field number and value of each member present.
  */
 import { fail, sha256 } from '../proof-v2/bytes.js';
+import { app, cat } from './bytebuf.js';
 import { binaryBytes, binaryString, canonicalAccTxId } from '../sigtypes/gourl.js';
 import { transactionHash } from '../sigtypes/txhash.js';
 import { encodeNode, type WireNode } from '../sigtypes/wire.js';
@@ -12,6 +13,8 @@ import { AccUrl } from './acc.js';
 import { enumByName } from './enum-names.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
 import { nodeToJson } from './nodejson.js';
+import { BadNum, mergedPairs, Occ, occurrences, oneOf } from './occ.js';
+import { u64big } from './gojson.js';
 
 /** A delivered messaging.SequencedMessage, decoded: what the verifier reads of an anchor and of a production. */
 export interface SeqMsg {
@@ -33,17 +36,7 @@ export interface SeqMsg {
   canonical: Record<string, unknown>;
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-
-/** An object's member by Go's key matching: the exact name, else a case-insensitive one. */
-function member(o: Record<string, unknown>, name: string): unknown {
-  if (Object.prototype.hasOwnProperty.call(o, name)) return o[name];
-  let hit: unknown;
-  for (const k of Object.keys(o)) if (k.toLowerCase() === name.toLowerCase()) hit = o[k];
-  return hit;
-}
-
-const describe = (v: unknown): string => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
+const describe = (v: unknown): string => (v instanceof BadNum ? 'number' : v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
 
 function uvarint(v: number | bigint): number[] {
   let x = BigInt(v);
@@ -55,25 +48,35 @@ function uvarint(v: number | bigint): number[] {
   out.push(Number(x));
   return out;
 }
-const lenBytes = (b: Uint8Array | number[]): number[] => [...uvarint(b.length), ...b];
+const lenBytes = (b: Uint8Array | number[]): number[] => cat(uvarint(b.length), b);
 
-/** A message's declared type must be its own; absent keeps its own (<Type>.UnmarshalJSON: "field Type: not equal"). */
-function checkMessageType(o: Record<string, unknown>, want: string, label: string): void {
-  const t = member(o, 'type');
-  if (t === undefined) return;
-  if (typeof t !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(t)} into Go value of type string`);
-  const e = enumByName('MessageType', t);
-  if (e === undefined) return fail(`${label}: invalid Message Type ${JSON.stringify(t)}`);
-  if (e !== enumByName('MessageType', want)) fail(`${label}: field Type: not equal: want ${want}, got ${t}`);
+type Pairs = [string, unknown][];
+
+/** A message's declared type must be its own; absent keeps its own (<Type>.UnmarshalJSON: "field Type: not equal"). Every occurrence is decoded. */
+function checkMessageType(pairs: Pairs, want: string, label: string): void {
+  for (const t of occurrences(pairs, 'type')) {
+    if (typeof t !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(t)} into Go value of type string`);
+    const e = enumByName('MessageType', t);
+    if (e === undefined) return fail(`${label}: invalid Message Type ${JSON.stringify(t)}`);
+    if (e !== enumByName('MessageType', want)) fail(`${label}: field Type: not equal: want ${want}, got ${t}`);
+  }
 }
 
-function urlField(o: Record<string, unknown>, name: string, label: string): AccUrl | undefined {
-  const v = member(o, name);
-  if (v === undefined || v === null) return undefined;
-  if (typeof v !== 'string') return fail(`${label}: json: cannot unmarshal ${typeof v} into Go struct field .${name} of type url.URL`);
-  const u = AccUrl.parse(v);
-  if (!u) return fail(`${label}.${name}: ${JSON.stringify(v)} is not a URL`);
-  return u;
+/** A *url.URL member: each occurrence is parsed, a null clears it, the last one stands. */
+function urlField(pairs: Pairs, name: string, label: string): AccUrl | undefined {
+  let out: AccUrl | undefined;
+  for (const v of occurrences(pairs, name)) {
+    if (v === undefined) continue;
+    if (v === null) {
+      out = undefined;
+      continue;
+    }
+    if (typeof v !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(v)} into Go struct field .${name} of type url.URL`);
+    const u = AccUrl.parse(v);
+    if (!u) return fail(`${label}.${name}: ${JSON.stringify(v)} is not a URL`);
+    out = u;
+  }
+  return out;
 }
 
 interface MsgOut {
@@ -87,73 +90,86 @@ interface MsgOut {
 /** A message from its JSON (UnmarshalMessageJSON, then MarshalBinary): the transaction, signature and sequenced messages. */
 function messageFromJson(j: unknown, label: string): MsgOut | null {
   if (j === null || j === undefined) return null;
-  if (!isObj(j)) return fail(`${label}: json: cannot unmarshal ${describe(j)} into Go value of type Message`);
-  const t = member(j, 'type');
+  const pairs = mergedPairs(j);
+  if (pairs === undefined) return fail(`${label}: json: cannot unmarshal ${describe(j)} into Go value of type Message`);
+  let t: string | undefined;
+  for (const x of occurrences(pairs, 'type')) {
+    if (typeof x !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(x)} into Go value of type string`);
+    t = x;
+  }
   if (t === undefined) return fail(`${label}: invalid Message type (none)`);
-  if (typeof t !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(t)} into Go value of type string`);
   const tag = enumByName('MessageType', t);
   if (tag === undefined) return fail(`${label}: invalid Message Type ${JSON.stringify(t)}`);
   if (tag === enumByName('MessageType', 'transaction')) {
-    checkMessageType(j, 'transaction', label);
-    const tx = member(j, 'transaction');
-    const out: number[] = [...uvarint(1), ...uvarint(tag)];
+    checkMessageType(pairs, 'transaction', label);
+    // Transaction *protocol.Transaction: the objects of every occurrence decode into the one transaction, a null leaves it
+    const txs = occurrences(pairs, 'transaction').filter((x) => x !== undefined && x !== null);
+    const out: number[] = cat(uvarint(1), uvarint(tag));
     let txn: WireNode | undefined;
-    if (tx !== undefined && tx !== null) {
-      txn = nodeFromJson('Transaction', tx, `${label}.transaction`);
-      out.push(...uvarint(2), ...lenBytes(encodeNode(txn)));
+    if (txs.length > 0) {
+      txn = nodeFromJson('Transaction', txs.length === 1 ? txs[0] : new Occ(txs), `${label}.transaction`);
+      app(out, uvarint(2), lenBytes(encodeNode(txn)));
     }
     return { kind: 'transaction', bin: Uint8Array.from(out), txn, canonical: { type: 'transaction', ...(txn ? { transaction: nodeToJson(txn) } : {}) } };
   }
   if (tag === enumByName('MessageType', 'signature')) {
-    checkMessageType(j, 'signature', label);
-    const sg = member(j, 'signature');
-    const out: number[] = [...uvarint(1), ...uvarint(tag)];
+    checkMessageType(pairs, 'signature', label);
+    const out: number[] = cat(uvarint(1), uvarint(tag));
     let sigHash: Uint8Array | undefined;
     const canonical: Record<string, unknown> = { type: 'signature' };
-    if (sg !== undefined && sg !== null) {
-      const node = unionFromJson('Signature', sg, `${label}.signature`);
-      if (node) {
-        const b = encodeNode(node);
-        sigHash = sha256(b);
-        out.push(...uvarint(2), ...lenBytes(b));
-        canonical.signature = nodeToJson(node, 'Signature');
-      }
+    // the signature union: every occurrence is unmarshalled, a later one replaces an earlier one
+    let node: WireNode | null = null;
+    for (const sg of occurrences(pairs, 'signature')) {
+      if (sg === undefined) continue;
+      node = unionFromJson('Signature', sg, `${label}.signature`);
     }
-    const id = member(j, 'txID');
-    if (id !== undefined && id !== null) {
-      if (typeof id !== 'string') return fail(`${label}: json: cannot unmarshal ${typeof id} into Go struct field .txID of type url.TxID`);
+    if (node) {
+      const b = encodeNode(node);
+      sigHash = sha256(b);
+      app(out, uvarint(2), lenBytes(b));
+      canonical.signature = nodeToJson(node, 'Signature');
+    }
+    let txid: string | undefined;
+    for (const id of occurrences(pairs, 'txID')) {
+      if (id === undefined) continue;
+      if (id === null) {
+        txid = undefined;
+        continue;
+      }
+      if (typeof id !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(id)} into Go struct field .txID of type url.TxID`);
       const c = canonicalAccTxId(binaryString(new TextEncoder().encode(id)));
       if (c === undefined) return fail(`${label}.txID: ${JSON.stringify(id)} is not a transaction id`);
-      out.push(...uvarint(3), ...lenBytes(binaryBytes(c)));
-      canonical.txID = new TextDecoder().decode(binaryBytes(c));
+      txid = c;
+    }
+    if (txid !== undefined) {
+      app(out, uvarint(3), lenBytes(binaryBytes(txid)));
+      canonical.txID = new TextDecoder().decode(binaryBytes(txid));
     }
     return { kind: 'signature', bin: Uint8Array.from(out), sigHash, canonical };
   }
   if (tag === enumByName('MessageType', 'sequenced')) {
-    const inner = sequencedFromJson(j, label);
+    const inner = sequencedFromPairs(pairs, label);
     return { kind: 'sequenced', bin: inner.bin, canonical: inner.canonical };
   }
   return fail(`${label}: a ${t} message is not read from JSON by this verifier`);
 }
 
-function sequencedFromJson(j: Record<string, unknown>, label: string): SeqMsg {
-  checkMessageType(j, 'sequenced', label);
-  const m = messageFromJson(member(j, 'message'), `${label}.message`);
-  const source = urlField(j, 'source', label);
-  const destination = urlField(j, 'destination', label);
-  const nraw = member(j, 'number');
-  let number = 0n;
-  if (nraw !== undefined && nraw !== null) {
-    if (typeof nraw !== 'number' || !Number.isInteger(nraw) || nraw < 0 || Object.is(nraw, -0)) {
-      return fail(`${label}: json: cannot unmarshal ${typeof nraw === 'number' ? `number ${nraw}` : typeof nraw} into Go struct field .number of type uint64`);
-    }
-    number = BigInt(nraw);
+function sequencedFromPairs(pairs: Pairs, label: string): SeqMsg {
+  checkMessageType(pairs, 'sequenced', label);
+  // the message union: every occurrence is unmarshalled, a later one replaces an earlier one
+  let m: MsgOut | null = null;
+  for (const x of occurrences(pairs, 'message')) {
+    if (x === undefined) continue;
+    m = messageFromJson(x, `${label}.message`);
   }
-  const out: number[] = [...uvarint(1), ...uvarint(enumByName('MessageType', 'sequenced')!)];
-  if (m) out.push(...uvarint(2), ...lenBytes(m.bin));
-  if (source) out.push(...uvarint(3), ...lenBytes(new TextEncoder().encode(source.toString())));
-  if (destination) out.push(...uvarint(4), ...lenBytes(new TextEncoder().encode(destination.toString())));
-  if (number !== 0n) out.push(...uvarint(5), ...uvarint(number));
+  const source = urlField(pairs, 'source', label);
+  const destination = urlField(pairs, 'destination', label);
+  const number = u64big(oneOf(occurrences(pairs, 'number')), `${label}.number`);
+  const out: number[] = cat(uvarint(1), uvarint(enumByName('MessageType', 'sequenced')!));
+  if (m) app(out, uvarint(2), lenBytes(m.bin));
+  if (source) app(out, uvarint(3), lenBytes(new TextEncoder().encode(source.toString())));
+  if (destination) app(out, uvarint(4), lenBytes(new TextEncoder().encode(destination.toString())));
+  if (number !== 0n) app(out, uvarint(5), uvarint(number));
   const bin = Uint8Array.from(out);
   const canonical: Record<string, unknown> = { type: 'sequenced' };
   if (m) canonical.message = m.canonical;
@@ -177,7 +193,8 @@ function sequencedFromJson(j: Record<string, unknown>, label: string): SeqMsg {
 /** importSequenced: a SequencedMessage from its JSON (portable.go importSequenced / importAnchor). */
 export function importSequenced(j: unknown, label: string): SeqMsg {
   // JSON null unmarshals to the zero message; an absent value is not JSON at all.
-  if (j === null) return sequencedFromJson({}, label);
-  if (!isObj(j)) return fail(`${label}: json: cannot unmarshal ${describe(j)} into Go value of type messaging.SequencedMessage`);
-  return sequencedFromJson(j, label);
+  if (j === null) return sequencedFromPairs([], label);
+  const pairs = mergedPairs(j);
+  if (pairs === undefined) return fail(`${label}: json: cannot unmarshal ${describe(j)} into Go value of type messaging.SequencedMessage`);
+  return sequencedFromPairs(pairs, label);
 }

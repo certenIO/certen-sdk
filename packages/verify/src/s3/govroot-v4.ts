@@ -13,6 +13,7 @@ import { canonicalAccSpelling, G1_HISTORICAL_UNAVAILABLE, GOVROOT_V3_TAGS, govRo
 import { keccak256 } from '../proof-v2/accumulate.js';
 import { encodeNode } from '../sigtypes/wire.js';
 import { goHex, goHexError } from './gojson.js';
+import { app } from './bytebuf.js';
 import { importEvidence, type Arrival, type Evidence, type Hop, type IndexProof, type Vote } from './evidence.js';
 import { accountUrl, type WireNode } from './model.js';
 import { canonicalRoles, DOMAIN_GOVROOT_V4, State, VERSION_21 } from './states.js';
@@ -139,12 +140,12 @@ class VoteWriter {
   b: number[] = [];
   err: Error | undefined;
   u64(v: number | bigint): void {
-    this.b.push(...u64be(v));
+    app(this.b, u64be(v));
   }
   u32(v: number): void {
     const x = new Uint8Array(4);
     new DataView(x.buffer).setUint32(0, v);
-    this.b.push(...x);
+    app(this.b, x);
   }
   flag(v: boolean): void {
     this.b.push(v ? 1 : 0);
@@ -153,7 +154,7 @@ class VoteWriter {
   str(s: string): void {
     const u = utf8(s);
     this.u32(u.length);
-    this.b.push(...u);
+    app(this.b, u);
   }
   /** A length-prefixed URL in canonical spelling (lower case, no trailing slash). */
   url(s: string): void {
@@ -166,7 +167,7 @@ class VoteWriter {
     // hex.DecodeString returns the bytes decoded before an error too, but a record with an error is never committed: the length it wrote is moot.
     const r = raw ?? new Uint8Array(0);
     this.u32(r.length);
-    this.b.push(...r);
+    app(this.b, r);
   }
   indexProof(name: string, p: IndexProofWire): void {
     this.u64(p.position);

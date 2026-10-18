@@ -31,6 +31,7 @@ import {
 } from '../sigtypes/wire.js';
 import { enumByName } from './enum-names.js';
 import { goHex, JsonError } from './gojson.js';
+import { BadNum, mergedPairs, Occ, occurrences } from './occ.js';
 
 const bad = (m: string): never => {
   throw new JsonError(m);
@@ -74,7 +75,15 @@ function enumOf(cls: string, field: string): string | undefined {
   return undefined;
 }
 
-const natOf = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && !Object.is(v, -0);
+const U64_MAX = (1n << 64n) - 1n;
+const I64_MAX = (1n << 63n) - 1n;
+
+/** The exact integer a JSON number holds: a number, or a BadNum whose literal is a whole number. */
+function wholeNumber(x: unknown): bigint | undefined {
+  if (typeof x === 'number') return Number.isInteger(x) ? BigInt(x) : undefined;
+  if (x instanceof BadNum && /^-?(0|[1-9][0-9]*)$/.test(x.text)) return BigInt(x.text);
+  return undefined;
+}
 
 function parseTime(s: string): TimeValue {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(s);
@@ -94,12 +103,16 @@ function parseTime(s: string): TimeValue {
 /** One scalar field of a Go struct, from its JSON value (null and absent are handled by the caller). */
 function scalar(cls: string, d: FieldDesc, v: unknown, label: string): Value {
   switch (d.kind) {
-    case 'uint':
-      if (!natOf(v) || (v as number) < 0) return bad(`json: cannot unmarshal ${describe(v)} into Go struct field ${label} of type uint64`);
-      return BigInt(v as number);
-    case 'int':
-      if (!natOf(v)) return bad(`json: cannot unmarshal ${describe(v)} into Go struct field ${label} of type int64`);
-      return BigInt(v as number);
+    case 'uint': {
+      const n = wholeNumber(v);
+      if (n === undefined || n < 0n || n > U64_MAX || Object.is(v, -0)) return bad(`json: cannot unmarshal ${describe(v)} into Go struct field ${label} of type uint64`);
+      return n;
+    }
+    case 'int': {
+      const n = wholeNumber(v);
+      if (n === undefined || n > I64_MAX || n < -I64_MAX - 1n) return bad(`json: cannot unmarshal ${describe(v)} into Go struct field ${label} of type int64`);
+      return n;
+    }
     case 'bool':
       if (typeof v !== 'boolean') return bad(`json: cannot unmarshal ${describe(v)} into Go struct field ${label} of type bool`);
       return v;
@@ -150,19 +163,9 @@ function scalar(cls: string, d: FieldDesc, v: unknown, label: string): Value {
 
 function describe(v: unknown): string {
   if (v === null) return 'null';
+  if (v instanceof BadNum) return 'number';
   if (Array.isArray(v)) return 'array';
   return typeof v === 'object' ? 'object' : typeof v === 'number' ? 'number' : typeof v;
-}
-
-const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
-
-/** The member of an object by Go's key matching: the exact name wins, else the last case-insensitive match; undefined when absent. */
-function member(o: Record<string, unknown>, name: string): unknown {
-  if (Object.prototype.hasOwnProperty.call(o, name)) return o[name];
-  const lower = name.toLowerCase();
-  let hit: unknown;
-  for (const k of Object.keys(o)) if (k.toLowerCase() === lower) hit = o[k];
-  return hit;
 }
 
 /** The union member class for a type name; undefined where the name is not one of the union's. */
@@ -184,8 +187,14 @@ function memberOf(union: string, name: string): { cls: string; tag: bigint } | u
  */
 export function unionFromJson(union: string, j: unknown, label: string): WireNode | null {
   if (j === null) return null;
-  if (!isObj(j)) return bad(`json: cannot unmarshal ${describe(j)} into Go value of type ${union}`);
-  const t = member(j, 'type');
+  const pairs = mergedPairs(j);
+  if (pairs === undefined) return bad(`json: cannot unmarshal ${describe(j)} into Go value of type ${union}`);
+  // json.Unmarshal(data, &struct{ Type <Enum> }): every occurrence of "type" is decoded, and a null or a non-name is the enum's error.
+  let t: string | undefined;
+  for (const x of occurrences(pairs, 'type')) {
+    if (typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go value of type string`);
+    t = x;
+  }
   // An account with no type is an UnknownAccount (AccountTypeUnknown is a type, and NewAccount creates it); every other union refuses none.
   if (t === undefined && union === 'Account') {
     const node = nodeFromJson('UnknownAccount', j, label, true);
@@ -193,7 +202,6 @@ export function unionFromJson(union: string, j: unknown, label: string): WireNod
     return node;
   }
   if (t === undefined) return bad(`${label}: invalid ${union} type (none)`);
-  if (typeof t !== 'string') return bad(`json: cannot unmarshal ${describe(t)} into Go value of type string`);
   const m = memberOf(union, t);
   if (!m) return bad(`${label}: invalid ${union} type ${JSON.stringify(t)}`);
   const node = nodeFromJson(m.cls, j, label, true);
@@ -201,67 +209,129 @@ export function unionFromJson(union: string, j: unknown, label: string): WireNod
   return node;
 }
 
+/** The scalar a member holds after all its occurrences: each is decoded (and so checked) in turn, a null leaves the value as it was. */
+function lastScalar(cls: string, d: FieldDesc, vals: unknown[], label: string): Value | undefined {
+  let out: Value | undefined;
+  for (const x of vals) {
+    if (x === null) {
+      // an enum held by value: its UnmarshalJSON is called with null and refuses it
+      if (d.kind === 'enum' && !d.repeatable) return bad(`invalid ${enumOf(cls, d.name) ?? 'enum'} ""`);
+      continue;
+    }
+    if (x === undefined) continue;
+    out = scalar(cls, d, x, label);
+  }
+  return out;
+}
+
 /** The generated <Type>.UnmarshalJSON: the object's members into a wire object of the class. */
 export function nodeFromJson(cls: string, j: unknown, label: string, member_ = false): WireNode {
   const node: WireNode = { cls, fields: new Map(), extra: new Uint8Array(0), empty: false };
   if (j === null || j === undefined) return node;
-  if (!isObj(j)) return bad(`json: cannot unmarshal ${describe(j)} into Go value of type ${cls}`);
+  const pairs = mergedPairs(j);
+  if (pairs === undefined) return bad(`json: cannot unmarshal ${describe(j)} into Go value of type ${cls}`);
   if (!hasClass(cls)) return bad(`${label}: ${cls} is not a class this verifier reads from JSON`);
   for (const d of flatFields(cls)) {
     if (d.name === 'type' && member_) continue;
-    let v = member(j, d.name);
+    const vals = occurrences(pairs, d.name);
     const lab = `${label}.${d.name}`;
     // protocol/types_gen.go: the aliases of the generated unmarshalers.
     if (cls === 'KeyPage' && d.name === 'acceptThreshold') {
-      const accept = member(j, 'acceptThreshold');
-      const alt = member(j, 'threshold');
-      for (const [x, n] of [[accept, 'acceptThreshold'], [alt, 'threshold']] as const) {
-        if (x !== undefined && x !== null) scalar(cls, d, x, `${label}.${n}`);
-      }
-      const set = accept !== undefined && accept !== null && accept !== 0;
-      v = set ? accept : alt !== undefined && alt !== null ? alt : accept;
+      const accept = lastScalar(cls, d, vals, `${label}.acceptThreshold`);
+      const alt = lastScalar(cls, d, occurrences(pairs, 'threshold'), `${label}.threshold`);
+      const set = accept !== undefined && accept !== 0n;
+      const v = set ? accept : alt !== undefined ? alt : accept;
+      if (v !== undefined) node.fields.set(d.name, v);
+      continue;
     }
     if (cls === 'KeySpec' && d.name === 'publicKeyHash') {
       // Both members are *string: both are type-checked; only the one used is hex-decoded (BytesFromJSON).
-      const h = member(j, 'publicKeyHash');
-      const pk = member(j, 'publicKey');
-      for (const [x, n] of [[h, 'publicKeyHash'], [pk, 'publicKey']] as const) {
-        if (x !== undefined && x !== null && typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go struct field ${label}.${n} of type string`);
-      }
-      v = h !== undefined && h !== null ? h : pk;
+      const used = (name: string): string | undefined => {
+        let last: string | undefined;
+        for (const x of occurrences(pairs, name)) {
+          if (x === undefined) continue;
+          if (x === null) {
+            last = undefined;
+            continue;
+          }
+          if (typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go struct field ${label}.${name} of type string`);
+          last = x;
+        }
+        return last;
+      };
+      const h = used('publicKeyHash');
+      const pk = used('publicKey');
+      const v = h !== undefined ? h : pk;
+      if (v !== undefined) node.fields.set(d.name, scalar(cls, d, v, lab));
+      continue;
     }
-    if (v === null && d.kind === 'enum' && !d.repeatable) return bad(`invalid ${enumOf(cls, d.name) ?? 'enum'} ""`);
-    if (v === undefined || v === null) continue;
     if (cls === 'KeyPage' && d.name === 'transactionBlacklist') {
-      if (!Array.isArray(v)) return bad(`json: cannot unmarshal ${describe(v)} into Go value of type []AllowedTransactionBit`);
-      let mask = 0n;
-      for (const b of v) {
-        if (typeof b !== 'string') return bad(`json: cannot unmarshal ${describe(b)} into Go value of type string`);
-        const e = enumByName('AllowedTransactionBit', b);
-        if (e === undefined) return bad(`invalid AllowedTransactionBit ${JSON.stringify(b)}`);
-        mask |= 1n << BigInt(e);
+      let mask: bigint | undefined;
+      for (const v of vals) {
+        if (v === undefined) continue;
+        if (v === null) {
+          mask = undefined;
+          continue;
+        }
+        if (!Array.isArray(v)) return bad(`json: cannot unmarshal ${describe(v)} into Go value of type []AllowedTransactionBit`);
+        let m = 0n;
+        for (const b of v) {
+          if (typeof b !== 'string') return bad(`json: cannot unmarshal ${describe(b)} into Go value of type string`);
+          const e = enumByName('AllowedTransactionBit', b);
+          if (e === undefined) return bad(`invalid AllowedTransactionBit ${JSON.stringify(b)}`);
+          m |= 1n << BigInt(e);
+        }
+        mask = m;
       }
-      node.fields.set('transactionBlacklist', mask);
+      if (mask !== undefined) node.fields.set('transactionBlacklist', mask);
       continue;
     }
     if (d.repeatable) {
-      // encoding.JsonList: a list, or - failing that - a single value, which is a list of one.
-      const list = Array.isArray(v) ? v : [v];
-      const items: Value[] = [];
-      list.forEach((e, i) => {
-        const x = element(cls, d, e, `${lab}[${i}]`);
-        if (x !== null) items.push(x);
-        else if (d.kind === 'reference') {
-          // A null element is a nil entry, which the generated writer writes as the empty object.
-          const c = registryType(cls, d.name);
-          if (c) items.push({ cls: c, fields: new Map(), extra: new Uint8Array(0), empty: false });
-        } else if (e === null) return bad(`${lab}[${i}]: a nil element of a ${d.kind} list is not read by this verifier`);
-      });
-      node.fields.set(d.name, items);
+      // encoding.JsonList: a list, or - failing that - a single value, which is a list of one; a later occurrence replaces an earlier one
+      // and a null clears it.
+      let items: Value[] | undefined;
+      for (const v of vals) {
+        if (v === undefined) continue;
+        if (v === null) {
+          items = undefined;
+          continue;
+        }
+        const list = Array.isArray(v) ? v : [v];
+        const here: Value[] = [];
+        list.forEach((e, i) => {
+          const x = element(cls, d, e, `${lab}[${i}]`);
+          if (x !== null) here.push(x);
+          else if (d.kind === 'reference') {
+            // A null element is a nil entry, which the generated writer writes as the empty object.
+            const c = registryType(cls, d.name);
+            if (c) here.push({ cls: c, fields: new Map(), extra: new Uint8Array(0), empty: false });
+          } else if (e === null) return bad(`${lab}[${i}]: a nil element of a ${d.kind} list is not read by this verifier`);
+        });
+        items = here;
+      }
+      if (items !== undefined) node.fields.set(d.name, items);
       continue;
     }
-    const x = element(cls, d, v, lab);
-    if (x !== null) node.fields.set(d.name, x);
+    if (d.kind === 'union') {
+      // each occurrence is unmarshalled by the union's own function; a later one replaces an earlier one
+      let x: Value | null | undefined;
+      for (const v of vals) {
+        if (v === undefined) continue;
+        x = element(cls, d, v, lab);
+      }
+      if (x !== null && x !== undefined) node.fields.set(d.name, x);
+      continue;
+    }
+    if (d.kind === 'reference') {
+      // a struct field: the objects of every occurrence decode into the one struct
+      const objs = vals.filter((v) => v !== undefined && v !== null);
+      if (objs.length === 0) continue;
+      const x = element(cls, d, objs.length === 1 ? objs[0] : new Occ(objs), lab);
+      if (x !== null) node.fields.set(d.name, x);
+      continue;
+    }
+    const x = lastScalar(cls, d, vals, lab);
+    if (x !== undefined) node.fields.set(d.name, x);
   }
   return node;
 }

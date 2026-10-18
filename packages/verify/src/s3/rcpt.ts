@@ -4,7 +4,7 @@
  */
 import { type Receipt } from '../proof-v2/bytes.js';
 import { encodeNode, type WireNode } from '../sigtypes/wire.js';
-import { bool, goHex, JsonError, list, struct } from './gojson.js';
+import { bool, goHex, i64big, JsonError, jsonList, strptr, struct } from './gojson.js';
 
 // --------------------------------------------------------------------------------------------------------------------------------
 // receipts
@@ -15,9 +15,10 @@ export interface Rcpt extends Receipt {
   bin: Uint8Array;
 }
 
-function bytesJson(v: unknown, label: string): Uint8Array {
-  if (v === undefined || v === null) return new Uint8Array(0);
-  if (typeof v !== 'string') throw new JsonError(`json: cannot unmarshal ${typeof v} into Go struct field ${label} of type string`);
+/** encoding.BytesFromJSON over a *string member: every occurrence is a string or null, the last one is hex. */
+function bytesJson(member: unknown, label: string): Uint8Array {
+  const v = strptr(member, label);
+  if (v === undefined) return new Uint8Array(0);
   const b = goHex(v);
   if (!b) throw new JsonError(`error decoding ${label}: encoding/hex: invalid byte`);
   return b;
@@ -31,10 +32,10 @@ export function importReceipt(j: unknown, label: string): Rcpt {
   const start = bytesJson(s.start, `${label}.start`);
   const end = bytesJson(s.end, `${label}.end`);
   const anchor = bytesJson(s.anchor, `${label}.anchor`);
-  const startIndex = s.startIndex === undefined || s.startIndex === null ? 0n : intJson(s.startIndex, `${label}.startIndex`);
-  const endIndex = s.endIndex === undefined || s.endIndex === null ? 0n : intJson(s.endIndex, `${label}.endIndex`);
+  const startIndex = i64big(s.startIndex, `${label}.startIndex`);
+  const endIndex = i64big(s.endIndex, `${label}.endIndex`);
   // merkle.Receipt.Entries is an encoding.JsonList: a list, or a single entry.
-  const entryList = s.entries !== undefined && s.entries !== null && !Array.isArray(s.entries) ? [s.entries] : (list(s.entries, `${label}.entries`) ?? []);
+  const entryList = jsonList(s.entries, `${label}.entries`) ?? [];
   const entries = entryList.map((e, i) => {
     const es = struct(e, ['right', 'hash', '$epilogue'], `merkle.ReceiptEntry (${label}.entries[${i}])`);
     return { right: bool(es.right, `${label}.entries[${i}].right`), hash: bytesJson(es.hash, `${label}.entries[${i}].hash`), extra: epilogue(es.$epilogue, `${label}.entries[${i}]`) };
@@ -64,13 +65,7 @@ export function importReceipt(j: unknown, label: string): Rcpt {
 }
 
 function epilogue(v: unknown, label: string): Uint8Array {
-  if (v === undefined || v === null) return new Uint8Array(0);
   return bytesJson(v, `${label}.$epilogue`);
-}
-
-function intJson(v: unknown, label: string): bigint {
-  if (typeof v !== 'number' || !Number.isSafeInteger(v)) throw new JsonError(`json: cannot unmarshal ${typeof v} into Go struct field ${label} of type int64`);
-  return BigInt(v);
 }
 
 export { importSequenced, type SeqMsg } from './seqmsg.js';
