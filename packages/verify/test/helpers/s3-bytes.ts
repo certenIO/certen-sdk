@@ -135,8 +135,8 @@ export function bytesDifferences(want: BytesExpect, text: Uint8Array): string[] 
 }
 
 /** One shard (of `total`) of the corpus; the shards are separate files so the suite runs them in parallel. */
-export function defineBytesShard(index: number, total: number, hash: string, chunk = 25): void {
-  const raw = readS3('go-written/bytes-cases.json.gz');
+export function defineBytesShard(index: number, total: number, hash: string, chunk = 25, corpus = 'go-written/bytes-cases.json.gz'): void {
+  const raw = readS3(corpus);
   const file = JSON.parse(gunzipSync(raw).toString('utf8')) as BytesFile;
   const mine = file.cases.filter((_, i) => i % total === index);
   describe(`byte-level cases of the portable documents, against Go (shard ${index + 1} of ${total})`, () => {
