@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { evidenceJson } from '../../src/s3/budget.js';
 import { importEvidence } from '../../src/s3/evidence.js';
 import { decodePortable } from '../../src/s3/gotree.js';
+import { VerifyError } from '../../src/proof-v2/bytes.js';
 import { NamedState, verifyPortableAnyBytes } from '../../src/s3/index.js';
 import { readS3, sha256hex, summarize, type ReportSummary, type StateView } from './s3.js';
 
@@ -64,7 +65,15 @@ function readFixture(name: string): Buffer {
 
 const view = (s: { code: string; partition: string; block: number }): StateView => ({ code: s.code, partition: s.partition, block: s.block });
 
-export type BytesJudged = { v: 'verified'; summary: Partial<ReportSummary> } | { v: 'named'; state: StateView; message: string } | { v: 'plain'; message: string };
+/**
+ * 'crash' is a throw that is neither a NamedState nor a VerifyError (a TypeError, RangeError, ReferenceError, ...): a defect of the TypeScript
+ * side, never a refusal. It is a verdict of its own so that it can not be read as agreement with Go's 'plain'.
+ */
+export type BytesJudged =
+  | { v: 'verified'; summary: Partial<ReportSummary> }
+  | { v: 'named'; state: StateView; message: string }
+  | { v: 'plain'; message: string }
+  | { v: 'crash'; message: string };
 
 /** The TypeScript verdict on the text of a document, in the vocabulary of the Go program. */
 export function judgeBytes(text: Uint8Array): BytesJudged {
@@ -101,7 +110,8 @@ export function judgeBytes(text: Uint8Array): BytesJudged {
     };
   } catch (e) {
     if (e instanceof NamedState) return { v: 'named', state: view(e), message: e.message };
-    return { v: 'plain', message: e instanceof Error ? e.message : String(e) };
+    if (e instanceof VerifyError) return { v: 'plain', message: e.message };
+    return { v: 'crash', message: e instanceof Error ? `${e.constructor.name}: ${e.message}` : `non-Error throw: ${String(e)}` };
   }
 }
 
@@ -118,7 +128,7 @@ export function bytesDifferences(want: BytesExpect, text: Uint8Array): string[] 
   const got = judgeBytes(text);
   const out: string[] = [];
   if (got.v !== want.v) {
-    out.push(`Go ${want.v}${want.state ? ` ${want.state.code}{${want.state.partition},${want.state.block}}` : ''}${want.v === 'plain' ? ` (${want.msg})` : ''}; here ${got.v}${got.v === 'named' ? ` ${got.state.code}{${got.state.partition},${got.state.block}}` : ''}${got.v === 'plain' ? ` (${got.message})` : ''}`);
+    out.push(`Go ${want.v}${want.state ? ` ${want.state.code}{${want.state.partition},${want.state.block}}` : ''}${want.v === 'plain' ? ` (${want.msg})` : ''}; here ${got.v}${got.v === 'named' ? ` ${got.state.code}{${got.state.partition},${got.state.block}}` : ''}${got.v === 'plain' || got.v === 'crash' ? ` (${got.message})` : ''}`);
     return out;
   }
   if (want.v === 'named' && got.v === 'named' && JSON.stringify(got.state) !== JSON.stringify(want.state)) out.push(`Go ${JSON.stringify(want.state)}; here ${JSON.stringify(got.state)}`);

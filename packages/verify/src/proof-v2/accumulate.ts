@@ -40,7 +40,21 @@ export function keccak256(data: Uint8Array): Uint8Array {
  */
 export function encodeObject(o: unknown): Uint8Array {
   if (!o || typeof o !== 'object') fail('cannot encode object: not an object');
-  return new Uint8Array(encode(o));
+  return sdkRefusal('cannot encode object', () => new Uint8Array(encode(o)));
+}
+
+/**
+ * The SDK refuses a value it cannot encode or hash (a number past 2^53, a transaction without a body) by throwing a plain Error with its
+ * reason. That is a refusal of the document - Go's verdict is a plain refusal of the same document (the signature or the update does not
+ * verify) - so it is carried as a VerifyError with the SDK's reason. Any other throw (a TypeError, a RangeError) is a defect and propagates.
+ */
+function sdkRefusal<T>(what: string, f: () => T): T {
+  try {
+    return f();
+  } catch (e) {
+    if (e instanceof Error && e.constructor === Error) return fail(`${what}: ${e.message}`);
+    throw e;
+  }
 }
 
 /**
@@ -61,7 +75,7 @@ export function messageHash(msg: unknown): Uint8Array {
 
 /** protocol.Transaction.GetHash, through the SDK's own TransactionBase.hash. */
 export function transactionHash(tx: Hashable): Uint8Array {
-  return new Uint8Array(tx.hash());
+  return sdkRefusal('transaction hash', () => new Uint8Array(tx.hash()));
 }
 
 export function transaction(j: unknown, label: string): Hashable & Rendered {
