@@ -1,12 +1,19 @@
-// Command xtsgen writes the Go side of the TypeScript parity corpora for evidence 2.1 (RB9 Phase D, certen-sdk packages/verify/test/fixtures/s3).
+﻿// Command xtsgen writes the Go side of the TypeScript parity corpora for evidence 2.1 (RB9 Phase D, certen-sdk packages/verify/test/fixtures/s3).
 //
 // It is a scratch program: the validator's repository is not changed by it. Its source is kept beside the corpora in certen-sdk
 // (test/fixtures/s3/gen/xtsgen-*.go.txt, one file per source file here) so that anyone can regenerate them from the validator at the commit
 // named in MANIFEST.json (validatorCommit):
 //
-//	mkdir <validator>/cmd/xtsgen && for f in main x21 intent intent2 facts consensus tables votes; do
+//	mkdir <validator>/cmd/xtsgen && for f in main x21 intent intent2 facts consensus tables votes bytes fold; do
 //	  cp test/fixtures/s3/gen/xtsgen-$f.go.txt <validator>/cmd/xtsgen/$f.go; done
-//	cd <validator> && GOWORK=off go run ./cmd/xtsgen -validator . -fixtures <certen-sdk>/packages/verify/test/fixtures/s3 //	    -out <certen-sdk>/packages/verify/test/fixtures/s3/go-written -per 100 real mutations intent facts decode tables votes
+//	cd <validator>
+//	S3=<certen-sdk>/packages/verify/test/fixtures/s3
+//	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written -per 100 real intent facts decode tables votes
+//	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written -per 12 mutations bytes fold
+//
+// (mutations.json, bytes-cases.json.gz and fold-orbits.json are written at -per 12: a larger -per writes a different, larger mutations.json.
+// At a larger -per three intent refusals differ from the checked-in corpus only in the binary decoder's wording, one facts case in the wording
+// of a URL percent escape, and one votes case is a harness applyPatches TypeError on a null parent: the verdict and the bytes are the same.)
 //
 // The corpus of consensus.judgeProofV2 needs the unexported function, so it is a test of that package
 // (test/fixtures/s3/gen/xts_judge_test.go.txt -> <validator>/pkg/consensus/xts_judge_test.go), run after the intent corpus exists:
