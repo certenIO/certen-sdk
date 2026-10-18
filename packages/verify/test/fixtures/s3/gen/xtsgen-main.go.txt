@@ -868,6 +868,8 @@ func main() {
 			err = bytesCorpus(*fixtures, *out, *per)
 		case "receiptspell":
 			err = receiptSpellCorpus(*fixtures, *out)
+		case "pathspell":
+			err = pathSpellCorpus(*fixtures, *out)
 		case "firstsibling":
 			err = firstSiblingCorpus(*fixtures, *out)
 		case "fold":

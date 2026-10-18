@@ -881,3 +881,226 @@ func receiptSpellCorpus(fixtures, out string) error {
 	}
 	return writeGz(filepath.Join(out, name), mustJSON(f))
 }
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// every string member of every document, by PATH CLASS. The receipt and first-sibling passes above spell the members of the state-receipt
+// check one site at a time; a port that reads another member with a lenient reader (a hex decoder that strips "0x" or trims, a partition
+// normaliser that uses JS trim) is not reached by them. This pass closes the whole class: for EVERY base document it walks the JSON text,
+// takes every string member whose value is hex (even length >= 2) or a partition / URL / account name, collapses array indices to [*] and
+// URL-shaped object keys to {url} (the path class, e.g. evidence.pages[*].receipt.entries[*].hash), keeps the FIRST occurrence of each class
+// and spells it
+//   hex:   "0x"+v, "0X"+v, UPPER, ASCII-space-padded
+//   name:  UPPER, ASCII-space-padded, U+FEFF prefix, U+0085 prefix, U+00A0 prefix, tab/newline pad (written as \t and \n escapes, so the
+//          JSON stays well formed; Go's strings.TrimSpace removes U+0085, U+00A0, tab and newline but NOT U+FEFF)
+// Classes whose first occurrence is a site of the receiptspell pass (and so of the firstsibling pass) are skipped: already judged there.
+// Separate command (pathspell) and file; XTS_SHARD=i/n shards the (class, spelling) sequence exactly like receiptspell.
+
+type pathMember struct {
+	class  string
+	key    string
+	vs, ve int // the string's content, quotes excluded
+	val    string
+}
+
+type pathWalker struct {
+	b   []byte
+	out []pathMember
+}
+
+func (w *pathWalker) ws(i int) int {
+	for i < len(w.b) && (w.b[i] == ' ' || w.b[i] == '\n' || w.b[i] == '\t' || w.b[i] == '\r') {
+		i++
+	}
+	return i
+}
+
+// str returns the end (past the closing quote) of the string that opens at i.
+func (w *pathWalker) str(i int) int {
+	j := i + 1
+	for j < len(w.b) && w.b[j] != '"' {
+		if w.b[j] == '\\' {
+			j++
+		}
+		j++
+	}
+	return j + 1
+}
+
+func (w *pathWalker) value(i int, class, key string) int {
+	i = w.ws(i)
+	if i >= len(w.b) {
+		return i
+	}
+	switch w.b[i] {
+	case '"':
+		e := w.str(i)
+		raw := w.b[i+1 : e-1]
+		if !bytes.Contains(raw, []byte{'\\'}) {
+			w.out = append(w.out, pathMember{class, key, i + 1, e - 1, string(raw)})
+		}
+		return e
+	case '{':
+		i = w.ws(i + 1)
+		for i < len(w.b) && w.b[i] != '}' {
+			ke := w.str(i)
+			k := string(w.b[i+1 : ke-1])
+			name := k
+			if strings.HasPrefix(strings.ToLower(k), "acc://") {
+				name = "{url}"
+			}
+			c := name
+			if class != "" {
+				c = class + "." + name
+			}
+			i = w.ws(ke)
+			i++ // ':'
+			i = w.value(i, c, name)
+			i = w.ws(i)
+			if i < len(w.b) && w.b[i] == ',' {
+				i = w.ws(i + 1)
+			}
+		}
+		return i + 1
+	case '[':
+		i = w.ws(i + 1)
+		for i < len(w.b) && w.b[i] != ']' {
+			i = w.value(i, class+"[*]", key)
+			i = w.ws(i)
+			if i < len(w.b) && w.b[i] == ',' {
+				i = w.ws(i + 1)
+			}
+		}
+		return i + 1
+	default:
+		j := i
+		for j < len(w.b) && w.b[j] != ',' && w.b[j] != '}' && w.b[j] != ']' && w.b[j] != ' ' && w.b[j] != '\n' && w.b[j] != '\t' && w.b[j] != '\r' {
+			j++
+		}
+		return j
+	}
+}
+
+var pathHexRe = regexp.MustCompile(`^[0-9a-fA-F]{2,}$`)
+var pathNameKeyRe = regexp.MustCompile(`(?i)partition|url|principal|origin|signer|account|network|ledger|source|destination|authority|delegate|keybook|^page$|cause|txid`)
+
+func pathKind(m pathMember) string {
+	if len(m.val)%2 == 0 && pathHexRe.MatchString(m.val) {
+		return "hex"
+	}
+	if m.val != "" && (strings.HasPrefix(strings.ToLower(m.val), "acc://") || pathNameKeyRe.MatchString(m.key)) {
+		return "name"
+	}
+	return ""
+}
+
+type pathRep struct {
+	class, kind string
+	vs, ve      int
+}
+
+// pathReps are the first occurrences, in document order, of every path class that is hex or a name and not a receiptspell site.
+func pathReps(doc []byte) (reps []pathRep, covered int) {
+	w := &pathWalker{b: doc}
+	w.value(0, "", "")
+	spell := map[int]bool{}
+	for _, s := range receiptSpellSites(doc) {
+		spell[s.start] = true
+	}
+	for _, loc := range firstSiblingRe.FindAllSubmatchIndex(doc, -1) {
+		spell[loc[2]] = true
+	}
+	seen := map[string]bool{}
+	for _, m := range w.out {
+		k := pathKind(m)
+		if k == "" || seen[m.class] {
+			continue
+		}
+		seen[m.class] = true
+		if spell[m.vs] {
+			covered++
+			continue
+		}
+		reps = append(reps, pathRep{m.class, k, m.vs, m.ve})
+	}
+	return reps, covered
+}
+
+type pathSpelling struct{ name, text string }
+
+func pathSpellings(kind, v string) []pathSpelling {
+	var all []pathSpelling
+	if kind == "hex" {
+		all = []pathSpelling{{"0x", "0x" + v}, {"0X", "0X" + v}, {"upper", strings.ToUpper(v)}, {"space", " " + v + " "}}
+	} else {
+		all = []pathSpelling{{"upper", strings.ToUpper(v)}, {"space", " " + v + " "}, {"feff", string(rune(0xFEFF)) + v}, {"nel", string(rune(0x85)) + v}, {"nbsp", string(rune(0xA0)) + v}, {"tabnl", `\t` + v + `\n`}}
+	}
+	var out []pathSpelling
+	for _, s := range all {
+		if s.text != v {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func pathSpellCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "The first occurrence of every path class of every string member that is hex (even length >= 2) or a partition / URL / account name, in every base document, spelled - hex: 0x, 0X, upper-cased, space-padded; name: upper-cased, space-padded, U+FEFF / U+0085 / U+00A0 prefixed, tab-and-newline padded - judged by VerifyPortable from the text. Classes already spelled by the receiptspell and firstsibling corpora are not repeated."}
+	bases, err := bytesBases(fixtures)
+	if err != nil {
+		return err
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStable(raw)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	n, seq, skipped := 0, 0, 0
+	classes := map[string]bool{}
+	for bi, bpath := range bases {
+		reps, covered := pathReps(docs[bi])
+		skipped += covered
+		for _, rp := range reps {
+			classes[rp.class] = true
+			h := string(docs[bi][rp.vs:rp.ve])
+			for _, v := range pathSpellings(rp.kind, h) {
+				if seq++; (seq-1)%shards != shard {
+					continue
+				}
+				edits := []ByteEdit{{rp.vs, rp.ve - rp.vs, ins(v.text)}}
+				text := applyEdits(docs[bi], edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeStableCounting(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s %s [%s]\n", bpath, rp.class, v.name)
+					continue
+				}
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("pathspell:%s:%s:%s", bpath, rp.class, v.name), Base: bi, Op: "pathspell " + rp.kind + " " + v.name, Edits: edits, Expect: ex})
+				if n++; n%2000 == 0 {
+					fmt.Fprintf(os.Stderr, "pathspell: %d cases judged\n", n)
+				}
+			}
+		}
+	}
+	fmt.Fprintf(os.Stderr, "pathspell shard %d/%d: %d path classes, %d (class,base) pairs already covered by receiptspell, %d spellings in all, %d judged here\n", shard, shards, len(classes), skipped, seq, len(f.Cases))
+	name := "bytes-cases-pathspell.json.gz"
+	if shards > 1 {
+		name = fmt.Sprintf("bytes-cases-pathspell-%d.json.gz", shard)
+	}
+	return writeGz(filepath.Join(out, name), mustJSON(f))
+}
