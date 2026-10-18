@@ -3,6 +3,7 @@ import { applyPatches, type Patch } from './helpers/s3-mutations.js';
 import { defineChunks, readCorpus } from './helpers/s3-corpus.js';
 import { intentDifferences, judgeCase, type RootOut } from './helpers/s3-intent.js';
 import { readS3Json } from './helpers/s3.js';
+import { computeGovRootV4, GOVROOT_V4_DOMAIN, GOVROOT_V4_TAGS, govRootV4G1, govRootV4G2 } from '../src/s3/govroot-v4.js';
 
 /**
  * The Go-written intent corpus (cmd/xtsgen intent; test/fixtures/s3/gen/): BindProofV21, the 2.1 branch of ProofV2Root (the facts read from
@@ -76,6 +77,17 @@ describe('govRoot v4 reproduces the committed golden', () => {
     expect(got.pagesRoot).toBe(golden.pagesRoot);
     expect(got.votesRoot).toBe(golden.votesRoot);
     expect(got.slots).toEqual(golden.slots);
+  });
+  it('commits G1 under certen:g1:v4 and G2 under certen:g2:v4, and folds the ten slots under certen:govroot:v4', () => {
+    const hex = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, 'hex'));
+    const toHex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
+    expect(GOVROOT_V4_TAGS).toEqual({ g1: 'certen:g1:v4', g2: 'certen:g2:v4' });
+    expect(GOVROOT_V4_DOMAIN).toBe('certen:govroot:v4');
+    const g1 = govRootV4G1(hex(golden.inputs.g1Hash!), hex(golden.pagesRoot), hex(golden.votesRoot));
+    expect(toHex(g1)).toBe(golden.slots.G1);
+    expect(toHex(govRootV4G2(hex(golden.inputs.g2Hash!), g1))).toBe(golden.slots.G2);
+    const s = golden.slots;
+    expect(computeGovRootV4({ l1: s.L1!, l2: s.L2!, l3: s.L3!, l4: s.L4!, g0: s.G0!, g1: s.G1!, g2: s.G2!, keyPage: s.keyPage!, keyBook: s.keyBook!, operationId: s.operationId! })).toBe(golden.govRootV4);
   });
 });
 

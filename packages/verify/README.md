@@ -67,6 +67,27 @@ pinned exactly; nothing here implements a curve. `test/fixtures/sigtypes` holds 
 each) with their manifest hash, and four more corpora written by Accumulate itself: EIP-712 digests over every user transaction body, URLs, and byte-level mutations of the
 signatures and of the transactions; this package must agree with Go on every one.
 
+## Cross-identity and delegated approvals: evidence 2.1
+
+`verifyPortableAny(doc)` verifies a portable proof of either version: evidence 2.0 as before, evidence 2.1 with `verifyPortable21` (the validator's S3 verifier). A 2.1
+document proves every page that decides who may approve an intent at the block of its own partition - the principal's account, the authorities' books and pages on other
+identities and other partitions, delegates followed to the protocol's depth of 20, the pages that initiated the transaction - and the authority votes as the principal's
+signature chain records them. Its report lists each proven page with its partition, block and roles, and every fact it could not establish as a named state carrying the
+partition and block it was judged at (`NamedState`, `State`): `g1_page_block_mismatch`, `g1_foreign_partition_mismatch`, `g1_partition_anchor_unavailable`,
+`g1_arrival_unproven`, `g1_authority_not_ready`, `g1_executor_version_unsupported`, `g1_executor_override_unsupported` and the rest of the validator's list. Nothing is
+assumed: the executor version at a block comes from the pinned activation table (`kermitExecutorActivations`, a trust input published with the proof), the routing table is
+proven or its absence is named, and an arrival is the block of the page's own signature-index chain.
+
+The consensus-side pieces are here too, each reaching the validator's verdict: `bindProofV21` (the binding of the report to the intent's governing facts,
+`governingFactsFromVoteEvidence`), `govRootV4FromPortable` / `govRootV4FromHashes` (the cross-partition govRoot: pages root, votes root, `encodeVoteV4`, G1 under
+`certen:g1:v4`, G2 under `certen:g2:v4`, the root under `certen:govroot:v4`), `proofV2Root`, `judgeProofV2` with the decode of a certificate's proof v2
+(`unmarshalCertifiedEvidence`, `evidence20View`).
+
+`test/fixtures/s3` holds the 100 conformance documents of the validator's seven `xpartition` suites byte for byte (manifest hash pinned), the committed govRoot v4 golden,
+the real Kermit document, and corpora the validator's own functions wrote - 1,257 mutations of the documents, 556 mutations of the intent scenarios and the 50 named cases of the binding tests, 433
+mutations of the vote evidence, 4,898 mutations and 73 more texts of a certificate's proof v2, 324 vote encodings, the pinned tables (284 probes, 1,024 transaction types),
+1,408 routes and 112 `judgeProofV2` scenarios - from the programs in `test/fixtures/s3/gen`; this package must agree with Go on every one.
+
 ## What it checks
 
 1. **The trust base.** The genesis network definition and globals are bound to the pinned incarnation identity:
