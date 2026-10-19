@@ -10,10 +10,10 @@ import type { ReportSummary } from './s3.js';
  * base document's JSON tree - a third of them the certify form's own structural changes (a link dropped, duplicated, swapped or nulled, a receipt
  * or a record given an unknown trailing field, a rootProof removed, the genesis link removed, the version set to 2.0, an item dropped) - and the
  * verdict the validator's proofv2.VerifyPortable gave the patched document. The corpus is written by test/fixtures/s3/gen/xtsgen-certify1.go.txt
- * over the validator at 2d98ff9 (built with GOWORK=off go build -trimpath from a detached worktree); the TypeScript verifier must reach every one.
+ * over the validator at d1bbe40 (built with GOWORK=off go build -trimpath from a detached worktree); the TypeScript verifier must reach every one.
  */
 const CORPUS = 'test/fixtures/s3-f5-go/certify1-mutations.json.gz';
-const CORPUS_SHA256 = 'fbcff3d5d6e5740ef275c447b8a7b371508effc699f3873ae3a39a0624de33e8';
+const CORPUS_SHA256 = '59ad1cbb1aec4e9f85ed86ea63c302e9d054a7b7ef01026facee5548c406d34b';
 const MINIMUM = 10000;
 /** The evidence 2.0 documents the sweeps also reach (the same program reads them from the fixtures of the earlier corpora: XTS_EXTRA_BASES). */
 const EXTRA_BASES = ['../proofv2/valid.json.gz', '../proofv2/network-update.json.gz'];

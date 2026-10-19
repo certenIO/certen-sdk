@@ -1,0 +1,214 @@
+package main
+
+// The genesis-link spelling corpus (RB9-F6 TS port, step 3; the validator review V-P's adversarial list as Go-judged cases): the offline walk requires the
+// genesis link of every evidence 2.1 document, and Go reads the member through encoding/json - its name matches case-insensitively, a duplicate key takes
+// the LAST value, a null leaves a pointer nil, a value of another type is an error. The corpus gives every base document that carries a genesis link (the
+// '-g' siblings of the xpartition suites and of certify1, and the document that carries a foreign chain's own link) each of these spellings of it:
+//
+//	value        delete, null, "", {}, [], 0, false, true, "00", "deadbeef"; an object with empty fields, entries null, a null step, no steps (anchor = start),
+//	             start altered, anchor altered
+//	name         genesislink, GenesisLink, GENESISLINK (the only spelling), genesis_link, 'genesisLink ' (a trailing space)
+//	misplaced    the member moved to the top of the document, into evidence.check
+//	duplicate    the good link then null / "" / {} (both spelled genesisLink and GENESISLINK), null / "x" / an altered link then the good link
+//	links        the link taken out of genesisLink and put in links: null, [], [that link], [{}], with and without genesisLink
+//	version      evidence.version null, "", "2.10", "2.1 " (a trailing space), "2.0" (the 2.0 reader does not read the members)
+//
+// A case is a list of byte edits of the base file, judged from the text as every byte corpus is; the file is read by the same consumer (helpers/s3-bytes.ts).
+//
+//	XTS_SHARD=<i>/<n> ./xtsgen -fixtures $S3 -out <dir> genesisspell      (the whole corpus is a few thousand cases: one process is enough)
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func genesisBases(fixtures string) ([]string, error) {
+	var bases []string
+	add := func(rel, dir string) error {
+		ents, err := os.ReadDir(filepath.Join(fixtures, dir))
+		if err != nil {
+			return err
+		}
+		for _, e := range ents {
+			n := e.Name()
+			if e.IsDir() || !strings.HasSuffix(n, "-g.json") {
+				continue
+			}
+			bases = append(bases, rel+n)
+		}
+		return nil
+	}
+	for _, s := range []string{"xpartition2", "xpartition2b", "xpartition3", "xpartition3b", "xpartition4", "xpartition5"} {
+		if err := add(s+"/", s); err != nil {
+			return nil, err
+		}
+	}
+	if err := add("../s3-rb9k/xpartition6/", "../s3-rb9k/xpartition6"); err != nil {
+		return nil, err
+	}
+	if err := add("../s3-f5/certify1/", "../s3-f5/certify1"); err != nil {
+		return nil, err
+	}
+	// the foreign chain that carries its own self-consistent link: a document with a link that does not hold, as a base of the spellings
+	bases = append(bases, "../s3-f5/certify1/continuous-chain-of-another-incarnation-with-its-own-link.json")
+	return bases, nil
+}
+
+type spellCase struct {
+	name  string
+	edits []ByteEdit
+}
+
+func spellCases(doc []byte) ([]spellCase, error) {
+	w := &objWalker{b: doc}
+	w.value(0, "", "", -1, false)
+	find := func(class string) *objNode {
+		for i := range w.out {
+			if w.out[i].class == class || (class == "$root" && w.out[i].class == "" && i == 0) {
+				return &w.out[i]
+			}
+		}
+		return nil
+	}
+	root := find("$root")
+	ev := find("evidence")
+	gl := find("evidence.genesisLink")
+	chk := find("evidence.check")
+	ver := find("evidence.version")
+	if root == nil || ev == nil || gl == nil || chk == nil || ver == nil || gl.kind != 'o' || ev.kind != 'o' || chk.kind != 'o' {
+		return nil, fmt.Errorf("the document has no evidence.genesisLink object")
+	}
+	good := string(doc[gl.vs:gl.ve])
+	var link map[string]any
+	if err := json.Unmarshal([]byte(good), &link); err != nil {
+		return nil, err
+	}
+	start, _ := link["start"].(string)
+	anchor, _ := link["anchor"].(string)
+	flip := func(h string) string {
+		if h == "" {
+			return "00"
+		}
+		c := h[0]
+		if c == '0' {
+			c = '1'
+		} else {
+			c = '0'
+		}
+		return string(c) + h[1:]
+	}
+	replace := func(n *objNode, text string) []ByteEdit { return []ByteEdit{{At: n.vs, Del: n.ve - n.vs, Ins: ins(text)}} }
+	rename := func(to string) []ByteEdit { return []ByteEdit{{At: gl.ms + 1, Del: len("genesisLink"), Ins: ins(to)}} }
+	del := func() ByteEdit { return ByteEdit{At: gl.delFrom, Del: gl.delTo - gl.delFrom} }
+	member := func(key, val string) string { return `"` + key + `":` + val }
+	// the member written before / after the good one (the edits are at the member's start and at its value's end)
+	before := func(text string) []ByteEdit { return []ByteEdit{{At: gl.ms, Ins: ins(text + ",")}} }
+	after := func(text string) []ByteEdit { return []ByteEdit{{At: gl.ve, Ins: ins("," + text)}} }
+	var out []spellCase
+	add := func(name string, edits []ByteEdit) { out = append(out, spellCase{name, edits}) }
+
+	// the value
+	add("delete", []ByteEdit{del()})
+	for _, v := range []struct{ n, t string }{{"null", "null"}, {"empty-string", `""`}, {"empty-object", `{}`}, {"empty-array", `[]`}, {"number0", `0`}, {"false", `false`}, {"true", `true`}, {"string-00", `"00"`}, {"string-deadbeef", `"deadbeef"`}} {
+		add(v.n, replace(gl, v.t))
+	}
+	add("obj-empty-fields", replace(gl, `{"start":"","anchor":"","entries":[]}`))
+	add("obj-null-entries", replace(gl, fmt.Sprintf(`{"start":%q,"anchor":%q,"entries":null}`, start, anchor)))
+	add("obj-null-step", replace(gl, fmt.Sprintf(`{"start":%q,"anchor":%q,"entries":[null]}`, start, anchor)))
+	add("obj-no-steps-same-start", replace(gl, fmt.Sprintf(`{"start":%q,"anchor":%q}`, start, start)))
+	altered := func(key, val string) string {
+		c := map[string]any{}
+		for k, v := range link {
+			c[k] = v
+		}
+		c[key] = val
+		b, _ := json.Marshal(c)
+		return string(b)
+	}
+	add("obj-start-altered", replace(gl, altered("start", flip(start))))
+	add("obj-anchor-altered", replace(gl, altered("anchor", flip(anchor))))
+
+	// the name
+	add("case-genesislink-only", rename("genesislink"))
+	add("case-GenesisLink-only", rename("GenesisLink"))
+	add("case-GENESISLINK-only", rename("GENESISLINK"))
+	add("snake-genesis_link", rename("genesis_link"))
+	add("trailing-space-key", rename("genesisLink "))
+
+	// misplaced: the member taken out of evidence and written at the top of the document, or into evidence.check
+	add("misplaced-top-level", []ByteEdit{del(), {At: root.closeAt, Ins: ins("," + member("genesisLink", good))}})
+	add("misplaced-in-check", []ByteEdit{del(), {At: chk.closeAt, Ins: ins("," + member("genesisLink", good))}})
+
+	// duplicates: the last value is the one Go keeps
+	for _, d := range []struct{ n, key, t string }{{"dup-good-then-null", "genesisLink", "null"}, {"dup-good-then-empty-string", "genesisLink", `""`}, {"dup-good-then-empty-object", "genesisLink", `{}`}, {"dup-good-then-empty-array", "genesisLink", `[]`}, {"dup-good-then-GENESISLINK-null", "GENESISLINK", "null"}, {"dup-good-then-genesislink-empty-object", "genesislink", `{}`}} {
+		add(d.n, after(member(d.key, d.t)))
+	}
+	for _, d := range []struct{ n, key, t string }{{"dup-null-then-good", "genesisLink", "null"}, {"dup-string-then-good", "genesisLink", `"x"`}, {"dup-empty-object-then-good", "genesisLink", `{}`}, {"dup-altered-then-good", "genesisLink", altered("start", flip(start))}, {"dup-GENESISLINK-null-then-good", "GENESISLINK", "null"}, {"dup-genesislink-altered-then-good", "genesislink", altered("anchor", flip(anchor))}} {
+		add(d.n, before(member(d.key, d.t)))
+	}
+	add("dup-good-then-good", after(member("genesisLink", good)))
+	add("dup-lower-good-then-upper-null", append(rename("genesislink"), ByteEdit{At: gl.ve, Ins: ins("," + member("GENESISLINK", "null"))}))
+
+	// links: the same link taken out of genesisLink and given as the links member (or beside it)
+	insEv := func(text string) ByteEdit { return ByteEdit{At: ev.closeAt, Ins: ins("," + text)} }
+	add("links-null", []ByteEdit{del(), insEv(member("links", "null"))})
+	add("links-empty-array", []ByteEdit{del(), insEv(member("links", "[]"))})
+	add("links-one-good-link-no-genesis", []ByteEdit{del(), insEv(member("links", "["+good+"]"))})
+	add("links-one-empty-object", []ByteEdit{del(), insEv(member("links", "[{}]"))})
+	add("links-one-empty-object-with-genesis", []ByteEdit{insEv(member("links", "[{}]"))})
+	add("links-one-good-link-with-genesis", []ByteEdit{insEv(member("links", "["+good+"]"))})
+
+	// the version
+	for _, v := range []struct{ n, t string }{{"version-null", "null"}, {"version-empty", `""`}, {"version-2.10", `"2.10"`}, {"version-2.1-space", `"2.1 "`}, {"version-2.0-with-members", `"2.0"`}} {
+		add(v.n, replace(ver, v.t))
+	}
+	return out, nil
+}
+
+func genesisSpellCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Every spelling of the evidence 2.1 genesis link member (the value, the name's case and form, a misplaced member, duplicate keys in both orders, the link given as links, the version) of every document that carries one, judged by VerifyPortable from the text: the offline walk requires the link of every 2.1 document and reads the member as encoding/json does."}
+	bases, err := genesisBases(fixtures)
+	if err != nil {
+		return err
+	}
+	sort.Strings(bases)
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStableCounting(raw, new(int), new(int))
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	byV := map[string]int{}
+	for bi, bpath := range bases {
+		cs, err := spellCases(docs[bi])
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		for _, c := range cs {
+			text := applyEdits(docs[bi], c.edits)
+			lastPanic, lastFlaky = "", ""
+			ex, ok := judgeSweep(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+			if !ok {
+				fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s [%s] %s%s\n", bpath, c.name, lastPanic, lastFlaky)
+				continue
+			}
+			byV[ex.V]++
+			f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("genesisspell:%s:%s", bpath, c.name), Base: bi, Op: "genesisspell " + c.name, Edits: c.edits, Expect: ex})
+		}
+	}
+	fmt.Printf("genesisspell: %d bases, %d cases %v, skipped %+v\n", len(bases), len(f.Cases), byV, f.Skipped)
+	return writeJSON(filepath.Join(out, "bytes-cases-genesisspell.json.gz"), f)
+}

@@ -4,7 +4,7 @@
 // (test/fixtures/s3/gen/xtsgen-*.go.txt, one file per source file here) so that anyone can regenerate them from the validator at the commit
 // named in MANIFEST.json (validatorCommit):
 //
-//	mkdir <validator>/cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile; do
+//	mkdir <validator>/cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile rejudge genesisspell receiptpos; do
 //	  cp test/fixtures/s3/gen/xtsgen-$f.go.txt <validator>/cmd/xtsgen/$f.go; done
 //	cd <validator>
 //	S3=<certen-sdk>/packages/verify/test/fixtures/s3
@@ -37,6 +37,15 @@
 // (about 7 minutes: the random mutations, then the sweeps - every field number of a trailing field on every receipt, entry and record path class, the
 // uint64 edge values on every number path class, delete and null of every message and receipt member - over the suite's documents and the two
 // evidence 2.0 documents named by XTS_EXTRA_BASES, each class in the first three documents that hold it.)
+//
+// RB9-F6 (the genesis link of every evidence 2.1 document, validator pv2/rb9-f6-genesis-link-required ba4b70f; the vectors are those of d1bbe40): the byte corpora keep
+// their cases and take the verdict of the new validator for every case the old one verified (rejudge, rejudgemerge; roundtrip shows the writer is the identity), the
+// patch corpora (mutations, certify1) are written afresh, and two corpora are new (genesisspell: every spelling of the genesisLink member; receiptpos: the position fields
+// of a receipt):
+//
+//	for j in <corpus>...; do XTS_CORPUS=go-written/$j.json.gz XTS_MODE=sample:300 XTS_SHARD=0/1 ./xtsgen -fixtures $S3 -out <dir> rejudge; XTS_CORPUS=go-written/$j.json.gz ./xtsgen -fixtures $S3 -out <dir> rejudgemerge; done
+//	./xtsgen -fixtures $S3 -out <dir> genesisspell
+//	for i in 0 1 2 3; do XTS_SHARD=$i/4 ./xtsgen -fixtures $S3 -out <dir> receiptpos; done
 //
 // The corpus of consensus.judgeProofV2 needs the unexported function, so it is a test of that package
 // (test/fixtures/s3/gen/xts_judge_test.go.txt -> <validator>/pkg/consensus/xts_judge_test.go), run after the intent corpus exists:
@@ -909,6 +918,16 @@ func main() {
 			err = objSweepCorpus(*fixtures, *out)
 		case "judgefile":
 			err = judgeFile()
+		case "genesisspell":
+			err = genesisSpellCorpus(*fixtures, *out)
+		case "receiptpos":
+			err = receiptPosCorpus(*fixtures, *out)
+		case "rejudge":
+			err = rejudgeCorpus(*fixtures, *out)
+		case "rejudgemerge":
+			err = rejudgeMerge(*fixtures, *out)
+		case "roundtrip":
+			err = roundTrip(*fixtures, *out)
 		case "certify1":
 			err = certify1Mutations(*fixtures, *out, *per)
 		default:

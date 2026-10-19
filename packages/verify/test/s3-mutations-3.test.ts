@@ -1,4 +1,4 @@
 import { defineShard } from './helpers/s3-mutations.js';
 
 /** Shard 3 of 4 of the Go-written mutation corpus (see helpers/s3-mutations.ts). */
-defineShard(2, 4, 'f748972c7bd3e9783d8e6abab87049363e20f020751750510409b06546fe1f69');
+defineShard(2, 4, '14a1b6b31e30fadc6e92b286096f0908c790df19436eaf59e1c3b9e32fa4f194');
