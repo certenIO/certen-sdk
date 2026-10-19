@@ -71,6 +71,14 @@ export function quoteChar(c: number): string {
   return `'${String.fromCharCode(c)}'`;
 }
 
+/** encoding/json's maxNestingDepth: the containers the scanner json.Unmarshal uses allows open at once. */
+export const GO_JSON_MAX_DEPTH = 10000;
+
+export interface ParseGoJsonOptions {
+  /** Containers allowed open at once; `Number.POSITIVE_INFINITY` for none. Default GO_JSON_MAX_DEPTH. */
+  maxDepth?: number;
+}
+
 /**
  * encoding/json's syntax: RFC 8259, nothing else; invalid UTF-8 in a string is read as U+FFFD.
  *
@@ -78,8 +86,14 @@ export function quoteChar(c: number): string {
  * (keyed by its `pairs` array) and each array, the set of indices whose value is such a string. A Go type that reads its
  * raw JSON token instead of the unescaped string (go-ethereum's hexutil.Bytes, common.Hash, common.Address) judges that
  * text, not the string, so a verifier mirroring it needs to know. Without it the parse is unchanged.
+ *
+ * `opts.maxDepth` is the number of containers that may be open at once (default GO_JSON_MAX_DEPTH, json.Unmarshal's own limit, which
+ * every caller whose Go side is json.Unmarshal keeps); a document nested deeper is `exceeded max depth`. A caller whose Go side
+ * reads the document with a json.Decoder.Token() pass, which has no limit (the S6 evidence, replaydecode.go parseJSONValue), passes
+ * `Number.POSITIVE_INFINITY`: the parse is iterative, so any depth is read, never a stack overflow.
  */
-export function parseGoJson(input: Uint8Array | string, escaped?: WeakMap<object, Set<number>>): JVal {
+export function parseGoJson(input: Uint8Array | string, escaped?: WeakMap<object, Set<number>>, opts?: ParseGoJsonOptions): JVal {
+  const maxDepth = opts?.maxDepth ?? GO_JSON_MAX_DEPTH;
   const b = typeof input === 'string' ? new TextEncoder().encode(input) : input;
   let i = 0;
   const bad = (what: string): never => {
@@ -193,7 +207,7 @@ export function parseGoJson(input: Uint8Array | string, escaped?: WeakMap<object
     }
     return new JNum(new TextDecoder().decode(b.subarray(start, i)));
   };
-  /** One value, with an explicit stack: a document nested to Go's limit (10000 containers) is read, not a stack overflow. */
+  /** One value, with an explicit stack: a document nested to the limit (Go's 10000 containers by default) is read, not a stack overflow. */
   type Frame = { obj: true; pairs: [string, JVal][]; key: string } | { obj: false; arr: JVal[] };
   const parseValue = (): JVal => {
     const stack: Frame[] = [];
@@ -205,7 +219,7 @@ export function parseGoJson(input: Uint8Array | string, escaped?: WeakMap<object
       let v: JVal;
       let vEscaped = false;
       if (c === 0x7b) {
-        if (stack.length >= 10000) bad('exceeded max depth');
+        if (stack.length >= maxDepth) bad('exceeded max depth');
         i++;
         ws();
         if (b[i] === 0x7d) {
@@ -221,7 +235,7 @@ export function parseGoJson(input: Uint8Array | string, escaped?: WeakMap<object
           continue;
         }
       } else if (c === 0x5b) {
-        if (stack.length >= 10000) bad('exceeded max depth');
+        if (stack.length >= maxDepth) bad('exceeded max depth');
         i++;
         ws();
         if (b[i] === 0x5d) {

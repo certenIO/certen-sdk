@@ -254,14 +254,31 @@ function noEscapedHex(path: string, v: JVal, schema: readonly Field[], esc: Weak
   }
 }
 
-function noDuplicateKeys(v: JVal): void {
-  if (Array.isArray(v)) v.forEach(noDuplicateKeys);
-  else if (v instanceof JObj) {
-    const seen = new Set<string>();
-    for (const [k, x] of v.pairs) {
-      if (seen.has(k)) throw new JsonError(`duplicate key ${JSON.stringify(k)}`);
-      seen.add(k);
-      noDuplicateKeys(x);
+/**
+ * No object of the document, at any depth, repeats a key (replaydecode.go parseJSONValue refuses the second one in document order).
+ * Iterative, depth first in document order, with an explicit stack: Go reads a document of any depth, so a nesting level must not
+ * cost a call frame here (a RangeError is not a named state).
+ */
+function noDuplicateKeys(root: JVal): void {
+  type Frame = { arr: readonly JVal[]; i: number } | { pairs: readonly [string, JVal][]; seen: Set<string>; i: number };
+  const stack: Frame[] = [];
+  const open = (v: JVal): void => {
+    if (Array.isArray(v)) {
+      if (v.length > 0) stack.push({ arr: v, i: 0 });
+    } else if (v instanceof JObj && v.pairs.length > 0) stack.push({ pairs: v.pairs, seen: new Set(), i: 0 });
+  };
+  open(root);
+  while (stack.length > 0) {
+    const fr = stack[stack.length - 1]!;
+    if ('arr' in fr) {
+      if (fr.i >= fr.arr.length) stack.pop();
+      else open(fr.arr[fr.i++]!);
+    } else if (fr.i >= fr.pairs.length) stack.pop();
+    else {
+      const [k, x] = fr.pairs[fr.i++]!;
+      if (fr.seen.has(k)) throw new JsonError(`duplicate key ${JSON.stringify(k)}`);
+      fr.seen.add(k);
+      open(x);
     }
   }
 }
@@ -365,7 +382,9 @@ export function decodeReplayGuardEvidence(raw: Uint8Array): S6ReplayGuardEvidenc
   let doc: JVal;
   const esc = new WeakMap<object, Set<number>>();
   try {
-    doc = parseGoJson(raw, esc);
+    // Go reads the document with a json.Decoder.Token() pass, which has no depth limit; the 10000-container limit is the
+    // scanner json.Unmarshal uses, which only ever sees a document that already passed the schema (so never a deep one).
+    doc = parseGoJson(raw, esc, { maxDepth: Number.POSITIVE_INFINITY });
     noDuplicateKeys(doc);
   } catch (e) {
     if (e instanceof JsonError) return unproven(R.malformedJson, e.message);
