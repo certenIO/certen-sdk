@@ -55,3 +55,34 @@ describe('a duplicated transactionBlacklist key ORs its bits onto one pointer, a
     });
   }
 });
+
+/**
+ * The same rule seen from the other side: a page whose JSON carries `"transactionBlacklist":[]` while the state its receipt proves has no tag 10 was verified by
+ * c94d780 (the zero mask was dropped) and is refused now, as Go refuses it. pages[3] of the capture is book/1, which has no blacklist. (A document Go builds never
+ * has `[]` there: AllowedTransactions.Unpack returns a nil slice for a zero mask, which marshals as null.)
+ */
+describe('[] injected into a page that has no blacklist', () => {
+  it('is refused at the page: the state it describes is not the proven one (Go evidence length 119978)', () => {
+    const backslash = String.fromCharCode(92);
+    const pages = real.indexOf('"pages":[');
+    const account = real.indexOf('"account":{', real.indexOf('"url":"acc://certen-protocol.acme/book/1"', pages));
+    let depth = 0;
+    let end = -1;
+    for (let p = account + 11; p < real.length && end < 0; p++) {
+      const c = real[p]!;
+      if (c === '"') {
+        for (p++; real[p] !== '"'; p++) if (real[p] === backslash) p++;
+      } else if (c === '{') depth++;
+      else if (c === '}') {
+        if (depth === 0) end = p;
+        else depth--;
+      }
+    }
+    expect(end).toBeGreaterThan(account);
+    const doc = Buffer.from(real.slice(0, end) + ',"transactionBlacklist":[]' + real.slice(end), 'utf8');
+    const j = judgeBytes(doc);
+    expect(j.v).toBe('plain');
+    expect((j as { message: string }).message.startsWith("page: acc://certen-protocol.acme/book/1: the receipt does not start at the state's hash")).toBe(true);
+    expect(bytesEvidenceLength(doc)).toBe(119978);
+  });
+});
