@@ -24,7 +24,11 @@ export const S6_MAX_JSON_INTEGER = 2 ** 53 - 1;
 /** The pinned account generations: the base slot of the replay guard and the settlement selectors that consume it. A
  * generation absent from this table has no pinned layout and is s6_replay_unproven{account_generation}. */
 export const S6_REPLAY_LAYOUTS: Readonly<Record<string, { base: number; selectors: readonly string[] }>> = Object.freeze({
+  // forge inspect CertenAccountV7_3 storageLayout / methodIdentifiers at certen-contracts 57153e5 (s6replay1 SPEC §4).
   CertenAccountV7_3: Object.freeze({ base: 4, selectors: Object.freeze(['606f2c8d', '329fe012']) }),
+  // forge inspect CertenAccountV7_2 storageLayout at certen-contracts 16c6d47 (factory V10): _consumedLeaf at slot 4;
+  // executeGovernanceProofDirect 0x57f8567d, batchExecuteGovernanceProofDirect 0xb7daa901 (s6replay2 SPEC §2).
+  CertenAccountV7_2: Object.freeze({ base: 4, selectors: Object.freeze(['57f8567d', 'b7daa901']) }),
 });
 
 export const S6_LEAF_CONSUMED_TOPIC = keccak_256(new TextEncoder().encode('LeafConsumed(bytes32,bytes32,bytes32)'));
