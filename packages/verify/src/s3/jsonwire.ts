@@ -30,7 +30,7 @@ import {
   type WireNode,
 } from '../sigtypes/wire.js';
 import { enumByName } from './enum-names.js';
-import { goHex, JsonError } from './gojson.js';
+import { goHex, JsonError, valueAfterNull } from './gojson.js';
 import { BadNum, mergedPairs, Occ, occurrences } from './occ.js';
 
 const bad = (m: string): never => {
@@ -469,10 +469,18 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
       continue;
     }
     if (d.kind === 'union') {
-      // each occurrence is unmarshalled by the union's own function; a later one replaces an earlier one
+      // each occurrence is unmarshalled by the union's own function; a later one replaces an earlier one. The member is a *encoding.JsonUnmarshalWith[T]: a
+      // null sets the pointer to nil and the next value allocates one with no Func (valueAfterNull)
       let x: Value | null | undefined;
+      let nulled = false;
       for (const v of vals) {
         if (v === undefined) continue;
+        if (v === null) {
+          nulled = true;
+          x = null;
+          continue;
+        }
+        if (nulled) valueAfterNull();
         x = element(cls, d, v, lab);
       }
       if (x !== null && x !== undefined) node.fields.set(d.name, x);

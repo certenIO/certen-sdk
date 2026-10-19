@@ -7,7 +7,7 @@ import { UNDECODABLE, VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
 import { decodeObject, encodeNode } from '../sigtypes/wire.js';
 import { afterLastNull, mergedPairs, Occ, occurrences } from './occ.js';
-import { goHex, i64big, JsonError, jsonList, strptr, struct, u64 } from './gojson.js';
+import { goHex, i64big, JsonError, jsonList, strptr, struct, u64, valueAfterNull } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
 import { decodeReceiptBin, receiptListDecodes, receiptListParts, recordDecodes, recordUpdateBins } from './certify.js';
@@ -206,13 +206,18 @@ export interface MinorRoot {
  */
 function unionList(v: unknown, label: string): unknown[] | undefined {
   let out: unknown[] | undefined;
+  // the member is a *encoding.JsonUnmarshalListWith[KeySignature]: a null sets the pointer to nil and what follows allocates one with no Func, which panics as
+  // soon as an element is to be decoded (valueAfterNull); an empty list calls nothing
+  let nulled = false;
   for (const x of v instanceof Occ ? v.vals : [v]) {
     if (x === undefined) continue;
     if (x === null) {
+      nulled = true;
       out = undefined;
       continue;
     }
     const els = Array.isArray(x) ? x : [x];
+    if (nulled && els.length > 0) valueAfterNull();
     els.forEach((el, i) => unionFromJson('Signature', el, `${label}.signatures[${i}]`));
     if (!Array.isArray(x)) {
       out = els;

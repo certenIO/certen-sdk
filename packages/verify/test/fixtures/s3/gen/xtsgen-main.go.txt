@@ -4,7 +4,7 @@
 // (test/fixtures/s3/gen/xtsgen-*.go.txt, one file per source file here) so that anyone can regenerate them from the validator at the commit
 // named in MANIFEST.json (validatorCommit):
 //
-//	mkdir <validator>/cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile rejudge genesisspell receiptpos; do
+//	mkdir <validator>/cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile rejudge genesisspell receiptpos nulldup; do
 //	  cp test/fixtures/s3/gen/xtsgen-$f.go.txt <validator>/cmd/xtsgen/$f.go; done
 //	cd <validator>
 //	S3=<certen-sdk>/packages/verify/test/fixtures/s3
@@ -46,6 +46,7 @@
 //	for j in <corpus>...; do XTS_CORPUS=go-written/$j.json.gz XTS_MODE=sample:300 XTS_SHARD=0/1 ./xtsgen -fixtures $S3 -out <dir> rejudge; XTS_CORPUS=go-written/$j.json.gz ./xtsgen -fixtures $S3 -out <dir> rejudgemerge; done
 //	./xtsgen -fixtures $S3 -out <dir> genesisspell
 //	for i in 0 1 2 3; do XTS_SHARD=$i/4 ./xtsgen -fixtures $S3 -out <dir> receiptpos; done
+//	for i in 0 1 2; do XTS_SHARD=$i/3 ./xtsgen -fixtures $S3 -out <dir> nulldup; done
 //
 // The corpus of consensus.judgeProofV2 needs the unexported function, so it is a test of that package
 // (test/fixtures/s3/gen/xts_judge_test.go.txt -> <validator>/pkg/consensus/xts_judge_test.go), run after the intent corpus exists:
@@ -920,6 +921,8 @@ func main() {
 			err = judgeFile()
 		case "genesisspell":
 			err = genesisSpellCorpus(*fixtures, *out)
+		case "nulldup":
+			err = nullDupCorpus(*fixtures, *out)
 		case "receiptpos":
 			err = receiptPosCorpus(*fixtures, *out)
 		case "rejudge":

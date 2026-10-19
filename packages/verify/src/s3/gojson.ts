@@ -17,6 +17,19 @@ const bad = (m: string): never => {
   throw new JsonError(m);
 };
 
+/**
+ * The refusal of a value that follows a JSON null in a member the generated UnmarshalJSON holds as *encoding.JsonUnmarshalWith[T] (a union: a transaction body,
+ * a data entry, a signature, a message, ...) or *encoding.JsonUnmarshalListWith[T] (a list of a union: the key signatures of a minor-root record)
+ * (pkg/types/encoding/json_list.go of accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c). The pointer the decoder starts with carries the Func that decodes the
+ * value; encoding/json sets that pointer to nil on a null and allocates a FRESH zero one for the next value, whose Func is nil, and its UnmarshalJSON calls the nil
+ * Func and panics (a list calls it for its first element, so an empty list does not). Go's Import recovers from the panic and refuses the document as one
+ * Accumulate's codec cannot decode; a null after the last value, which the objsweep corpus writes, only empties the member. Any value of any type counts: the
+ * Func is called before the value is looked at.
+ */
+export function valueAfterNull(): never {
+  throw new JsonError("a value Accumulate's codec cannot decode (a member it needs is null or absent)");
+}
+
 /** The JSON type name Go's UnmarshalTypeError reports. */
 function typeName(v: unknown): string {
   if (v === null) return 'null';

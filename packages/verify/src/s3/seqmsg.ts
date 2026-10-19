@@ -15,7 +15,7 @@ import { epilogueFromPairs, nodeFromJson, unionFromJson } from './jsonwire.js';
 import { messageDecodes } from './certify.js';
 import { nodeToJson } from './nodejson.js';
 import { BadNum, mergedPairs, Occ, occurrences, oneOf } from './occ.js';
-import { u64big } from './gojson.js';
+import { u64big, valueAfterNull } from './gojson.js';
 
 /** A delivered messaging.SequencedMessage, decoded: what the verifier reads of an anchor and of a production. */
 export interface SeqMsg {
@@ -160,10 +160,17 @@ function messageFromJson(j: unknown, label: string, decode: boolean): MsgOut | n
     const dout: number[] = cat(uvarint(1), uvarint(tag));
     let sigHash: Uint8Array | undefined;
     const canonical: Record<string, unknown> = { type: 'signature' };
-    // the signature union: every occurrence is unmarshalled, a later one replaces an earlier one
+    // the signature union: every occurrence is unmarshalled, a later one replaces an earlier one; a *encoding.JsonUnmarshalWith[Signature] (valueAfterNull)
     let node: WireNode | null = null;
+    let nulled = false;
     for (const sg of occurrences(pairs, 'signature')) {
       if (sg === undefined) continue;
+      if (sg === null) {
+        nulled = true;
+        node = null;
+        continue;
+      }
+      if (nulled) valueAfterNull();
       node = unionFromJson('Signature', sg, `${label}.signature`);
     }
     if (node) {
@@ -210,10 +217,18 @@ const dbinOf = new WeakMap<SeqMsg, Uint8Array>();
 
 function sequencedFromPairs(pairs: Pairs, label: string, decode: boolean): SeqMsg {
   checkMessageType(pairs, 'sequenced', label);
-  // the message union: every occurrence is unmarshalled, a later one replaces an earlier one
+  // the message union: every occurrence is unmarshalled, a later one replaces an earlier one; the member is a *encoding.JsonUnmarshalWith[Message]: a null sets
+  // the pointer to nil and the next value allocates one with no Func (valueAfterNull)
   let m: MsgOut | null = null;
+  let nulled = false;
   for (const x of occurrences(pairs, 'message')) {
     if (x === undefined) continue;
+    if (x === null) {
+      nulled = true;
+      m = null;
+      continue;
+    }
+    if (nulled) valueAfterNull();
     m = messageFromJson(x, `${label}.message`, decode);
   }
   const source = urlField(pairs, 'source', label);
