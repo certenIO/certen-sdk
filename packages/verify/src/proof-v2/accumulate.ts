@@ -7,8 +7,8 @@ import { createPublicKey, verify as nodeVerify } from 'node:crypto';
 import { core, messaging } from 'accumulate-sdk-opendlt';
 import { encode } from 'accumulate-sdk-opendlt/encoding';
 import { keccak256 as sdkKeccak256 } from 'accumulate-sdk-opendlt/common';
-import { equal, fail, hexBytes, MerkleState, sha256, uvarint } from './bytes.js';
-import { encodeNode } from '../sigtypes/wire.js';
+import { equal, fail, hexBytes, MerkleState, sha256, uvarint, VerifyError } from './bytes.js';
+import { encodeNode, WireError } from '../sigtypes/wire.js';
 import { transactionHash as nodeTransactionHash, TransactionHashError } from '../sigtypes/txhash.js';
 import { nodeFromJson, unionFromJson } from '../s3/jsonwire.js';
 
@@ -66,6 +66,10 @@ function sdkRefusal<T>(what: string, f: () => T): T {
 /**
  * A SequencedMessage from JSON. accumulate-sdk-opendlt >= 2.5.0 registers the message classes, so the nested message is
  * built as its real class by Message.fromObject (test/upstream-encoder.test.ts pins its bytes against Go's).
+ *
+ * No verifier code calls this since RB9-D B8: Go has no counterpart of building an SDK message from the anchor (it decodes the bytes the import wrote), and the
+ * SDK build crashed on a decoded body whose trailing field the decoder reads as a huge integer, so the verification reads s3/seqmsg.ts instead. It stays an
+ * exported helper of this module, with messageHash: test/keysignatures.test.ts and test/spine-updates.test.ts build and sign SDK messages with them.
  */
 export function sequencedMessage(j: unknown, label: string): { message: { transaction: Hashable } } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
@@ -74,7 +78,7 @@ export function sequencedMessage(j: unknown, label: string): { message: { transa
   return sdkRefusal(`${label}: sequenced message`, () => messaging.Message.fromObject(n as Parameters<typeof messaging.Message.fromObject>[0])) as unknown as { message: { transaction: Hashable } };
 }
 
-/** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). */
+/** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). Used by test/keysignatures.test.ts and test/spine-updates.test.ts, not by the verifier (see sequencedMessage). */
 export function messageHash(msg: unknown): Uint8Array {
   return sha256(encodeObject(msg));
 }
@@ -88,7 +92,10 @@ export function transactionHashOfJson(j: unknown, label: string): Uint8Array {
   try {
     node = nodeFromJson('Transaction', j, label);
   } catch (e) {
-    return fail(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+    // a JSON Go's generated reader refuses (JsonError / VerifyError) or bytes its decoder refuses (WireError) is a refusal of the document; a RangeError or a
+    // TypeError is a defect of this verifier and propagates
+    if (e instanceof VerifyError || e instanceof WireError) return fail(`${label}: ${e.message}`);
+    throw e;
   }
   try {
     return nodeTransactionHash(node);

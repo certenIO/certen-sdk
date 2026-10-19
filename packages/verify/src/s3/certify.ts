@@ -6,7 +6,7 @@
 import { equal, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { CERTIFY_DETAILS, CertifyCode } from './certify-names.js';
 import type { Rcpt } from './rcpt.js';
-import { decodeObject, decodeUnion } from '../sigtypes/wire.js';
+import { decodeObject, decodeUnion, WireError } from '../sigtypes/wire.js';
 import { enumByName } from './enum-names.js';
 
 export { CertifyCode, CERTIFY_DETAILS, CERTIFY_FIELDS, CERTIFY_SIDE, CERTIFY_NAMES_SHA256 } from './certify-names.js';
@@ -333,16 +333,7 @@ export function messageDecodes(bin: Uint8Array): boolean {
 function readMessage(r: Rd, bin: Uint8Array): boolean {
   const type = new Rd(bin, 0, bin.length).readUint(1);
   if (type === undefined) return false;
-  const txn = (s: Rd): boolean => {
-    const b = s.restBytes();
-    if (b.length === 0) return true;
-    try {
-      decodeObject('Transaction', b);
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  const txn = (s: Rd): boolean => s.rest() === 0 || transactionDecodes(s.restBytes());
   if (Number(type) === enumByName('MessageType', 'sequenced')) {
     r.readUint(1);
     r.readValue(2, (s) => readMessage(s, s.restBytes()));
@@ -360,12 +351,17 @@ function readMessage(r: Rd, bin: Uint8Array): boolean {
   return !r.err;
 }
 
+/**
+ * Whether Accumulate's decoder reads these bytes: only a WireError is a refusal to decode (a field that cannot be placed, a varint cut short); any other
+ * exception (a RangeError, a TypeError) is a defect of this verifier and propagates, as in s3/index.ts verifyDecoded.
+ */
 const transactionDecodes = (b: Uint8Array): boolean => {
   try {
     decodeObject('Transaction', b);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    if (e instanceof WireError) return false;
+    throw e;
   }
 };
 
@@ -373,8 +369,9 @@ const signatureDecodes = (b: Uint8Array): boolean => {
   try {
     decodeUnion('Signature', b);
     return true;
-  } catch {
-    return false;
+  } catch (e) {
+    if (e instanceof WireError) return false;
+    throw e;
   }
 };
 
