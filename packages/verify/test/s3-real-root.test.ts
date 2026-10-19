@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { gunzipSync } from 'node:zlib';
 import { readCorpus } from './helpers/s3-corpus.js';
 import { canonical, type RootOut } from './helpers/s3-intent.js';
-import { readS3 } from './helpers/s3.js';
+import { readS3, withRecordedGenesisLink } from './helpers/s3.js';
 import { importEvidence } from '../src/s3/evidence.js';
 import { pageCounts, pagesRootInputs, voteWire } from '../src/s3/govroot-v4.js';
 import { proofV2Root } from '../src/s3/proofroot.js';
@@ -24,7 +24,14 @@ interface File {
 const intent = readCorpus<File>('go-written/intent-cases.json.gz', HASH);
 
 describe('the real stored 2.1 document: verified here, bound and committed here', () => {
-  const doc = JSON.parse(gunzipSync(readS3('go-written/real-bvn1-billing-receipts.portable.json.gz')).toString('utf8')) as Record<string, unknown>;
+  const committed = JSON.parse(gunzipSync(readS3('go-written/real-bvn1-billing-receipts.portable.json.gz')).toString('utf8')) as Record<string, unknown>;
+  // RB9-F6, F-VE-2 (b): the committed real document carries no genesis link and is refused by the offline entry; it is judged here with Kermit's RECORDED
+  // genesis link attached (helpers/s3.ts), as the validator's tests do. The file is untouched.
+  const doc = withRecordedGenesisLink(committed);
+
+  it('the unmodified committed document is refused certify_link_missing{genesis} by the offline entry', () => {
+    expect(() => verifyPortable21(committed)).toThrow(/^certify_link_missing\{genesis\}/);
+  });
   const at = intent.baseNames.indexOf('real-root');
   const base = intent.bases[at]! as Record<string, any>;
   const want = intent.baseExpect[at]!;

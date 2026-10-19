@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { judgeDocument, readS3Json, type Judged } from './helpers/s3.js';
+import { judgeDocument, readS3Json, withRecordedGenesisLink, type Judged } from './helpers/s3.js';
 import { evidenceJson } from '../src/s3/budget.js';
 import { importEvidence } from '../src/s3/evidence.js';
 
@@ -14,15 +14,29 @@ import { importEvidence } from '../src/s3/evidence.js';
 const doc = readS3Json<Record<string, unknown>>('go-written/real-bvn1-billing-receipts.portable.json.gz');
 const expectG = readS3Json<{ v: string; summary: Record<string, unknown>; evLen: number }>('go-written/real-bvn1-billing-receipts.expect.json');
 
-describe('the real Kermit document (BVN1, 14713382)', () => {
-  it('is verified with exactly the report Go produced', () => {
+/**
+ * RB9-F6, F-VE-2 (b): the committed real document is a live continuous capture that does not name its chain, so the offline walk refuses it. The suites
+ * below judge it with Kermit's recorded genesis link attached (helpers/s3.ts recordedGenesisLink), as the validator's tests do; the file is untouched.
+ */
+const linked = withRecordedGenesisLink(doc);
+
+describe('the real Kermit document without a genesis link', () => {
+  it('is refused certify_link_missing{genesis} by the offline entry: a live continuous capture that does not name its chain cannot be tied to the incarnation', () => {
     const got: Judged = judgeDocument(doc);
+    expect(got.verdict).toBe('plain');
+    if (got.verdict === 'plain') expect(got.message.startsWith('certify_link_missing{genesis}')).toBe(true);
+  });
+});
+
+describe('the real Kermit document (BVN1, 14713382)', () => {
+  it('is verified with exactly the report Go produced (with Kermit\'s recorded genesis link)', () => {
+    const got: Judged = judgeDocument(linked);
     expect(got.verdict).toBe('verified');
     if (got.verdict === 'verified') expect(got.summary).toEqual(expectG.summary);
   });
 
   it('is complete: nothing unproven, the votes re-evaluated on the certified timeline, only the certificate-dependent role declared', () => {
-    const got = judgeDocument(doc);
+    const got = judgeDocument(linked);
     if (got.verdict !== 'verified') throw new Error('not verified');
     expect(got.summary.unproven).toEqual([]);
     expect(got.summary.authorizationMode).toBe('authorities_required');

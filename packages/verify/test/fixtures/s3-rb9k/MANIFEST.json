@@ -1,6 +1,6 @@
 {
  "format": "certen:s3-vectors-manifest:v1",
- "validatorCommit": "92d9a9b0907baaef6ff749e96d079e67f76d4bfa",
+ "validatorCommit": "d1bbe407d6cabb20cc10708378ad7d98ebc68732",
  "suites": [
   {
    "name": "xpartition6",
@@ -12,7 +12,7 @@
     },
     {
      "name": "MANIFEST.sha256",
-     "sha256": "90cbcd59fb155a36f17b62a71befdb4898858d17271fa53fa4251e74b16557f2",
+     "sha256": "1fcc3214541bd4d0998b9655ab1ba8e4fc40f832c536bb475f108147883c6e64",
      "bytes": 80
     },
     {
@@ -21,14 +21,29 @@
      "bytes": 29683
     },
     {
+     "name": "add-op-added-authority-page-threshold-two-voted-g.json",
+     "sha256": "8128affddab8029ada66b7f5027d259eff75979fd6d0fa7c29c6c12feb37dc5a",
+     "bytes": 31850
+    },
+    {
      "name": "add-op-added-authority-page-threshold-two-voted.json",
      "sha256": "9a857d319d5d89ae3b52b346bee7a5474c316ff827828e52827e08d265d6ea67",
      "bytes": 31582
     },
     {
+     "name": "add-op-added-authority-voted-first-g.json",
+     "sha256": "8a058e2378d29370a187a1fa9b5d8404d63b8bdb26aea745b5a77bbf9bf844aa",
+     "bytes": 29517
+    },
+    {
      "name": "add-op-added-authority-voted-first.json",
      "sha256": "36dc0ed3d529f951a59a9f517c00838029bda2b9782b3cfa5ad0b1a7587de01f",
      "bytes": 29249
+    },
+    {
+     "name": "add-op-added-authority-voted-g.json",
+     "sha256": "7fea4e6e14b4c406ce43fa31c6dc880ab7494f59d66a67ce3014af5fec240a47",
+     "bytes": 36258
     },
     {
      "name": "add-op-added-authority-voted-reject.json",
@@ -71,9 +86,19 @@
      "bytes": 29338
     },
     {
+     "name": "add-op-votes-listed-in-the-other-order-g.json",
+     "sha256": "d054d56c6e71a3d351504c11c74378b0c365b8d56a9303f181d16a91e3ab2ecf",
+     "bytes": 29517
+    },
+    {
      "name": "add-op-votes-listed-in-the-other-order.json",
      "sha256": "10b513cc1ac03607977e5bb0d8046c642c0ceb54c1612e32e58c8e7342b0446a",
      "bytes": 29249
+    },
+    {
+     "name": "disable-op-both-authorities-voted-g.json",
+     "sha256": "7d6be90a9a1e307def75fa241d9cc81115ca6c3ae50eaa18c1c2f642610c6ab0",
+     "bytes": 29495
     },
     {
      "name": "disable-op-both-authorities-voted.json",
@@ -91,14 +116,19 @@
      "bytes": 29188
     },
     {
+     "name": "enable-op-both-authorities-voted-g.json",
+     "sha256": "c3e6c01363858015455cb768adbcf629e25e5651bffd928db5a448775a05e8c1",
+     "bytes": 29479
+    },
+    {
      "name": "enable-op-both-authorities-voted.json",
      "sha256": "3f4155c9d974ee98d2d3747e3648adb4eccc3a346eb5b511135df7ebeb8348c8",
      "bytes": 29211
     },
     {
      "name": "manifest.json",
-     "sha256": "aaa46baffca8969bbbd8ec40bb1bc622f6fbd1c9d9779c48d1d9849d16f27685",
-     "bytes": 23712
+     "sha256": "85d3aadfd175872e02e2ccb0b27109799b0a064f4abfb070d71ca71620bc2950",
+     "bytes": 28534
     },
     {
      "name": "update-account-auth-voter-neither-listed-nor-added.json",
@@ -106,9 +136,9 @@
      "bytes": 29172
     }
    ],
-   "manifestSha256": "aaa46baffca8969bbbd8ec40bb1bc622f6fbd1c9d9779c48d1d9849d16f27685"
+   "manifestSha256": "85d3aadfd175872e02e2ccb0b27109799b0a064f4abfb070d71ca71620bc2950"
   }
  ],
  "goldens": [],
- "manifestHash": "6be370f8dbb9dfb258f6f81b83d189b524815c6e1582a6dcf18033f92a49c5b9"
+ "manifestHash": "ab41b4c6b3d95aaaa3178a58fb8d6d762b8dd2e8a742a0614cc5bb05f703a801"
 }

@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { equal, fail, goHexStrict, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { genesisGlobals, selfAnchorBlock, Spine } from '../proof-v2/spine.js';
-import { CertifyCode, certifyState, CertifyState, checkGenesisLink, decodeReceiptBin, recordDecodes, recordHasRootProof } from './certify.js';
+import { CertifyCode, certifyState, CertifyState, checkGenesisLink, decodeReceiptBin, GENESIS_LINK_INDEX, recordDecodes, recordHasRootProof } from './certify.js';
 import type { Rcpt } from './rcpt.js';
 import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
@@ -194,7 +194,9 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   const genesisLink = ev.genesisLink ? (decodeReceiptBin(ev.genesisLink.bin) ?? certifyFail('genesis')) : undefined;
   const used = { n: 0 };
   walkRuns(cert, ev.certify, ev.certifyBin, ev.certifyNested, 'certify run', links, used, 0);
-  // The chain identity (V-E A1b, F-VE-2): a document with links ties the certified root to the genesis root of the pinned incarnation.
+  // The genesis link (V-E A1b, F-VE-2): a document with links, or with a genesis link, must have the pinned incarnation's genesis root chain anchor covered by the
+  // certified root (checkGenesisLink); its position in the certified tree is not authenticated.
+  // (A continuous document with neither is judged at the end of this function: the offline walk requires the link of every document.)
   if (links.length > 0 || genesisLink !== undefined) checkGenesisLink(genesisLink, genesisRoot, cert.rootChainAnchor);
   // decodeReceipt: the transaction's receipt is the one its binary form decodes to
   const r = decodeReceiptBin(ev.receipt.bin) ?? fail('receipt: fields are out of order');
@@ -265,6 +267,13 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
     network: chk.g.network.networkName ?? '',
   };
   verify21(ev, rep, inn);
+  // RB9-F6 / F-VE-2 (b), owner decision 2026-10-19: the offline walk (Verify21FromGenesis) requires the genesis link of EVERY evidence 2.1 document, the
+  // continuous form included. Offline, the spine is started from the pinned incarnation's genesis RECORDS, which bind its validator set but not its root
+  // chain, so without the link a complete chain of another incarnation that shares those records would pass the pin. A document with links, or with a genesis
+  // link, was judged above; one with neither is refused here, by the same name, after everything it does carry has been judged: a document that fails for
+  // another reason keeps that refusal. The validator requires the same of the spine-log walk consensus runs (c93f5ac); this package has no spine-log entry
+  // point, so there is nothing here to make conditional.
+  if (links.length === 0 && genesisLink === undefined) throw certifyState(CertifyCode.CertifyLinkMissing, GENESIS_LINK_INDEX);
   return rep;
 }
 
