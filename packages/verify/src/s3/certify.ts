@@ -413,8 +413,10 @@ export function recordHasRootProof(bin: Uint8Array): boolean {
 // the genesis link
 
 /**
- * checkGenesisLink judges the chain identity of an anchored document (V-E A1b): the genesis link must start at the pinned incarnation's genesis root
- * chain anchor, end at the certified root chain anchor and validate. Its refusals are the certify_link_* states at index "genesis".
+ * checkGenesisLink judges the genesis link of an evidence 2.1 document (V-E A1b, RB9-F6): it must start at the pinned incarnation's genesis root chain
+ * anchor, end at the certified root chain anchor and validate - so the pinned root is covered by the certified root; its position in the certified tree is
+ * not authenticated (the receipt's start index is read by nothing, and nothing derives a position from the path). Its refusals are the certify_link_* states
+ * at index "genesis".
  */
 export function checkGenesisLink(link: Rcpt | undefined, genesisRoot: Uint8Array, certifiedRoot: Uint8Array): void {
   if (link === undefined) throw certifyState(CertifyCode.CertifyLinkMissing, GENESIS_LINK_INDEX);

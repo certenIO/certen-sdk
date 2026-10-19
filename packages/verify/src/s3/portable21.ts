@@ -194,7 +194,8 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   const genesisLink = ev.genesisLink ? (decodeReceiptBin(ev.genesisLink.bin) ?? certifyFail('genesis')) : undefined;
   const used = { n: 0 };
   walkRuns(cert, ev.certify, ev.certifyBin, ev.certifyNested, 'certify run', links, used, 0);
-  // The chain identity (V-E A1b, F-VE-2): a document with links, or with a genesis link, ties the certified root to the genesis root of the pinned incarnation.
+  // The genesis link (V-E A1b, F-VE-2): a document with links, or with a genesis link, must have the pinned incarnation's genesis root chain anchor covered by the
+  // certified root (checkGenesisLink); its position in the certified tree is not authenticated.
   // (A continuous document with neither is judged at the end of this function: the offline walk requires the link of every document.)
   if (links.length > 0 || genesisLink !== undefined) checkGenesisLink(genesisLink, genesisRoot, cert.rootChainAnchor);
   // decodeReceipt: the transaction's receipt is the one its binary form decodes to
@@ -270,8 +271,8 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   // continuous form included. Offline, the spine is started from the pinned incarnation's genesis RECORDS, which bind its validator set but not its root
   // chain, so without the link a complete chain of another incarnation that shares those records would pass the pin. A document with links, or with a genesis
   // link, was judged above; one with neither is refused here, by the same name, after everything it does carry has been judged: a document that fails for
-  // another reason keeps that refusal. There is no spine-log entry point in this package (consensus judges the spine's own checkpoints), so nothing here is
-  // conditional on one.
+  // another reason keeps that refusal. The validator requires the same of the spine-log walk consensus runs (c93f5ac); this package has no spine-log entry
+  // point, so there is nothing here to make conditional.
   if (links.length === 0 && genesisLink === undefined) throw certifyState(CertifyCode.CertifyLinkMissing, GENESIS_LINK_INDEX);
   return rep;
 }

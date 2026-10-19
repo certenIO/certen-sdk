@@ -5,10 +5,10 @@ import { judgeCertify, read, type CertJudged } from './helpers/certify1.js';
 /**
  * RB9-F6, F-VE-2 option (b) (owner decision 2026-10-19): the OFFLINE walk of an evidence 2.1 document requires the genesis link of EVERY document, the
  * continuous form (no links) included, and refuses a document without it as certify_link_missing{genesis} - the existing name, names.json unchanged.
- * Validator pkg/proof/v2/evidence.go verifyFrom(..., requireGenesisLink): true for verifyFromGenesis (VerifyPortable, Verify21FromGenesis), false for
- * the spine-log entry point (consensus), which this package does not have. The refusal is made AFTER verify21 has judged everything else, so a
- * document that fails for another reason keeps that refusal, and a document with links or a genesis link is judged as it always was. Evidence 2.0 is
- * untouched.
+ * Validator pkg/proof/v2/evidence.go verifyFrom (c93f5ac) makes the same refusal for the offline walk (VerifyPortable, Verify21FromGenesis) and for the
+ * spine-log walk consensus runs (VerifyEvidence21FromSpine) alike; an earlier head had a requireGenesisLink flag that left the spine-log entry out, and review V-P
+ * removed it. This package has only the offline walk. The refusal is made AFTER verify21 has judged everything else, so a document that fails for another
+ * reason keeps that refusal, and a document with links or a genesis link is judged as it always was. Evidence 2.0 is untouched.
  *
  * The documents are built from the certify1 fixtures (Go-written, byte for byte) by taking a member out, so the tests hold whichever way a re-sync of
  * the suite moves the documents that carry no link.
