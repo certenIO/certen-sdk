@@ -1,0 +1,131 @@
+package main
+
+// The receipt position-field corpus (RB9-F6 TS port, step 3; the validator review V-P): StartIndex, EndIndex and End of a merkle.Receipt are read by no
+// verifier (Receipt.Validate recomputes Start through Entries to Anchor only), so a receipt with ANY value of those three fields must be judged by its
+// Start, Entries and Anchor alone - and a value of the wrong type is a refusal of the document like any other member of the wrong type. Every document that
+// carries a genesis link (the corpus of genesisspell) is given, at EVERY place it carries a receipt that this rule reaches (evidence.genesisLink,
+// evidence.receipt, evidence.anchor.receipt, every evidence.links[i], every evidence.anchors[*].receipt), each of:
+//
+//	end        "00", "deadbeef", the receipt's own anchor, "", null, 5 (a number: wrong type)
+//	startIndex 0, 1, -1, 9223372036854775807, 9223372036854775808 (past int64), null, "x" (wrong type)
+//	endIndex   1, 9223372036854775807, true (wrong type)
+//	all three  startIndex 7, endIndex 3, end "ab"
+//
+// A case is a list of byte edits of the base file (the member written at the end of the receipt object), judged from the text; each shard is its own file,
+// bytes-cases-receiptpos-<i>.json.gz, consumed by test/s3-bytes-receiptpos-<i+1>.test.ts through the same consumer as every byte corpus.
+//
+//	XTS_SHARD=<i>/4 ./xtsgen -fixtures $S3 -out <dir> receiptpos      (i = 0..3)
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+type posKind struct{ name, member string }
+
+func posKinds(anchor string) []posKind {
+	return []posKind{
+		{"end-00", `"end":"00"`},
+		{"end-deadbeef", `"end":"deadbeef"`},
+		{"end-anchor", `"end":"` + anchor + `"`},
+		{"end-empty", `"end":""`},
+		{"end-null", `"end":null`},
+		{"end-number", `"end":5`},
+		{"startIndex-0", `"startIndex":0`},
+		{"startIndex-1", `"startIndex":1`},
+		{"startIndex-neg", `"startIndex":-1`},
+		{"startIndex-int64max", `"startIndex":9223372036854775807`},
+		{"startIndex-past-int64", `"startIndex":9223372036854775808`},
+		{"startIndex-null", `"startIndex":null`},
+		{"startIndex-string", `"startIndex":"x"`},
+		{"endIndex-1", `"endIndex":1`},
+		{"endIndex-int64max", `"endIndex":9223372036854775807`},
+		{"endIndex-bool", `"endIndex":true`},
+		{"all-three", `"startIndex":7,"endIndex":3,"end":"ab"`},
+	}
+}
+
+func receiptPosCases(doc []byte) []spellCase {
+	w := &objWalker{b: doc}
+	w.value(0, "", "", -1, false)
+	var out []spellCase
+	for i := range w.out {
+		n := w.out[i]
+		if n.kind != 'o' {
+			continue
+		}
+		c := n.class
+		reach := c == "evidence.genesisLink" || c == "evidence.receipt" || c == "evidence.anchor.receipt" || c == "evidence.links[*]" || (strings.HasPrefix(c, "evidence.anchors.{url}") && strings.HasSuffix(c, ".receipt") && strings.Count(c, ".") == 3)
+		if !reach {
+			continue
+		}
+		var rc map[string]any
+		if err := json.Unmarshal(doc[n.vs:n.ve], &rc); err != nil {
+			continue
+		}
+		anchor, _ := rc["anchor"].(string)
+		where := fmt.Sprintf("%s@%d", c, n.vs)
+		for _, k := range posKinds(anchor) {
+			text := k.member
+			if n.nmembers > 0 {
+				text = "," + text
+			}
+			out = append(out, spellCase{where + ":" + k.name, []ByteEdit{{At: n.closeAt, Ins: ins(text)}}})
+		}
+	}
+	return out
+}
+
+func receiptPosCorpus(fixtures, out string) error {
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "StartIndex, EndIndex and End of a receipt at every place a genesis-link document carries one (the genesis link, the receipt, the anchor's receipt, every link, every anchors[*] receipt), given every kind of value: judged by VerifyPortable from the text. No verifier reads these three fields: the receipt is judged by Start, Entries and Anchor alone."}
+	bases, err := genesisBases(fixtures)
+	if err != nil {
+		return err
+	}
+	sort.Strings(bases)
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStableCounting(raw, new(int), new(int))
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	byV := map[string]int{}
+	seq := 0
+	for bi, bpath := range bases {
+		for _, c := range receiptPosCases(docs[bi]) {
+			if seq++; (seq-1)%shards != shard {
+				continue
+			}
+			text := applyEdits(docs[bi], c.edits)
+			lastPanic, lastFlaky = "", ""
+			ex, ok := judgeSweep(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+			if !ok {
+				fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s [%s] %s%s\n", bpath, c.name, lastPanic, lastFlaky)
+				continue
+			}
+			byV[ex.V]++
+			f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("receiptpos:%s:%s", bpath, c.name), Base: bi, Op: "receiptpos " + c.name[strings.LastIndex(c.name, ":")+1:], Edits: c.edits, Expect: ex})
+		}
+	}
+	fmt.Printf("receiptpos shard %d/%d: %d bases, %d cases %v, skipped %+v\n", shard, shards, len(bases), len(f.Cases), byV, f.Skipped)
+	return writeJSON(filepath.Join(out, fmt.Sprintf("bytes-cases-receiptpos-%d.json.gz", shard)), f)
+}

@@ -30,7 +30,7 @@ import {
   type WireNode,
 } from '../sigtypes/wire.js';
 import { enumByName } from './enum-names.js';
-import { goHex, JsonError } from './gojson.js';
+import { goHex, intoSlice, JsonError, overwriteList, valueAfterNull } from './gojson.js';
 import { BadNum, mergedPairs, Occ, occurrences } from './occ.js';
 
 const bad = (m: string): never => {
@@ -249,10 +249,13 @@ export function unionFromJson(union: string, j: unknown, label: string): WireNod
   if (j === null) return null;
   const pairs = mergedPairs(j);
   if (pairs === undefined) return bad(`json: cannot unmarshal ${describe(j)} into Go value of type ${union}`);
-  // json.Unmarshal(data, &struct{ Type <Enum> }): every occurrence of "type" is decoded, and a null or a non-name is the enum's error.
+  // json.Unmarshal(data, &struct{ Type <Enum> }): every occurrence of "type" is decoded, and a null or a non-name is the enum's error - the one that comes
+  // first in the document, though a later occurrence names a member (RB9-F6 review V-Q D1: a name that is not one of the enum's is refused wherever it stands).
   let t: string | undefined;
   for (const x of occurrences(pairs, 'type')) {
     if (typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go value of type string`);
+    const table = UNION_ENUM[union];
+    if (table && enumByName(table, x) === undefined) return bad(`invalid ${union} Type ${JSON.stringify(x)}`);
     t = x;
   }
   // An account with no type is an UnknownAccount (AccountTypeUnknown is a type, and NewAccount creates it); every other union refuses none.
@@ -352,6 +355,16 @@ export function epilogueFromPairs(pairs: [string, unknown][], label: string): Ui
   return b;
 }
 
+/** encoding.JsonList of scalars: a list, or a single value, which is a list of one; a null clears it; the last list is the list (an element is overwritten by the one at its index). */
+function lastList(vals: readonly unknown[]): unknown[] | undefined {
+  let out: unknown[] | undefined;
+  for (const v of vals) {
+    if (v === undefined) continue;
+    out = v === null ? undefined : Array.isArray(v) ? v : [v];
+  }
+  return out;
+}
+
 /** The generated <Type>.UnmarshalJSON: the object's members into a wire object of the class. */
 export function nodeFromJson(cls: string, j: unknown, label: string, member_ = false): WireNode {
   const node: WireNode = { cls, fields: new Map(), extra: new Uint8Array(0), empty: false };
@@ -405,6 +418,8 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
       continue;
     }
     if (cls === 'KeyPage' && d.name === 'transactionBlacklist') {
+      // *AllowedTransactions: AllowedTransactions.UnmarshalJSON only Sets the bits it names onto the pointer it is given (protocol/access_control.go:93-103), so the
+      // occurrences of the key OR together; a null sets the pointer to nil and the first list after it allocates an empty one (a list, `[]` too, leaves it allocated).
       let mask: bigint | undefined;
       for (const v of vals) {
         if (v === undefined) continue;
@@ -420,7 +435,7 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
           if (e === undefined) return bad(`invalid AllowedTransactionBit ${JSON.stringify(b)}`);
           m |= 1n << BigInt(e);
         }
-        mask = m;
+        mask = (mask ?? 0n) | m;
       }
       if (mask !== undefined) node.fields.set('transactionBlacklist', mask);
       continue;
@@ -443,18 +458,12 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
       continue;
     }
     if (d.repeatable) {
-      // encoding.JsonList: a list, or - failing that - a single value, which is a list of one; a later occurrence replaces an earlier one
-      // and a null clears it.
-      let items: Value[] | undefined;
-      for (const v of vals) {
-        if (v === undefined) continue;
-        if (v === null) {
-          items = undefined;
-          continue;
-        }
-        const list = Array.isArray(v) ? v : [v];
+      // encoding.JsonList: a list, or - failing that - a single value, which is a list of one; a null clears it. A later list is decoded INTO the elements an earlier
+      // one left (a struct element keeps its members and takes the new ones: intoSlice); a list of unions (encoding.JsonUnmarshalListWith) writes each element over the
+      // one at its index and never shortens (overwriteList). Every occurrence is decoded on its own first: a wrong one is an error although a later one replaces it.
+      const decodeAll = (rawList: unknown[]): Value[] => {
         const here: Value[] = [];
-        list.forEach((e, i) => {
+        rawList.forEach((e, i) => {
           const x = element(cls, d, e, `${lab}[${i}]`);
           if (x !== null) here.push(x);
           else if (d.kind === 'reference') {
@@ -463,16 +472,27 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
             if (c) here.push({ cls: c, fields: new Map(), extra: new Uint8Array(0), empty: false });
           } else if (e === null) return bad(`${lab}[${i}]: a nil element of a ${d.kind} list is not read by this verifier`);
         });
-        items = here;
-      }
-      if (items !== undefined) node.fields.set(d.name, items);
+        return here;
+      };
+      const live = vals.filter((v) => v !== undefined && v !== null);
+      if (live.length > 1) for (const v of live) decodeAll(Array.isArray(v) ? v : [v]);
+      const rawItems = d.kind === 'union' ? overwriteList(vals) : d.kind === 'reference' ? intoSlice(vals, true) : lastList(vals);
+      if (rawItems !== undefined) node.fields.set(d.name, decodeAll(rawItems));
       continue;
     }
     if (d.kind === 'union') {
-      // each occurrence is unmarshalled by the union's own function; a later one replaces an earlier one
+      // each occurrence is unmarshalled by the union's own function; a later one replaces an earlier one. The member is a *encoding.JsonUnmarshalWith[T]: a
+      // null sets the pointer to nil and the next value allocates one with no Func (valueAfterNull)
       let x: Value | null | undefined;
+      let nulled = false;
       for (const v of vals) {
         if (v === undefined) continue;
+        if (v === null) {
+          nulled = true;
+          x = null;
+          continue;
+        }
+        if (nulled) valueAfterNull();
         x = element(cls, d, v, lab);
       }
       if (x !== null && x !== undefined) node.fields.set(d.name, x);

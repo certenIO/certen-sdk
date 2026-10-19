@@ -683,6 +683,14 @@ export function encodeNode(node: WireNode, omit: ReadonlySet<string> = new Set()
   return Uint8Array.from(out);
 }
 
+/**
+ * The scalar members Go holds by pointer and writes whenever the pointer is not nil, whatever the value (`if !(v.X == nil) { writer.WriteEnum(n, *v.X) }` in the
+ * generated MarshalBinary of accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c): a value that arrived is written, a zero one too. The only one of the types this
+ * verifier reads is a key page's transaction blacklist: the JSON `[]` allocates the pointer with no bit set, and the page's state, and so its hash, carries
+ * the field (tag 10, value 0).
+ */
+const POINTER_SCALARS: ReadonlySet<string> = new Set(['KeyPage.transactionBlacklist']);
+
 function encodeFields(out: number[], node: WireNode, descs: FieldDesc[], omit: ReadonlySet<string>): void {
   for (const d of descs) {
     if (d.kind === 'embedded') {
@@ -705,7 +713,7 @@ function encodeFields(out: number[], node: WireNode, descs: FieldDesc[], omit: R
     }
     const items = d.repeatable ? (v as Value[]) : [v];
     for (const item of items) {
-      if (!d.repeatable && (isZero(d, item) || equalsZero(node.cls, d, item))) continue;
+      if (!d.repeatable && !POINTER_SCALARS.has(node.cls + '.' + d.name) && (isZero(d, item) || equalsZero(node.cls, d, item))) continue;
       writeUvarint(out, BigInt(d.number));
       writeValue(out, d, item);
     }

@@ -333,6 +333,13 @@ function isPtr(s: Sch): s is { ptr: StructDef } {
   return typeof s === 'object' && 'ptr' in s;
 }
 
+/** The backing array of a decoded slice (the slots past its length still hold what an earlier, longer array decoded into them). */
+const BACKING: unique symbol = Symbol('goBacking');
+function withStore(out: GoVal[], store: GoVal[]): GoVal[] {
+  Object.defineProperty(out, BACKING, { value: store, enumerable: false });
+  return out;
+}
+
 /** The zero Go value of a schema. */
 export function zero(s: Sch): GoVal {
   if (s === 'string') return '';
@@ -394,7 +401,15 @@ export function decodeVal(s: Sch, v: JVal, label: string, into?: GoVal): GoVal {
   if ('list' in s) {
     if (v === null) return null;
     if (!Array.isArray(v)) mismatch(v, 'slice', label);
-    return (v as JVal[]).map((e, i) => decodeVal(s.list, e, `${label}[${i}]`, zero(s.list)));
+    // encoding/json decode.go array: an array is decoded INTO the slice already there, slot by slot - a slot keeps what was decoded into it before (a struct its members,
+    // a string its value when the new one is null), the length becomes the array's, and the slots beyond it are not cleared (Go's backing array: a later longer array
+    // decodes into what an earlier longer one left there). An empty array allocates a new empty slice and keeps nothing. RB9-F6 review V-Q D1.
+    if ((v as JVal[]).length === 0) return withStore([], []);
+    const store: GoVal[] = (Array.isArray(into) && (into as { [BACKING]?: GoVal[] })[BACKING]) || (Array.isArray(into) ? (into as GoVal[]).slice() : []);
+    (v as JVal[]).forEach((e, i) => {
+      store[i] = decodeVal(s.list, e, `${label}[${i}]`, i < store.length ? store[i] : zero(s.list));
+    });
+    return withStore(store.slice(0, (v as JVal[]).length), store);
   }
   if ('map' in s) {
     if (v === null) return null;

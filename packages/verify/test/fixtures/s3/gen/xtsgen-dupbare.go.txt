@@ -1,0 +1,142 @@
+package main
+
+// The bare-element corpus (RB9-F6 TS port, step 3, review V-Q second pass D5): a second occurrence of a list member that is not a list but one element. encoding/json
+// decodes a JsonList (a list, or - failing that - a single value, which is a list of one) into the slice it already holds, and a JsonUnmarshalListWith runs
+// unmarshalList first, which accepts a bare value as a list of one: it grows its Value only if the list is longer, and sets Value[0]; unmarshalSingle (which replaces
+// the whole list) is reached only when unmarshalList fails. So `"signatures":[A,B],"signatures":C` is [C,B] in Go, and the dupdiff corpus, which wrote lists, an
+// empty list, a null and objects as the second occurrence but never a bare element, did not see that the verifier read [C].
+//
+// EVERY list member of EVERY object path class of the bases (the same sampling as dupdiff: the first sweepK documents of each form that hold the class, the
+// genesis-link documents first) is given a second occurrence of its key that is the list's first element or its last, bare, before the list and after it, and the
+// first one after it with the key in upper case. A case is a list of byte edits of the base file, judged as every byte corpus is; each shard is its own file,
+// bytes-cases-dupbare-<i>.json.gz, consumed by test/s3-bytes-dupbare-<i+1>.test.ts.
+//
+//	XTS_SHARD=<i>/<n> ./xtsgen -fixtures $S3 -out <dir> dupbare      (XTS_COUNT=1 only counts)
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func dupBareCases(doc []byte, n objNode) []objCase {
+	if n.inArray || n.ms < 0 || n.kind != 'a' {
+		return nil
+	}
+	el := rawElems(doc[n.vs:n.ve])
+	if len(el) == 0 {
+		return nil
+	}
+	key := string(doc[n.ms:n.vs]) // `"key" :` as spelled, with its colon and spacing
+	out := []objCase{
+		{"dup-bare-first-element-after", []ByteEdit{{n.ve, 0, ins("," + key + el[0])}}},
+		{"dup-bare-first-element-before", []ByteEdit{{n.ms, 0, ins(key + el[0] + ",")}}},
+	}
+	if !strings.Contains(key, `\`) && strings.ToUpper(key) != key {
+		out = append(out, objCase{"dup-bare-first-element-after-upper", []ByteEdit{{n.ve, 0, ins("," + strings.ToUpper(key) + el[0])}}})
+	}
+	if len(el) > 1 {
+		last := el[len(el)-1]
+		out = append(out,
+			objCase{"dup-bare-last-element-after", []ByteEdit{{n.ve, 0, ins("," + key + last)}}},
+			objCase{"dup-bare-last-element-before", []ByteEdit{{n.ms, 0, ins(key + last + ",")}}})
+	}
+	return out
+}
+
+func dupBareCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Every list member of every object path class of the bases (the first sweepK documents of each form holding the class; the genesis-link documents first), given a second occurrence of its key as a BARE element (not wrapped in a list): the list's first element or its last, written before the list and after it, and the first one after it with the key in upper case. A list of unions (encoding.JsonUnmarshalListWith) takes a bare value as a list of one written over index 0 and keeps the rest; a JsonList (a list or, failing that, a single value) replaces the list by a fresh list of one. Judged by VerifyPortable from the text."}
+	gb, err := genesisBases(fixtures)
+	if err != nil {
+		return err
+	}
+	ob, err := objBases(fixtures)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	var bases []string
+	for _, b := range append(append([]string(nil), gb...), ob...) {
+		if !have[b] {
+			have[b] = true
+			bases = append(bases, b)
+		}
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStableCounting(raw, new(int), new(int))
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	use := map[string]int{}
+	classes := map[string]bool{}
+	byV := map[string]int{}
+	seq := 0
+	for bi, bpath := range bases {
+		form := "2.1"
+		if objForm20.Match(docs[bi]) {
+			form = "2.0"
+		}
+		w := &objWalker{b: docs[bi]}
+		w.value(0, "", "", -1, false)
+		seen := map[string]bool{}
+		for _, n := range w.out {
+			if n.class == "" {
+				n.class = "$root"
+			}
+			if seen[n.class] {
+				continue
+			}
+			seen[n.class] = true
+			k := form + "|" + n.class
+			if use[k]++; use[k] > sweepK {
+				continue
+			}
+			for _, c := range dupBareCases(docs[bi], n) {
+				if seq++; (seq-1)%shards != shard {
+					continue
+				}
+				classes[k] = true
+				if os.Getenv("XTS_COUNT") != "" {
+					continue
+				}
+				text := applyEdits(docs[bi], c.edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeSweep(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s %s [%s] %s%s\n", bpath, n.class, c.name, lastPanic, lastFlaky)
+					continue
+				}
+				byV[ex.V]++
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("dupbare:%s:%s:%s", bpath, n.class, c.name), Base: bi, Op: "dupbare " + c.name, Edits: c.edits, Expect: ex})
+			}
+		}
+	}
+	var names []string
+	for k, v := range byV {
+		names = append(names, fmt.Sprintf("%s=%d", k, v))
+	}
+	sort.Strings(names)
+	fmt.Fprintf(os.Stderr, "dupbare shard %d/%d: %d bases, %d path classes (form|class), %d cases in all, %d judged here (%s)\n", shard, shards, len(bases), len(classes), seq, len(f.Cases), strings.Join(names, " "))
+	if os.Getenv("XTS_COUNT") != "" {
+		return nil
+	}
+	return writeGz(filepath.Join(out, fmt.Sprintf("bytes-cases-dupbare-%d.json.gz", shard)), mustJSON(f))
+}

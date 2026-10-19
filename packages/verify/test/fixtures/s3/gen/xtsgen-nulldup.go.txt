@@ -1,0 +1,142 @@
+package main
+
+// The null-before-the-value corpus (RB9-F6 TS port, step 3; found by a byte case that the new -g bases brought in: xpartition2/routing-history-unproven-g.json
+// "message":null written before the "message" of a sequenced message). The generated UnmarshalJSON of Accumulate holds every union member as
+// *encoding.JsonUnmarshalWith[T] whose Func is set only on the pointer the decoder starts with: encoding/json sets that pointer to nil on a null and allocates a
+// FRESH one (Func nil) for the next value, and calling the nil Func panics, which Import recovers and reports as a value Accumulate's codec cannot decode.
+// So a null written BEFORE the real value of a union member refuses the document, while the same null written after it (the objsweep corpus' dup-null-after)
+// leaves the member empty. The sweeps so far wrote a wrongly typed value before the member and a null only after it, so the class was open.
+//
+// EVERY member of EVERY object path class of the bases (the first sweepK documents of each form that hold the class, the genesis-link documents first) is given:
+//
+//	dup-null-before        the member's key with the value null written just before it (the key as spelled)
+//	dup-null-before-upper  the same with the key in upper case (encoding/json matches a key without regard to case): skipped for a key with an escape
+//	null-between           the member, then the key with null, then the key with a copy of the member's value (value, null, value)
+//	null-then-empty-list   (a list) the key with null, then the key with the empty list in the place of the member's value (null, [])
+//	null-empty-list-then-value  (a list) the key with null, the key with the empty list, then the member (null, [], value)
+//
+// A case is a list of byte edits of the base file, judged as every byte corpus is; each shard is its own file, bytes-cases-nulldup-<i>.json.gz, consumed by
+// test/s3-bytes-nulldup-<i+1>.test.ts.
+//
+//	XTS_SHARD=<i>/<n> ./xtsgen -fixtures $S3 -out <dir> nulldup      (XTS_COUNT=1 only counts)
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+func nullDupCases(doc []byte, n objNode) []objCase {
+	if n.inArray || n.ms < 0 {
+		return nil
+	}
+	key := string(doc[n.ms:n.vs]) // `"key" :` as spelled, with its colon and spacing
+	val := string(doc[n.vs:n.ve])
+	out := []objCase{{"dup-null-before", []ByteEdit{{n.ms, 0, ins(key + "null,")}}}}
+	if !strings.Contains(key, `\`) && strings.ToUpper(key) != key {
+		out = append(out, objCase{"dup-null-before-upper", []ByteEdit{{n.ms, 0, ins(strings.ToUpper(key) + "null,")}}})
+	}
+	out = append(out, objCase{"null-between", []ByteEdit{{n.ve, 0, ins("," + key + "null," + key + val)}}})
+	if n.kind == 'a' { // a list: a *encoding.JsonUnmarshalListWith calls its Func for an element only, so an empty list after a null decodes
+		out = append(out, objCase{"null-then-empty-list", []ByteEdit{{n.ms, 0, ins(key + "null,")}, {n.vs, n.ve - n.vs, ins("[]")}}})
+		out = append(out, objCase{"null-empty-list-then-value", []ByteEdit{{n.ms, 0, ins(key + "null," + key + "[],")}}})
+	}
+	return out
+}
+
+func nullDupCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Every member of every object path class of the bases (the first sweepK documents of each form holding the class; the genesis-link documents first), given a null before its value (the key as spelled and in upper case) and a null between two copies of its value: a null before the value of a union member refuses the document (encoding/json allocates a fresh *JsonUnmarshalWith whose Func is nil), a null after it leaves the member empty. Judged by VerifyPortable from the text."}
+	gb, err := genesisBases(fixtures)
+	if err != nil {
+		return err
+	}
+	ob, err := objBases(fixtures)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	var bases []string
+	for _, b := range append(append([]string(nil), gb...), ob...) {
+		if !have[b] {
+			have[b] = true
+			bases = append(bases, b)
+		}
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStableCounting(raw, new(int), new(int))
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	use := map[string]int{}
+	classes := map[string]bool{}
+	byV := map[string]int{}
+	seq := 0
+	for bi, bpath := range bases {
+		form := "2.1"
+		if objForm20.Match(docs[bi]) {
+			form = "2.0"
+		}
+		w := &objWalker{b: docs[bi]}
+		w.value(0, "", "", -1, false)
+		seen := map[string]bool{}
+		for _, n := range w.out {
+			if n.class == "" {
+				n.class = "$root"
+			}
+			if seen[n.class] {
+				continue
+			}
+			seen[n.class] = true
+			k := form + "|" + n.class
+			if use[k]++; use[k] > sweepK {
+				continue
+			}
+			for _, c := range nullDupCases(docs[bi], n) {
+				if seq++; (seq-1)%shards != shard {
+					continue
+				}
+				classes[k] = true
+				if os.Getenv("XTS_COUNT") != "" {
+					continue
+				}
+				text := applyEdits(docs[bi], c.edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeSweep(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s %s [%s] %s%s\n", bpath, n.class, c.name, lastPanic, lastFlaky)
+					continue
+				}
+				byV[ex.V]++
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("nulldup:%s:%s:%s", bpath, n.class, c.name), Base: bi, Op: "nulldup " + c.name, Edits: c.edits, Expect: ex})
+			}
+		}
+	}
+	var names []string
+	for k, v := range byV {
+		names = append(names, fmt.Sprintf("%s=%d", k, v))
+	}
+	sort.Strings(names)
+	fmt.Fprintf(os.Stderr, "nulldup shard %d/%d: %d bases, %d path classes (form|class), %d cases in all, %d judged here (%s)\n", shard, shards, len(bases), len(classes), seq, len(f.Cases), strings.Join(names, " "))
+	if os.Getenv("XTS_COUNT") != "" {
+		return nil
+	}
+	return writeGz(filepath.Join(out, fmt.Sprintf("bytes-cases-nulldup-%d.json.gz", shard)), mustJSON(f))
+}

@@ -7,7 +7,7 @@ import { UNDECODABLE, VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
 import { decodeObject, encodeNode } from '../sigtypes/wire.js';
 import { afterLastNull, mergedPairs, Occ, occurrences } from './occ.js';
-import { goHex, i64big, JsonError, jsonList, strptr, struct, u64 } from './gojson.js';
+import { goHex, i64big, intoSlice, JsonError, jsonList, strptr, struct, u64, valueAfterNull } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
 import { decodeReceiptBin, receiptListDecodes, receiptListParts, recordDecodes, recordUpdateBins } from './certify.js';
@@ -114,18 +114,13 @@ function ptr(v: unknown, decode: (x: unknown) => unknown): unknown {
  * earlier one, and every element of every occurrence is decoded in turn (a wrongly typed one is an error even when a later list replaces it).
  */
 function updateList(v: unknown): unknown[] | undefined {
-  let out: unknown[] | undefined;
-  for (const x of v instanceof Occ ? v.vals : [v]) {
-    if (x === undefined) continue;
-    if (x === null) {
-      out = undefined;
-      continue;
-    }
-    const els = Array.isArray(x) ? x : [x];
-    for (const el of els) struct(el, ['transaction', 'receipt'], 'NetworkUpdateProof');
-    out = els;
+  const vals = v instanceof Occ ? v.vals : [v];
+  for (const x of vals) {
+    if (x === undefined || x === null) continue;
+    for (const el of Array.isArray(x) ? x : [x]) struct(el, ['transaction', 'receipt'], 'NetworkUpdateProof');
   }
-  return out;
+  // a later list is decoded into the elements an earlier one left (intoSlice)
+  return intoSlice(vals, true);
 }
 
 function receiptListFromJson(j: unknown, ok: { v: boolean }): State {
@@ -201,23 +196,25 @@ export interface MinorRoot {
 
 /**
  * encoding.JsonUnmarshalListWith (a list of an interface type): a later list is written over the elements already read, index by index, and
- * never shortens what an earlier one made; a single value replaces the whole list and a null drops it. Every element of every occurrence is
- * decoded in turn, so a wrongly typed one is an error even when a later list overwrites it.
+ * never shortens what an earlier one made; a null drops it. A single value is a list of one written over index 0 (UnmarshalJSON runs unmarshalList first, which
+ * takes a bare value as a list of one; unmarshalSingle, which would replace the list, is reached only when unmarshalList fails). Every element of every occurrence
+ * is decoded in turn, so a wrongly typed one is an error even when a later list overwrites it.
  */
 function unionList(v: unknown, label: string): unknown[] | undefined {
   let out: unknown[] | undefined;
+  // the member is a *encoding.JsonUnmarshalListWith[KeySignature]: a null sets the pointer to nil and what follows allocates one with no Func, which panics as
+  // soon as an element is to be decoded (valueAfterNull); an empty list calls nothing
+  let nulled = false;
   for (const x of v instanceof Occ ? v.vals : [v]) {
     if (x === undefined) continue;
     if (x === null) {
+      nulled = true;
       out = undefined;
       continue;
     }
     const els = Array.isArray(x) ? x : [x];
+    if (nulled && els.length > 0) valueAfterNull();
     els.forEach((el, i) => unionFromJson('Signature', el, `${label}.signatures[${i}]`));
-    if (!Array.isArray(x)) {
-      out = els;
-      continue;
-    }
     const next = out === undefined ? [] : out.slice();
     els.forEach((el, i) => {
       next[i] = el;

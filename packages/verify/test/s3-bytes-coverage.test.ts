@@ -26,10 +26,10 @@ const withOp = (re: RegExp) => file.cases.filter((c) => parts(c.op).some((p) => 
 const repro = (re: RegExp) => file.cases.filter((c) => c.op === 'repro' && re.test(c.id));
 
 describe('the Go-written byte-level corpus covers D1 to D6', () => {
-  it('has more than 1,000 cases over the 105 base documents, all three kinds of Go verdict, and the 2.0 fixtures among the bases', () => {
-    expect(sha256hex(raw)).toBe('f13196d067422e5eb00d32b26eb1ec87478f66ea3b16c96935febcf50e68bbb2');
+  it('has more than 1,000 cases over the 140 base documents, all three kinds of Go verdict, and the 2.0 fixtures among the bases', () => {
+    expect(sha256hex(raw)).toBe('2eb7fea1f157a8e812d4e25f68d0d930fe9178102eb65a51a042b1a3e65e2412');
     expect(file.cases.length).toBeGreaterThan(1000);
-    expect(file.bases.length).toBe(105);
+    expect(file.bases.length).toBe(140);
     expect(file.bases).toEqual(expect.arrayContaining(['proofv2/valid.json.gz', 'proofv2/network-update.json.gz']));
     const kinds = new Set(file.cases.map((c) => c.expect.v));
     expect([...kinds].sort()).toEqual(['named', 'plain', 'verified']);

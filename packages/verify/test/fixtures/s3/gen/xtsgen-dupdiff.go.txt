@@ -1,0 +1,277 @@
+package main
+
+// The duplicate-key-with-another-value corpus (RB9-F6 TS port, step 3; review V-Q D1, a duplicated "transactionBlacklist" key: Go ORs the bits of AllowedTransactions
+// across the occurrences of the key onto one pointer, the verifier replaced the mask with the last list). The sweeps so far wrote a WRONGLY typed value before a
+// member (objsweep), a null (objsweep dup-null-after, nulldup), or a copy of the member's own value (bytes dupsame): none wrote a second value of the RIGHT type that
+// differs from the first, and encoding/json does not replace in every case - it decodes the second occurrence INTO what the first made: a struct has its members
+// merged, a map takes the entries, a slice has its existing elements decoded into (an element keeps the members the second occurrence does not name, and the slice is
+// cut to the second one's length), and a type with its own UnmarshalJSON does what that does (AllowedTransactions Sets the bits it names onto the pointer it is given).
+//
+// EVERY member of EVERY object path class of the bases (the first sweepK documents of each form that hold the class, the genesis-link documents first) is given a
+// second occurrence of its key, written before the member and after it, with each of the right-typed values that differ from the member's own:
+//
+//	array   [] ; [first element] ; [last element] ; [{}] and [{first member of the first element}] when the elements are objects
+//	object  {} ; {first member} ; {last member}
+//	string  "" ; the string with its first character changed
+//	number  0 ; 1 ; 2
+//	bool    the other value
+//
+// and, for the first of those values, the key in upper case after the member (encoding/json matches a key without regard to case). A case is a list of byte edits of
+// the base file, judged as every byte corpus is; each shard is its own file, bytes-cases-dupdiff-<i>.json.gz, consumed by test/s3-bytes-dupdiff-<i+1>.test.ts.
+//
+//	XTS_SHARD=<i>/<n> ./xtsgen -fixtures $S3 -out <dir> dupdiff      (XTS_COUNT=1 only counts)
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+)
+
+type rawMember struct {
+	key string
+	val string
+}
+
+func rawMembers(raw []byte) []rawMember {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if _, err := dec.Token(); err != nil {
+		return nil
+	}
+	var out []rawMember
+	for dec.More() {
+		kt, err := dec.Token()
+		if err != nil {
+			return nil
+		}
+		k, _ := kt.(string)
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return nil
+		}
+		kb, _ := json.Marshal(k)
+		out = append(out, rawMember{string(kb), string(v)})
+	}
+	return out
+}
+
+func rawElems(raw []byte) []string {
+	var l []json.RawMessage
+	if err := json.Unmarshal(raw, &l); err != nil {
+		return nil
+	}
+	out := make([]string, len(l))
+	for i, e := range l {
+		out[i] = string(e)
+	}
+	return out
+}
+
+func flipFirst(s string) string {
+	if s == "" {
+		return "x"
+	}
+	c := s[0]
+	switch {
+	case c == '0':
+		c = '1'
+	case c == 'a':
+		c = 'b'
+	default:
+		c = '0'
+	}
+	return string(c) + s[1:]
+}
+
+type dupAlt struct{ name, text string }
+
+func dupAlts(doc []byte, n objNode) []dupAlt {
+	raw := doc[n.vs:n.ve]
+	var out []dupAlt
+	switch n.kind {
+	case 'a':
+		out = append(out, dupAlt{"empty-list", "[]"})
+		el := rawElems(raw)
+		if len(el) > 0 {
+			out = append(out, dupAlt{"first-element", "[" + el[0] + "]"})
+		}
+		if len(el) > 1 {
+			out = append(out, dupAlt{"last-element", "[" + el[len(el)-1] + "]"})
+		}
+		if len(el) > 0 && strings.HasPrefix(el[0], "{") {
+			out = append(out, dupAlt{"one-empty-object", "[{}]"})
+			if ms := rawMembers([]byte(el[0])); len(ms) > 0 {
+				out = append(out, dupAlt{"first-element-first-member", "[{" + ms[0].key + ":" + ms[0].val + "}]"})
+			}
+		}
+	case 'o':
+		out = append(out, dupAlt{"empty-object", "{}"})
+		if ms := rawMembers(raw); len(ms) > 0 {
+			out = append(out, dupAlt{"first-member", "{" + ms[0].key + ":" + ms[0].val + "}"})
+			if len(ms) > 1 {
+				l := ms[len(ms)-1]
+				out = append(out, dupAlt{"last-member", "{" + l.key + ":" + l.val + "}"})
+			}
+		}
+	case 's':
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			return nil
+		}
+		out = append(out, dupAlt{"empty-string", `""`})
+		if f, _ := json.Marshal(flipFirst(s)); string(f) != string(raw) {
+			out = append(out, dupAlt{"first-char-changed", string(f)})
+		}
+	case 'n':
+		for _, v := range []string{"0", "1", "2"} {
+			if v != string(raw) {
+				out = append(out, dupAlt{"number-" + v, v})
+			}
+		}
+	case 't':
+		if string(raw) == "true" {
+			out = append(out, dupAlt{"false", "false"})
+		} else {
+			out = append(out, dupAlt{"true", "true"})
+		}
+	}
+	return out
+}
+
+func dupDiffCases(doc []byte, n objNode) []objCase {
+	if n.inArray || n.ms < 0 {
+		return nil
+	}
+	key := string(doc[n.ms:n.vs]) // `"key" :` as spelled, with its colon and spacing
+	var out []objCase
+	for i, a := range dupAlts(doc, n) {
+		out = append(out, objCase{"dup-" + a.name + "-before", []ByteEdit{{n.ms, 0, ins(key + a.text + ",")}}})
+		out = append(out, objCase{"dup-" + a.name + "-after", []ByteEdit{{n.ve, 0, ins("," + key + a.text)}}})
+		if i == 0 && !strings.Contains(key, `\`) && strings.ToUpper(key) != key {
+			out = append(out, objCase{"dup-" + a.name + "-after-upper", []ByteEdit{{n.ve, 0, ins("," + strings.ToUpper(key) + a.text)}}})
+		}
+	}
+	// three occurrences: what a slice keeps when a null, an empty list or a shorter list comes between two lists (the slots past the length are not cleared, a null and an
+	// empty list start a new slice), and what a null does between the members of an object
+	raw := doc[n.vs:n.ve]
+	switch n.kind {
+	case 'a':
+		el := rawElems(raw)
+		if len(el) > 0 {
+			out = append(out, objCase{"dup-null-then-first-element-after", []ByteEdit{{n.ve, 0, ins("," + key + "null," + key + "[" + el[0] + "]")}}})
+		}
+		if len(el) > 1 {
+			regrow := "[" + strings.Repeat("{},", len(el)-1) + "{}]"
+			out = append(out,
+				objCase{"dup-truncate-then-regrow-after", []ByteEdit{{n.ve, 0, ins("," + key + "[{}]," + key + regrow)}}},
+				objCase{"dup-empty-then-regrow-after", []ByteEdit{{n.ve, 0, ins("," + key + "[]," + key + regrow)}}},
+				objCase{"dup-null-then-regrow-after", []ByteEdit{{n.ve, 0, ins("," + key + "null," + key + regrow)}}},
+				objCase{"dup-truncate-then-original-after", []ByteEdit{{n.ve, 0, ins("," + key + "[" + el[0] + "]," + key + string(raw))}}})
+		}
+	case 'o':
+		if ms := rawMembers(raw); len(ms) > 0 {
+			out = append(out,
+				objCase{"dup-null-then-first-member-after", []ByteEdit{{n.ve, 0, ins("," + key + "null," + key + "{" + ms[0].key + ":" + ms[0].val + "}")}}},
+				objCase{"dup-null-then-original-after", []ByteEdit{{n.ve, 0, ins("," + key + "null," + key + string(raw))}}})
+		}
+	}
+	return out
+}
+
+func dupDiffCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Every member of every object path class of the bases (the first sweepK documents of each form holding the class; the genesis-link documents first), given a second occurrence of its key before and after it with each right-typed value that differs from its own (an empty list, one element, an empty object, one member, another string, number or bool), and the key in upper case after it: encoding/json decodes the second occurrence into what the first made (structs merge, maps take the entries, slices decode into their elements) and a type with its own UnmarshalJSON does what that does (AllowedTransactions ORs its bits). Judged by VerifyPortable from the text."}
+	gb, err := genesisBases(fixtures)
+	if err != nil {
+		return err
+	}
+	ob, err := objBases(fixtures)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	var bases []string
+	for _, b := range append(append([]string(nil), gb...), ob...) {
+		if !have[b] {
+			have[b] = true
+			bases = append(bases, b)
+		}
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStableCounting(raw, new(int), new(int))
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	use := map[string]int{}
+	classes := map[string]bool{}
+	byV := map[string]int{}
+	seq := 0
+	for bi, bpath := range bases {
+		form := "2.1"
+		if objForm20.Match(docs[bi]) {
+			form = "2.0"
+		}
+		w := &objWalker{b: docs[bi]}
+		w.value(0, "", "", -1, false)
+		seen := map[string]bool{}
+		for _, n := range w.out {
+			if n.class == "" {
+				n.class = "$root"
+			}
+			if seen[n.class] {
+				continue
+			}
+			seen[n.class] = true
+			k := form + "|" + n.class
+			if use[k]++; use[k] > sweepK {
+				continue
+			}
+			for _, c := range dupDiffCases(docs[bi], n) {
+				if seq++; (seq-1)%shards != shard {
+					continue
+				}
+				classes[k] = true
+				if os.Getenv("XTS_COUNT") != "" {
+					continue
+				}
+				text := applyEdits(docs[bi], c.edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeSweep(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s %s [%s] %s%s\n", bpath, n.class, c.name, lastPanic, lastFlaky)
+					continue
+				}
+				byV[ex.V]++
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("dupdiff:%s:%s:%s", bpath, n.class, c.name), Base: bi, Op: "dupdiff " + c.name, Edits: c.edits, Expect: ex})
+			}
+		}
+	}
+	var names []string
+	for k, v := range byV {
+		names = append(names, fmt.Sprintf("%s=%d", k, v))
+	}
+	sort.Strings(names)
+	fmt.Fprintf(os.Stderr, "dupdiff shard %d/%d: %d bases, %d path classes (form|class), %d cases in all, %d judged here (%s)\n", shard, shards, len(bases), len(classes), seq, len(f.Cases), strings.Join(names, " "))
+	if os.Getenv("XTS_COUNT") != "" {
+		return nil
+	}
+	return writeGz(filepath.Join(out, fmt.Sprintf("bytes-cases-dupdiff-%d.json.gz", shard)), mustJSON(f))
+}

@@ -144,26 +144,50 @@ export function bytesDifferences(want: BytesExpect, text: Uint8Array): string[] 
   return out;
 }
 
+/**
+ * What judging a case costs grows with the size of its base document: proofv2/valid.json.gz (1.5 MB) takes about 1.3 s a case on a quiet host, the other bases a few
+ * tens of milliseconds. A chunk of cases is one test: it closes at `chunk` cases or when the documents of its cases add up to CHUNK_BYTES, whichever comes first
+ * (about five seconds of work alone), and gets a time limit of its own that grows with those bytes (RB9-F6 review V-Q D2: 25 cases on valid.json.gz were 32 s of
+ * work against the package's 20 s default, and passed only with a longer limit). No corpus pin depends on the chunking.
+ */
+const CHUNK_BYTES = 6_000_000;
+const CHUNK_BASE_MS = 60_000;
+const CHUNK_MS_PER_MB = 30_000;
+
 /** One shard (of `total`) of the corpus; the shards are separate files so the suite runs them in parallel. */
 export function defineBytesShard(index: number, total: number, hash: string, chunk = 25, corpus = 'go-written/bytes-cases.json.gz'): void {
   const raw = readS3(corpus);
   const file = JSON.parse(gunzipSync(raw).toString('utf8')) as BytesFile;
   const mine = file.cases.filter((_, i) => i % total === index);
+  const chunks: { part: BytesCase[]; from: number; bytes: number }[] = [];
+  for (let c = 0; c < mine.length; ) {
+    let bytes = 0;
+    let end = c;
+    while (end < mine.length && end - c < chunk && (end === c || bytes + baseBytes(file.bases[mine[end]!.base]!).length <= CHUNK_BYTES)) {
+      bytes += baseBytes(file.bases[mine[end]!.base]!).length;
+      end++;
+    }
+    chunks.push({ part: mine.slice(c, end), from: c, bytes });
+    c = end;
+  }
   describe(`byte-level cases of the portable documents, against Go (shard ${index + 1} of ${total})`, () => {
     it('is the file the Go program wrote', () => {
       expect(sha256hex(raw)).toBe(hash);
       expect(file.format).toBe('certen-sdk/s3-bytes-corpus/v1');
     });
-    for (let c = 0; c < mine.length; c += chunk) {
-      const part = mine.slice(c, c + chunk);
-      it(`reaches Go's verdict on ${part.length} cases (${c + 1}-${c + part.length})`, () => {
-        const wrong: string[] = [];
-        for (const k of part) {
-          const d = bytesDifferences(k.expect, applyEdits(baseBytes(file.bases[k.base]!), k.edits));
-          if (d.length > 0) wrong.push(`${k.id} [${k.op}]: ${d.join(' | ')}`);
-        }
-        expect(wrong).toEqual([]);
-      });
+    for (const { part, from, bytes } of chunks) {
+      it(
+        `reaches Go's verdict on ${part.length} cases (${from + 1}-${from + part.length})`,
+        () => {
+          const wrong: string[] = [];
+          for (const k of part) {
+            const d = bytesDifferences(k.expect, applyEdits(baseBytes(file.bases[k.base]!), k.edits));
+            if (d.length > 0) wrong.push(`${k.id} [${k.op}]: ${d.join(' | ')}`);
+          }
+          expect(wrong).toEqual([]);
+        },
+        CHUNK_BASE_MS + Math.ceil(bytes / 1_000_000) * CHUNK_MS_PER_MB,
+      );
     }
   });
 }

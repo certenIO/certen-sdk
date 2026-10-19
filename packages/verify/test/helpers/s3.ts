@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
+import { decodeReceiptBin } from '../../src/s3/certify.js';
 import { NamedState, verifyPortableAny, type Report21 } from '../../src/s3/index.js';
 
 /**
@@ -77,6 +78,33 @@ export function summarize(r: Report21): ReportSummary {
     authorizationMode: r.authorizationMode,
     arrivals: r.arrivals.map((a) => ({ kind: a.kind, account: a.account, partition: a.partition, message: a.message, block: a.block })),
   };
+}
+
+/**
+ * Kermit's RECORDED answer for the genesis link of the real continuous 2.1 document (RB9-F6, F-VE-2 (b)): the receipt, labelled 'genesis', that
+ * pkg/proof/v2/testdata/certify1-live/links.json holds (Go-recorded; the TS copy is test/fixtures/s3-f5/certify1-live/links.json, pinned by sha256 in
+ * test/helpers/certify1.ts and test/certify1.test.ts). The committed real documents stay byte-identical and carry no genesis link, so the offline walk
+ * refuses them certify_link_missing{genesis}; the suites that judge them as verified attach this receipt here, exactly as the validator's tests do
+ * (loadReal21), and never write it by hand.
+ */
+export function recordedGenesisLink(): Record<string, unknown> {
+  const rec = JSON.parse(readFileSync(new URL('../fixtures/s3-f5/certify1-live/links.json', import.meta.url), 'utf8')) as { links: { label: string; receipt: string }[] };
+  const hit = rec.links.find((l) => l.label === 'genesis');
+  if (!hit) throw new Error('certify1-live/links.json has no genesis link');
+  const r = decodeReceiptBin(Uint8Array.from(Buffer.from(hit.receipt, 'hex')));
+  if (!r) throw new Error('the recorded genesis link does not decode');
+  return {
+    start: Buffer.from(r.start).toString('hex'),
+    anchor: Buffer.from(r.anchor).toString('hex'),
+    entries: r.entries.map((e) => ({ hash: Buffer.from(e.hash).toString('hex'), right: e.right })),
+  };
+}
+
+/** A copy of a portable evidence 2.1 document with Kermit's recorded genesis link attached (the document itself is not touched). */
+export function withRecordedGenesisLink<T>(doc: T): T {
+  const d = structuredClone(doc) as { evidence: Record<string, unknown> };
+  d.evidence.genesisLink = recordedGenesisLink();
+  return d as unknown as T;
 }
 
 /** Judge a portable document as Go's proofv2.VerifyPortable does: a report, a named state, or a plain refusal. */

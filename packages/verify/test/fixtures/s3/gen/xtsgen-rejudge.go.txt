@@ -1,0 +1,233 @@
+package main
+
+// The rejudge command (RB9-F6 TS port, step 3): the Go-written byte corpora keep their cases and their bases and take the verdicts of a validator whose
+// rule moved. F-VE-2 (b) (the offline walk requires the genesis link of every evidence 2.1 document, judged LAST) can only move a case the old validator
+// VERIFIED - a document refused earlier, or by a named state of verify21, keeps its refusal - so the cases to judge again are the verified ones, plus a
+// deterministic sample of the others that proves the rule (a sample case that moves is an error).
+//
+//	XTS_CORPUS=go-written/bytes-cases-pathspell.json.gz XTS_MODE=verified XTS_SHARD=i/n ./xtsgen -fixtures $S3 -out <dir> rejudge
+//	    writes <dir>/<corpus>.rejudge.<i>.json: for every selected case (every n-th from the i-th) the verdict now, and the verdict before
+//	XTS_CORPUS=... ./xtsgen -fixtures $S3 -out <dir> rejudgemerge
+//	    reads <dir>/<corpus>.rejudge.*.json, applies them to the corpus, judges the bases again, writes <dir>/<corpus> and prints what moved
+//
+// Every verdict is produced by the validator's own functions (judgeStable, as the generators use), the file is written by the generators' own writer, and a
+// corpus that nothing moved in is byte-identical to the one it was read from.
+
+import (
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+type rejudgeOne struct {
+	Idx    int    `json:"idx"`
+	Old    Expect `json:"old"`
+	New    Expect `json:"new"`
+	Sample bool   `json:"sample,omitempty"`
+}
+
+func shardOf() (int, int, error) {
+	i, n := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		parts := strings.Split(v, "/")
+		if len(parts) != 2 {
+			return 0, 0, fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+		i, _ = strconv.Atoi(parts[0])
+		n, _ = strconv.Atoi(parts[1])
+	}
+	return i, n, nil
+}
+
+func readByteFile(fixtures string) (*ByteFile, string, error) {
+	rel := os.Getenv("XTS_CORPUS")
+	if rel == "" {
+		return nil, "", fmt.Errorf("XTS_CORPUS is not set")
+	}
+	raw, err := readDoc(filepath.Join(fixtures, rel))
+	if err != nil {
+		return nil, "", err
+	}
+	f := new(ByteFile)
+	if err := json.Unmarshal(raw, f); err != nil {
+		return nil, "", err
+	}
+	return f, rel, nil
+}
+
+func rejudgeCorpus(fixtures, out string) error {
+	f, rel, err := readByteFile(fixtures)
+	if err != nil {
+		return err
+	}
+	si, sn, err := shardOf()
+	if err != nil {
+		return err
+	}
+	sample := 0
+	if m := os.Getenv("XTS_MODE"); strings.HasPrefix(m, "sample:") {
+		sample, _ = strconv.Atoi(strings.TrimPrefix(m, "sample:"))
+	}
+	// the selection: every verified case, and a deterministic sample of the others
+	var sel []int
+	others := []int{}
+	for i, c := range f.Cases {
+		if c.Expect.V == "verified" {
+			sel = append(sel, i)
+		} else {
+			others = append(others, i)
+		}
+	}
+	isSample := map[int]bool{}
+	if sample > 0 && len(others) > 0 {
+		r := rand.New(rand.NewSource(seedOf(rel, "sample")))
+		r.Shuffle(len(others), func(a, b int) { others[a], others[b] = others[b], others[a] })
+		if sample > len(others) {
+			sample = len(others)
+		}
+		picked := others[:sample]
+		sort.Ints(picked)
+		for _, i := range picked {
+			isSample[i] = true
+			sel = append(sel, i)
+		}
+		sort.Ints(sel)
+	}
+	docs := map[int][]byte{}
+	var res []rejudgeOne
+	for k, idx := range sel {
+		if k%sn != si {
+			continue
+		}
+		c := f.Cases[idx]
+		base, ok := docs[c.Base]
+		if !ok {
+			base, err = baseDoc(fixtures, f.Bases[c.Base])
+			if err != nil {
+				return fmt.Errorf("%s: %w", f.Bases[c.Base], err)
+			}
+			docs[c.Base] = base
+		}
+		e, ok := judgeStable(applyEdits(base, c.Edits))
+		if !ok {
+			return fmt.Errorf("case %s: Go panicked or answered differently on two runs (%s)", c.ID, lastPanic)
+		}
+		res = append(res, rejudgeOne{Idx: idx, Old: c.Expect, New: e, Sample: isSample[idx]})
+	}
+	return writeJSON(filepath.Join(out, filepath.Base(rel)+fmt.Sprintf(".rejudge.%d.json", si)), res)
+}
+
+func rejudgeMerge(fixtures, out string) error {
+	f, rel, err := readByteFile(fixtures)
+	if err != nil {
+		return err
+	}
+	matches, _ := filepath.Glob(filepath.Join(out, filepath.Base(rel)+".rejudge.*.json"))
+	sort.Strings(matches)
+	if len(matches) == 0 {
+		return fmt.Errorf("no %s.rejudge.*.json in %s", filepath.Base(rel), out)
+	}
+	moved, same, sampled, sampleMoved := 0, 0, 0, 0
+	kinds := map[string]int{}
+	for _, m := range matches {
+		raw, err := os.ReadFile(m)
+		if err != nil {
+			return err
+		}
+		var res []rejudgeOne
+		if err := json.Unmarshal(raw, &res); err != nil {
+			return err
+		}
+		for _, r := range res {
+			if r.Sample {
+				sampled++
+			}
+			if sameVerdict(r.Old, r.New) {
+				same++
+				continue
+			}
+			if r.Sample {
+				sampleMoved++
+			}
+			moved++
+			msg := r.New.Msg
+			if len(msg) > 36 {
+				msg = msg[:36]
+			}
+			kinds[fmt.Sprintf("%s -> %s %q (evLen same: %v)", r.Old.V, r.New.V, msg, r.Old.EvLen == r.New.EvLen)]++
+			f.Cases[r.Idx].Expect = r.New
+		}
+	}
+	// the bases are judged again: a base document that moved takes its new verdict
+	baseMoved := 0
+	for bi, bpath := range f.Bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		be, ok := judgeStable(raw)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		a, _ := json.Marshal(f.BaseExpect[bi])
+		b, _ := json.Marshal(be)
+		if string(a) != string(b) {
+			baseMoved++
+		}
+		f.BaseExpect[bi] = be
+	}
+	fmt.Printf("%s: judged again %d (%d verdicts unchanged, %d moved; sample of %d others: %d moved), bases moved %d of %d\n", rel, same+moved, same, moved, sampled, sampleMoved, baseMoved, len(f.Bases))
+	keys := make([]string, 0, len(kinds))
+	for k := range kinds {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("    %6d  %s\n", kinds[k], k)
+	}
+	if sampleMoved > 0 {
+		return fmt.Errorf("%d of the sampled non-verified cases moved: the premise (only a verified case can move) does not hold", sampleMoved)
+	}
+	return writeJSON(filepath.Join(out, filepath.Base(rel)), f)
+}
+
+// sameVerdict: the verdict a corpus records. A plain refusal is recorded by its class (the consumers compare the class), except a certify state, which carries its
+// name and fields; the wording of a JSON syntax error is not part of the verdict.
+func sameVerdict(a, b Expect) bool {
+	if a.V != b.V || a.EvLen != b.EvLen {
+		return false
+	}
+	switch a.V {
+	case "verified":
+		x, _ := json.Marshal(a.Summary)
+		y, _ := json.Marshal(b.Summary)
+		return string(x) == string(y)
+	case "named":
+		x, _ := json.Marshal(a.State)
+		y, _ := json.Marshal(b.State)
+		return string(x) == string(y)
+	}
+	certify := func(m string) string {
+		if strings.HasPrefix(m, "certify_") {
+			if i := strings.Index(m, "}"); i > 0 {
+				return m[:i]
+			}
+		}
+		return ""
+	}
+	return certify(a.Msg) == certify(b.Msg)
+}
+
+// roundTrip reads the corpus and writes it back unchanged (the writer's identity on a file it wrote).
+func roundTrip(fixtures, out string) error {
+	f, rel, err := readByteFile(fixtures)
+	if err != nil {
+		return err
+	}
+	return writeJSON(filepath.Join(out, filepath.Base(rel)), f)
+}

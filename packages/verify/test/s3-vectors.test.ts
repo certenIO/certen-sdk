@@ -32,16 +32,19 @@ interface Mfst {
 }
 const MANIFEST = readS3Json<Mfst>('MANIFEST.json');
 
-/** The hash of the vectors this suite was written against (MANIFEST.json, written from the validator at 3419863). */
-const MANIFEST_HASH = '3fb31e6dca788fec39f997b1c4bef75557f746e3776811f22c8efbe89a1fc522';
+/**
+ * The hash of the vectors this suite was written against (MANIFEST.json, written from the validator at d1bbe40: RB9-F6, F-VE-2 (b) - the document files
+ * are byte-identical to the 3419863 ones, the manifests gain the moved entries' words and the appended '-g' siblings).
+ */
+const MANIFEST_HASH = '7f2a5f8fad6a5a9280228440607e79ca44c8967a2957ae24b8c6044e61813ed8';
 /** The manifest hash each Go suite states in its own MANIFEST.sha256. */
 const GO_SUITE_MANIFEST_SHA256: Record<string, string> = {
-  xpartition2: '5617294b7b61368d22b492dbc16da4ddd121498ac4b9e41ea4a80ab784cfbd93',
-  xpartition2b: '1f5043b1e53d9a1c17d8e8f91e8f3b782bbf336d174c332e877a2ef631ea056b',
-  xpartition3: '529892575924ce8a6a819a4251b1dcb9003d26bf651136642bfc1eb32bb953aa',
-  xpartition3b: '5c2ad4af55e10a9ba485598b357fe4c56019a1a4e84b1c9bf2e646f076d04f98',
-  xpartition4: '5cfda653c454b7e54e030bebe98e97799fd64737f7c72a3ea25424007e034ae1',
-  xpartition5: 'dd8aa1b571bf8a49ca20cefab4d851437fd9c4eb49b421637eba90c4548b350a',
+  xpartition2: '92670fb0f7fef66d826973e43b613ae3b56b806e80ed1ae228353c20a63c0e2b',
+  xpartition2b: '5d258989fce7cbe23ba8aee9886ec03d59d80fa0a7329503ae839374d13be02d',
+  xpartition3: '512b6a4bf20e9a980eabce5d77afbba914652b87f55204441eacc0bdf8ff5402',
+  xpartition3b: '61f18014084d3850ce32e66f3dd914e3949a4a0650bdabf11830424ac7d763bb',
+  xpartition4: 'a9000df52fd51df19c473ec294c7d8072d4d11cea1a354c91b4f7c01df06989b',
+  xpartition5: 'bfea86bf28bfecaca5c05c8853dce3d9a58739fa8cedd7042fe303756e3d3368',
 };
 
 interface Case {
@@ -53,6 +56,9 @@ interface Case {
   state?: string;
   partition?: string;
   block?: number;
+  /** The fields of a certify state (certify_link_missing{genesis}); present with `note` on an entry the F-VE-2 (b) requirement moved. */
+  fields?: string[];
+  note?: string;
   report?: {
     version: string;
     tag: string;
@@ -77,19 +83,19 @@ interface CaseFile {
   cases: Case[];
 }
 
-const SUITES: { name: string; format: string; min: { verified: number; refused: number }; count: number }[] = [
-  { name: 'xpartition2', format: 'certen-xpartition2-conformance/1', min: { verified: 4, refused: 15 }, count: 22 },
-  { name: 'xpartition2b', format: 'certen-xpartition2b-conformance/1', min: { verified: 10, refused: 11 }, count: 24 },
-  { name: 'xpartition3', format: 'certen-xpartition3-conformance/1', min: { verified: 3, refused: 8 }, count: 12 },
-  { name: 'xpartition3b', format: 'certen-xpartition3b-conformance/1', min: { verified: 5, refused: 4 }, count: 12 },
-  { name: 'xpartition4', format: 'certen-xpartition4-conformance/1', min: { verified: 11, refused: 11 }, count: 22 },
-  { name: 'xpartition5', format: 'certen-xpartition5-conformance/1', min: { verified: 2, refused: 6 }, count: 8 },
+const SUITES: { name: string; format: string; min: { verified: number; refused: number }; count: number; moved: number }[] = [
+  { name: 'xpartition2', format: 'certen-xpartition2-conformance/1', min: { verified: 4, refused: 15 }, count: 26, moved: 4 },
+  { name: 'xpartition2b', format: 'certen-xpartition2b-conformance/1', min: { verified: 10, refused: 11 }, count: 34, moved: 10 },
+  { name: 'xpartition3', format: 'certen-xpartition3-conformance/1', min: { verified: 3, refused: 8 }, count: 15, moved: 3 },
+  { name: 'xpartition3b', format: 'certen-xpartition3b-conformance/1', min: { verified: 5, refused: 4 }, count: 17, moved: 5 },
+  { name: 'xpartition4', format: 'certen-xpartition4-conformance/1', min: { verified: 11, refused: 11 }, count: 33, moved: 11 },
+  { name: 'xpartition5', format: 'certen-xpartition5-conformance/1', min: { verified: 2, refused: 6 }, count: 10, moved: 2 },
 ];
 
 describe('the shared vectors are the ones Go wrote', () => {
   it('every file hashes to what the manifest pins, and the manifest to the hash this suite was written against', () => {
     expect(MANIFEST.format).toBe('certen:s3-vectors-manifest:v1');
-    expect(MANIFEST.validatorCommit).toBe('341986373dbee1fdc37b05051668d12892c2ea87');
+    expect(MANIFEST.validatorCommit).toBe('d1bbe407d6cabb20cc10708378ad7d98ebc68732');
     let files = 0;
     const h = createHash('sha256');
     for (const s of MANIFEST.suites) {
@@ -120,7 +126,7 @@ describe('the shared vectors are the ones Go wrote', () => {
     }
   });
 
-  it('has the documents the suites count: 100 in six suites', () => {
+  it('has the documents the suites count: 135 in six suites (100 frozen documents and the 35 linked siblings of the ones that verified)', () => {
     let n = 0;
     for (const s of SUITES) {
       const m = readS3Json<CaseFile>(`${s.name}/manifest.json`);
@@ -129,9 +135,19 @@ describe('the shared vectors are the ones Go wrote', () => {
       expect(m.portableFormat).toBe('certen-proof-v2-accumulate-portable/1');
       expect(m.cases.length, s.name).toBe(s.count);
       expect(new Set(m.cases.map((c) => c.file)).size, s.name).toBe(m.cases.length);
+      // F-VE-2 (b): every entry that verified is frozen as certify_link_missing{genesis} (note + fields), and its '-g' sibling carries the link
+      const moved = m.cases.filter((c) => c.note !== undefined);
+      expect(moved.length, s.name).toBe(s.moved);
+      for (const c of moved) {
+        expect(c.expect, c.name).toBe('refused');
+        expect(c.state, c.name).toBe('certify_link_missing');
+        expect(c.fields, c.name).toEqual(['genesis']);
+        const sib = m.cases.find((x) => x.name === `${c.name}-g`);
+        expect(sib?.expect, `${c.name}-g`).toBe('verified');
+      }
       n += m.cases.length;
     }
-    expect(n).toBe(100);
+    expect(n).toBe(135);
   });
 });
 
@@ -169,6 +185,12 @@ for (const s of SUITES) {
         if (c.expect === 'verified') {
           expect(got.verdict, got.verdict === 'verified' ? '' : `refused: ${got.verdict === 'named' ? got.message : got.message}`).toBe('verified');
           if (got.verdict === 'verified') expectReport(c, got.summary, s.name === 'xpartition4' || s.name === 'xpartition5');
+          return;
+        }
+        if (c.fields) {
+          // a certify state (certify_link_missing{genesis}: a frozen document F-VE-2 (b) moved): a plain refusal that carries the state's name and fields
+          expect(got.verdict, `want ${c.state}{${c.fields.join(',')}}`).toBe('plain');
+          if (got.verdict === 'plain') expect(got.message.startsWith(`${c.state}{${c.fields.join(',')}}`), got.message).toBe(true);
           return;
         }
         if (c.state) {

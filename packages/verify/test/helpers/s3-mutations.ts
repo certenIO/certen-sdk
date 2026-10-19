@@ -70,6 +70,8 @@ export function applyPatch(root: unknown, patch: Patch): unknown {
     case 'rename': {
       const parent = walk(root, p.path.slice(0, -1)) as J;
       const last = p.path[p.path.length - 1]!;
+      // cmd/xtsgen apply: a set or a rename whose parent is neither an object nor an array (a nil left by an earlier patch of the same mutation) does nothing
+      if ((p.op === 'set' || p.op === 'rename') && (parent === null || parent === undefined || typeof parent !== 'object')) return root;
       if (p.op === 'set') (parent as Record<string | number, unknown>)[last] = clone(p.value === undefined ? null : p.value);
       else if (p.op === 'delete') delete (parent as Record<string | number, unknown>)[last];
       else {

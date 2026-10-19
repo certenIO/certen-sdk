@@ -5,7 +5,7 @@
 import { type Receipt } from '../proof-v2/bytes.js';
 import { Occ } from './occ.js';
 import { encodeNode, type WireNode } from '../sigtypes/wire.js';
-import { bool, goHex, i64big, JsonError, strptr, struct } from './gojson.js';
+import { bool, goHex, i64big, intoSlice, JsonError, strptr, struct } from './gojson.js';
 
 // --------------------------------------------------------------------------------------------------------------------------------
 // receipts
@@ -41,15 +41,11 @@ export function importReceipt(j: unknown, label: string): Rcpt {
     const es = struct(e, ['right', 'hash', '$epilogue'], `merkle.ReceiptEntry (${label}.entries[${i}])`);
     return { right: bool(es.right, `${label}.entries[${i}].right`), hash: bytesJson(es.hash, `${label}.entries[${i}].hash`), extra: epilogue(es.$epilogue, `${label}.entries[${i}]`) };
   };
-  let entries: { right: boolean; hash: Uint8Array; extra: Uint8Array }[] = [];
-  for (const x of s.entries instanceof Occ ? s.entries.vals : [s.entries]) {
-    if (x === undefined) continue;
-    if (x === null) {
-      entries = [];
-      continue;
-    }
-    entries = (Array.isArray(x) ? x : [x]).map(decodeEntry);
-  }
+  // A later list is decoded into the elements an earlier one left (intoSlice), so every occurrence is decoded on its own first and then the elements they make.
+  const occs = s.entries instanceof Occ ? s.entries.vals : [s.entries];
+  const live = occs.filter((x) => x !== undefined && x !== null);
+  if (live.length > 1) for (const x of live) (Array.isArray(x) ? x : [x]).forEach(decodeEntry);
+  const entries: { right: boolean; hash: Uint8Array; extra: Uint8Array }[] = (intoSlice(occs, true) ?? []).map(decodeEntry);
   const extra = epilogue(s.$epilogue, label);
   const node: WireNode = {
     cls: 'merkle.Receipt',
