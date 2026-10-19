@@ -168,8 +168,9 @@ export function intoSlice(vals: readonly unknown[], single = false): unknown[] |
 
 /**
  * encoding.JsonUnmarshalListWith (a list of an interface type, decoded one element at a time by a function): a later list is written over the elements already read,
- * index by index, and never shortens what an earlier one made; a single value replaces the whole list and a null drops it. The elements are the raw values of the
- * last list that reached each index.
+ * index by index, and never shortens what an earlier one made; a null drops it. A single value is not a different case: UnmarshalJSON runs unmarshalList first, which
+ * takes a bare value as a list of one, so it is written over index 0 and the rest stays (json_list.go: unmarshalSingle, which would replace the list, is reached only
+ * when unmarshalList fails). The elements are the raw values of the last list that reached each index.
  */
 export function overwriteList(vals: readonly unknown[]): unknown[] | undefined {
   let out: unknown[] | undefined;
@@ -180,10 +181,6 @@ export function overwriteList(vals: readonly unknown[]): unknown[] | undefined {
       continue;
     }
     const els = Array.isArray(x) ? (x as unknown[]) : [x];
-    if (!Array.isArray(x)) {
-      out = els;
-      continue;
-    }
     const next = out === undefined ? [] : out.slice();
     els.forEach((el, i) => {
       next[i] = el;

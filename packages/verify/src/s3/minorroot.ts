@@ -196,8 +196,9 @@ export interface MinorRoot {
 
 /**
  * encoding.JsonUnmarshalListWith (a list of an interface type): a later list is written over the elements already read, index by index, and
- * never shortens what an earlier one made; a single value replaces the whole list and a null drops it. Every element of every occurrence is
- * decoded in turn, so a wrongly typed one is an error even when a later list overwrites it.
+ * never shortens what an earlier one made; a null drops it. A single value is a list of one written over index 0 (UnmarshalJSON runs unmarshalList first, which
+ * takes a bare value as a list of one; unmarshalSingle, which would replace the list, is reached only when unmarshalList fails). Every element of every occurrence
+ * is decoded in turn, so a wrongly typed one is an error even when a later list overwrites it.
  */
 function unionList(v: unknown, label: string): unknown[] | undefined {
   let out: unknown[] | undefined;
@@ -214,10 +215,6 @@ function unionList(v: unknown, label: string): unknown[] | undefined {
     const els = Array.isArray(x) ? x : [x];
     if (nulled && els.length > 0) valueAfterNull();
     els.forEach((el, i) => unionFromJson('Signature', el, `${label}.signatures[${i}]`));
-    if (!Array.isArray(x)) {
-      out = els;
-      continue;
-    }
     const next = out === undefined ? [] : out.slice();
     els.forEach((el, i) => {
       next[i] = el;

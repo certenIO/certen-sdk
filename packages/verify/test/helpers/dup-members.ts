@@ -53,6 +53,18 @@ const firstAnchor = (() => {
   return inner.slice(0, valueEnd(inner, k));
 })();
 
+// the key signatures of the first minor-root record of the certify walk: a list of unions (encoding.JsonUnmarshalListWith)
+const certifyAt = text.indexOf('"certify":[');
+const [, sigsV, sigsE] = member('signatures', certifyAt);
+const sigEls: string[] = [];
+for (let i = sigsV + 1; i < sigsE - 1; ) {
+  const e = valueEnd(text, i);
+  sigEls.push(text.slice(i, e));
+  i = e + 1; // the comma
+}
+const sigFirst = sigEls[0]!;
+const sigLast = sigEls[sigEls.length - 1]!;
+
 export const dupMembers: [string, () => Buffer][] = [
   ['the base document', () => Buffer.from(text, 'utf8')],
   ['pages: [{}] after the list', () => after('pages', '"pages":[{}]')],
@@ -64,4 +76,8 @@ export const dupMembers: [string, () => Buffer][] = [
   ['keys of a page account: [{}] after the list', () => after('keys', '"keys":[{}]')],
   ['the type of a transaction body: "" before the name', () => before('type', '"type":""', bodyAt)],
   ['the type of a transaction body: a name that is not the enum\'s after the name', () => after('type', '"type":"x"', bodyAt)],
+  // a bare element as the second occurrence of a list of unions: UnmarshalJSON runs unmarshalList first, which takes it as a list of one written over index 0, so the rest stays
+  ['signatures of a certify run: the first signature bare after the list ([A,B] then A: the list is intact)', () => after('signatures', `"signatures":${sigFirst}`, certifyAt)],
+  ['signatures of a certify run: the first signature bare before the list (A then [A,B])', () => before('signatures', `"signatures":${sigFirst}`, certifyAt)],
+  ['signatures of a certify run: the last signature bare after the list ([A,B] then B: [B,B])', () => after('signatures', `"signatures":${sigLast}`, certifyAt)],
 ];

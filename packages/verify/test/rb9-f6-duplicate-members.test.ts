@@ -11,7 +11,9 @@ import { dupMembers } from './helpers/dup-members.js';
  *
  * The documents are test/helpers/dup-members.ts (the Go-written xpartition2 fixture valid-mixed-partition-g.json, which verifies, with one member written again);
  * every verdict and evidence length is Go's (cmd/xtsgen judgefile at validator pv2/rb9-f6-genesis-link-required c93f5ac). The corpus that judges the class
- * everywhere is Go-written: test/s3-bytes-dupdiff-N.test.ts (17738 cases).
+ * everywhere is Go-written: test/s3-bytes-dupdiff-N.test.ts (17738 cases), and test/s3-bytes-dupbare-N.test.ts (1354 cases) for a list given a second time as one bare
+ * element: a list of unions (JsonUnmarshalListWith) takes a bare value as a list of one written over index 0 and keeps the rest (json_list.go: UnmarshalJSON runs
+ * unmarshalList first; unmarshalSingle, which would replace the list, is reached only when that fails), so "signatures":[A,B],"signatures":A is [A,B], not [A].
  */
 const VERIFIED = '';
 const want: [string, number][] = [
@@ -25,6 +27,9 @@ const want: [string, number][] = [
   [VERIFIED, 16180], // keys: [{}] after the list
   ['Type ""', -1], // "" before the name: Go says 'major 1: invalid Transaction Type ""', the wording is not part of the verdict
   ['Type "x"', -1], // "x" after the name
+  [VERIFIED, 16180], // signatures: [A,B] then A bare: Value[0] = A, the list is intact (the verifier read [A])
+  [VERIFIED, 16180], // signatures: A bare then [A,B]
+  [VERIFIED, 16180], // signatures: [A,B] then B bare: [B,B]
 ];
 
 describe('a member given twice with different right-typed values is decoded into what the first occurrence made', () => {
