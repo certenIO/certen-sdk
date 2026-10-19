@@ -124,6 +124,8 @@ function messageFromJson(j: unknown, label: string, decode: boolean): MsgOut | n
   let t: string | undefined;
   for (const x of occurrences(pairs, 'type')) {
     if (typeof x !== 'string') return fail(`${label}: json: cannot unmarshal ${describe(x)} into Go value of type string`);
+    // MessageType.UnmarshalJSON runs on every occurrence: a name that is not one of the enum's is refused wherever it stands
+    if (enumByName('MessageType', x) === undefined) return fail(`${label}: invalid Message Type ${JSON.stringify(x)}`);
     t = x;
   }
   if (t === undefined) return fail(`${label}: invalid Message type (none)`);

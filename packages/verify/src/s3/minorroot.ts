@@ -7,7 +7,7 @@ import { UNDECODABLE, VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
 import { decodeObject, encodeNode } from '../sigtypes/wire.js';
 import { afterLastNull, mergedPairs, Occ, occurrences } from './occ.js';
-import { goHex, i64big, JsonError, jsonList, strptr, struct, u64, valueAfterNull } from './gojson.js';
+import { goHex, i64big, intoSlice, JsonError, jsonList, strptr, struct, u64, valueAfterNull } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
 import { decodeReceiptBin, receiptListDecodes, receiptListParts, recordDecodes, recordUpdateBins } from './certify.js';
@@ -114,18 +114,13 @@ function ptr(v: unknown, decode: (x: unknown) => unknown): unknown {
  * earlier one, and every element of every occurrence is decoded in turn (a wrongly typed one is an error even when a later list replaces it).
  */
 function updateList(v: unknown): unknown[] | undefined {
-  let out: unknown[] | undefined;
-  for (const x of v instanceof Occ ? v.vals : [v]) {
-    if (x === undefined) continue;
-    if (x === null) {
-      out = undefined;
-      continue;
-    }
-    const els = Array.isArray(x) ? x : [x];
-    for (const el of els) struct(el, ['transaction', 'receipt'], 'NetworkUpdateProof');
-    out = els;
+  const vals = v instanceof Occ ? v.vals : [v];
+  for (const x of vals) {
+    if (x === undefined || x === null) continue;
+    for (const el of Array.isArray(x) ? x : [x]) struct(el, ['transaction', 'receipt'], 'NetworkUpdateProof');
   }
-  return out;
+  // a later list is decoded into the elements an earlier one left (intoSlice)
+  return intoSlice(vals, true);
 }
 
 function receiptListFromJson(j: unknown, ok: { v: boolean }): State {

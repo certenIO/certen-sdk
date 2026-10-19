@@ -124,18 +124,80 @@ export function bool(v: unknown, what: string): boolean {
   return out;
 }
 
-/** A slice: undefined is Go's nil slice (absent or null - a null after a list clears it), otherwise the elements (possibly none). */
-export function list(v: unknown, what: string): unknown[] | undefined {
-  let out: unknown[] | undefined;
-  each(v, (x) => {
-    if (x === undefined || x === null) {
-      out = undefined;
-      return;
+/**
+ * What json.Unmarshal makes of several occurrences of a member that is a slice (encoding/json decode.go array): each array is decoded INTO the slice the earlier
+ * occurrences left, element by element - a slot keeps what was decoded into it before (a struct its members, merged with the new ones; the occurrences of a slot are
+ * an Occ), the length becomes the new array's, and the slots beyond it are not cleared, so a later longer array decodes into what an earlier longer one left there
+ * (Go's backing array). An empty array allocates a new empty slice (nothing is kept), a null sets the slice to nil (nothing is kept either), and a JsonList's
+ * single value allocates a new one-element slice. undefined: nil. RB9-F6 review V-Q D1.
+ */
+export function intoSlice(vals: readonly unknown[], single = false): unknown[] | undefined {
+  let store: unknown[] = []; // the backing array: slot i holds what was decoded into it
+  let len = 0;
+  let isNil = true;
+  for (const x of vals) {
+    if (x === undefined) continue;
+    if (x === null) {
+      store = [];
+      len = 0;
+      isNil = true;
+      continue;
     }
-    if (!Array.isArray(x)) bad(`json: cannot unmarshal ${typeName(x)} into Go struct field ${what} of type slice`);
-    out = x as unknown[];
-  });
+    const arr = Array.isArray(x);
+    const els: unknown[] = arr ? (x as unknown[]) : [x];
+    if (!arr && single) store = [];
+    if (els.length === 0) {
+      store = [];
+      len = 0;
+      isNil = false;
+      continue;
+    }
+    for (let i = 0; i < els.length; i++) {
+      const e = els[i];
+      const old = store[i];
+      // a struct element decoded again takes the new members on top of the old (an Occ, merged where it is read); any other element (a string, a number, a list) is
+      // overwritten
+      const structs = (isObject(old) || old instanceof Occ) && (isObject(e) || e instanceof Occ || e === null);
+      store[i] = i >= store.length || !structs ? e : old instanceof Occ ? new Occ([...old.vals, e]) : new Occ([old, e]);
+    }
+    len = els.length;
+    isNil = false;
+  }
+  return isNil ? undefined : store.slice(0, len);
+}
+
+/**
+ * encoding.JsonUnmarshalListWith (a list of an interface type, decoded one element at a time by a function): a later list is written over the elements already read,
+ * index by index, and never shortens what an earlier one made; a single value replaces the whole list and a null drops it. The elements are the raw values of the
+ * last list that reached each index.
+ */
+export function overwriteList(vals: readonly unknown[]): unknown[] | undefined {
+  let out: unknown[] | undefined;
+  for (const x of vals) {
+    if (x === undefined) continue;
+    if (x === null) {
+      out = undefined;
+      continue;
+    }
+    const els = Array.isArray(x) ? (x as unknown[]) : [x];
+    if (!Array.isArray(x)) {
+      out = els;
+      continue;
+    }
+    const next = out === undefined ? [] : out.slice();
+    els.forEach((el, i) => {
+      next[i] = el;
+    });
+    out = next;
+  }
   return out;
+}
+
+/** A slice: undefined is Go's nil slice (absent or null - a null after a list clears it), otherwise the elements (possibly none; several occurrences: intoSlice). */
+export function list(v: unknown, what: string): unknown[] | undefined {
+  const vals = v instanceof Occ ? v.vals : [v];
+  for (const x of vals) if (x !== undefined && x !== null && !Array.isArray(x)) bad(`json: cannot unmarshal ${typeName(x)} into Go struct field ${what} of type slice`);
+  return intoSlice(vals);
 }
 
 /** A map[string]T: undefined is nil; the entries of every object occurrence are kept (a later one wins a key). */
@@ -184,19 +246,10 @@ export function i64(v: unknown, what: string): number {
   return Number(i64big(v, what));
 }
 
-/** encoding.JsonList[T]: a list, or - failing that - a single value, which is a list of one; a null clears it, a later occurrence replaces an earlier one. */
+/** encoding.JsonList[T]: a list, or - failing that - a single value, which is a list of one; a null clears it, a later list is decoded into the elements the earlier left (intoSlice). */
 export function jsonList(v: unknown, what: string): unknown[] | undefined {
-  let out: unknown[] | undefined;
-  each(v, (x) => {
-    if (x === undefined) return;
-    if (x === null) {
-      out = undefined;
-      return;
-    }
-    out = Array.isArray(x) ? x : [x];
-  });
   void what;
-  return out;
+  return intoSlice(v instanceof Occ ? v.vals : [v], true);
 }
 
 /** A []string: every element a string (null elements are the empty string). */
