@@ -7,7 +7,9 @@
  */
 import { createHash } from 'node:crypto';
 import { equal, fail, goHexStrict, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
-import { genesisGlobals, Spine } from '../proof-v2/spine.js';
+import { genesisGlobals, selfAnchorBlock, Spine } from '../proof-v2/spine.js';
+import { CertifyCode, certifyState, CertifyState, checkGenesisLink, receiptDecodes } from './certify.js';
+import type { Rcpt } from './rcpt.js';
 import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
 import { sameUrl } from '../proof-v2/accumulate.js';
@@ -121,17 +123,72 @@ export function verifyPortable21(document: unknown): Report21 {
   if (need === 0 || need > majors.length) fail(`evidence builds on ${need} major blocks; the archive has ${majors.length}`);
   const at = spineStates(genesis, majors, need, [ev.majors, ev.check.majors], createHash('sha256').update(exactKey([g, majors])).digest('hex'));
   rep.majors = need;
-  return verifyFrom(ev, rep, at, pin);
+  return verifyFrom(ev, rep, at, pin, goHexStrict(g.rootChainAnchor ?? '', 'genesis.rootChainAnchor', 32));
+}
+
+/**
+ * The ordinal (index) a CertifyState was judged at, for the index-carrying codes the spine produces (reindexCertifyState); any other error is
+ * returned as it is.
+ */
+function reindex(err: unknown, index: number): unknown {
+  if (err instanceof CertifyState && (err.code === CertifyCode.CertifyLinkMissing || err.code === CertifyCode.CertifyLinkStart || err.code === CertifyCode.CertifyLinkEnd || err.code === CertifyCode.CertifyLinkInvalid)) {
+    return certifyState(err.code, String(index));
+  }
+  return err;
+}
+
+/**
+ * walkRuns (evidence.go): advances sp through the minor-root records of one sequence (certify, or the set check's hops). A record with a root proof is
+ * a continuous item (advanceEpoch). A record without one is an anchored item: it takes the next link (used counts the links taken so far, across both
+ * sequences) and is advanced by advanceAnchored, and an anchored item that has no effect (it carries no update, or none that the walk applies) is
+ * refused unless it is the last of its sequence. first is the position of runs[0] in certify followed by hops. Go's per-item order is kept.
+ */
+function walkRuns(sp: Spine, runs: unknown[], label: string, links: Rcpt[], used: { n: number }, first: number): void {
+  runs.forEach((run, i) => {
+    const r = run as Record<string, unknown>;
+    const lab = `${label} ${i}`;
+    if (r.rootProof === undefined) {
+      const updates = r.updates;
+      const block = selfAnchorBlock(r.anchor);
+      if (block !== undefined && (!Array.isArray(updates) || updates.length === 0) && i !== runs.length - 1) {
+        throw certifyState(CertifyCode.CertifyItemWithoutEffect, String(first + i), String(block));
+      }
+      const link = used.n < links.length ? links[used.n] : undefined;
+      const applied = sp.applied.length;
+      try {
+        sp.advanceAnchored(run, link, lab);
+      } catch (e) {
+        throw reindex(e, used.n);
+      }
+      used.n++;
+      // The canonical form is about effect, not about the updates member: an update the walk does not apply changes nothing.
+      if (sp.applied.length === applied && i !== runs.length - 1) {
+        throw certifyState(CertifyCode.CertifyItemWithoutEffect, String(first + i), String(sp.lastMinorBlock));
+      }
+      return;
+    }
+    sp.advanceEpoch(run, lab);
+  });
 }
 
 /** verifyFrom checks everything after the spine's starting points: at holds the spine after ev.majors and after ev.check.majors major blocks. */
-function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Uint8Array): Report21 {
+function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Uint8Array, genesisRoot: Uint8Array): Report21 {
   // S1-S2: the receipt from the transaction to a certified root.
   const certified = at.get(ev.majors);
   if (!certified) fail(`certify: evidence.majors ${ev.majors} is not a major block of the archive`);
   const cert = certified.clone();
   if (ev.certify.length === 0) fail('certify: no minor-root run');
-  ev.certify.forEach((run, i) => cert.advanceEpoch(run, `certify run ${i}`));
+  // Evidence 2.1: every link of the document decodes before any item is judged (a link that does not is certify_link_invalid at its ordinal and wins over
+  // the refusal of any item), then the genesis link.
+  cert.refuseReplay = true;
+  ev.links.forEach((l, i) => {
+    if (!receiptDecodes(l.bin)) throw certifyState(CertifyCode.CertifyLinkInvalid, String(i));
+  });
+  if (ev.genesisLink && !receiptDecodes(ev.genesisLink.bin)) throw certifyState(CertifyCode.CertifyLinkInvalid, 'genesis');
+  const used = { n: 0 };
+  walkRuns(cert, ev.certify, 'certify run', ev.links, used, 0);
+  // The chain identity (V-E A1b, F-VE-2): a document with links ties the certified root to the genesis root of the pinned incarnation.
+  if (ev.links.length > 0 || ev.genesisLink !== undefined) checkGenesisLink(ev.genesisLink, genesisRoot, cert.rootChainAnchor);
   const r = ev.receipt;
   const tx = ev.txHash.length === 64 && /^[0-9a-fA-F]{64}$/.test(ev.txHash) ? hexBytes(ev.txHash, 'txHash', 32) : fail('txHash is not 32 bytes of hex');
   if (!equal(r.start, tx)) fail(`receipt starts at ${toHex(r.start)}, not the transaction ${toHex(tx)}`);
@@ -172,7 +229,9 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
     if (!start) fail(`set check: check.majors ${ev.check.majors} is not a major block of the archive`);
     chk = start.clone();
   }
-  ev.check.hops.forEach((h, i) => chk.advanceEpoch(h, `set check hop ${i}`));
+  chk.refuseReplay = true;
+  walkRuns(chk, ev.check.hops, 'set check hop', ev.links, used, ev.certify.length);
+  if (used.n !== ev.links.length) throw certifyState(CertifyCode.CertifyLinkInvalid, String(used.n)); // a link no anchored item takes: the same bytes would otherwise carry two encodings
   if (chk.lastMinorBlock < cert.lastMinorBlock) {
     fail(`the set is checked at DN ${chk.lastMinorBlock}, before the certified DN ${cert.lastMinorBlock}: updates between are unaccounted`);
   }
@@ -181,7 +240,9 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   const sc = verifySetCheck(ev.check.network, ev.check.globals, ev.check.incarnation, chk.stateTreeAnchor, pin, {
     networkRecord: chk.g.networkRecord,
     globalsRecord: chk.g.globalsRecord,
-    networkUpdates: chk.applied.filter((x) => sameUrl(x.principal, 'acc://dn.acme/network')).length,
+    networkUpdates: chk.networkUpdates(),
+    globalsUpdates: chk.globalsUpdates(),
+    checkBlock: chk.lastMinorBlock,
   });
   rep.setVerdict = sc.verdict;
   rep.accumulateSetRoot = sc.accumulateSetRoot;

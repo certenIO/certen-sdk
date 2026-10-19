@@ -197,12 +197,33 @@ function merkleCount(v: unknown, label: string): number {
 
 /** merkle.ReceiptList.Validate. */
 export function receiptListValid(j: unknown, label: string): { start: Uint8Array; anchor: Uint8Array; end: Uint8Array } {
+  const p = receiptListParts(j, label);
+  const end = p.validate();
+  return { start: p.start, anchor: p.anchor, end };
+}
+
+/**
+ * A root proof in the phases Go judges it in (AdvanceEpoch): present, where it starts and where it ends are read first; whether the chain from one
+ * to the other validates is judged by validate(), which returns the recomputed end or fails with `invalid root proof`.
+ */
+export function receiptListParts(j: unknown, label: string): { start: Uint8Array; anchor: Uint8Array; validate: () => Uint8Array } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const rl = j as Record<string, unknown>;
   const ms = rl.merkleState as Record<string, unknown> | undefined;
   if (!ms || !rl.receipt) fail(`${label}: incomplete root proof`);
   const state = MerkleState.fromJSON(ms.pending, `${label}.merkleState`, merkleCount(ms.count, `${label}.merkleState`));
   const start = state.anchor();
+  const receiptAnchor = (() => {
+    try {
+      return receiptFromJSON(rl.receipt, `${label}.receipt`).anchor;
+    } catch {
+      return new Uint8Array(0);
+    }
+  })();
+  return { start: start ?? new Uint8Array(0), anchor: receiptAnchor, validate: () => validateReceiptList(rl, state, label) };
+}
+
+function validateReceiptList(rl: Record<string, unknown>, state: MerkleState, label: string): Uint8Array {
   const elements = rl.elements;
   if (!Array.isArray(elements) || elements.length === 0) fail(`${label}: invalid root proof`);
   const work = new MerkleState(state.pending, state.count);
@@ -221,5 +242,5 @@ export function receiptListValid(j: unknown, label: string): { start: Uint8Array
     const c = receiptFromJSON(rl.continuedReceipt, `${label}.continuedReceipt`);
     if (!equal(anchor, c.start) || !receiptValid(c)) fail(`${label}: invalid root proof`);
   }
-  return { start: start ?? new Uint8Array(0), anchor: receipt.anchor, end: anchor };
+  return anchor;
 }

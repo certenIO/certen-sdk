@@ -64,6 +64,8 @@ const EVIDENCE: StructDef = [
   f('Anchors', { map: { struct: ANCHOR } }),
   f('Votes', { list: { struct: VOTE } }),
   f('Transaction', S),
+  f('Links', RAW),
+  f('GenesisLink', RAW),
   f('Check', { struct: CHECK }),
 ];
 const GENESIS: StructDef = [

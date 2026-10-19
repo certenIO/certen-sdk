@@ -8,6 +8,7 @@
  * exactly the entry's bytes. What the verifier derives - the validators, the threshold, the routes - it derives from the entry's BYTES.
  */
 import { VerifyError, equal, fail, toHex } from '../proof-v2/bytes.js';
+import { CertifyCode, certifyState } from './certify.js';
 import type { SetVerdict } from '../proof-v2/verify.js';
 import { accumulateSetRoot, type AccumulateValidator } from '../proof-v2/accset.js';
 import { decodeObject, type WireNode } from '../sigtypes/wire.js';
@@ -145,11 +146,17 @@ export function verifySetCheck(
   incarnation: string,
   bound: Uint8Array,
   pinned: Uint8Array,
-  walk: { networkRecord: Uint8Array; globalsRecord: Uint8Array; networkUpdates: number },
+  walk: { networkRecord: Uint8Array; globalsRecord: Uint8Array; networkUpdates: number; globalsUpdates: number; checkBlock: number },
 ): SetCheckResult {
   // DerivedSet: both are decoded from the accounts' own bytes, neither is asserted.
   const derived = decodeValidators(net);
   const thr = decodeAcceptThreshold(glob);
+  // Evidence 2.1 (V-E A2(b), A3): when the walk has applied every write to BOTH accounts - the network account's main chain holds exactly 1 + the
+  // writes to the network definition, the globals account's exactly 1 + the writes to the globals - the set's history is derived from the pinned
+  // genesis by induction, and a main chain height above 1 is accounted, not asserted.
+  const netHeight = mainHeightOf(net);
+  const globHeight = mainHeightOf(glob);
+  const accounted = netHeight !== undefined && globHeight !== undefined && netHeight === 1 + walk.networkUpdates && globHeight === 1 + walk.globalsUpdates;
   let verdict: SetVerdict;
   if (net.receipt.entries.length === 0 || glob.receipt.entries.length === 0) {
     // An absent proof is a named state, not an error.
@@ -172,7 +179,7 @@ export function verifySetCheck(
       fail(`set check: validatorSetProof: the BPT root the set was proven into is not the one the quorum signed: proven=${toHex(n.root).slice(0, 16)} signed=${toHex(bound).slice(0, 16)}`);
     }
     if (n.mainHeight === undefined) fail("set check: validatorSetProof: no main chain in the network account's chain set");
-    if (n.mainHeight !== 1) verdict = 'validator_set_asserted';
+    if (n.mainHeight !== 1 && !accounted) verdict = 'validator_set_asserted';
     else if (incarnation === '') verdict = 'incarnation_unknown';
     else {
       const inc = mustHex32(incarnation, 'incarnation');
@@ -182,9 +189,13 @@ export function verifySetCheck(
   // The proven accounts must hold exactly what the walk derived.
   if (!equal(net.entry, walk.networkRecord)) fail('set check: network: the proven record differs from the one the walk derived');
   if (!equal(glob.entry, walk.globalsRecord)) fail('set check: globals: the proven record differs from the one the walk derived');
-  const height = mainHeightOf(net);
+  const height = netHeight;
   if (height === undefined) fail('set check: no main chain on the network account');
-  if (height !== 1 + walk.networkUpdates) fail(`set check: the network account's main chain has ${height} entries but the walk applied ${walk.networkUpdates} updates after genesis`);
+  // Named, with the account and the block it was judged at: have is the entries the walk accounts for (1 + the writes it applied), want the proven main chain height.
+  const checkBlock = String(walk.checkBlock);
+  if (height !== 1 + walk.networkUpdates) throw certifyState(CertifyCode.CertifyWindowUnaccounted, 'network', checkBlock, String(1 + walk.networkUpdates), String(height));
+  if (globHeight === undefined) fail('set check: no main chain on the globals account');
+  if (globHeight !== 1 + walk.globalsUpdates) throw certifyState(CertifyCode.CertifyWindowUnaccounted, 'globals', checkBlock, String(1 + walk.globalsUpdates), String(globHeight));
   let root: string;
   try {
     root = accumulateSetRoot(derived, { numerator: thr.num, denominator: thr.den }, toHex(pinned));

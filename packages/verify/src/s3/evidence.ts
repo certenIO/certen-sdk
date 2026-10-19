@@ -10,7 +10,7 @@
 import { equal, toHex } from '../proof-v2/bytes.js';
 import { accountState } from './jsonwire.js';
 import { importCheckAccount, type CheckAccount } from './setcheck.js';
-import { list, map, str, strList, struct, u64, u64big } from './gojson.js';
+import { JsonError, list, map, str, strList, struct, u64, u64big } from './gojson.js';
 import { minorRootFromJson } from './minorroot.js';
 import { importReceipt, importSequenced, type Rcpt, type SeqMsg } from './rcpt.js';
 import type { PageRole } from './states.js';
@@ -126,6 +126,12 @@ export interface Evidence {
   anchors?: Map<string, PartitionAnchorX>;
   votes: Vote[];
   transaction: string;
+  /**
+   * Evidence 2.1 only (RB9-F5): the links of the anchored minor-root items, certify first and then the set check's hops, and the genesis link. Read only
+   * from a document whose version is 2.1; a 2.0 document ignores both members.
+   */
+  links: Rcpt[];
+  genesisLink?: Rcpt;
   check: {
     majors: number;
     hops: unknown[];
@@ -289,7 +295,7 @@ export interface Imported {
  * held.refusal and the account left out: the 2.0 verifier reports its stages in order and the set check is the last of them (portable20.ts).
  */
 export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: Error }): Evidence {
-  const e = struct(doc.evidence, ['version', 'account', 'txHash', 'receipt', 'majors', 'certify', 'anchor', 'pages', 'anchors', 'votes', 'transaction', 'check'], 'PortableEvidence');
+  const e = struct(doc.evidence, ['version', 'account', 'txHash', 'receipt', 'majors', 'certify', 'anchor', 'pages', 'anchors', 'votes', 'transaction', 'links', 'genesisLink', 'check'], 'PortableEvidence');
   const anchorS = struct(e.anchor, ['message', 'receipt'], 'PortableEvidence.anchor');
   const ev: Evidence = {
     version: str(e.version, 'evidence.version'),
@@ -302,6 +308,7 @@ export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: 
     anchor: { message: importSequenced(anchorS.message, 'anchor message'), receipt: importReceipt(anchorS.receipt, 'anchor receipt') },
     pages: [],
     votes: [],
+    links: [],
     transaction: str(e.transaction, 'evidence.transaction'),
     check: { majors: 0, hops: [], hopsBin: [], incarnation: '', network: undefined as unknown as CheckAccount, globals: undefined as unknown as CheckAccount },
   };
@@ -325,6 +332,14 @@ export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: 
   const certify = (list(e.certify, 'evidence.certify') ?? []).map((r, i) => minorRootFromJson(r, `certify run ${i}`));
   ev.certify = certify.map((m) => m.canonical);
   ev.certifyBin = certify.map((m) => m.bin);
+  if (ev.version === '2.1') {
+    // portable.go Import: a 2.1 document's links member is a list of receipts (null: none), its genesis link one receipt (null: none).
+    if (e.links !== undefined && e.links !== null) {
+      if (!Array.isArray(e.links)) throw new JsonError(`links: json: cannot unmarshal ${jsonTypeName(e.links)} into Go value of type []json.RawMessage`);
+      ev.links = e.links.map((l, i) => importReceipt(l, `link ${i}`));
+    }
+    if (e.genesisLink !== undefined && e.genesisLink !== null) ev.genesisLink = importReceipt(e.genesisLink, 'genesis link');
+  }
   const hops = (list(c.hops, 'check.hops') ?? []).map((r, i) => minorRootFromJson(r, `set check hop ${i}`));
   ev.check.hops = hops.map((m) => m.canonical);
   ev.check.hopsBin = hops.map((m) => m.bin);
@@ -351,3 +366,19 @@ export const sameReceipt = (a: Rcpt, b: Rcpt): boolean => equal(a.bin, b.bin);
 export const hex = (b: Uint8Array): string => toHex(b);
 
 export type { PageRole };
+
+/** The JSON type name Go's UnmarshalTypeError reports for a value of a decoded tree. */
+function jsonTypeName(v: unknown): string {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return 'array';
+  switch (typeof v) {
+    case 'string':
+      return 'string';
+    case 'number':
+      return 'number';
+    case 'boolean':
+      return 'bool';
+    default:
+      return v !== null && typeof v === 'object' && 'lit' in (v as object) ? 'number' : 'object';
+  }
+}

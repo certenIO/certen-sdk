@@ -107,6 +107,8 @@ export function anchorMessage(v: unknown, label: string): AnchorMessage {
 
 export interface AnchorBody {
   minorBlockIndex: number;
+  /** The root chain index of the anchor (a zero Go omits). */
+  rootChainIndex: number;
   rootChainAnchor: Uint8Array;
   stateTreeAnchor: Uint8Array;
   /** The partition the anchor is from (blockValidatorAnchor / directoryAnchor `source`). */
@@ -116,6 +118,7 @@ export interface AnchorBody {
 export function anchorBody(body: Rec, label: string): AnchorBody {
   return {
     minorBlockIndex: uint(body.minorBlockIndex, `${label}.minorBlockIndex`),
+    rootChainIndex: optUint(body.rootChainIndex, `${label}.rootChainIndex`),
     rootChainAnchor: hex32(body.rootChainAnchor, `${label}.rootChainAnchor`),
     stateTreeAnchor: hex32(body.stateTreeAnchor, `${label}.stateTreeAnchor`),
     source: typeof body.source === 'string' ? body.source : '',

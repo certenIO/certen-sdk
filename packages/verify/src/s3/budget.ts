@@ -14,15 +14,90 @@ import type { Rcpt } from './rcpt.js';
 import type { XAnchor } from './executor.js';
 import { list, struct, str, u64 } from './gojson.js';
 import { refusal21, State } from './states.js';
+import { CertifyCode, CertifyState } from './certify.js';
 
 /** ConsensusTxLimit is the largest transaction CERTEN's consensus engine accepts by default (CometBFT max_tx_bytes). */
 export const CONSENSUS_TX_LIMIT = 1 << 20;
-/** CertificateReserve is what the rest of the intent certificate may take of that transaction. */
-export const CERTIFICATE_RESERVE = 96 << 10;
+/**
+ * CertificateReserve is what the rest of the intent certificate (R) may take of that transaction: the largest measured R (258,469) plus the vote
+ * evidence of a closure of 8 pages (V-E A4: at least 320 KiB).
+ */
+export const CERTIFICATE_RESERVE = 320 << 10;
 /** MaxEvidenceBytes is the budget of the encoded evidence document. */
 export const MAX_EVIDENCE_BYTES = CONSENSUS_TX_LIMIT - CERTIFICATE_RESERVE;
-/** FixedEvidenceBytes is the largest fixed part (everything but the pages, votes and transaction) measured on a real evidence. */
-export const FIXED_EVIDENCE_BYTES = 760_000;
+/** FixedEvidenceBytes is the largest fixed part (everything but the pages, votes and transaction) of the ANCHORED form, budgeted for BUDGETED_VALIDATORS validators. */
+export const FIXED_EVIDENCE_BYTES = 40_000;
+/** ValidatorSignatureBytes is one validator's signature entry in a record (measured: 165). */
+export const VALIDATOR_SIGNATURE_BYTES = 165;
+/** BudgetedValidators is the validator count FixedEvidenceBytes is budgeted for; the measurement was taken at MeasuredValidators. */
+export const BUDGETED_VALIDATORS = 16;
+export const MEASURED_VALIDATORS = 3;
+/** RestFlatBytes is the largest R measured in production (258,469): the part of R that does not grow with the closure. */
+export const REST_FLAT_BYTES = 260_000;
+/** VoteEvidenceBytesPerPage is the largest vote evidence per closure page measured on the live intents (7,503), rounded up. */
+export const VOTE_EVIDENCE_BYTES_PER_PAGE = 7_600;
+
+// The evidence 2.0 values. A 2.0 document still holds the minor-root runs since the last major, so its fixed part is the 760,000 the old constant
+// measured, and it is judged against the 96 KiB reserve it always had (RB9-F5 invariant 2): nothing on the 2.0 path tightens or loosens.
+/** CertificateReserve20 is the reserve evidence 2.0 was judged with. */
+export const CERTIFICATE_RESERVE_20 = 96 << 10;
+/** MaxEvidenceBytes20 is the evidence 2.0 budget (950,272). */
+export const MAX_EVIDENCE_BYTES_20 = CONSENSUS_TX_LIMIT - CERTIFICATE_RESERVE_20;
+/** FixedEvidenceBytes20 is the fixed part measured on a real 2.0 evidence (731,778 bytes, rounded up). */
+export const FIXED_EVIDENCE_BYTES_20 = 760_000;
+
+/** CertificateEstimate is the size of the whole certificate for an evidence of evidenceBytes and a closure of pages pages. */
+export const certificateEstimate = (evidenceBytes: number, pages: number): number => evidenceBytes + REST_FLAT_BYTES + VOTE_EVIDENCE_BYTES_PER_PAGE * pages;
+
+/** certificate_budget{size,limit}: the whole certificate does not fit the path (the same decision as the transaction path's tx_too_large), judged at where. */
+function certificateBudget(size: number, where: string, why: string): CertifyState {
+  return new CertifyState(CertifyCode.CertificateBudget, [String(size), String(CONSENSUS_TX_LIMIT)], `: judged at ${where}: ${why}`);
+}
+
+/** CheckCertificateFits judges the whole certificate before it is signed: the estimate must be inside ConsensusTxLimit, else certificate_budget{size,limit}. */
+export function checkCertificateFits(evidenceBytes: number, pages: number, where: string): void {
+  const size = certificateEstimate(evidenceBytes, pages);
+  if (size > CONSENSUS_TX_LIMIT) {
+    throw certificateBudget(
+      size,
+      where,
+      `the evidence is ${evidenceBytes} bytes and the rest of the transaction is estimated at ${size - evidenceBytes} (${REST_FLAT_BYTES} flat + ${VOTE_EVIDENCE_BYTES_PER_PAGE} per page x ${pages} pages): ${size - CONSENSUS_TX_LIMIT} bytes over the ${CONSENSUS_TX_LIMIT} the consensus path accepts (tx_too_large)`,
+    );
+  }
+}
+
+/** UpdateWindowsBytes is what the signature entries of k update-bearing windows take at V validators. */
+export const updateWindowsBytes = (k: number, validators: number): number => k * validators * VALIDATOR_SIGNATURE_BYTES;
+
+/** MaxUpdateWindows is the largest number of update windows whose signatures, at V validators, fit MaxEvidenceBytes beside the fixed part and otherBytes; 0 when none does. */
+export function maxUpdateWindows(validators: number, otherBytes: number): number {
+  const room = MAX_EVIDENCE_BYTES - FIXED_EVIDENCE_BYTES - otherBytes;
+  if (validators <= 0 || room < updateWindowsBytes(1, validators)) return 0;
+  return Math.floor(room / updateWindowsBytes(1, validators));
+}
+
+/** CheckUpdateWindows refuses, by certificate_budget{size,limit}, a certify of k update windows at V validators whose signature entries alone are over the evidence budget (the k x V bound). */
+export function checkUpdateWindows(k: number, validators: number, otherBytes: number, suffix = ''): void {
+  const sig = updateWindowsBytes(k, validators);
+  const ev = FIXED_EVIDENCE_BYTES + otherBytes + sig;
+  if (ev > MAX_EVIDENCE_BYTES) {
+    throw certificateBudget(
+      ev + CERTIFICATE_RESERVE,
+      'the update windows',
+      `k=${k} windows x validators=${validators} x ${VALIDATOR_SIGNATURE_BYTES} bytes = ${sig} bytes of signature entries with the ${FIXED_EVIDENCE_BYTES}-byte fixed part and ${otherBytes} other bytes is over the ${MAX_EVIDENCE_BYTES}-byte evidence budget (largest k at this V: ${maxUpdateWindows(validators, otherBytes)}; tx_too_large)`,
+    );
+  }
+}
+
+/**
+ * CheckAssembledBudget is the builder's pre-sign check on an assembled evidence 2.1: its links are one update window each (the k of the k x V bound,
+ * at the report's validator count), and its encoding with the rest of the transaction, scaled by its pages, must fit the path limit.
+ */
+export function checkAssembledBudget(ev: Evidence, validators: number, partition: string, block: number): void {
+  const where = `${partition} block ${block}`;
+  checkUpdateWindows(ev.links.length, validators, 0, ` (${where})`);
+  checkCertificateFits(utf8Length(evidenceJson(ev)), ev.pages.length, where);
+}
 
 // --------------------------------------------------------------------------------------------------------------------------------
 // Go's encoding/json, for the shapes of an Evidence
@@ -205,6 +280,8 @@ export function evidenceJson(ev: Evidence): string {
     opt('anchors', anchors),
     opt('votes', ev.votes.length > 0 ? arr(ev.votes.map(voteJson)) : undefined),
     opt('transaction', ev.transaction !== '' ? strJson(ev.transaction) : undefined),
+    opt('links', ev.links.length > 0 ? arr(ev.links.map((l) => hexJson(l.bin))) : undefined),
+    opt('genesisLink', ev.genesisLink ? hexJson(ev.genesisLink.bin) : undefined),
     member(
       'check',
       obj([
@@ -237,19 +314,30 @@ export function checkEvidenceBudget(ev: Evidence, x: XAnchor): void {
   if (size > MAX_EVIDENCE_BYTES) budgetState(ev.pages.length, size, x);
 }
 
-/** CheckClosureBudget: the early form of the same check the capture asks, before the document is built. */
-export function checkClosureBudget(pages: PageState[], votes: Vote[], partition: string, block: number): void {
-  let size = FIXED_EVIDENCE_BYTES;
+/**
+ * CheckClosureBudget: the early form of the same check the capture asks, before the document is built, for the document form the capture becomes
+ * (version '2.0' or '2.1'; any other value is an error, never a default). Evidence 2.0 is judged exactly as it always was (the 2.0 fixed part and
+ * reserve; nothing else is checked); evidence 2.1 with the anchored form's constants, and the whole certificate they imply must fit the path limit.
+ */
+export function checkClosureBudget(version: string, pages: PageState[], votes: Vote[], partition: string, block: number): void {
+  let fixed: number;
+  let limit: number;
+  if (version === '2.0') [fixed, limit] = [FIXED_EVIDENCE_BYTES_20, MAX_EVIDENCE_BYTES_20];
+  else if (version === '2.1') [fixed, limit] = [FIXED_EVIDENCE_BYTES, MAX_EVIDENCE_BYTES];
+  else throw new Error(`closure budget: unknown evidence version ${JSON.stringify(version)} (judged at ${partition} block ${block})`);
+  let size = fixed;
   for (const p of pages) size += utf8Length(pageJson(p));
   size += utf8Length(votes.length === 0 ? 'null' : arr(votes.map(voteJson)));
-  if (size > MAX_EVIDENCE_BYTES) {
+  if (size > limit) {
     throw refusal21(
       State.ClosureExceedsBudget,
       partition,
       block,
-      `pages=${pages.length} limit=${MAX_EVIDENCE_BYTES}: the pages and votes encode to ${size} bytes with the ${FIXED_EVIDENCE_BYTES}-byte fixed part, over the ${MAX_EVIDENCE_BYTES} bytes the consensus transaction limit (${CONSENSUS_TX_LIMIT}) leaves the evidence`,
+      `pages=${pages.length} limit=${limit}: the pages and votes encode to ${size} bytes with the ${fixed}-byte fixed part, over the ${limit} bytes the consensus transaction limit (${CONSENSUS_TX_LIMIT}) leaves the evidence`,
     );
   }
+  if (version === '2.0') return;
+  checkCertificateFits(size, pages.length, `${partition} block ${block}`);
 }
 
 export type { Rcpt };
