@@ -18,6 +18,13 @@ import { bytesOf, fixedOf, Item, listItems, RlpError, split, structItems, uintOf
 
 export const S6_REPLAY_DOMAIN = 'certen:s6-replay:v1';
 export const S6_MAX_REPLAY_HEADER_CHAIN = 512;
+/**
+ * The largest evidence document, in bytes, decodeReplayGuardEvidence reads (4 MiB; pkg/ethproof MaxReplayEvidenceBytes, s6replay5).
+ * Honest evidence is far smaller (at most 512 headers of about 1.2 KB of hex, and the proofs: under 1 MiB). The reader has no depth limit,
+ * so its memory is bounded only by its input, which is therefore bounded here, before anything is parsed. 4194304 bytes are read,
+ * 4194305 are refused evidence_too_large.
+ */
+export const MAX_REPLAY_EVIDENCE_BYTES = 4194304;
 export const S6_REPLAY_DERIVATION = 'keccak256(abi.encode(bytes32 key, uint256 base))';
 export const S6_MAX_JSON_INTEGER = 2 ** 53 - 1;
 
@@ -63,6 +70,8 @@ export const S6_REASONS = Object.freeze({
   unknownField: 'unknown_field',
   missingField: 'missing_field',
   wrongType: 'wrong_type',
+  /** The document is longer than MAX_REPLAY_EVIDENCE_BYTES: refused before anything is read, so never malformed_json. */
+  evidenceTooLarge: 'evidence_too_large',
 });
 const R = S6_REASONS;
 
@@ -372,6 +381,8 @@ function readBefore(v: JVal | undefined): S6ReplayBefore | undefined {
 
 /**
  * DecodeReplayGuardEvidence: strict decoding, every refusal s6_replay_unproven{reason}:
+ *  0. at most MAX_REPLAY_EVIDENCE_BYTES long - else evidence_too_large, judged on the byte length alone before anything is read
+ *     (test/fixtures/s6replay5/SPEC.md);
  *  1. one JSON value, no duplicate key, nothing after it - else malformed_json;
  *  2. the schema, depth first in schema order - unknown_field, missing_field, wrong_type;
  *  3. the Go types' own decoding: a hash, address or bytes value whose JSON text holds an escape - wrong_type;
@@ -379,6 +390,9 @@ function readBefore(v: JVal | undefined): S6ReplayBefore | undefined {
  *  5. the evidence's version, then the proof's, is certen:s6-replay:v1 - else unknown_version.
  */
 export function decodeReplayGuardEvidence(raw: Uint8Array): S6ReplayGuardEvidence {
+  if (raw.length > MAX_REPLAY_EVIDENCE_BYTES) {
+    return unproven(R.evidenceTooLarge, `the evidence is ${raw.length} bytes, more than the ${MAX_REPLAY_EVIDENCE_BYTES} bytes the format allows`);
+  }
   let doc: JVal;
   const esc = new WeakMap<object, Set<number>>();
   try {
