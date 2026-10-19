@@ -45,6 +45,15 @@ export function checkCheckpointLag(version: string, majors: number, newest: numb
   }
 }
 
+/**
+ * The same rule for the set check's starting point (F5-3c): evidence 2.1 whose check builds on a checkpoint more than CHECKPOINT_LAG major blocks
+ * behind the newest is checkpoint_stale too. The certification's majors are judged first, then the check's.
+ */
+export function checkEvidenceCheckpointLags(version: string, majors: number, checkMajors: number, newest: number): void {
+  checkCheckpointLag(version, majors, newest);
+  checkCheckpointLag(version, checkMajors, newest);
+}
+
 // --------------------------------------------------------------------------------------------------------------------------------
 // Accumulate's binary reader, as far as merkle.Receipt needs it
 
@@ -133,15 +142,18 @@ class Rd {
     return r.v;
   }
 
-  readBytes(n: number): void {
-    if (!this.readField(n)) return;
+  readBytes(n: number): Uint8Array | undefined {
+    if (!this.readField(n)) return undefined;
     const l = this.value();
-    if (l === undefined || l === 0n) return;
+    if (l === undefined) return undefined;
+    if (l === 0n) return new Uint8Array(0);
     if (BigInt(this.end - this.pos) < l || l >= BigInt(MAX_VALUE_SIZE)) {
       this.err = true;
-      return;
+      return undefined;
     }
+    const out = this.b.slice(this.pos, this.pos + Number(l));
     this.pos += Number(l);
+    return out;
   }
 
   readInt(n: number): void {
@@ -149,10 +161,15 @@ class Rd {
     this.value();
   }
 
-  readBool(n: number): void {
-    if (!this.readField(n)) return;
+  readBool(n: number): boolean | undefined {
+    if (!this.readField(n)) return undefined;
     const v = this.value();
-    if (v !== undefined && v > 1n) this.err = true;
+    if (v === undefined) return undefined;
+    if (v > 1n) {
+      this.err = true;
+      return undefined;
+    }
+    return v === 1n;
   }
 
   /** ReadValue: a length-prefixed sub-reader handed to unmarshal; true when it was read and decoded. */
@@ -178,20 +195,49 @@ class Rd {
  * entries (1-6: out of order) or one above 32. An unknown trailing field 7..32 leaves the receipt decodable, as a record tolerates it.
  */
 export function receiptDecodes(bin: Uint8Array): boolean {
+  return decodeReceiptBin(bin) !== undefined;
+}
+
+/**
+ * decodeReceipt (evidence.go): the receipt as merkle.Receipt.UnmarshalBinary reads it from its binary form - its start, its anchor and its entries,
+ * whatever the JSON it was imported from said - or undefined when it does not decode. A trailing field the reader places as an entry (field 6) is an
+ * entry, so the verifier judges the receipt it decoded and not the one the JSON appeared to describe.
+ */
+export function decodeReceiptBin(bin: Uint8Array): Rcpt | undefined {
   const r = new Rd(bin, 0, bin.length);
-  r.readBytes(1);
+  const start = r.readBytes(1);
   r.readInt(2);
   r.readBytes(3);
   r.readInt(4);
-  r.readBytes(5);
+  const anchor = r.readBytes(5);
+  const entries: { right: boolean; hash: Uint8Array }[] = [];
   for (;;) {
+    let e: { right: boolean; hash: Uint8Array } | undefined;
     const ok = r.readValue(6, (sub) => {
-      sub.readBool(1);
-      sub.readBytes(2);
+      const right = sub.readBool(1);
+      const hash = sub.readBytes(2);
+      e = { right: right ?? false, hash: hash ?? new Uint8Array(0) };
       return !sub.err;
     });
     if (!ok) break;
+    entries.push(e!);
   }
+  if (r.err) return undefined;
+  return { start: start ?? new Uint8Array(0), anchor: anchor ?? new Uint8Array(0), entries, bin };
+}
+
+/**
+ * Whether the binary form of a minor-root record decodes as api.MinorRootRecord.UnmarshalBinary decodes it (decodeMinorRoot): its four fields in
+ * order (the nested values are judged by the import that wrote them), and whatever follows is extra data - a record tolerates an unknown trailing
+ * field 5..32 - unless it opens with a field number the reader cannot place after the record's own (1..3), or one above 32, or is cut short.
+ */
+export function recordDecodes(bin: Uint8Array): boolean {
+  const r = new Rd(bin, 0, bin.length);
+  const skip = (): boolean => true;
+  r.readValue(1, skip);
+  while (r.readValue(2, skip));
+  while (r.readValue(3, skip));
+  r.readValue(4, skip);
   return !r.err;
 }
 

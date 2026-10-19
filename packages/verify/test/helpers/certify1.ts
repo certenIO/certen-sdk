@@ -9,6 +9,13 @@ import { summarize, type ReportSummary } from './s3.js';
  * verified (a report summary), certify (a CertifyState: code and fields), named (a NamedState with its partition and block) or plain (any other
  * refusal; a port's own fault - a TypeError or RangeError - is a fault, never a refusal).
  */
+/** THE pins: a re-sync of the suite is a copy of the files and a change of these hashes (and of the validator commit prefix) and nothing else. */
+export const PINS = {
+  validatorCommit: '31393e0',
+  namesSha256: '2413c2baac002a4f5a0b34d1331d41079a1c50e8b4792e1263b690ed8df84878',
+  suiteManifestSha256: 'bb200d6decb7a809ada325e376d2f95ea460b80a91b58ca021dc766cf032c312',
+  liveLinksSha256: '98ba7ccd2e71a7631f836ad597dcab25df1e908a82aa82443daa0d729ae7b70f',
+} as const;
 export const dir = new URL('../fixtures/s3-f5/', import.meta.url);
 export const read = (name: string): Buffer => readFileSync(new URL(name, dir));
 export const sha256hex = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');

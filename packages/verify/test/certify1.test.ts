@@ -23,10 +23,11 @@ import {
   CertifyCode,
   CertifyState,
   checkCheckpointLag,
+  checkEvidenceCheckpointLags,
   receiptDecodes,
   rootChainLeafIndex,
 } from '../src/s3/certify.js';
-import { judgeCertify, read, sha256hex } from './helpers/certify1.js';
+import { judgeCertify, PINS, read, sha256hex } from './helpers/certify1.js';
 
 /**
  * certify1 (RB9-F5, validator pkg/proof/v2/testdata/certify1 at 31393e0): the anchored certify form of evidence 2.1 - links, the genesis link, the
@@ -34,10 +35,9 @@ import { judgeCertify, read, sha256hex } from './helpers/certify1.js';
  * certify1,certify1-live --out s3-f5), pinned here and by MANIFEST.json. Each document must reach the verdict Go's manifest records: verified with the
  * same report, or refused by the same plain wording prefix, or by the named state with the same fields.
  */
-const NAMES_SHA256 = '2413c2baac002a4f5a0b34d1331d41079a1c50e8b4792e1263b690ed8df84878';
-const SUITE_MANIFEST_SHA256 = 'bb200d6decb7a809ada325e376d2f95ea460b80a91b58ca021dc766cf032c312';
-const LIVE_LINKS_SHA256 = '98ba7ccd2e71a7631f836ad597dcab25df1e908a82aa82443daa0d729ae7b70f';
-const VECTORS = 46;
+const NAMES_SHA256 = PINS.namesSha256;
+const SUITE_MANIFEST_SHA256 = PINS.suiteManifestSha256;
+const LIVE_LINKS_SHA256 = PINS.liveLinksSha256;
 
 interface Case {
   name: string;
@@ -85,7 +85,7 @@ const names = JSON.parse(read('certify1/names.json').toString('utf8')) as { name
 describe('certify1: the shared vectors are the ones Go wrote', () => {
   it('every file hashes to what the manifest pins', () => {
     expect(MANIFEST.format).toBe('certen:s3-vectors-manifest:v1');
-    expect(MANIFEST.validatorCommit.startsWith('31393e0')).toBe(true);
+    expect(MANIFEST.validatorCommit.startsWith(PINS.validatorCommit)).toBe(true);
     const h = createHash('sha256');
     for (const s of MANIFEST.suites) {
       for (const f of s.files) {
@@ -109,22 +109,24 @@ describe('certify1: the shared vectors are the ones Go wrote', () => {
     expect(sha256hex(read('certify1-live/links.json'))).toBe(LIVE_LINKS_SHA256);
   });
 
-  it(`has the ${VECTORS} documents of the suite`, () => {
+  it('has one document per case of the manifest, and every file the manifest pins is a case, the manifest or the names', () => {
     expect(suite.format).toBe('certen-certify1-conformance/1');
     expect(suite.domain).toBe('certen:g1:v4');
     expect(suite.portableFormat).toBe('certen-proof-v2-accumulate-portable/1');
     expect(suite.namesFile).toBe('names.json');
-    expect(suite.cases.length).toBe(VECTORS);
-    expect(new Set(suite.cases.map((c) => c.file)).size).toBe(VECTORS);
-    expect(new Set(suite.cases.map((c) => c.name)).size).toBe(VECTORS);
-    expect(suite.cases.filter((c) => c.expect === 'verified').length).toBe(11);
+    expect(suite.cases.length).toBeGreaterThan(0);
+    expect(new Set(suite.cases.map((c) => c.file)).size).toBe(suite.cases.length);
+    expect(new Set(suite.cases.map((c) => c.name)).size).toBe(suite.cases.length);
+    const files = MANIFEST.suites[0]!.files.map((f) => f.name).filter((n) => n.endsWith('.json') && n !== 'manifest.json' && n !== 'names.json');
+    expect(files.sort()).toEqual(suite.cases.map((c) => c.file).sort());
+    expect(suite.cases.some((c) => c.expect === 'verified')).toBe(true);
+    expect(suite.cases.some((c) => c.expect === 'refused')).toBe(true);
   });
 });
 
 describe('certify1: the names are generated from names.json and cannot drift', () => {
   it('the generated constants are the names file (codes, fields, sides, detail text, hash)', () => {
     expect(CERTIFY_NAMES_SHA256).toBe(NAMES_SHA256);
-    expect(names.names.length).toBe(12);
     expect(Object.keys(CERTIFY_FIELDS)).toEqual(names.names.map((n) => n.name));
     expect(Object.values(CertifyCode)).toEqual(names.names.map((n) => n.name));
     for (const n of names.names) {
@@ -334,6 +336,22 @@ describe('certify1: checkpoint_stale and the budget constants', () => {
     expect((thrown as CertifyState).fields).toEqual(['2', '5', '2']);
     expect((thrown as CertifyState).message).toBe('checkpoint_stale{2,5,2}: the evidence builds on a major block older than the newest verified one by more than the allowed lag');
     expect(() => checkCheckpointLag('2.0', 1, 50)).not.toThrow(); // evidence 2.0 is judged as ever
+  });
+
+  it("the set check's starting point is bounded by the same rule (F5-3c): checkpoint_stale for check.majors too, judged after the certification's", () => {
+    expect(() => checkEvidenceCheckpointLags('2.1', 5, 5, 5)).not.toThrow();
+    expect(() => checkEvidenceCheckpointLags('2.1', 3, 3, 5)).not.toThrow();
+    const stale = (f: () => void): CertifyState => {
+      try {
+        f();
+      } catch (e) {
+        return e as CertifyState;
+      }
+      throw new Error('not refused');
+    };
+    expect(stale(() => checkEvidenceCheckpointLags('2.1', 5, 2, 5)).fields).toEqual(['2', '5', '2']);
+    expect(stale(() => checkEvidenceCheckpointLags('2.1', 1, 2, 5)).fields).toEqual(['1', '5', '2']); // the certification's majors first
+    expect(() => checkEvidenceCheckpointLags('2.0', 1, 1, 50)).not.toThrow();
   });
 
   it('the evidence 2.1 budget is 40,000 / 720,896 / 320 KiB and the 2.0 values stay named constants', () => {

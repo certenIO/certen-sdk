@@ -277,6 +277,7 @@ export function importChains(v: unknown, label: string): ChainRoot[] {
 
 function importAnchorX(j: unknown, label: string): PartitionAnchorX {
   const s = struct(j, ['message', 'receipt'], `PortableAnchor (${label})`);
+  if (s.message === undefined) throw new JsonError('anchor message: unexpected end of JSON input'); // an absent json.RawMessage is not JSON at all
   return { message: importSequenced(s.message, 'anchor message'), receipt: importReceipt(s.receipt, `${label}.receipt`) };
 }
 

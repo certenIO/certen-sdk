@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { equal, fail, goHexStrict, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { genesisGlobals, selfAnchorBlock, Spine } from '../proof-v2/spine.js';
-import { CertifyCode, certifyState, CertifyState, checkGenesisLink, receiptDecodes } from './certify.js';
+import { CertifyCode, certifyState, CertifyState, checkGenesisLink, decodeReceiptBin, recordDecodes } from './certify.js';
 import type { Rcpt } from './rcpt.js';
 import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
@@ -126,6 +126,11 @@ export function verifyPortable21(document: unknown): Report21 {
   return verifyFrom(ev, rep, at, pin, goHexStrict(g.rootChainAnchor ?? '', 'genesis.rootChainAnchor', 32));
 }
 
+/** A link that does not decode is certify_link_invalid at its ordinal (or at genesis), judged before any item. */
+function certifyFail(index: number | string): never {
+  throw certifyState(CertifyCode.CertifyLinkInvalid, String(index));
+}
+
 /**
  * The ordinal (index) a CertifyState was judged at, for the index-carrying codes the spine produces (reindexCertifyState); any other error is
  * returned as it is.
@@ -143,10 +148,12 @@ function reindex(err: unknown, index: number): unknown {
  * sequences) and is advanced by advanceAnchored, and an anchored item that has no effect (it carries no update, or none that the walk applies) is
  * refused unless it is the last of its sequence. first is the position of runs[0] in certify followed by hops. Go's per-item order is kept.
  */
-function walkRuns(sp: Spine, runs: unknown[], label: string, links: Rcpt[], used: { n: number }, first: number): void {
+function walkRuns(sp: Spine, runs: unknown[], bins: Uint8Array[], label: string, links: Rcpt[], used: { n: number }, first: number): void {
   runs.forEach((run, i) => {
     const r = run as Record<string, unknown>;
     const lab = `${label} ${i}`;
+    // decodeMinorRoot: the record is decoded at its turn; one whose trailing bytes the reader cannot place is a plain refusal
+    if (!recordDecodes(bins[i]!)) throw new VerifyError(`${lab}: fields are out of order`);
     if (r.rootProof === undefined) {
       const updates = r.updates;
       const block = selfAnchorBlock(r.anchor);
@@ -181,15 +188,15 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   // Evidence 2.1: every link of the document decodes before any item is judged (a link that does not is certify_link_invalid at its ordinal and wins over
   // the refusal of any item), then the genesis link.
   cert.refuseReplay = true;
-  ev.links.forEach((l, i) => {
-    if (!receiptDecodes(l.bin)) throw certifyState(CertifyCode.CertifyLinkInvalid, String(i));
-  });
-  if (ev.genesisLink && !receiptDecodes(ev.genesisLink.bin)) throw certifyState(CertifyCode.CertifyLinkInvalid, 'genesis');
+  // The links are the receipts decoded from their binary form, as Go's decodeReceipt reads them, not the JSON they were imported from.
+  const links = ev.links.map((l, i) => decodeReceiptBin(l.bin) ?? certifyFail(i));
+  const genesisLink = ev.genesisLink ? (decodeReceiptBin(ev.genesisLink.bin) ?? certifyFail('genesis')) : undefined;
   const used = { n: 0 };
-  walkRuns(cert, ev.certify, 'certify run', ev.links, used, 0);
+  walkRuns(cert, ev.certify, ev.certifyBin, 'certify run', links, used, 0);
   // The chain identity (V-E A1b, F-VE-2): a document with links ties the certified root to the genesis root of the pinned incarnation.
-  if (ev.links.length > 0 || ev.genesisLink !== undefined) checkGenesisLink(ev.genesisLink, genesisRoot, cert.rootChainAnchor);
-  const r = ev.receipt;
+  if (links.length > 0 || genesisLink !== undefined) checkGenesisLink(genesisLink, genesisRoot, cert.rootChainAnchor);
+  // decodeReceipt: the transaction's receipt is the one its binary form decodes to
+  const r = decodeReceiptBin(ev.receipt.bin) ?? fail('receipt: fields are out of order');
   const tx = ev.txHash.length === 64 && /^[0-9a-fA-F]{64}$/.test(ev.txHash) ? hexBytes(ev.txHash, 'txHash', 32) : fail('txHash is not 32 bytes of hex');
   if (!equal(r.start, tx)) fail(`receipt starts at ${toHex(r.start)}, not the transaction ${toHex(tx)}`);
   if (!equal(r.anchor, cert.rootChainAnchor)) fail(`receipt ends at ${toHex(r.anchor)}, not the root ${toHex(cert.rootChainAnchor)} certified at DN ${cert.lastMinorBlock}`);
@@ -202,7 +209,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   // transaction's receipt passes through and whose state root the pages are proven into.
   const anchor = decodeAnchor21(ev.anchor.message);
   partitionOfAnchor(anchor);
-  const ar = ev.anchor.receipt;
+  const ar = decodeReceiptBin(ev.anchor.receipt.bin) ?? fail('partition anchor: receipt: fields are out of order');
   if (!equal(ar.start, anchor.tx) || !equal(ar.anchor, cert.rootChainAnchor) || !receiptValid(ar)) {
     fail('partition anchor: its receipt does not prove the anchor transaction into the certified root');
   }
@@ -230,8 +237,8 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
     chk = start.clone();
   }
   chk.refuseReplay = true;
-  walkRuns(chk, ev.check.hops, 'set check hop', ev.links, used, ev.certify.length);
-  if (used.n !== ev.links.length) throw certifyState(CertifyCode.CertifyLinkInvalid, String(used.n)); // a link no anchored item takes: the same bytes would otherwise carry two encodings
+  walkRuns(chk, ev.check.hops, ev.check.hopsBin, 'set check hop', links, used, ev.certify.length);
+  if (used.n !== links.length) throw certifyState(CertifyCode.CertifyLinkInvalid, String(used.n)); // a link no anchored item takes: the same bytes would otherwise carry two encodings
   if (chk.lastMinorBlock < cert.lastMinorBlock) {
     fail(`the set is checked at DN ${chk.lastMinorBlock}, before the certified DN ${cert.lastMinorBlock}: updates between are unaccounted`);
   }

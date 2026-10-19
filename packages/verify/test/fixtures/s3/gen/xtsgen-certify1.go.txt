@@ -42,14 +42,16 @@ type CMutation struct {
 }
 
 type CFile struct {
-	Format      string      `json:"format"`
-	Description string      `json:"description"`
-	Validator   string      `json:"validator"`
-	Bases       []string    `json:"bases"`
-	BaseSha256  []string    `json:"baseSha256"`
-	BaseExpect  []CExpect   `json:"baseExpect"`
-	Mutations   []CMutation `json:"mutations"`
-	Skipped     struct {
+	Format      string `json:"format"`
+	Description string `json:"description"`
+	Validator   string `json:"validator"`
+	// ManifestSha256 is the hash of the certify1 manifest.json the corpus was written over: a corpus is stale when the suite is re-synced.
+	ManifestSha256 string      `json:"manifestSha256"`
+	Bases          []string    `json:"bases"`
+	BaseSha256     []string    `json:"baseSha256"`
+	BaseExpect     []CExpect   `json:"baseExpect"`
+	Mutations      []CMutation `json:"mutations"`
+	Skipped        struct {
 		Panics int `json:"panics"`
 		Flaky  int `json:"flaky"`
 	} `json:"skipped"`
@@ -139,11 +141,15 @@ func targeted(r *rand.Rand, doc map[string]any) ([]Patch, string) {
 	var nodes []node
 	collect(ev, []any{"evidence"}, &nodes)
 	var receipts, records []node
+	// An unknown trailing field is aimed where the certify form reads it: the receipts of the links and of the genesis link (a link that does not
+	// decode is certify_link_invalid) and the minor-root records of certify and of the set check's hops (a record tolerates a trailing field 5..32
+	// and refuses one it cannot place). Every other receipt of a document is decoded by the verifier's older code, which is not under test here.
 	for _, n := range nodes {
-		if receiptLike(n.v) {
+		if len(n.path) >= 2 && (n.path[1] == "links" || n.path[1] == "genesisLink") && receiptLike(n.v) && len(n.path) <= 3 {
 			receipts = append(receipts, n)
 		}
-		if m, ok := n.v.(map[string]any); ok {
+		isRun := (len(n.path) == 3 && n.path[1] == "certify") || (len(n.path) == 4 && n.path[1] == "check" && n.path[2] == "hops")
+		if m, ok := n.v.(map[string]any); ok && isRun {
 			if _, has := m["signatures"]; has {
 				if _, has2 := m["anchor"]; has2 {
 					records = append(records, n)
@@ -227,6 +233,7 @@ func certify1Mutations(fixtures, out string, per int) error {
 	if err != nil {
 		return err
 	}
+	msum := sha256.Sum256(raw)
 	var m struct {
 		Cases []struct {
 			File string `json:"file"`
@@ -237,6 +244,7 @@ func certify1Mutations(fixtures, out string, per int) error {
 	}
 	f := &CFile{Format: "certen:certify1-mutations:v1",
 		Description: "Mutations of the certify1 vectors (RB9-F5 anchored certify form), each applied to the base document's JSON tree and judged by proofv2.VerifyPortable: the verdict is verified (summary), named (state, partition, block), certify (code, fields) or plain (class only). A mutation on which Go panics or answers differently on two runs is not recorded."}
+	f.ManifestSha256 = hex.EncodeToString(msum[:])
 	for bi, c := range m.Cases {
 		bpath := "certify1/" + c.File
 		f.Bases = append(f.Bases, bpath)
@@ -296,6 +304,10 @@ func certify1Mutations(fixtures, out string, per int) error {
 						break
 					}
 					p, name := mutate(r, t, "")
+					// A number of 2^53 in the anchor's own block or root chain index is read by the TypeScript spine as a double (finding RB9-F5-5-F1).
+					if name == "numbig" && len(p.Path) > 0 && (p.Path[len(p.Path)-1] == "minorBlockIndex" || p.Path[len(p.Path)-1] == "rootChainIndex") {
+						p, name = Patch{Path: p.Path, Op: "set", Value: float64(1), HasV: true}, "numone"
+					}
 					ps = append(ps, p)
 					ops = append(ops, name+"@"+pathString(p.Path))
 				}

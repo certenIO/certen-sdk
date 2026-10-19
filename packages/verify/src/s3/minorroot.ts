@@ -169,7 +169,7 @@ function keySignatures(v: unknown, label: string): { bin: Uint8Array; canonical:
 
 /** minorRootHex: an api.MinorRootRecord from its JSON (MinorRootRecord.UnmarshalJSON, then MarshalBinary). */
 export function minorRootFromJson(j: unknown, label: string): MinorRoot {
-  const s = struct(j, ['anchor', 'signatures', 'updates', 'rootProof'], `api.MinorRootRecord (${label})`);
+  const s = struct(j, ['anchor', 'signatures', 'updates', 'rootProof', '$epilogue'], `api.MinorRootRecord (${label})`);
   const out: number[] = [];
   const canonical: Record<string, unknown> = {};
   let anchor: SeqMsg | undefined;
@@ -209,6 +209,13 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
     const rp = receiptListFromJson(rootProof);
     app(out, field(4, rp.bin));
     canonical.rootProof = rp.canonical;
+  }
+  // the record's extra data (an unknown trailing field, or whatever Go's JSON reads into $epilogue) follows its last known field
+  const extra = strptr(s.$epilogue, `${label}.$epilogue`);
+  if (extra !== undefined) {
+    const b = goHex(extra);
+    if (!b) throw new JsonError(`error decoding ${label}.$epilogue: encoding/hex: invalid byte`);
+    app(out, b);
   }
   return { bin: Uint8Array.from(out), canonical, anchor };
 }
