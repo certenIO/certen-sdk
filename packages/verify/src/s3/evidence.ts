@@ -218,7 +218,8 @@ function importVote(j: unknown, i: number): Vote {
         receipt: importReceipt(p.receipt, 'produced.receipt'),
         arrival: importArrival(p.arrival, 'produced.arrival'),
       };
-      if (p.sequenced !== undefined && p.sequenced !== null) pr.sequenced = importSequenced(p.sequenced, 'sequenced message');
+      // json.RawMessage with omitempty: a JSON null is the four bytes null, which Go imports as the zero SequencedMessage (len > 0), not as an absent one
+      if (p.sequenced !== undefined) pr.sequenced = importSequenced(p.sequenced, 'sequenced message');
       return pr;
     }, `${who}, production`);
   }

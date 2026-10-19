@@ -548,6 +548,8 @@ function readFields(node: WireNode, descs: FieldDesc[], buf: Uint8Array): Uint8A
         node.fields.set(d.name, list);
         peek();
         if (cur === d.number) continue;
+        // the generated reader loops on ReadX(n) until it answers false, and answers an out-of-order error (not false) when the next field is below n
+        if (cur !== 0 && cur < d.number) bad(`field ${cur} is out of order (expected ${d.number} or later)`);
       } else if (v !== null && !(d.kind === 'bigint' && equalsZero(cls, d, v))) {
         // A struct-valued field that is the zero struct stays: its extra data still counts where Accumulate hashes it (a transaction
         // header), though the writer leaves it out.

@@ -5,14 +5,14 @@
  */
 import { UNDECODABLE, VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
-import { encodeNode } from '../sigtypes/wire.js';
+import { decodeObject, encodeNode } from '../sigtypes/wire.js';
 import { afterLastNull, mergedPairs, Occ, occurrences } from './occ.js';
 import { goHex, i64big, JsonError, jsonList, strptr, struct, u64 } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
-import { decodeReceiptBin, recordDecodes } from './certify.js';
+import { decodeReceiptBin, receiptListDecodes, receiptListParts, recordDecodes, recordUpdateBins } from './certify.js';
 import { importReceipt, type Rcpt } from './rcpt.js';
-import { importSequenced, type SeqMsg } from './seqmsg.js';
+import { importSequenced, redecode, type SeqMsg } from './seqmsg.js';
 
 const KEY_SIGNATURES = new Set(['LegacyED25519Signature', 'ED25519Signature', 'RCD1Signature', 'BTCSignature', 'BTCLegacySignature', 'ETHSignature', 'RsaSha256Signature', 'EcdsaSha256Signature', 'TypedDataSignature']);
 
@@ -109,8 +109,27 @@ function ptr(v: unknown, decode: (x: unknown) => unknown): unknown {
   return value;
 }
 
+/**
+ * encoding.JsonList[*NetworkUpdateProof]: a list, or - failing that - a single value, which is a list of one; a null drops it, a later occurrence replaces an
+ * earlier one, and every element of every occurrence is decoded in turn (a wrongly typed one is an error even when a later list replaces it).
+ */
+function updateList(v: unknown): unknown[] | undefined {
+  let out: unknown[] | undefined;
+  for (const x of v instanceof Occ ? v.vals : [v]) {
+    if (x === undefined) continue;
+    if (x === null) {
+      out = undefined;
+      continue;
+    }
+    const els = Array.isArray(x) ? x : [x];
+    for (const el of els) struct(el, ['transaction', 'receipt'], 'NetworkUpdateProof');
+    out = els;
+  }
+  return out;
+}
+
 function receiptListFromJson(j: unknown, ok: { v: boolean }): State {
-  const s = struct(j, ['merkleState', 'elements', 'receipt', 'continuedReceipt'], 'merkle.ReceiptList');
+  const s = struct(j, ['merkleState', 'elements', 'receipt', 'continuedReceipt', '$epilogue'], 'merkle.ReceiptList');
   const out: number[] = [];
   const canonical: Record<string, unknown> = {};
   // merkle.ReceiptList holds its state and both receipts by pointer: a null clears them (what came before it is still decoded)
@@ -146,7 +165,28 @@ function receiptListFromJson(j: unknown, ok: { v: boolean }): State {
     app(out, field(4, r.bin));
     canonical.continuedReceipt = canonReceipt(nestedReceipt(r, ok));
   }
-  return { bin: Uint8Array.from(out), canonical };
+  if (out.length === 0) out.push(0x80); // nothing written: the empty object (encoding.Writer.Reset)
+  // the list's own extra data (merkle.ReceiptList keeps what follows its last known field, and reads it from the member $epilogue)
+  const extra = strptr(s.$epilogue, 'rootProof.$epilogue');
+  if (extra !== undefined) {
+    const b = goHex(extra);
+    if (!b) throw new JsonError('error decoding rootProof.$epilogue: encoding/hex: invalid byte');
+    app(out, b);
+  }
+  const bin = Uint8Array.from(out);
+  if (!receiptListDecodes(bin)) ok.v = false;
+  else {
+    // The list is the struct its BINARY form decodes to (decodeMinorRoot reads RootProof from the record's bytes): a trailing field that opens with 2, 3
+    // or 4 is one more element, a receipt or a continued receipt, whatever the JSON said.
+    const parts = receiptListParts(bin);
+    canonical.elements = parts.elements.map((e) => Buffer.from(e).toString('hex'));
+    const asReceipt = (b: Uint8Array): Record<string, unknown> => canonReceipt({ start: new Uint8Array(0), anchor: new Uint8Array(0), entries: [], bin: b });
+    if (parts.receipt !== undefined) canonical.receipt = asReceipt(parts.receipt);
+    else delete canonical.receipt;
+    if (parts.continued !== undefined) canonical.continuedReceipt = asReceipt(parts.continued);
+    else delete canonical.continuedReceipt;
+  }
+  return { bin, canonical };
 }
 
 export interface MinorRoot {
@@ -207,8 +247,9 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
   const canonical: Record<string, unknown> = {};
   const ok = { v: true };
   let anchor: SeqMsg | undefined;
-  if (s.anchor !== undefined && s.anchor !== null) {
-    anchor = importSequenced(s.anchor, `${label}.anchor`);
+  const anchorJ = ptr(s.anchor, (x) => importSequenced(x, `${label}.anchor`));
+  if (anchorJ !== undefined) {
+    anchor = importSequenced(anchorJ, `${label}.anchor`);
     app(out, field(1, anchor.bin));
     canonical.anchor = anchor.canonical;
   }
@@ -216,34 +257,42 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
   for (const sg of sigs) app(out, field(2, sg.bin));
   canonical.signatures = sigs.map((x) => x.canonical);
   const updates: Record<string, unknown>[] = [];
-  for (const u of jsonList(s.updates, 'Updates') ?? []) {
+  for (const u of updateList(s.updates) ?? []) {
     if (u === null) {
+      // a nil element of Updates is written as the empty object and is an update with no transaction and no receipt: refused as incomplete where the walk
+      // reaches it, and counted among the record's updates
       app(out, field(3, Uint8Array.of(0x80)));
+      updates.push({});
       continue;
     }
     const us = struct(u, ['transaction', 'receipt'], 'NetworkUpdateProof');
     const inner: number[] = [];
     const cu: Record<string, unknown> = {};
-    if (us.transaction !== undefined && us.transaction !== null) {
-      const txn = nodeFromJson('Transaction', us.transaction, `${label}.updates.transaction`);
+    // NetworkUpdateProof holds its transaction and its receipt by pointer: a later null clears them
+    const txJ = ptr(us.transaction, (x) => nodeFromJson('Transaction', x, `${label}.updates.transaction`));
+    const rcJ = ptr(us.receipt, (x) => importReceipt(x, `${label}.updates.receipt`));
+    if (txJ !== undefined) {
+      const txn = nodeFromJson('Transaction', txJ, `${label}.updates.transaction`);
       app(inner, field(1, encodeNode(txn)));
-      cu.transaction = nodeToJson(txn);
+      // the verifier decodes the record's binary form: the update's transaction is the struct that decoder makes (a trailing field it reads as a known one)
+      cu.transaction = nodeToJson(redecode('Transaction', txn, true));
     }
-    if (us.receipt !== undefined && us.receipt !== null) {
-      const r = importReceipt(us.receipt, `${label}.updates.receipt`);
+    if (rcJ !== undefined) {
+      const r = importReceipt(rcJ, `${label}.updates.receipt`);
       app(inner, field(2, r.bin));
       cu.receipt = canonReceipt(nestedReceipt(r, ok));
     }
     app(out, field(3, Uint8Array.from(inner.length === 0 ? [0x80] : inner)));
     updates.push(cu);
   }
-  canonical.updates = updates;
   const rootProof = ptr(s.rootProof, (x) => receiptListFromJson(x, { v: true }));
   if (rootProof !== undefined) {
     const rp = receiptListFromJson(rootProof, ok);
     app(out, field(4, rp.bin));
     canonical.rootProof = rp.canonical;
   }
+  // a record with no field written is the single byte 0x80 (encoding.Writer.Reset), whose extra data follows it
+  if (out.length === 0) out.push(0x80);
   // the record's extra data (an unknown trailing field, or whatever Go's JSON reads into $epilogue) follows its last known field
   const extra = strptr(s.$epilogue, `${label}.$epilogue`);
   if (extra !== undefined) {
@@ -251,6 +300,17 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
     if (!b) throw new JsonError(`error decoding ${label}.$epilogue: encoding/hex: invalid byte`);
     app(out, b);
   }
+  // The updates are those of the record's BINARY form (api.MinorRootRecord.UnmarshalBinaryFrom reads every field 3 of it): what the JSON spelled, then one
+  // update more for each field 3 the extra data opens with.
+  const binUpdates = recordUpdateBins(Uint8Array.from(out));
+  for (let k = updates.length; k < binUpdates.length; k++) {
+    const bu = binUpdates[k]!;
+    const cu: Record<string, unknown> = {};
+    if (bu.tx !== undefined) cu.transaction = nodeToJson(decodeObject('Transaction', bu.tx));
+    if (bu.rc !== undefined) cu.receipt = canonReceipt({ start: new Uint8Array(0), anchor: new Uint8Array(0), entries: [], bin: bu.rc });
+    updates.push(cu);
+  }
+  canonical.updates = updates;
   // A record that does not decode (an unplaceable trailing field of its own or of a receipt nested in it) is refused where the walk reaches it.
   const decodes = ok.v && recordDecodes(Uint8Array.from(out));
   if (!decodes) Object.defineProperty(canonical, UNDECODABLE, { value: true });
@@ -264,16 +324,21 @@ export function majorFromJson(j: unknown, label: string): Record<string, unknown
   if (s.index !== undefined && s.index !== null) {
     canonical.index = u64(s.index, `${label}.index`);
   }
-  if (s.entry !== undefined && s.entry !== null) canonical.entry = nodeToJson(nodeFromJson('IndexEntry', s.entry, `${label}.entry`));
-  if (s.anchor !== undefined && s.anchor !== null) canonical.anchor = importSequenced(s.anchor, `${label}.anchor`).canonical;
+  // MajorHeaderRecord holds its entry and its anchor by pointer: a later null clears them (what came before it is still decoded)
+  const entryJ = ptr(s.entry, (x) => nodeFromJson('IndexEntry', x, `${label}.entry`));
+  if (entryJ !== undefined) canonical.entry = nodeToJson(nodeFromJson('IndexEntry', entryJ, `${label}.entry`));
+  const anchorJ = ptr(s.anchor, (x) => importSequenced(x, `${label}.anchor`, false));
+  if (anchorJ !== undefined) canonical.anchor = importSequenced(anchorJ, `${label}.anchor`, false).canonical;
   canonical.signatures = keySignatures(s.signatures, label).map((x) => x.canonical);
   const updates: Record<string, unknown>[] = [];
-  for (const u of jsonList(s.updates, 'Updates') ?? []) {
+  for (const u of updateList(s.updates) ?? []) {
     const us = struct(u, ['transaction', 'receipt'], 'NetworkUpdateProof');
     const cu: Record<string, unknown> = {};
-    if (us.transaction !== undefined && us.transaction !== null) cu.transaction = nodeToJson(nodeFromJson('Transaction', us.transaction, `${label}.updates.transaction`));
+    const txJ = ptr(us.transaction, (x) => nodeFromJson('Transaction', x, `${label}.updates.transaction`));
+    if (txJ !== undefined) cu.transaction = nodeToJson(nodeFromJson('Transaction', txJ, `${label}.updates.transaction`));
     // the archive keeps the structs json.Unmarshal built (portable.go Import): a receipt nested in a major record is not decoded from binary
-    if (us.receipt !== undefined && us.receipt !== null) cu.receipt = canonReceiptJson(importReceipt(us.receipt, `${label}.updates.receipt`));
+    const rcJ = ptr(us.receipt, (x) => importReceipt(x, `${label}.updates.receipt`));
+    if (rcJ !== undefined) cu.receipt = canonReceiptJson(importReceipt(rcJ, `${label}.updates.receipt`));
     updates.push(cu);
   }
   canonical.updates = updates;

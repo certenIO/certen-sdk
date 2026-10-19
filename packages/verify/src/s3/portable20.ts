@@ -24,6 +24,17 @@ function recordJson(cls: string, raw: unknown, label: string): { json: Rec; bin:
   return { json: nodeToJson(nodeFromJson(cls, raw, label)) as Rec, bin };
 }
 
+/**
+ * The binary state of each account the 2.0 verifier is handed, by the canonical JSON object it reads (protocol.UnmarshalAccountJSON then MarshalBinary,
+ * extra data included): the SDK's classes cannot hold the trailing fields a type keeps, so the bytes a receipt proves are taken from here.
+ */
+const accountStates = new WeakMap<object, { state: Uint8Array; undecodable?: string }>();
+export const accountStateOf = (canonical: object): { state: Uint8Array; undecodable?: string } | undefined => accountStates.get(canonical);
+const withState = (json: Rec, state: Uint8Array, undecodable?: string): Rec => {
+  accountStates.set(json, { state, undecodable });
+  return json;
+};
+
 function accountJson(raw: unknown, label: string): Rec {
   const node = unionFromJson('Account', raw, label);
   if (!node) throw new VerifyError(`${label}: an account of no type`);
@@ -35,7 +46,7 @@ function checkAccountJson(a: CheckAccount, recordCls: string, label: string): Re
   const sr = struct(a.json.stateReceipt, ['localBlock'], `${label} stateReceipt`);
   return {
     accountUrl: a.accountUrl,
-    account: nodeToJson(a.node, 'Account'),
+    account: withState(nodeToJson(a.node, 'Account'), a.state, a.undecodable),
     record: recordJson(recordCls, a.json.record, `${label} record`).json,
     stateReceipt: { start: a.receipt.start, anchor: a.receipt.anchor, localBlock: u64(sr.localBlock, `${label} stateReceipt.localBlock`), entries: a.receipt.entries },
     chains: a.chains,
@@ -87,7 +98,7 @@ export function canonicalize20(doc: Rec): Rec & { [SET_CHECK_REFUSAL]?: Error } 
     anchor: { message: ev.anchor.message.canonical, receipt: canonReceipt(ev.anchor.receipt) },
     pages: ev.pages.map((p, i) => ({
       ...pagesIn[i],
-      account: nodeToJson(decodeAccount(p.state), 'Account'),
+      account: withState(nodeToJson(decodeAccount(p.state), 'Account'), p.state),
       receipt: canonReceipt(p.receipt),
     })),
     check: held

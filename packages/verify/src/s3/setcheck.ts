@@ -11,12 +11,12 @@ import { VerifyError, equal, fail, toHex } from '../proof-v2/bytes.js';
 import { CertifyCode, certifyState } from './certify.js';
 import type { SetVerdict } from '../proof-v2/verify.js';
 import { accumulateSetRoot, type AccumulateValidator } from '../proof-v2/accset.js';
-import { decodeObject, type WireNode } from '../sigtypes/wire.js';
+import { decodeObject, WireError, type WireNode } from '../sigtypes/wire.js';
 import { AccUrl, goEqualFold } from './acc.js';
 import { mustHex32, verifyAccountState, type ChainedReceipt } from './chains.js';
 import type { ChainRoot } from './evidence.js';
 import { bool, list, str, struct, u64, u64big } from './gojson.js';
-import { accountState, recordBytes } from './jsonwire.js';
+import { accountState, recordBytes, unionFromJson } from './jsonwire.js';
 import { bigOf, bytesOf, decodeAccount, nodesOf, urlOf } from './model.js';
 
 /** The members of a PortableAccount. */
@@ -29,6 +29,11 @@ export interface CheckAccount {
   state: Uint8Array;
   /** The account and its single data entry's bytes. */
   node: WireNode;
+  /**
+   * Why the binary state does not decode as an account, when it does not: the import reads the account from its JSON and marshals it (no decode), so a
+   * state whose extra data cannot be placed imports and is refused where the set check decodes it (proveAccount).
+   */
+  undecodable?: string;
   entry: Uint8Array;
   chains: ChainRoot[];
   receipt: ChainedReceipt;
@@ -75,10 +80,29 @@ export function importCheckAccount(pa: Record<string, unknown>, recordCls: strin
   const secondaryHash = str(s.secondaryHash, `${label}.secondaryHash`);
   const pendingHash = str(s.pendingHash, `${label}.pendingHash`);
   const state = accountState(s.account, `${label} account`);
-  const node = decodeAccount(state);
-  const entry = node.cls === 'DataAccount' ? node.fields.get('entry') : undefined;
+  // portable.go importAccount reads the account from its JSON (UnmarshalAccountJSON) and never decodes the bytes it wrote: the one-entry test and the
+  // record are those of the account the JSON built; the bytes are decoded where the set check uses them (proveAccount)
+  const built = unionFromJson('Account', s.account, `${label} account`);
+  if (!built) fail(`${label}: ${accountUrl} is an account of no type, not a one-entry data account`);
+  const entry = built.cls === 'DataAccount' ? built.fields.get('entry') : undefined;
   const data = entry && typeof entry === 'object' && !(entry instanceof Uint8Array) && !Array.isArray(entry) ? (entry as WireNode).fields.get('data') : undefined;
-  if (node.cls !== 'DataAccount' || !Array.isArray(data) || data.length !== 1) fail(`${label}: ${accountUrl} is ${node.cls}, not a one-entry data account`);
+  if (built.cls !== 'DataAccount' || !Array.isArray(data) || data.length !== 1) fail(`${label}: ${accountUrl} is ${built.cls}, not a one-entry data account`);
+  let node: WireNode = built;
+  let undecodable: string | undefined;
+  try {
+    node = decodeAccount(state);
+    const dec = node.cls === 'DataAccount' ? node.fields.get('entry') : undefined;
+    const decData = dec && typeof dec === 'object' && !(dec instanceof Uint8Array) && !Array.isArray(dec) ? (dec as WireNode).fields.get('data') : undefined;
+    if (node.cls !== 'DataAccount' || !Array.isArray(decData) || decData.length !== 1 || !equal(decData[0] as Uint8Array, (data as Uint8Array[])[0]!)) {
+      // a trailing field the decoder reads as another entry (or as a different one): the state is not the one-entry account the JSON described
+      undecodable = 'the state does not decode as the one-entry data account the JSON described';
+      node = built;
+    }
+  } catch (e) {
+    if (!(e instanceof WireError)) throw e;
+    undecodable = e.message;
+    node = built;
+  }
   const bytes = (data as Uint8Array[])[0]!;
   let enc: Uint8Array;
   try {
@@ -87,11 +111,12 @@ export function importCheckAccount(pa: Record<string, unknown>, recordCls: strin
     throw new VerifyError(`${label}: ${accountUrl}: record: ${(e as Error).message}`);
   }
   if (!equal(enc, bytes)) fail(`${label}: ${accountUrl}: record: the JSON does not re-encode to the record's bytes`);
-  return { accountUrl, state, node, entry: bytes, chains, receipt: chainedReceipt(s.stateReceipt, `${label} stateReceipt`), secondaryHash, pendingHash, json: s };
+  return { accountUrl, state, node, undecodable, entry: bytes, chains, receipt: chainedReceipt(s.stateReceipt, `${label} stateReceipt`), secondaryHash, pendingHash, json: s };
 }
 
 /** AccountStateProof.verify of an imported account: the proven root and the main chain's height. */
 export function proveAccount(a: CheckAccount): { root: Uint8Array; mainHeight: number | undefined } {
+  if (a.undecodable !== undefined) fail(`set check: ${a.accountUrl}: does not decode as an account: ${a.undecodable}`);
   return verifyAccountState(a.state, a.receipt, a.chains, a.secondaryHash, a.pendingHash);
 }
 

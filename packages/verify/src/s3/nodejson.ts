@@ -8,6 +8,7 @@ import { core } from 'accumulate-sdk-opendlt';
 import { TRANSACTION_TYPE_NAMES } from '../sigtypes/eip712-schema.js';
 import { binaryBytes } from '../sigtypes/gourl.js';
 import { flatFields, registryType, type TimeValue, type Value, type WireNode } from '../sigtypes/wire.js';
+import { JSON_IGNORES_EPILOGUE } from './jsonwire.js';
 
 interface Named {
   getName(v: number): string;
@@ -107,6 +108,8 @@ export function nodeToJson(n: WireNode, union?: string): Record<string, unknown>
     }
     out[d.name] = jsonOf(v, u);
   }
+  // the extra data a type keeps is written by its generated MarshalJSON as the member $epilogue (hex), as the JSON reader takes it back
+  if (n.extra.length > 0 && !JSON_IGNORES_EPILOGUE.has(n.cls)) out.$epilogue = Buffer.from(n.extra).toString('hex');
   return out;
 }
 

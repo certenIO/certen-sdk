@@ -30,6 +30,9 @@ const hash32 = (n: WireNode, name: string): Uint8Array => {
 
 /** decodeAnchor21: the shape of a delivered anchor of either kind (xdirectory.go). */
 export function decodeAnchor21(m: SeqMsg): PartitionAnchor21 {
+  // the anchor is read back from the binary form the import wrote (messaging.UnmarshalMessage): a trailing field it cannot place, or a nested value that
+  // does not decode, is no anchor
+  if (!m.decodes) throw new VerifyError('partition anchor: field Message: failed to unmarshal value: the message does not decode');
   if (m.kind !== 'transaction' || !m.txn || !nodeOf(m.txn, 'body')) {
     throw new VerifyError(`partition anchor is ${m.kind === 'transaction' ? '*messaging.TransactionMessage' : m.kind}, not a transaction`);
   }

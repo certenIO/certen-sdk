@@ -4,14 +4,16 @@
  * failure throws VerifyError; there is no weaker answer for the transaction, its certification or its pages. The
  * validator-set check's verdict is reported as is.
  */
-import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sameUrl, sequencedMessage, transactionHash } from './accumulate.js';
+import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sameUrl } from './accumulate.js';
 import { accumulateSetRoot, validatorsOf } from './accset.js';
 import { equal, fail, goHexStrict, goTrimSpace, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
 import { anchorBody, anchorMessage, list, optList, rec, str, uint, type Rec } from './shapes.js';
 import { BadNum, decodePortable } from '../s3/gotree.js';
 import { bit, mustHex32 } from '../s3/chains.js';
-import { canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
+import { accountStateOf, canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
+import { sequencedOf } from '../s3/seqmsg.js';
+
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
 export const VERSION = '2.0';
@@ -164,13 +166,18 @@ export function verifyPortableDecoded(document: unknown, trace: Trace = () => {}
   // The partition anchor (page.go anchorBody), proven into the same certified root.
   const evAnchor = rec(ev.anchor, 'evidence.anchor');
   const am = anchorMessage(evAnchor.message, 'partition anchor');
-  const msg = sequencedMessage(am.json, 'partition anchor');
   if (am.bodyType !== 'blockValidatorAnchor') fail(`partition anchor is ${am.bodyType}, not a block validator anchor`);
   if (!sameUrl(am.destination, 'acc://dn.acme') || !sameUrl(am.principal, 'acc://dn.acme/anchors')) {
     fail("partition anchor is not delivered to the Directory's anchor pool");
   }
   const body = anchorBody(am.body, 'partition anchor');
-  const anchorTx = transactionHash(msg.message.transaction);
+  // The anchor is read back from the binary form the import wrote (messaging.UnmarshalMessage), and its transaction is hashed as that decoder made it:
+  // a trailing field in the header or body is part of what the receipt proves.
+  const seq = sequencedOf(am.json);
+  if (!seq) fail('partition anchor: the message was not read as Go reads it');
+  if (!seq.decodes) fail('partition anchor: field Message: failed to unmarshal value: the message does not decode');
+  if (!seq.txnHash) fail('partition anchor: transaction hash: the transaction has no body');
+  const anchorTx = seq.txnHash;
   const ar = receiptFromJSON(evAnchor.receipt, 'partition anchor receipt');
   if (!equal(ar.start, anchorTx) || !equal(ar.anchor, cert.rootChainAnchor) || !receiptValid(ar)) {
     fail('partition anchor: its receipt does not prove the anchor transaction into the certified root');
@@ -187,7 +194,7 @@ export function verifyPortableDecoded(document: unknown, trace: Trace = () => {}
   for (const [i, pageJson] of optList(ev.pages, 'evidence.pages').entries()) {
     const p = rec(pageJson, `page ${i}`);
     const acct = account(p.account, `page ${i}`);
-    const state = encodeObject(acct);
+    const state = accountBytes(p.account, `page ${i}`);
     const pr = receiptFromJSON(p.receipt, `page ${i} receipt`);
     if (!equal(pr.start, sha256(state))) fail(`page: ${p.url}: the receipt does not start at the state's hash`);
     if (!equal(pr.anchor, stateRoot)) fail(`page: ${p.url}: the receipt ends at ${toHex(pr.anchor)}, not the block's state root ${toHex(stateRoot)}`);
@@ -273,19 +280,42 @@ function refuseMembersOf21(ev: Rec): void {
   }
 }
 
+/** protocol.UnmarshalAccountJSON then MarshalBinary: the account's bytes, with the extra data its type keeps (a member $epilogue), as the import made them. */
+function accountBytes(j: unknown, label: string): Uint8Array {
+  const held = j && typeof j === 'object' ? accountStateOf(j) : undefined;
+  if (!held) return fail(`${label}: the account was not read as Go reads it`);
+  if (held.undecodable !== undefined) fail(`${label}: does not decode as an account: ${held.undecodable}`);
+  return held.state;
+}
+
 interface Proven {
-  root: Uint8Array; // the BPT root the account is proven into
+  root: Uint8Array; // the BPT root the account is proven into (once verifyProven has run)
   entry: Uint8Array; // the data account's single entry
   record: Rec; // that entry, decoded (JSON)
   mainHeight?: number;
+  /** The account's proof: judged by verifyProven, which ValidatorSetProof.Verify runs only when both accounts carry a state receipt. */
+  pa: Rec;
+  state: Uint8Array;
+  label: string;
+  /** The state receipt has no entries: an absent proof, which is the named verdict validator_set_asserted and not an error. */
+  absent: boolean;
+}
+
+/** ValidatorSetProof.MainChainHeight: the count of the first chain named main, as the document states it. */
+function statedMainHeight(chains: unknown): number | undefined {
+  if (!Array.isArray(chains)) return undefined;
+  for (const c of chains) {
+    if (c && typeof c === 'object' && (c as Rec).name === 'main') return Number(restatedCount((c as Rec).count, 'main chain count'));
+  }
+  return undefined;
 }
 
 /** AccountStateProof.verify, with the account and its record rebuilt from JSON and re-encoded. */
 function provenAccount(proven: unknown, label: string): Proven {
   if (!proven) fail(`set check ${label}: missing`);
   const pa = rec(proven, `set check ${label}`);
-  const acct = account(pa.account, `set check ${label}`);
-  const state = encodeObject(acct);
+  account(pa.account, `set check ${label}`);
+  const state = accountBytes(pa.account, `set check ${label}`);
   const n = rec(pa.account, `set check ${label} account`);
   const entryJson = n.entry && typeof n.entry === 'object' ? (n.entry as Rec) : undefined;
   if (n.type !== 'dataAccount' || !entryJson || !Array.isArray(entryJson.data) || entryJson.data.length !== 1) {
@@ -295,6 +325,14 @@ function provenAccount(proven: unknown, label: string): Proven {
   const decoded = label === 'network' ? networkDefinition(pa.record) : networkGlobals(pa.record);
   if (!equal(encodeObject(decoded), entry)) fail(`set check ${label}: ${String(pa.accountUrl)}: record: the JSON does not re-encode to the record's bytes`);
 
+  const sr = pa.stateReceipt && typeof pa.stateReceipt === 'object' ? (pa.stateReceipt as Rec) : undefined;
+  const absent = !Array.isArray(sr?.entries) || (sr!.entries as unknown[]).length === 0;
+  return { root: new Uint8Array(32), entry, record: rec(pa.record, `set check ${label} record`), mainHeight: statedMainHeight(pa.chains), pa, state, label, absent };
+}
+
+/** AccountStateProof.verify (steps 11-13): the state hashes to the leaf, the path validates, the chain history is bound. */
+function verifyProven(p: Proven): void {
+  const { pa, state, label } = p;
   // 11. the state hashes to the leaf being proven; 12. the path validates.
   const r = receiptFromJSON(pa.stateReceipt, `set check ${label} stateReceipt`);
   // Go reads start and anchor through MustHex32Lower (exactly 64 hex characters, so no 0x prefix) and compares the strings.
@@ -308,8 +346,8 @@ function provenAccount(proven: unknown, label: string): Proven {
   const rawSteps = (pa.stateReceipt as Record<string, unknown>).entries;
   const firstHash = Array.isArray(rawSteps) && rawSteps.length > 0 ? (rawSteps[0] as Record<string, unknown>).hash : undefined;
   const secondHash = Array.isArray(rawSteps) && rawSteps.length > 1 ? (rawSteps[1] as Record<string, unknown>).hash : undefined;
-  const mainHeight = chainBinding(r, firstHash, secondHash, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
-  return { root: r.anchor, entry, record: rec(pa.record, `set check ${label} record`), mainHeight };
+  p.mainHeight = chainBinding(r, firstHash, secondHash, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
+  p.root = r.anchor;
 }
 
 /**
@@ -386,6 +424,10 @@ function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array }
 
 /** ValidatorSetProof.Verify steps 11-17, with the asserted set being the derived one (as proofv2.Verify passes it). */
 function setVerdict(check: Rec, net: Proven, glob: Proven, bound: Uint8Array, pin: Uint8Array): SetVerdict {
+  // 10. an absent proof is a named state, NOT an error (ValidatorSetProof.Verify judges neither account's receipt then)
+  if (net.absent || glob.absent) return 'validator_set_asserted';
+  verifyProven(net);
+  verifyProven(glob);
   if (!equal(net.root, glob.root)) fail('validatorSetProof: the two accounts are proven into different BPT roots');
   // 14. the set and threshold decode (decodeValidators, decodeAcceptThreshold).
   const vs = net.record.validators;

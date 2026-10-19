@@ -6,6 +6,8 @@
 import { equal, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { CERTIFY_DETAILS, CertifyCode } from './certify-names.js';
 import type { Rcpt } from './rcpt.js';
+import { decodeObject, decodeUnion } from '../sigtypes/wire.js';
+import { enumByName } from './enum-names.js';
 
 export { CertifyCode, CERTIFY_DETAILS, CERTIFY_FIELDS, CERTIFY_SIDE, CERTIFY_NAMES_SHA256 } from './certify-names.js';
 
@@ -182,6 +184,20 @@ class Rd {
     return v === 1n;
   }
 
+  /** ReadUint: the value of field n, undefined when the field is not there (or the stream is broken). */
+  readUint(n: number): bigint | undefined {
+    if (!this.readField(n)) return undefined;
+    return this.value();
+  }
+
+  /** The number of bytes left in this (sub)reader, and a copy of them. */
+  rest(): number {
+    return this.end - this.pos;
+  }
+  restBytes(): Uint8Array {
+    return this.b.slice(this.pos, this.end);
+  }
+
   /** ReadValue: a length-prefixed sub-reader handed to unmarshal; true when it was read and decoded. */
   readValue(n: number, unmarshal: (sub: Rd) => boolean): boolean {
     if (!this.readField(n)) return false;
@@ -243,9 +259,11 @@ function readReceipt(r: Rd): { start: Uint8Array; anchor: Uint8Array; entries: {
 
 /** api.NetworkUpdateProof.UnmarshalBinaryFrom: its transaction (judged by the import that wrote it), its receipt, and extra data that opens above field 2. */
 function updateDecodes(sub: Rd): boolean {
-  sub.readValue(1, () => true);
+  // the transaction is decoded as Accumulate decodes it: an entry or a body whose extra data cannot be placed is no update
+  sub.readValue(1, (s) => s.rest() === 0 || transactionDecodes(s.restBytes()));
   sub.readValue(2, (s) => readReceipt(s) !== undefined);
-  sub.trailing(2);
+  // NetworkUpdateProof.UnmarshalBinaryFrom reads ReadValue(1), ReadValue(2) and then ReadAll: readValue(2) looks ahead when field 2 is absent, and what
+  // follows is extra data whatever its first field number.
   return !sub.err;
 }
 
@@ -254,14 +272,131 @@ function updateDecodes(sub: Rd): boolean {
  * order (the nested values are judged by the import that wrote them), and whatever follows is extra data - a record tolerates an unknown trailing
  * field 5..32 - unless it opens with a field number the reader cannot place after the record's own (1..3), or one above 32, or is cut short.
  */
+/**
+ * merkle.ReceiptList.UnmarshalBinary: its state (field 1), every element (field 2), its receipt (3) and its continued receipt (4), and the extra data
+ * after them; a value that does not decode, or extra data the reader meets as an out-of-place field, is no list.
+ */
+export function receiptListParts(bin: Uint8Array): { elements: Uint8Array[]; receipt?: Uint8Array; continued?: Uint8Array } {
+  const r = new Rd(bin, 0, bin.length);
+  r.readValue(1, () => true);
+  const elements: Uint8Array[] = [];
+  for (;;) {
+    const e = r.readBytes(2);
+    if (e === undefined) break;
+    elements.push(e);
+  }
+  let receipt: Uint8Array | undefined;
+  let continued: Uint8Array | undefined;
+  r.readValue(3, (s) => {
+    receipt = s.restBytes();
+    return true;
+  });
+  r.readValue(4, (s) => {
+    continued = s.restBytes();
+    return true;
+  });
+  return { elements, receipt, continued };
+}
+
+export function receiptListDecodes(bin: Uint8Array): boolean {
+  const r = new Rd(bin, 0, bin.length);
+  return readReceiptList(r);
+}
+function readReceiptList(r: Rd): boolean {
+  r.readValue(1, () => true);
+  while (r.readBytes(2) !== undefined);
+  r.readValue(3, (s) => s.rest() === 0 || readReceipt(s) !== undefined);
+  r.readValue(4, (s) => s.rest() === 0 || readReceipt(s) !== undefined);
+  return !r.err;
+}
+
 export function recordDecodes(bin: Uint8Array): boolean {
   const r = new Rd(bin, 0, bin.length);
-  const skip = (): boolean => true;
-  r.readValue(1, skip);
-  while (r.readValue(2, skip));
+  // the content of the anchor (field 1) and of every signature (field 2) is decoded as Go decodes it: an epilogue that opens with field 1 or 2 carries
+  // one, and a value that is not a message or a signature (0100, 0200: its Type is missing) is refused
+  r.readValue(1, (s) => s.rest() > 0 && messageDecodes(s.restBytes()));
+  while (r.readValue(2, (s) => signatureDecodes(s.restBytes())));
   while (r.readValue(3, updateDecodes));
-  r.readValue(4, skip);
+  r.readValue(4, (s) => readReceiptList(s));
   return !r.err;
+}
+
+/**
+ * messaging.UnmarshalMessage over a message's binary form: the type (field 1) picks the message, whose fields are read in order and whose extra data must
+ * open with a field number the reader can place - and the transaction, the signature and the wrapped message inside it decode as Accumulate decodes them.
+ * The sequenced, transaction and signature messages are the ones a proof carries; any other type is not read here.
+ */
+export function messageDecodes(bin: Uint8Array): boolean {
+  return readMessage(new Rd(bin, 0, bin.length), bin);
+}
+
+function readMessage(r: Rd, bin: Uint8Array): boolean {
+  const type = new Rd(bin, 0, bin.length).readUint(1);
+  if (type === undefined) return false;
+  const txn = (s: Rd): boolean => {
+    const b = s.restBytes();
+    if (b.length === 0) return true;
+    try {
+      decodeObject('Transaction', b);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (Number(type) === enumByName('MessageType', 'sequenced')) {
+    r.readUint(1);
+    r.readValue(2, (s) => readMessage(s, s.restBytes()));
+    r.readBytes(3);
+    r.readBytes(4);
+    r.readUint(5);
+  } else if (Number(type) === enumByName('MessageType', 'transaction')) {
+    r.readUint(1);
+    r.readValue(2, txn);
+  } else if (Number(type) === enumByName('MessageType', 'signature')) {
+    r.readUint(1);
+    r.readValue(2, (s) => s.rest() === 0 || signatureDecodes(s.restBytes()));
+    r.readBytes(3);
+  } else return false;
+  return !r.err;
+}
+
+const transactionDecodes = (b: Uint8Array): boolean => {
+  try {
+    decodeObject('Transaction', b);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const signatureDecodes = (b: Uint8Array): boolean => {
+  try {
+    decodeUnion('Signature', b);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The updates a minor-root record's BINARY form carries (decodeMinorRoot reads mr.Updates from the bytes, so a record whose extra data opens with field 3
+ * has one more update per value, whatever its JSON spelled): each update's transaction and receipt as binary, undefined when the update lacks it.
+ */
+export function recordUpdateBins(bin: Uint8Array): { tx?: Uint8Array; rc?: Uint8Array }[] {
+  const r = new Rd(bin, 0, bin.length);
+  r.readValue(1, () => true);
+  while (r.readValue(2, () => true));
+  const out: { tx?: Uint8Array; rc?: Uint8Array }[] = [];
+  for (;;) {
+    let u: { tx?: Uint8Array; rc?: Uint8Array } = {};
+    const ok = r.readValue(3, (sub) => {
+      u = { tx: sub.readBytes(1), rc: sub.readBytes(2) };
+      return !sub.err;
+    });
+    if (!ok) break;
+    out.push(u);
+  }
+  return out;
 }
 
 /**

@@ -13,9 +13,8 @@ import {
   networkDefinition,
   networkGlobals,
   sameUrl,
-  sequencedMessage,
   transaction,
-  transactionHash,
+  transactionHashOfJson,
   verifySignature,
 } from './accumulate.js';
 import { equal, fail, hexBytes, receiptFromJSON, receiptListParts, receiptListValid, receiptValid, toHex, UNDECODABLE } from './bytes.js';
@@ -267,12 +266,15 @@ export function selfAnchorBlock(m: unknown): bigint | undefined {
 
 /** checkDirectorySelfAnchor. */
 function directorySelfAnchor(m: AnchorMessage, label: string): { hash: Uint8Array; body: AnchorBody } {
-  const msg = sequencedMessage(m.json, `${label}.anchor`);
   if (m.bodyType !== 'directoryAnchor') fail(`${label}: anchor is ${m.bodyType}, not a directory anchor`);
   if (!sameUrl(m.source, 'acc://dn.acme') || !sameUrl(m.destination, 'acc://dn.acme') || !sameUrl(m.principal, 'acc://dn.acme/anchors')) {
     fail(`${label}: anchor is not a directory self-anchor`);
   }
-  return { hash: sequencedHashOf(m.json) ?? messageHash(msg), body: anchorBody(m.body, `${label}.anchor`) };
+  // The hash is the one Go's reader computes from the message's binary form, extra data included; an anchor whose message was not imported has none, and
+  // is refused here rather than judged by the hash of a re-encoding.
+  const hash = sequencedHashOf(m.json);
+  if (hash === undefined) fail(`${label}: the anchor message was not read as Go reads it, so its hash is not established`);
+  return { hash, body: anchorBody(m.body, `${label}.anchor`) };
 }
 
 /** verifyQuorum: every signature valid and by an active Directory validator; distinct signers >= threshold. */
@@ -309,8 +311,8 @@ function applyProvenUpdate(
   // The principal is read (and required) first when the update's window is to be judged: Go refuses an update without one before anything else.
   const principalOf = (): string => str(rec(ut.header ?? {}, `${label}.transaction.header`).principal, `${label}.transaction.header.principal`);
   const early = window ? principalOf() : '';
-  const tx = transaction(ut, `${label}.transaction`);
-  const h = transactionHash(tx);
+  transaction(ut, `${label}.transaction`); // the SDK must still accept the transaction's shape; its hash is that of the wire object below
+  const h = transactionHashOfJson(ut, `${label}.transaction`);
   const r = receiptFromJSON(u.receipt, `${label}.receipt`);
   if (!equal(r.start, h)) fail(`${label}: network update receipt does not start at the transaction`);
   if (!equal(r.anchor, root)) fail(`${label}: network update receipt does not end at the anchor's root`);

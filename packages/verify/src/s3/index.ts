@@ -9,6 +9,7 @@
  */
 import { verifyPortableDecoded, type Report } from '../proof-v2/verify.js';
 import { VerifyError } from '../proof-v2/bytes.js';
+import { WireError } from '../sigtypes/wire.js';
 import { verifyPortable21 } from './portable21.js';
 import { decodePortable } from './gotree.js';
 import type { Report21 } from './xtypes.js';
@@ -48,8 +49,15 @@ export function verifyPortableAny(document: unknown): { version: '2.0'; report: 
 
 function verifyDecoded(doc: Record<string, unknown>): { version: '2.0'; report: Report } | { version: '2.1'; report: Report21 } {
   const ev = doc.evidence as Record<string, unknown>;
-  if (ev.version === VERSION_21) return { version: '2.1', report: verifyPortable21(doc) };
-  return { version: '2.0', report: verifyPortableDecoded(doc) };
+  try {
+    if (ev.version === VERSION_21) return { version: '2.1', report: verifyPortable21(doc) };
+    return { version: '2.0', report: verifyPortableDecoded(doc) };
+  } catch (e) {
+    // Bytes that are not an Accumulate value (a field that cannot be placed, a varint cut short) are a value Go's decoder refuses: a plain refusal of the
+    // document, never a defect of the verifier.
+    if (e instanceof WireError) throw new VerifyError(`undecodable: ${e.message}`);
+    throw e;
+  }
 }
 
 export { govRootV4FromHashes, govRootV4FromPortable, computeGovRootV4, govRootV4G1, govRootV4G2, encodeVoteV4, votesRootV4, pagesRootV4, pagesRootInputs, pageCounts, voteWire, GOVROOT_V4_DOMAIN, GOVROOT_V4_TAGS, VOTE_RECORD_TAG_V4 } from './govroot-v4.js';

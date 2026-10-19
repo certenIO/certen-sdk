@@ -189,7 +189,7 @@ function chainRootJson(c: ChainRoot): string {
   return obj([
     member('name', strJson(c.name)),
     member('pending', c.pending === undefined ? 'null' : arr(c.pending.map((p) => (p === null ? 'null' : strJson(p))))),
-    member('count', String(c.count)),
+    member('count', c.countBig.toString()),
     member('anchor', strJson(c.anchor)),
   ]);
 }

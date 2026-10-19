@@ -8,6 +8,9 @@ import { core, messaging } from 'accumulate-sdk-opendlt';
 import { encode } from 'accumulate-sdk-opendlt/encoding';
 import { keccak256 as sdkKeccak256 } from 'accumulate-sdk-opendlt/common';
 import { equal, fail, hexBytes, MerkleState, sha256, uvarint } from './bytes.js';
+import { encodeNode } from '../sigtypes/wire.js';
+import { transactionHash as nodeTransactionHash, TransactionHashError } from '../sigtypes/txhash.js';
+import { nodeFromJson, unionFromJson } from '../s3/jsonwire.js';
 
 /**
  * The parts of accumulate-sdk-opendlt's objects this verifier uses, stated once. The SDK's classes are not exported with
@@ -74,6 +77,25 @@ export function sequencedMessage(j: unknown, label: string): { message: { transa
 /** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). */
 export function messageHash(msg: unknown): Uint8Array {
   return sha256(encodeObject(msg));
+}
+
+/**
+ * protocol.Transaction.GetHash of a transaction's JSON, computed from the wire object the generated JSON reader makes of it - its header and body with
+ * the extra data they keep (a member $epilogue), which the SDK's classes cannot hold. A transaction with no body has no hash.
+ */
+export function transactionHashOfJson(j: unknown, label: string): Uint8Array {
+  let node;
+  try {
+    node = nodeFromJson('Transaction', j, label);
+  } catch (e) {
+    return fail(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    return nodeTransactionHash(node);
+  } catch (e) {
+    if (e instanceof TransactionHashError) return fail(`transaction hash: ${e.message}`);
+    throw e;
+  }
 }
 
 /** protocol.Transaction.GetHash, through the SDK's own TransactionBase.hash. */
@@ -165,7 +187,10 @@ export function verifySignature(sigJson: unknown, msgHash: Uint8Array, label: st
   const md: Record<string, unknown> = { ...s };
   delete md.signature;
   delete md.transactionHash;
-  const mdHash = sha256(encodeObject(sdk.Signature.fromObject(md)));
+  sdkRefusal(`${label}`, () => sdk.Signature.fromObject(md)); // the SDK must still accept the signature's shape
+  const sigNode = unionFromJson('Signature', md, label);
+  if (!sigNode) fail(`${label}: no signature`);
+  const mdHash = sha256(encodeNode(sigNode));
   if (ed25519(pub, combine(mdHash), sig)) return true;
 
   const signerVersion = Number(s.signerVersion ?? 0);

@@ -375,7 +375,8 @@ export function decodeVal(s: Sch, v: JVal, label: string, into?: GoVal): GoVal {
   if ('map' in s) {
     if (v === null) return null;
     if (!(v instanceof JObj)) mismatch(v, 'map', label);
-    const m = new Map<string, GoVal>();
+    // json.Unmarshal reuses a map that is not nil: a later object adds its keys (each decoded into a fresh element) and drops none
+    const m = into instanceof Map ? (into as Map<string, GoVal>) : new Map<string, GoVal>();
     for (const [k, e] of (v as JObj).pairs) m.set(k, decodeVal(s.map, e, `${label}.${k}`, zero(s.map)));
     return m;
   }

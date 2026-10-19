@@ -53,8 +53,65 @@ const UNION_ENUM: Readonly<Record<string, string>> = {
 };
 
 /** The enum a non-discriminating field names. */
-/** The struct-valued members the protocol's generated types hold by pointer (protocol.NetworkGlobals: FeeSchedule *FeeSchedule, Limits *NetworkLimits). */
-const POINTER_STRUCTS: ReadonlySet<string> = new Set(['NetworkGlobals.feeSchedule', 'NetworkGlobals.limits']);
+/**
+ * The struct-valued members the protocol's generated types hold by pointer (every `*T` field of a generated struct whose T is a generated struct, from
+ * protocol/types_gen.go of accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c): a JSON null sets one to nil, so only what follows the last null decodes into it.
+ */
+const POINTER_STRUCTS: ReadonlySet<string> = new Set([
+  'AnnotatedReceipt.receipt',
+  'AnnotatedReceipt.anchor',
+  'AnnotatedReceipt.receiptList',
+  'CreateTokenAccount.proof',
+  'KeyBookProof.keyBook',
+  'KeyBookProof.receipt',
+  'NetworkGlobals.feeSchedule',
+  'NetworkGlobals.limits',
+  'PartitionAnchorReceipt.anchor',
+  'PartitionAnchorReceipt.rootChainReceipt',
+  'SetLiteAccountDelegate.proof',
+  'SyntheticForwardTransaction.transaction',
+  'TokenIssuerProof.transaction',
+  'TokenIssuerProof.receipt',
+  'TransactionHeader.expire',
+  'TransactionHeader.holdUntil',
+  'TransactionHeader.hashLock',
+  'TransactionStatus.proof',
+]);
+
+/**
+ * The hash members the generated UnmarshalJSON reads through encoding.ChainFromJSON and then dereferences (`v.X = *x`): a JSON null as the last occurrence leaves the
+ * pointer nil and Go's Import recovers from the panic, refusing the document as one Accumulate's codec cannot decode (protocol/types_gen.go of accumulate
+ * v1.4.7-0.20260926030013-e1d1db9ebb7c).
+ */
+const CHAIN_DEREF: ReadonlySet<string> = new Set([
+  'BTCLegacySignature.transactionHash',
+  'BTCSignature.transactionHash',
+  'BlockValidatorAnchor.rootChainAnchor',
+  'BlockValidatorAnchor.stateTreeAnchor',
+  'DirectoryAnchor.rootChainAnchor',
+  'DirectoryAnchor.stateTreeAnchor',
+  'ED25519Signature.transactionHash',
+  'ETHSignature.transactionHash',
+  'EcdsaSha256Signature.transactionHash',
+  'FactomDataEntry.accountId',
+  'FactomDataEntryWrapper.accountId',
+  'InternalSignature.cause',
+  'InternalSignature.transactionHash',
+  'LegacyED25519Signature.transactionHash',
+  'PartitionAnchor.rootChainAnchor',
+  'PartitionAnchor.stateTreeAnchor',
+  'PartitionSignature.transactionHash',
+  'RCD1Signature.transactionHash',
+  'ReceiptSignature.transactionHash',
+  'RemoteTransaction.hash',
+  'RsaSha256Signature.transactionHash',
+  'SendTokens.hash',
+  'SignatureSet.transactionHash',
+  'TransactionHeader.initiator',
+  'TypedDataSignature.transactionHash',
+  'ValidatorInfo.publicKeyHash',
+  'WriteDataResult.entryHash',
+]);
 
 function enumOf(cls: string, field: string): string | undefined {
   if (field === 'vote') return 'VoteType';
@@ -223,7 +280,7 @@ function lastScalar(cls: string, d: FieldDesc, vals: unknown[], label: string): 
   for (const x of vals) {
     if (x === null) {
       // an enum held by value: its UnmarshalJSON is called with null and refuses it
-      if (d.kind === 'enum' && !d.repeatable) return bad(`invalid ${enumOf(cls, d.name) ?? 'enum'} ""`);
+      if (d.kind === 'enum' && !d.repeatable && enumOf(cls, d.name) !== undefined) return bad(`invalid ${enumOf(cls, d.name)} ""`);
       if (pointer) {
         out = undefined;
         pending = undefined;
@@ -243,6 +300,58 @@ function lastScalar(cls: string, d: FieldDesc, vals: unknown[], label: string): 
   return out;
 }
 
+/**
+ * The types that keep extra data in binary but have NO generated UnmarshalJSON, so Go's encoding/json reads them by their fields alone and a member
+ * "$epilogue" is an unknown key that is dropped (a Rational, a PartitionInfo, a Route ...: a trailing field spelled in the JSON of a network definition,
+ * the globals or the routing table leaves the record unchanged and re-encodes to it). Computed from accumulate v1.4.7-0.20260926030013-e1d1db9ebb7c
+ * (protocol/types_gen.go and pkg/api/v3/types_gen.go: the struct types with an extraData field and no "func (v *T) UnmarshalJSON").
+ */
+export const JSON_IGNORES_EPILOGUE: ReadonlySet<string> = new Set([
+  'AcmeOracle',
+  'AnnotatedReceipt',
+  'AuthorityEntry',
+  'BlockEntry',
+  'ChainMetadata',
+  'CreditRecipient',
+  'ExpireOptions',
+  'HoldUntilOptions',
+  'IndexEntry',
+  'KeyBookProof',
+  'NetworkLimits',
+  'PartitionAnchorReceipt',
+  'PartitionExecutorVersion',
+  'PartitionInfo',
+  'Rational',
+  'Route',
+  'RouteOverride',
+  'SyntheticOrigin',
+  'TokenIssuerProof',
+  'ValidatorPartitionInfo',
+  'AnchorReceiptRecord',
+  'NetworkUpdateProof',
+]);
+
+/**
+ * The member $epilogue of a generated type's JSON (hex; every occurrence is a string or null, the last is used, a null clears it): the extra data the
+ * type keeps after its last known field. undefined when there is none.
+ */
+export function epilogueFromPairs(pairs: [string, unknown][], label: string): Uint8Array | undefined {
+  let extra: string | undefined;
+  for (const x of occurrences(pairs, '$epilogue')) {
+    if (x === undefined) continue;
+    if (x === null) {
+      extra = undefined;
+      continue;
+    }
+    if (typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go struct field ${label}.$epilogue of type string`);
+    extra = x;
+  }
+  if (extra === undefined) return undefined;
+  const b = goHex(extra);
+  if (!b) return bad(`error decoding ${label}.$epilogue: encoding/hex: invalid byte`);
+  return b;
+}
+
 /** The generated <Type>.UnmarshalJSON: the object's members into a wire object of the class. */
 export function nodeFromJson(cls: string, j: unknown, label: string, member_ = false): WireNode {
   const node: WireNode = { cls, fields: new Map(), extra: new Uint8Array(0), empty: false };
@@ -260,6 +369,10 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
   for (const d of flatFields(cls)) {
     if (d.name === 'type' && member_) continue;
     const vals = occurrences(pairs, d.name);
+    if (CHAIN_DEREF.has(`${cls}.${d.name}`)) {
+      const seen = vals.filter((x) => x !== undefined);
+      if (seen.length > 0 && seen[seen.length - 1] === null) throw new JsonError("a value Accumulate's codec cannot decode (a member it needs is null or absent)");
+    }
     const lab = `${label}.${d.name}`;
     // protocol/types_gen.go: the aliases of the generated unmarshalers.
     if (cls === 'KeyPage' && d.name === 'acceptThreshold') {
@@ -310,6 +423,23 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
         mask = m;
       }
       if (mask !== undefined) node.fields.set('transactionBlacklist', mask);
+      continue;
+    }
+    if (d.repeatable && d.kind === 'bytes') {
+      // encoding.JsonList[*string]: every occurrence is only type-checked (a string or a null per element); the hex is decoded once, from the LAST list
+      // (generated code, after json.Unmarshal), and a null element is the empty byte string
+      let last: unknown[] | undefined;
+      for (const v of vals) {
+        if (v === undefined) continue;
+        if (v === null) {
+          last = undefined;
+          continue;
+        }
+        const list = Array.isArray(v) ? v : [v];
+        for (const e of list) if (e !== null && typeof e !== 'string') return bad(`json: cannot unmarshal ${describe(e)} into Go value of type string`);
+        last = list;
+      }
+      if (last !== undefined) node.fields.set(d.name, last.map((e, i) => (e === null ? new Uint8Array(0) : (scalar(cls, d, e, `${lab}[${i}]`) as Uint8Array))));
       continue;
     }
     if (d.repeatable) {
@@ -370,24 +500,13 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
     const x = lastScalar(cls, d, vals, lab);
     if (x !== undefined) node.fields.set(d.name, x);
   }
-  if (cls === 'merkle.Receipt' || cls === 'merkle.ReceiptEntry') {
-    // A receipt and its entries keep what follows their last known field as extra data, and the JSON reader takes it from the member $epilogue (hex; every
-    // occurrence is a string or null, the last is used): a receipt nested in a message (a DirectoryAnchor's receipts) is part of the bytes the quorum signed.
-    let extra: string | undefined;
-    for (const x of occurrences(pairs, '$epilogue')) {
-      if (x === undefined) continue;
-      if (x === null) {
-        extra = undefined;
-        continue;
-      }
-      if (typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go struct field ${label}.$epilogue of type string`);
-      extra = x;
-    }
-    if (extra !== undefined) {
-      const b = goHex(extra);
-      if (!b) return bad(`error decoding ${label}.$epilogue: encoding/hex: invalid byte`);
-      node.extra = b;
-    }
+  if (!JSON_IGNORES_EPILOGUE.has(cls)) {
+    // Every generated type keeps what follows its last known field as extra data, and its generated JSON reader takes it from the member $epilogue; a type
+    // that has no generated UnmarshalJSON is read by encoding/json's default and has no such member (JSON_IGNORES_EPILOGUE). The extra data of a nested
+    // transaction body, header or signature, a receipt in a message (a DirectoryAnchor's receipts) or a key page is part of the bytes Go hashes and the
+    // quorum signed.
+    const extra = epilogueFromPairs(pairs, label);
+    if (extra !== undefined) node.extra = extra;
   }
   return node;
 }
