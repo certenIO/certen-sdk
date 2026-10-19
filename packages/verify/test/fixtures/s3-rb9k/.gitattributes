@@ -1,0 +1,2 @@
+# The vectors are the Go validator's files byte for byte (their hashes are pinned in MANIFEST.json); no line-ending conversion may touch them.
+* -text

@@ -1,0 +1,438 @@
+package main
+
+// The object-class sweep (TS parity round B7, closing the "trailing field / structural" class mechanically): EVERY OBJECT path class and EVERY SCALAR
+// path class of EVERY base document of every suite is given, once per base (the first sweepK documents of each form that hold the class), each of:
+//
+//	object  - a trailing $epilogue (field numbers 0-8, 31-33, 64 with a value, and the bare bytes 01 03 04 21 ff 80), null, the member deleted, a wrong
+//	          JSON type (string, number, array, true), a duplicate key (a wrong value before the member; null and an empty object after it)
+//	scalar  - null, the member deleted, a wrong JSON type, a duplicate key (a wrong value before; null and a wrong value after), and for a number
+//	          the uint64 edge values (2^53-1, 2^53, 2^63, 2^64-1, 2^64)
+//	element - an array element: null, deleted, a wrong JSON type
+//
+// The validator it is written by is origin/pv2/rb9-f5-certify f16dc64 PLUS the one hunk of pv2/rb9-k-two-voter-vector 8a6790b (RB9-K-F1: pkg/proof/v2/xverify.go
+// deriveRoles does not apply the all-authorities-disabled rule to a transaction type that requires authorization): the xpartition6 documents are the RB9-K
+// vectors and their verdicts are those of that rule; neither branch contains the other yet (the two merge into main), and without the hunk the oracle judges
+// xpartition6/disable-op-voter-outside-the-list-every-authority-disabled.json differently (g1_role_mismatch{BVN3,90}) from the vector's manifest
+// (g1_vote_not_reproduced{BVN1,50}). Every other verdict of the 49846 is the same with or without it.
+//
+// A case is a list of byte edits of the base file, judged as the pathspell corpus is (the validator's json.Unmarshal into Portable and VerifyPortable);
+// the file is read by the same consumer (helpers/s3-bytes.ts). The bases are the earlier byte corpora's (xpartition .. xpartition5, both 2.0 fixtures,
+// the real document) and the synced suites certify1, xpartition6 and robust1 (named relative to the s3 fixtures directory: ../s3-f5/certify1/...).
+//
+// Regeneration (12 shards, three Go processes at a time; it writes the pinned files byte for byte, sha256 in test/s3-bytes-objsweep-{1..12}.test.ts):
+//
+//	git -C <validator> worktree add --detach <judge> f16dc64
+//	cd <judge> && git diff 8a6790b^ 8a6790b -- pkg/proof/v2/xverify.go | git apply
+//	mkdir cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile; do cp <certen-sdk>/packages/verify/test/fixtures/s3/gen/xtsgen-$f.go.txt cmd/xtsgen/$f.go; done
+//	S3=<certen-sdk>/packages/verify/test/fixtures/s3
+//	GOWORK=off go build -trimpath -o xtsgen ./cmd/xtsgen && for g in 0 3 6 9; do for i in $g $((g+1)) $((g+2)); do XTS_SHARD=$i/12 ./xtsgen -fixtures $S3 -out <dir> objsweep & done; wait; done
+//
+// (each shard is its own file, <dir>/bytes-cases-objsweep-<i>.json.gz for i = 0..11, consumed by test/s3-bytes-objsweep-<i+1>.test.ts)
+
+import (
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"regexp"
+	"sort"
+	"strings"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+)
+
+// sweepK is the number of documents of one form that a path class is swept in.
+const sweepK = 3
+
+type objNode struct {
+	class      string
+	key        string
+	kind       byte // o object, a array, s string, n number, t true/false, z null
+	vs, ve     int  // the value
+	closeAt    int  // objects: the position of the closing brace
+	nmembers   int  // objects: the member count
+	ms         int  // the member (key start), -1 for an array element or the root
+	delFrom    int  // the range a delete removes (member or element with its separating comma)
+	delTo      int
+	inArray    bool
+	rootObject bool
+}
+
+type objWalker struct {
+	b   []byte
+	out []objNode
+}
+
+func (w *objWalker) ws(i int) int {
+	for i < len(w.b) && (w.b[i] == ' ' || w.b[i] == '\n' || w.b[i] == '\t' || w.b[i] == '\r') {
+		i++
+	}
+	return i
+}
+
+func (w *objWalker) str(i int) int {
+	j := i + 1
+	for j < len(w.b) && w.b[j] != '"' {
+		if w.b[j] == '\\' {
+			j++
+		}
+		j++
+	}
+	return j + 1
+}
+
+// value walks the value that starts at i (after whitespace) and returns its end. idx is the position in w.out reserved for it.
+func (w *objWalker) value(i int, class, key string, ms int, inArray bool) int {
+	i = w.ws(i)
+	if i >= len(w.b) {
+		return i
+	}
+	n := objNode{class: class, key: key, vs: i, ms: ms, inArray: inArray}
+	idx := len(w.out)
+	w.out = append(w.out, n)
+	var end int
+	switch w.b[i] {
+	case '"':
+		end = w.str(i)
+		w.out[idx].kind = 's'
+	case '{':
+		w.out[idx].kind = 'o'
+		type mem struct{ ms, ve int }
+		var mems []mem
+		j := w.ws(i + 1)
+		var kids []int
+		for j < len(w.b) && w.b[j] != '}' {
+			ke := w.str(j)
+			k := string(w.b[j+1 : ke-1])
+			name := k
+			if strings.HasPrefix(strings.ToLower(k), "acc://") {
+				name = "{url}"
+			}
+			c := name
+			if class != "" {
+				c = class + "." + name
+			}
+			mstart := j
+			j = w.ws(ke)
+			j++ // ':'
+			kid := len(w.out)
+			j = w.value(j, c, name, mstart, false)
+			kids = append(kids, kid)
+			mems = append(mems, mem{mstart, j})
+			j = w.ws(j)
+			if j < len(w.b) && w.b[j] == ',' {
+				j = w.ws(j + 1)
+			}
+		}
+		w.out[idx].closeAt = j
+		w.out[idx].nmembers = len(mems)
+		for k, kid := range kids {
+			switch {
+			case k < len(mems)-1:
+				w.out[kid].delFrom, w.out[kid].delTo = mems[k].ms, mems[k+1].ms
+			case k > 0:
+				w.out[kid].delFrom, w.out[kid].delTo = mems[k-1].ve, mems[k].ve
+			default:
+				w.out[kid].delFrom, w.out[kid].delTo = mems[k].ms, mems[k].ve
+			}
+		}
+		end = j + 1
+	case '[':
+		w.out[idx].kind = 'a'
+		type el struct{ vs, ve int }
+		var els []el
+		var kids []int
+		j := w.ws(i + 1)
+		for j < len(w.b) && w.b[j] != ']' {
+			kid := len(w.out)
+			s := j
+			j = w.value(j, class+"[*]", key, -1, true)
+			kids = append(kids, kid)
+			els = append(els, el{s, j})
+			j = w.ws(j)
+			if j < len(w.b) && w.b[j] == ',' {
+				j = w.ws(j + 1)
+			}
+		}
+		for k, kid := range kids {
+			switch {
+			case k < len(els)-1:
+				w.out[kid].delFrom, w.out[kid].delTo = els[k].vs, els[k+1].vs
+			case k > 0:
+				w.out[kid].delFrom, w.out[kid].delTo = els[k-1].ve, els[k].ve
+			default:
+				w.out[kid].delFrom, w.out[kid].delTo = els[k].vs, els[k].ve
+			}
+		}
+		end = j + 1
+	default:
+		j := i
+		for j < len(w.b) && w.b[j] != ',' && w.b[j] != '}' && w.b[j] != ']' && w.b[j] != ' ' && w.b[j] != '\n' && w.b[j] != '\t' && w.b[j] != '\r' {
+			j++
+		}
+		end = j
+		switch w.b[i] {
+		case 't', 'f':
+			w.out[idx].kind = 't'
+		case 'n':
+			w.out[idx].kind = 'z'
+		default:
+			w.out[idx].kind = 'n'
+		}
+	}
+	w.out[idx].ve = end
+	return end
+}
+
+// objEpilogues are the trailing fields: every field number 0-8, 31-33 and 64 with a value, and the bare bytes that open a field.
+var objEpilogues = func() []string {
+	var out []string
+	for _, n := range []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 31, 32, 33, 64} {
+		out = append(out, fmt.Sprintf("%02x01aa", n))
+	}
+	// the epilogues a reader DECODES (RB9-F5-5 V-N): field 1, 2 and 4 of a minor-root record with an empty value, field 3 as one and two empty updates
+	// (0300, 03000300), an update with an empty transaction and receipt (030402000200), the same with a root proof of an empty receipt (0302020004020100)
+	return append(out, "01", "03", "04", "21", "ff", "80", "0100", "0200", "0400", "04020100", "0300", "03000300", "030402000200", "0302020004020100")
+}()
+
+var objU64 = []string{"9007199254740991", "9007199254740992", "9223372036854775808", "18446744073709551615", "18446744073709551616"}
+
+// objWrongs are the JSON values of the other types, by the kind of the value they replace.
+func objWrongs(kind byte) []string {
+	switch kind {
+	case 's':
+		return []string{"1", "{}", "[]", "true"}
+	case 'n':
+		return []string{`"1"`, "{}", "[]", "true"}
+	case 'o':
+		return []string{`"x"`, "1", "[]", "true"}
+	case 'a':
+		return []string{`"x"`, "1", "{}", "true"}
+	case 't':
+		return []string{`"x"`, "1", "{}", "[]"}
+	}
+	return []string{`"x"`, "1", "{}", "[]"}
+}
+
+type objCase struct {
+	name  string
+	edits []ByteEdit
+}
+
+// updateEpilogues are the epilogues made of one complete network update proof of the document itself: field 3 once, field 3 twice, and field 3 once
+// after an empty field 2 (the first update of the document's first record that has one, binary-encoded as the validator's reader decodes it).
+func updateEpilogues(doc []byte, nodes []objNode) []string {
+	for _, n := range nodes {
+		if n.kind != 'o' || !strings.HasSuffix(n.class, ".updates[*]") {
+			continue
+		}
+		p := new(api.NetworkUpdateProof)
+		if err := json.Unmarshal(doc[n.vs:n.ve], p); err != nil {
+			continue
+		}
+		b, err := p.MarshalBinary()
+		if err != nil {
+			continue
+		}
+		f3 := append([]byte{3}, binary.AppendUvarint(nil, uint64(len(b)))...)
+		f3 = append(f3, b...)
+		return []string{hex.EncodeToString(f3), hex.EncodeToString(append(append([]byte(nil), f3...), f3...)), hex.EncodeToString(append([]byte{2, 0}, f3...))}
+	}
+	return nil
+}
+
+func objCases(doc []byte, n objNode, upd []string) []objCase {
+	var out []objCase
+	replace := func(name, v string) {
+		out = append(out, objCase{name, []ByteEdit{{n.vs, n.ve - n.vs, ins(v)}}})
+	}
+	if n.kind == 'o' {
+		for _, e := range append(append([]string(nil), objEpilogues...), upd...) {
+			text := `"$epilogue":"` + e + `"`
+			if n.nmembers > 0 {
+				text = "," + text
+			}
+			out = append(out, objCase{"epilogue-" + e, []ByteEdit{{n.closeAt, 0, ins(text)}}})
+		}
+	}
+	if n.ms < 0 && !n.inArray {
+		return out // the root: a trailing field is the only change
+	}
+	if n.kind != 'z' {
+		replace("null", "null")
+	}
+	for i, w := range objWrongs(n.kind) {
+		replace(fmt.Sprintf("wrong-%d", i), w)
+	}
+	if n.kind == 'n' {
+		for _, v := range objU64 {
+			replace("u64-"+v, v)
+		}
+	}
+	out = append(out, objCase{"delete", []ByteEdit{{n.delFrom, n.delTo - n.delFrom, ""}}})
+	if !n.inArray && n.ms >= 0 {
+		key := string(doc[n.ms : n.vs]) // `"key" :` as spelled, with its colon and spacing
+		member := key + string(doc[n.vs:n.ve])
+		_ = member
+		w := objWrongs(n.kind)
+		out = append(out, objCase{"dup-wrong-before", []ByteEdit{{n.ms, 0, ins(key + w[0] + ",")}}})
+		out = append(out, objCase{"dup-null-after", []ByteEdit{{n.ve, 0, ins("," + key + "null")}}})
+		if n.kind == 'o' {
+			out = append(out, objCase{"dup-empty-after", []ByteEdit{{n.ve, 0, ins("," + key + "{}")}}})
+		} else {
+			out = append(out, objCase{"dup-wrong-after", []ByteEdit{{n.ve, 0, ins("," + key + w[1])}}})
+		}
+	}
+	return out
+}
+
+var objForm20 = regexp.MustCompile(`"version"\s*:\s*"2\.0"`)
+
+func objBases(fixtures string) ([]string, error) {
+	var bases []string
+	var m struct {
+		Cases []struct {
+			File string `json:"file"`
+		} `json:"cases"`
+	}
+	raw, err := os.ReadFile(filepath.Join(fixtures, "..", "s3-f5", "certify1", "manifest.json"))
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	for _, c := range m.Cases {
+		bases = append(bases, "../s3-f5/certify1/"+c.File)
+	}
+	for _, d := range []string{"s3-rb9k/xpartition6", "s3-rb9l/robust1"} {
+		ents, err := os.ReadDir(filepath.Join(fixtures, "..", d))
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range ents {
+			if n := e.Name(); !e.IsDir() && strings.HasSuffix(n, ".json") {
+				bases = append(bases, "../"+d+"/"+n)
+			}
+		}
+	}
+	old, err := bytesBases(fixtures)
+	if err != nil {
+		return nil, err
+	}
+	return append(bases, old...), nil
+}
+
+// judgeSweep judges a document three times: a verdict that differs between runs (Go's map order) has no verdict to match.
+func judgeSweep(doc []byte, panics, flaky *int) (Expect, bool) {
+	a, ok := judge(doc)
+	if !ok {
+		*panics++
+		return a, false
+	}
+	for i := 1; i < 3; i++ {
+		b, ok := judge(doc)
+		if !ok {
+			*panics++
+			return a, false
+		}
+		if a.V != b.V || (a.V != "plain" && !reflect.DeepEqual(a, b)) {
+			*flaky++
+			lastFlaky = brief(a) + " vs " + brief(b)
+			return a, false
+		}
+	}
+	return a, true
+}
+
+func objSweepCorpus(fixtures, out string) error {
+	f := &ByteFile{Format: "certen-sdk/s3-bytes-corpus/v1",
+		Description: "Every object path class and every scalar path class of every base document (the first sweepK documents of each form holding the class): a trailing $epilogue (field numbers 0-8, 31-33, 64, bare bytes 01 03 04 21 ff 80), null, the member deleted, a wrong JSON type, a duplicate key, the uint64 edge numbers; array elements nulled, deleted and given a wrong type; judged by VerifyPortable from the text."}
+	bases, err := objBases(fixtures)
+	if err != nil {
+		return err
+	}
+	f.Bases = bases
+	docs := make([][]byte, len(bases))
+	for bi, bpath := range bases {
+		raw, err := baseDoc(fixtures, bpath)
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		docs[bi] = raw
+		be, ok := judgeStableCounting(raw, new(int), new(int))
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+	}
+	shard, shards := 0, 1
+	if v := os.Getenv("XTS_SHARD"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d/%d", &shard, &shards); err != nil || shards < 1 || shard < 0 || shard >= shards {
+			return fmt.Errorf("XTS_SHARD %q: want i/n", v)
+		}
+	}
+	use := map[string]int{}
+	classes := map[string]bool{}
+	byKind := map[string]int{}
+	seq := 0
+	for bi, bpath := range bases {
+		form := "2.1"
+		if objForm20.Match(docs[bi]) {
+			form = "2.0"
+		}
+		w := &objWalker{b: docs[bi]}
+		w.value(0, "", "", -1, false)
+		seen := map[string]bool{}
+		upd := updateEpilogues(docs[bi], w.out)
+		for _, n := range w.out {
+			if n.class == "" {
+				n.class = "$root"
+			}
+			if seen[n.class] {
+				continue
+			}
+			seen[n.class] = true
+			k := form + "|" + n.class
+			if use[k]++; use[k] > sweepK {
+				continue
+			}
+			classes[form+"|"+n.class] = true
+			for _, c := range objCases(docs[bi], n, upd) {
+				if seq++; (seq-1)%shards != shard {
+					continue
+				}
+				if os.Getenv("XTS_COUNT") != "" {
+					continue
+				}
+				text := applyEdits(docs[bi], c.edits)
+				lastPanic, lastFlaky = "", ""
+				ex, ok := judgeSweep(text, &f.Skipped.Panics, &f.Skipped.Flaky)
+				if !ok {
+					fmt.Fprintf(os.Stderr, "PANIC/FLAKY %s %s [%s] %s%s\n", bpath, n.class, c.name, lastPanic, lastFlaky)
+					continue
+				}
+				kind := map[byte]string{'o': "object", 'a': "array", 's': "string", 'n': "number", 't': "bool", 'z': "null"}[n.kind]
+				byKind[kind]++
+				f.Cases = append(f.Cases, ByteCase{ID: fmt.Sprintf("objsweep:%s:%s:%s", bpath, n.class, c.name), Base: bi, Op: "objsweep " + kind + " " + c.name, Edits: c.edits, Expect: ex})
+			}
+		}
+	}
+	var names []string
+	for k, v := range byKind {
+		names = append(names, fmt.Sprintf("%s=%d", k, v))
+	}
+	sort.Strings(names)
+	fmt.Fprintf(os.Stderr, "objsweep shard %d/%d: %d bases, %d path classes (form|class), %d cases in all, %d judged here (%s)\n", shard, shards, len(bases), len(classes), seq, len(f.Cases), strings.Join(names, " "))
+	if os.Getenv("XTS_COUNT") != "" {
+		return nil
+	}
+	name := "bytes-cases-objsweep.json.gz"
+	if shards > 1 {
+		name = fmt.Sprintf("bytes-cases-objsweep-%d.json.gz", shard)
+	}
+	return writeGz(filepath.Join(out, name), mustJSON(f))
+}

@@ -1,0 +1,18 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { it } from 'vitest';
+import { applyEdits, baseBytes, bytesDifferences, type BytesFile } from './helpers/s3-bytes.js';
+it('diag', () => {
+  const file = JSON.parse(gunzipSync(readFileSync(new URL(process.env.DIAG_FILE ?? './fixtures/s3/go-written/bytes-cases-wide.json.gz', import.meta.url))).toString('utf8')) as BytesFile;
+  const ids = (process.env.DIAG_IDS ?? '').split(',');
+  const out: string[] = [];
+  for (const k of file.cases) {
+    if (!ids.includes(k.id)) continue;
+    const text = applyEdits(baseBytes(file.bases[k.base]!), k.edits);
+    let d: string[];
+    try { d = bytesDifferences(k.expect, text); } catch (e) { d = ['THROW ' + String(e)]; }
+    out.push('== ' + k.id + ' [' + k.op + '] base=' + file.bases[k.base] + ' edits=' + JSON.stringify(k.edits.map((e) => ({ at: e.at, del: e.del, ins: Buffer.from(e.ins ?? '', 'base64').toString('utf8').slice(0, 80) }))) + '\n   want=' + JSON.stringify(k.expect).slice(0, 300) + '\n   diff=' + d.join(' | ').slice(0, 400));
+    if (process.env.DIAG_CTX) for (const e of k.edits) { const b = baseBytes(file.bases[k.base]!); out.push('   ctx@' + e.at + ': ' + JSON.stringify(b.subarray(Math.max(0, e.at - 120), e.at + (e.del ?? 0) + 60).toString('utf8'))); }
+  }
+  writeFileSync(process.env.DIAG_OUT ?? 'diag.txt', out.join('\n'));
+}, 600000);

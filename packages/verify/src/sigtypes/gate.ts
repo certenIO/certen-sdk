@@ -16,7 +16,7 @@
  * table - the version is UNPROVEN, which is a named state and never an acceptance. The activation block itself counts as not
  * yet proven: the table records the block in which the activation message was received.
  */
-import { sha256 } from '../proof-v2/bytes.js';
+import { goLower, goTrimSpace, sha256 } from '../proof-v2/bytes.js';
 
 /** accumulate protocol.ExecutorVersion values (protocol/enums.yml). */
 export const ExecutorVersion = { V2Baikonur: 6, V2Vandenberg: 7, V2Jiuquan: 8, V2Kourou: 9 } as const;
@@ -55,7 +55,7 @@ export interface Where {
 }
 
 export function normalizePartition(p: string): string {
-  const s = p.trim().toLowerCase();
+  const s = goLower(goTrimSpace(p));
   return s === 'dn' || s === 'directory' || s === 'dn.acme' ? 'directory' : s;
 }
 

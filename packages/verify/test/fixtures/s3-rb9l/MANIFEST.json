@@ -1,0 +1,119 @@
+{
+ "format": "certen:s3-vectors-manifest:v1",
+ "validatorCommit": "a5499e2d015bf45f05e357fa3944e13b069aaf82",
+ "suites": [
+  {
+   "name": "robust1",
+   "files": [
+    {
+     "name": ".gitattributes",
+     "sha256": "e60522a3d7a932840f0a1b4c45f651d1ad7dd55d7d999e628231a17075cbd18f",
+     "bytes": 113
+    },
+    {
+     "name": "MANIFEST.sha256",
+     "sha256": "88e9fc0c4589681eaabc140a4e28b7b064303ceadfc3f2e70b5b2301841a4037",
+     "bytes": 80
+    },
+    {
+     "name": "anchor-message-carries-no-transaction.json",
+     "sha256": "966ef66fa6d86bbfdc57a82428b1014d72ac20355dd99e823e314ab5d9b31bfc",
+     "bytes": 15319
+    },
+    {
+     "name": "anchor-message-names-no-source.json",
+     "sha256": "b068492500902a11bcf3622fb90f09ab270185bd53ccb22e089b17e6392f17be",
+     "bytes": 15627
+    },
+    {
+     "name": "anchors-two-defective-first-in-key-order.json",
+     "sha256": "c133fda93184759ef366203ebd8f4f30b195aadf898efeb49153ea538096e33d",
+     "bytes": 21883
+    },
+    {
+     "name": "anchors-two-unimportable-first-in-key-order.json",
+     "sha256": "ebb7998a5eb1e019c28d95085c61c08935e6d971527c8efbfb1c54a2c4029719",
+     "bytes": 20947
+    },
+    {
+     "name": "codec-anchor-body-member-null.json",
+     "sha256": "f5c354b4668908b3a1e9e8653299564b00fffd5525ce56681aca71e2731fc159",
+     "bytes": 23648
+    },
+    {
+     "name": "codec-certify-run-signature-null.json",
+     "sha256": "84c2f8a2f65c2a59d3a9107655858964519b20e605f234393e29a7974ce5b3a6",
+     "bytes": 23312
+    },
+    {
+     "name": "codec-major-anchor-body-member-null.json",
+     "sha256": "50314d19f21034b0303a93987b943b262a2f68d46b39bd9fed63d43a126b93b9",
+     "bytes": 23648
+    },
+    {
+     "name": "codec-major-signature-member-null.json",
+     "sha256": "c8393faf4edddfeee27a3d4ddabc04568d68b6ad81c3accb9477952a5b4a266d",
+     "bytes": 23648
+    },
+    {
+     "name": "codec-validator-member-null.json",
+     "sha256": "44f5a7bd3caeea470fbf3fd6a2651f66bc0a1eec13ee6a606603c9abfdf0fa7d",
+     "bytes": 23648
+    },
+    {
+     "name": "evidence-majors-absent.json",
+     "sha256": "b09c6fa72dcae9bfa38da933a946c25880774a4f559a1f4cfb613c8248151f1c",
+     "bytes": 25781
+    },
+    {
+     "name": "evidence-majors-zero.json",
+     "sha256": "b4441ca949c562add8629d685b27fc36183bc671c777b2b5294f6ef9dd11c71b",
+     "bytes": 25792
+    },
+    {
+     "name": "manifest.json",
+     "sha256": "758ca82a4069ddb3c09206259fd3683f0da170cb462ae7a56f0dfc50663fa4aa",
+     "bytes": 13344
+    },
+    {
+     "name": "page-account-null.json",
+     "sha256": "a1b0615f6af5e831c33da5616f6c841360b0823a4ccc33b913ac8148df01d84c",
+     "bytes": 23607
+    },
+    {
+     "name": "set-check-globals-account-null.json",
+     "sha256": "42cc1fb629d9eedd372affb8d955fdf7dc681c363d12f2f12483b17f622f7e19",
+     "bytes": 23524
+    },
+    {
+     "name": "set-check-network-account-null.json",
+     "sha256": "40cf997c85e8793569612f5ad24b9c2f3c14e36d33f2fa2e1ba873da9efe3545",
+     "bytes": 22976
+    },
+    {
+     "name": "set-check-routing-account-null.json",
+     "sha256": "9ae1b4a1049e3de2af68a708e9bf3e6e728075b88090d56764286099a4bd6966",
+     "bytes": 23272
+    },
+    {
+     "name": "spine-network-update-receipt-step-null.json",
+     "sha256": "b1fc2f85a4f9093fd6fcdcaf3ab44274c8c82f3d7b893653bc09143f9489454c",
+     "bytes": 15560
+    },
+    {
+     "name": "transaction-names-an-authority-with-no-url.json",
+     "sha256": "427d536d2fea6ecefc721a89b60bf8bb4eaeb520b47aab48bd7eb937a94b7429",
+     "bytes": 25813
+    },
+    {
+     "name": "vote-hop-signature-holds-no-signature.json",
+     "sha256": "ae601034cf2109430b96ef379f56d577008ce6027c87589e915d7427896b1a30",
+     "bytes": 29183
+    }
+   ],
+   "manifestSha256": "758ca82a4069ddb3c09206259fd3683f0da170cb462ae7a56f0dfc50663fa4aa"
+  }
+ ],
+ "goldens": [],
+ "manifestHash": "a90a1fa0feacc405205841c8c86a93f6fd60b6b2363c8f09b21c69a4edd58712"
+}

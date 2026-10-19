@@ -1,0 +1,114 @@
+{
+ "format": "certen:s3-vectors-manifest:v1",
+ "validatorCommit": "92d9a9b0907baaef6ff749e96d079e67f76d4bfa",
+ "suites": [
+  {
+   "name": "xpartition6",
+   "files": [
+    {
+     "name": ".gitattributes",
+     "sha256": "e60522a3d7a932840f0a1b4c45f651d1ad7dd55d7d999e628231a17075cbd18f",
+     "bytes": 113
+    },
+    {
+     "name": "MANIFEST.sha256",
+     "sha256": "90cbcd59fb155a36f17b62a71befdb4898858d17271fa53fa4251e74b16557f2",
+     "bytes": 80
+    },
+    {
+     "name": "add-op-added-authority-page-below-threshold.json",
+     "sha256": "7e5fa02946035090e29fec536561eb380df309e925d0eff56f2192299a86c83e",
+     "bytes": 29683
+    },
+    {
+     "name": "add-op-added-authority-page-threshold-two-voted.json",
+     "sha256": "9a857d319d5d89ae3b52b346bee7a5474c316ff827828e52827e08d265d6ea67",
+     "bytes": 31582
+    },
+    {
+     "name": "add-op-added-authority-voted-first.json",
+     "sha256": "36dc0ed3d529f951a59a9f517c00838029bda2b9782b3cfa5ad0b1a7587de01f",
+     "bytes": 29249
+    },
+    {
+     "name": "add-op-added-authority-voted-reject.json",
+     "sha256": "ad695d582fc0916cf42b38469bb2700ab213a2eef0da7fe94e555140c5d8a09d",
+     "bytes": 29253
+    },
+    {
+     "name": "add-op-added-authority-voted.json",
+     "sha256": "431cdc1b8528600203fe859b8390bbc207aee17614791aebc9f1a00ed69a4b56",
+     "bytes": 35990
+    },
+    {
+     "name": "add-op-first-authorities-both-added-both-voted.json",
+     "sha256": "dcb06b7ed19aa8cbd22a337b07970aacc5db970d50632995766ab135005eb01f",
+     "bytes": 29313
+    },
+    {
+     "name": "add-op-only-the-added-authority-voted.json",
+     "sha256": "20367f199eee64b4f2897a4b4f3a46c0645bab1a14e11a0f5267c7c18cd519c5",
+     "bytes": 26060
+    },
+    {
+     "name": "add-op-second-vote-not-in-the-principal-chain.json",
+     "sha256": "421a06f7390be380ccb4531e7ae1ce5622d33f2f4a21559b8b9eab69ed7198d5",
+     "bytes": 29249
+    },
+    {
+     "name": "add-op-second-voter-history-tampered.json",
+     "sha256": "02d72ede438adf80addcce7e5996c58785e54017ee9e4ae0b3442668292594fb",
+     "bytes": 30059
+    },
+    {
+     "name": "add-op-second-voter-key-added-after-arrival.json",
+     "sha256": "74b269ba4b8c9ada20c79c9b35bbd015af3f2c964cfbec7ce3c2bd20aa21aecb",
+     "bytes": 29679
+    },
+    {
+     "name": "add-op-second-voter-page-at-another-block.json",
+     "sha256": "58f03a33842bd68e0e4de77cffaccc07c641ead20ec9fff29ee377bdf9edf14e",
+     "bytes": 29338
+    },
+    {
+     "name": "add-op-votes-listed-in-the-other-order.json",
+     "sha256": "10b513cc1ac03607977e5bb0d8046c642c0ceb54c1612e32e58c8e7342b0446a",
+     "bytes": 29249
+    },
+    {
+     "name": "disable-op-both-authorities-voted.json",
+     "sha256": "ebf942267948b55afb066c1c6717f6e20be2ad504804f3b34a6a2460ee4cf2b6",
+     "bytes": 29227
+    },
+    {
+     "name": "disable-op-every-authority-disabled-one-voted.json",
+     "sha256": "490be4bb3de9b2ebea0032a6e871fbacc720394b58ef63da742d09cad57f83ae",
+     "bytes": 26118
+    },
+    {
+     "name": "disable-op-voter-outside-the-list-every-authority-disabled.json",
+     "sha256": "58d989cc5bd943d3082ac2ee47db1c841df93b1402ed3953d35aed2fe6d127ad",
+     "bytes": 29188
+    },
+    {
+     "name": "enable-op-both-authorities-voted.json",
+     "sha256": "3f4155c9d974ee98d2d3747e3648adb4eccc3a346eb5b511135df7ebeb8348c8",
+     "bytes": 29211
+    },
+    {
+     "name": "manifest.json",
+     "sha256": "aaa46baffca8969bbbd8ec40bb1bc622f6fbd1c9d9779c48d1d9849d16f27685",
+     "bytes": 23712
+    },
+    {
+     "name": "update-account-auth-voter-neither-listed-nor-added.json",
+     "sha256": "4bfa77d84f2452e3623c2f5a18d044620a35bdbdb4a8742251731822bcdcc6d5",
+     "bytes": 29172
+    }
+   ],
+   "manifestSha256": "aaa46baffca8969bbbd8ec40bb1bc622f6fbd1c9d9779c48d1d9849d16f27685"
+  }
+ ],
+ "goldens": [],
+ "manifestHash": "6be370f8dbb9dfb258f6f81b83d189b524815c6e1582a6dcf18033f92a49c5b9"
+}

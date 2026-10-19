@@ -1,14 +1,19 @@
-/**
+﻿/**
  * Verify a proof v2 Accumulate proof in portable form (certen-validator pkg/proof/v2: portable.go, evidence.go
  * VerifyFromGenesis, page.go, and pkg/proof ValidatorSetProof.Verify). Each step names the Go code it mirrors. Any
  * failure throws VerifyError; there is no weaker answer for the transaction, its certification or its pages. The
  * validator-set check's verdict is reported as is.
  */
-import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sameUrl, sequencedMessage, transactionHash } from './accumulate.js';
+import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sameUrl } from './accumulate.js';
 import { accumulateSetRoot, validatorsOf } from './accset.js';
-import { equal, fail, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
+import { equal, fail, goHexStrict, goTrimSpace, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
-import { anchorBody, anchorMessage, hex32, list, optList, rec, str, uint, type Rec } from './shapes.js';
+import { anchorBody, anchorMessage, list, optList, rec, str, uint, type Rec } from './shapes.js';
+import { BadNum, decodePortable } from '../s3/gotree.js';
+import { bit, mustHex32 } from '../s3/chains.js';
+import { accountStateOf, canonicalize20, SET_CHECK_REFUSAL } from '../s3/portable20.js';
+import { sequencedOf } from '../s3/seqmsg.js';
+
 
 export const PORTABLE_FORMAT = 'certen-proof-v2-accumulate-portable/1';
 export const VERSION = '2.0';
@@ -71,8 +76,8 @@ function u64be(n: number | bigint): Uint8Array {
 /** pkg/proof ComputeIncarnation. */
 export function computeIncarnation(genesis: unknown, networkRecord: Uint8Array, globalsRecord: Uint8Array): Uint8Array {
   const g = rec(genesis, 'genesis');
-  const root = hexBytes(g.rootChainAnchor, 'genesis.rootChainAnchor', 32);
-  const state = hexBytes(g.stateTreeAnchor, 'genesis.stateTreeAnchor', 32);
+  const root = goHexStrict(g.rootChainAnchor, 'genesis.rootChainAnchor', 32);
+  const state = goHexStrict(g.stateTreeAnchor, 'genesis.stateTreeAnchor', 32);
   const minorBlockIndex = uint(g.minorBlockIndex, 'genesis.minorBlockIndex');
   const timeUnix = uint(g.timeUnix, 'genesis.timeUnix');
   if (minorBlockIndex !== GENESIS_BLOCK) fail(`incarnation: the genesis anchor is for block ${minorBlockIndex}, not the genesis block ${GENESIS_BLOCK}`);
@@ -96,17 +101,32 @@ export function computeIncarnation(genesis: unknown, networkRecord: Uint8Array, 
 export type Stage = 'trust_base' | 'spine' | 'receipt' | 'anchor' | 'pages' | 'set';
 export type Trace = (stage: Stage, facts: Record<string, unknown>) => void;
 
+/**
+ * VerifyPortable for evidence 2.0 from a parsed document. The document is first decoded as Go decodes the text it was parsed from into
+ * Portable (src/s3/gotree.ts): every member has the type it has in Go, keys are matched as encoding/json matches them, a repeated or null member
+ * is read as Go reads it. verifyPortableAnyBytes (src/s3) is the entry for a document received as text, which also keeps number literals.
+ */
 export function verifyPortable(document: unknown, trace: Trace = () => {}): Report {
-  const doc = document && typeof document === 'object' ? (document as Rec) : undefined;
-  if (!doc || doc.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(doc?.format)} is not ${PORTABLE_FORMAT}`);
+  const text = JSON.stringify(document);
+  if (text === undefined) fail('portable proof is not JSON');
+  return verifyPortableDecoded(decodePortable(text), trace);
+}
+
+/** VerifyPortable over a document already decoded by decodePortable. */
+export function verifyPortableDecoded(document: unknown, trace: Trace = () => {}): Report {
+  const decoded = document && typeof document === 'object' ? (document as Rec) : undefined;
+  if (!decoded || decoded.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(decoded?.format)} is not ${PORTABLE_FORMAT}`);
+  // Import (portable.go): the whole document is decoded, by the decoders Go decodes with, before any of it is verified; what is read below is
+  // the document those decoders made, in Accumulate's own spelling.
+  const doc = canonicalize20(decoded);
   const ev = doc.evidence && typeof doc.evidence === 'object' ? (doc.evidence as Rec) : undefined;
   if (!ev || ev.version !== VERSION) fail('not a v2 Accumulate proof');
-  const pin = hexBytes(doc.pin, 'pin', 32);
+  const pin = goHexStrict(doc.pin, 'pin', 32);
 
   // The trust base: the genesis values, bound to the pin by the incarnation identity.
   const g = doc.genesis ? rec(doc.genesis, 'genesis') : fail('no genesis');
-  const networkRecord = hexBytes(g.networkRecord, 'genesis.networkRecord');
-  const globalsRecord = hexBytes(g.globalsRecord, 'genesis.globalsRecord');
+  const networkRecord = goHexStrict(g.networkRecord, 'genesis.networkRecord');
+  const globalsRecord = goHexStrict(g.globalsRecord, 'genesis.globalsRecord');
   const id = computeIncarnation(g, networkRecord, globalsRecord);
   if (!equal(id, pin)) fail(`incarnation evidence is for ${toHex(id)}, not the pinned ${toHex(pin)}`);
   const genesis = genesisGlobals(g.network, networkRecord, g.globals, globalsRecord);
@@ -126,14 +146,18 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
     if (i + 1 === evMajors || i + 1 === checkMajors) at.set(i + 1, sp.clone());
   }
 
+  refuseMembersOf21(ev);
+
   // S1-S2: the receipt from the transaction to a certified root.
-  const cert = at.get(evMajors)!.clone();
+  const certified = at.get(evMajors);
+  if (!certified) fail(`certify: evidence.majors ${evMajors} is not a major block of the archive`);
+  const cert = certified.clone();
   const certify = optList(ev.certify, 'evidence.certify');
   if (certify.length === 0) fail('certify: no minor-root run');
   certify.forEach((run, i) => cert.advanceEpoch(run, `certify run ${i}`));
   trace('spine', { majors: need, certifiedBlock: cert.lastMinorBlock, certifiedRoot: toHex(cert.rootChainAnchor), validators: cert.validators().length, threshold: cert.directoryThreshold(), networkUpdatesApplied: cert.applied.length });
   const r = receiptFromJSON(ev.receipt, 'receipt');
-  const tx = hex32(ev.txHash, 'txHash');
+  const tx = goHexStrict(ev.txHash, 'txHash', 32);
   if (!equal(r.start, tx)) fail(`receipt starts at ${toHex(r.start)}, not the transaction ${toHex(tx)}`);
   if (!equal(r.anchor, cert.rootChainAnchor)) fail(`receipt ends at ${toHex(r.anchor)}, not the root ${toHex(cert.rootChainAnchor)} certified at DN ${cert.lastMinorBlock}`);
   if (!receiptValid(r)) fail('receipt does not validate');
@@ -142,13 +166,18 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
   // The partition anchor (page.go anchorBody), proven into the same certified root.
   const evAnchor = rec(ev.anchor, 'evidence.anchor');
   const am = anchorMessage(evAnchor.message, 'partition anchor');
-  const msg = sequencedMessage(am.json, 'partition anchor');
   if (am.bodyType !== 'blockValidatorAnchor') fail(`partition anchor is ${am.bodyType}, not a block validator anchor`);
   if (!sameUrl(am.destination, 'acc://dn.acme') || !sameUrl(am.principal, 'acc://dn.acme/anchors')) {
     fail("partition anchor is not delivered to the Directory's anchor pool");
   }
   const body = anchorBody(am.body, 'partition anchor');
-  const anchorTx = transactionHash(msg.message.transaction);
+  // The anchor is read back from the binary form the import wrote (messaging.UnmarshalMessage), and its transaction is hashed as that decoder made it:
+  // a trailing field in the header or body is part of what the receipt proves.
+  const seq = sequencedOf(am.json);
+  if (!seq) fail('partition anchor: the message was not read as Go reads it');
+  if (!seq.decodes) fail('partition anchor: field Message: failed to unmarshal value: the message does not decode');
+  if (!seq.txnHash) fail('partition anchor: transaction hash: the transaction has no body');
+  const anchorTx = seq.txnHash;
   const ar = receiptFromJSON(evAnchor.receipt, 'partition anchor receipt');
   if (!equal(ar.start, anchorTx) || !equal(ar.anchor, cert.rootChainAnchor) || !receiptValid(ar)) {
     fail('partition anchor: its receipt does not prove the anchor transaction into the certified root');
@@ -165,7 +194,7 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
   for (const [i, pageJson] of optList(ev.pages, 'evidence.pages').entries()) {
     const p = rec(pageJson, `page ${i}`);
     const acct = account(p.account, `page ${i}`);
-    const state = encodeObject(acct);
+    const state = accountBytes(p.account, `page ${i}`);
     const pr = receiptFromJSON(p.receipt, `page ${i} receipt`);
     if (!equal(pr.start, sha256(state))) fail(`page: ${p.url}: the receipt does not start at the state's hash`);
     if (!equal(pr.anchor, stateRoot)) fail(`page: ${p.url}: the receipt ends at ${toHex(pr.anchor)}, not the block's state root ${toHex(stateRoot)}`);
@@ -189,12 +218,16 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
     }
     chk = cert.clone();
   } else {
-    chk = at.get(checkMajors)!.clone();
+    const start = at.get(checkMajors);
+    if (!start) fail(`set check: check.majors ${checkMajors} is not a major block of the archive`);
+    chk = start.clone();
   }
   hops.forEach((h: unknown, i: number) => chk.advanceEpoch(h, `set check hop ${i}`));
   if (chk.lastMinorBlock < cert.lastMinorBlock) {
     fail(`the set is checked at DN ${chk.lastMinorBlock}, before the certified DN ${cert.lastMinorBlock}: updates between are unaccounted`);
   }
+  const refusal = (doc as { [SET_CHECK_REFUSAL]?: Error })[SET_CHECK_REFUSAL];
+  if (refusal) throw refusal;
   const net = provenAccount(check.network, 'network');
   const glob = provenAccount(check.globals, 'globals');
   const verdict = setVerdict(check, net, glob, chk.stateTreeAnchor, pin);
@@ -230,19 +263,59 @@ export function verifyPortable(document: unknown, trace: Trace = () => {}): Repo
   };
 }
 
+/**
+ * evidence.go verifyFrom: a 2.0 document carries none of the evidence 2.1 members; one that does would have them silently ignored, so it
+ * is refused. The test is on what Go's Import produces: a non-empty "anchors" object, a non-empty "votes" list, a routing proof, and a
+ * page with a partition or a roles list (an empty list is a non-nil slice there; null and absent are nil).
+ */
+function refuseMembersOf21(ev: Rec): void {
+  const nonEmptyMap = (v: unknown): boolean => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0;
+  const check = ev.check && typeof ev.check === 'object' && !Array.isArray(ev.check) ? (ev.check as Rec) : {};
+  const routing = check.routing !== undefined && check.routing !== null;
+  const votes = Array.isArray(ev.votes) && ev.votes.length > 0;
+  if (nonEmptyMap(ev.anchors) || votes || routing) fail('evidence 2.0 carries 2.1 members (anchors, votes or a routing proof)');
+  for (const p of optList(ev.pages, 'evidence.pages')) {
+    const page = p && typeof p === 'object' && !Array.isArray(p) ? (p as Rec) : {};
+    if ((typeof page.partition === 'string' && page.partition !== '') || Array.isArray(page.roles)) fail(`evidence 2.0 page ${String(page.url)} carries a partition or roles`);
+  }
+}
+
+/** protocol.UnmarshalAccountJSON then MarshalBinary: the account's bytes, with the extra data its type keeps (a member $epilogue), as the import made them. */
+function accountBytes(j: unknown, label: string): Uint8Array {
+  const held = j && typeof j === 'object' ? accountStateOf(j) : undefined;
+  if (!held) return fail(`${label}: the account was not read as Go reads it`);
+  if (held.undecodable !== undefined) fail(`${label}: does not decode as an account: ${held.undecodable}`);
+  return held.state;
+}
+
 interface Proven {
-  root: Uint8Array; // the BPT root the account is proven into
+  root: Uint8Array; // the BPT root the account is proven into (once verifyProven has run)
   entry: Uint8Array; // the data account's single entry
   record: Rec; // that entry, decoded (JSON)
   mainHeight?: number;
+  /** The account's proof: judged by verifyProven, which ValidatorSetProof.Verify runs only when both accounts carry a state receipt. */
+  pa: Rec;
+  state: Uint8Array;
+  label: string;
+  /** The state receipt has no entries: an absent proof, which is the named verdict validator_set_asserted and not an error. */
+  absent: boolean;
+}
+
+/** ValidatorSetProof.MainChainHeight: the count of the first chain named main, as the document states it. */
+function statedMainHeight(chains: unknown): number | undefined {
+  if (!Array.isArray(chains)) return undefined;
+  for (const c of chains) {
+    if (c && typeof c === 'object' && (c as Rec).name === 'main') return Number(restatedCount((c as Rec).count, 'main chain count'));
+  }
+  return undefined;
 }
 
 /** AccountStateProof.verify, with the account and its record rebuilt from JSON and re-encoded. */
 function provenAccount(proven: unknown, label: string): Proven {
   if (!proven) fail(`set check ${label}: missing`);
   const pa = rec(proven, `set check ${label}`);
-  const acct = account(pa.account, `set check ${label}`);
-  const state = encodeObject(acct);
+  account(pa.account, `set check ${label}`);
+  const state = accountBytes(pa.account, `set check ${label}`);
   const n = rec(pa.account, `set check ${label} account`);
   const entryJson = n.entry && typeof n.entry === 'object' ? (n.entry as Rec) : undefined;
   if (n.type !== 'dataAccount' || !entryJson || !Array.isArray(entryJson.data) || entryJson.data.length !== 1) {
@@ -252,28 +325,48 @@ function provenAccount(proven: unknown, label: string): Proven {
   const decoded = label === 'network' ? networkDefinition(pa.record) : networkGlobals(pa.record);
   if (!equal(encodeObject(decoded), entry)) fail(`set check ${label}: ${String(pa.accountUrl)}: record: the JSON does not re-encode to the record's bytes`);
 
+  const sr = pa.stateReceipt && typeof pa.stateReceipt === 'object' ? (pa.stateReceipt as Rec) : undefined;
+  const absent = !Array.isArray(sr?.entries) || (sr!.entries as unknown[]).length === 0;
+  return { root: new Uint8Array(32), entry, record: rec(pa.record, `set check ${label} record`), mainHeight: statedMainHeight(pa.chains), pa, state, label, absent };
+}
+
+/** AccountStateProof.verify (steps 11-13): the state hashes to the leaf, the path validates, the chain history is bound. */
+function verifyProven(p: Proven): void {
+  const { pa, state, label } = p;
   // 11. the state hashes to the leaf being proven; 12. the path validates.
   const r = receiptFromJSON(pa.stateReceipt, `set check ${label} stateReceipt`);
+  // Go reads start and anchor through MustHex32Lower (exactly 64 hex characters, so no 0x prefix) and compares the strings.
+  const rawReceipt = pa.stateReceipt as Record<string, unknown>;
+  mustHex32(String(rawReceipt.start), `validatorSetProof.${label}: stateReceipt.start`);
   if (!equal(sha256(state), r.start)) fail(`validatorSetProof.${label}: accountState does not hash to the proven leaf`);
   if (!receiptValid(r)) fail(`validatorSetProof.${label}: state receipt does not recompute`);
+  mustHex32(String(rawReceipt.anchor), `validatorSetProof.${label}: stateReceipt.anchor`);
 
   // 13. the chain history is bound.
-  const mainHeight = chainBinding(r, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
-  return { root: r.anchor, entry, record: rec(pa.record, `set check ${label} record`), mainHeight };
+  const rawSteps = (pa.stateReceipt as Record<string, unknown>).entries;
+  const firstHash = Array.isArray(rawSteps) && rawSteps.length > 0 ? (rawSteps[0] as Record<string, unknown>).hash : undefined;
+  const secondHash = Array.isArray(rawSteps) && rawSteps.length > 1 ? (rawSteps[1] as Record<string, unknown>).hash : undefined;
+  p.mainHeight = chainBinding(r, firstHash, secondHash, pa.chains, pa.secondaryHash, pa.pendingHash, `validatorSetProof.${label}`);
+  p.root = r.anchor;
 }
 
 /**
  * AccountStateProof.verifyChainBinding: the state hasher is [main, secondaryState, chains, pending], so the receipt's
  * first sibling is the secondary component and its second H(merkle(chain anchors) || pending). Returns the height of
- * the chain named main, when there is one.
+ * the chain named main, when there is one. Go keeps the receipt's steps as the strings the document spells and compares the STRING
+ * strings.ToLower(Entries[0].Hash) with the 64-character secondaryHash, so firstHash is the document's own spelling of the first
+ * step: a "0x" spelling is refused although recomputeReceipt accepts it. The second sibling is compared the same way: Go lower-cases the
+ * STRING Entries[1].Hash and compares it with hex(H(chains || pending)), so secondHash is the document's own spelling of the second step.
  */
-function chainBinding(r: Receipt, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
+function chainBinding(r: Receipt, firstHash: unknown, secondHash: unknown, chains: unknown, secondaryHash: unknown, pendingHash: unknown, label: string): number | undefined {
   if (r.entries.length < 2) fail(`${label}: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
   if (!secondaryHash || !pendingHash) {
     fail(`${label}: secondaryHash and pendingHash are required: the receipt's second step is H(chains || pending), so the chain roots alone cannot be checked`);
   }
-  const sec = hexBytes(secondaryHash, `${label}.secondaryHash`, 32);
-  if (!equal(r.entries[0].hash, sec)) fail(`${label}: secondaryHash is not the receipt's first sibling`);
+  if (typeof secondaryHash !== 'string') fail(`${label}.secondaryHash: not a hex string`);
+  const sec = mustHex32(secondaryHash as string, `${label}.secondaryHash`);
+  const first = String(firstHash).toLowerCase();
+  if (first !== toHex(sec)) fail(`${label}: secondaryHash is not the receipt's first sibling: got=${toHex(sec).slice(0, 16)} want=${first.slice(0, 16)}`);
   let mainHeight: number | undefined;
   const leaves: Uint8Array[] = [];
   for (const [i, chain] of optList(chains, `${label}.chains`).entries()) {
@@ -282,8 +375,10 @@ function chainBinding(r: Receipt, chains: unknown, secondaryHash: unknown, pendi
     if (c.name === 'main' && mainHeight === undefined) mainHeight = count;
     leaves.push(count === 0 ? new Uint8Array(32) : anchor);
   }
-  const pend = hexBytes(pendingHash, `${label}.pendingHash`, 32);
-  if (!equal(sha256(merkleHashList(leaves), pend), r.entries[1].hash)) {
+  // pkg/proof hexBytes: strings.TrimSpace, lower-case, an optional 0x prefix removed
+  const pend = hexBytes(typeof pendingHash === 'string' ? goTrimSpace(pendingHash) : pendingHash, `${label}.pendingHash`, 32);
+  const combined = toHex(sha256(merkleHashList(leaves), pend));
+  if (String(secondHash).toLowerCase() !== combined) {
     fail(`${label}: H(chains||pending) is not the receipt's second sibling - the chain heights are NOT bound`);
   }
   return mainHeight;
@@ -301,30 +396,38 @@ function pageChain(p: Rec, r: Receipt): PageChain {
     return { url, bound: false, mainHeight: 0, note };
   }
   if (r.entries.length < 2) fail(`page: ${url}: chains: state receipt has ${r.entries.length} steps; the state hasher needs at least 2`);
-  const h = chainBinding(r, p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
+  // page.go verifyPage passes toChainedReceipt(r): a merkle.Receipt, whose steps are bytes, spelled lower-case hex by Go.
+  const h = chainBinding(r, toHex(r.entries[0].hash), toHex(r.entries[1].hash), p.chains, toHex(r.entries[0].hash), p.pendingHash, `page: ${url}: chains`);
   if (h === undefined) fail(`page: ${url}: no main chain among the bound chains`);
   return { url, bound: true, mainHeight: h };
 }
 
 /** ChainRoot.derive: count and anchor from Pending alone; the restated values must agree. */
 function chainRoot(c: Rec, label: string): { count: number; anchor: Uint8Array } {
-  let count = 0;
+  let count = 0n;
   let anchor: Uint8Array | undefined;
   for (const [i, v] of optList(c.pending, `${label}.pending`).entries()) {
     if (v === null || v === undefined) continue;
-    count += 2 ** i;
-    const h = hexBytes(v, `${label}.pending[${i}]`, 32);
+    count |= bit(i); // Go: count |= 1 << uint(i) on a uint64
+    // ChainRoot.derive trims the entry before it decodes it (strings.TrimSpace)
+    const h = hexBytes(typeof v === 'string' ? goTrimSpace(v) : v, `${label}.pending[${i}]`, 32);
     anchor = anchor === undefined ? h : sha256(h, anchor);
   }
   const a = anchor ?? new Uint8Array(32);
-  if (count !== optUintLocal(c.count, `${label}.count`)) fail(`chain ${String(c.name)}: restated count ${String(c.count)} but its merkle state says ${count} - the height is not what the proof claims`);
-  const restated = String(c.anchor ?? '').toLowerCase().replace(/^0x/, '');
+  if (count !== restatedCount(c.count, `${label}.count`)) fail(`chain ${String(c.name)}: restated count ${String(c.count)} but its merkle state says ${count} - the height is not what the proof claims`);
+  // ChainRoot.derive: strings.ToLower(strings.TrimPrefix(c.Anchor, "0x")): the prefix is removed BEFORE the lower-casing, so "0X" never matches
+  const anchorText = String(c.anchor ?? '');
+  const restated = (anchorText.startsWith('0x') ? anchorText.slice(2) : anchorText).toLowerCase();
   if (restated !== '' && count > 0 && restated !== toHex(a)) fail(`chain ${String(c.name)}: restated anchor does not match its merkle state`);
-  return { count, anchor: a };
+  return { count: Number(count), anchor: a };
 }
 
 /** ValidatorSetProof.Verify steps 11-17, with the asserted set being the derived one (as proofv2.Verify passes it). */
 function setVerdict(check: Rec, net: Proven, glob: Proven, bound: Uint8Array, pin: Uint8Array): SetVerdict {
+  // 10. an absent proof is a named state, NOT an error (ValidatorSetProof.Verify judges neither account's receipt then)
+  if (net.absent || glob.absent) return 'validator_set_asserted';
+  verifyProven(net);
+  verifyProven(glob);
   if (!equal(net.root, glob.root)) fail('validatorSetProof: the two accounts are proven into different BPT roots');
   // 14. the set and threshold decode (decodeValidators, decodeAcceptThreshold).
   const vs = net.record.validators;
@@ -345,8 +448,18 @@ function setVerdict(check: Rec, net: Proven, glob: Proven, bound: Uint8Array, pi
   if (net.mainHeight !== 1) return 'validator_set_asserted';
   // 17. the incarnation.
   if (!check.incarnation) return 'incarnation_unknown';
-  if (!equal(hexBytes(check.incarnation, 'incarnation', 32), pin)) return 'foreign_incarnation';
+  if (!equal(mustHex32(String(check.incarnation), 'incarnation'), pin)) return 'foreign_incarnation';
   return 'verified';
+}
+
+/** A restated uint64 count exactly: a double, or the literal gotree kept for a value above 2^53 (a BadNum); absent or null is 0. */
+function restatedCount(v: unknown, label: string): bigint {
+  if (v instanceof BadNum) {
+    const n = BigInt(v.text);
+    if (n < 0n || n > 0xffffffffffffffffn) fail(`${label}: not a uint64`);
+    return n;
+  }
+  return BigInt(optUintLocal(v, label));
 }
 
 function optUintLocal(v: unknown, label: string): number {

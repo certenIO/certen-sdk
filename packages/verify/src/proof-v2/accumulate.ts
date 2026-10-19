@@ -7,7 +7,10 @@ import { createPublicKey, verify as nodeVerify } from 'node:crypto';
 import { core, messaging } from 'accumulate-sdk-opendlt';
 import { encode } from 'accumulate-sdk-opendlt/encoding';
 import { keccak256 as sdkKeccak256 } from 'accumulate-sdk-opendlt/common';
-import { equal, fail, hexBytes, MerkleState, sha256, uvarint } from './bytes.js';
+import { equal, fail, hexBytes, MerkleState, sha256, uvarint, VerifyError } from './bytes.js';
+import { encodeNode, WireError } from '../sigtypes/wire.js';
+import { transactionHash as nodeTransactionHash, TransactionHashError } from '../sigtypes/txhash.js';
+import { nodeFromJson, unionFromJson } from '../s3/jsonwire.js';
 
 /**
  * The parts of accumulate-sdk-opendlt's objects this verifier uses, stated once. The SDK's classes are not exported with
@@ -40,28 +43,71 @@ export function keccak256(data: Uint8Array): Uint8Array {
  */
 export function encodeObject(o: unknown): Uint8Array {
   if (!o || typeof o !== 'object') fail('cannot encode object: not an object');
-  return new Uint8Array(encode(o));
+  return sdkRefusal('cannot encode object', () => new Uint8Array(encode(o)));
+}
+
+/**
+ * The SDK refuses a value it cannot encode or hash (a number past 2^53, a transaction without a body) by throwing a plain Error with its
+ * reason. That is a refusal of the document - Go's verdict is a plain refusal of the same document (the signature or the update does not
+ * verify) - so it is carried as a VerifyError with the SDK's reason. A URL the SDK cannot parse (a TypeError "Invalid URL" from new URL, for example
+ * a name ending in U+0085) is the same: Go refuses the document plainly (its URL parser refuses the name), so it is a refusal and not a defect. Any
+ * other throw (another TypeError, a RangeError) is a defect and propagates.
+ */
+function sdkRefusal<T>(what: string, f: () => T): T {
+  try {
+    return f();
+  } catch (e) {
+    if (e instanceof Error && e.constructor === Error) return fail(`${what}: ${e.message}`);
+    if (e instanceof TypeError && e.message === 'Invalid URL') return fail(`${what}: ${e.message}`);
+    throw e;
+  }
 }
 
 /**
  * A SequencedMessage from JSON. accumulate-sdk-opendlt >= 2.5.0 registers the message classes, so the nested message is
  * built as its real class by Message.fromObject (test/upstream-encoder.test.ts pins its bytes against Go's).
+ *
+ * No verifier code calls this since RB9-D B8: Go has no counterpart of building an SDK message from the anchor (it decodes the bytes the import wrote), and the
+ * SDK build crashed on a decoded body whose trailing field the decoder reads as a huge integer, so the verification reads s3/seqmsg.ts instead. It stays an
+ * exported helper of this module, with messageHash: test/keysignatures.test.ts and test/spine-updates.test.ts build and sign SDK messages with them.
  */
 export function sequencedMessage(j: unknown, label: string): { message: { transaction: Hashable } } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const n = j as Record<string, unknown>;
   if (n.type !== 'sequenced') fail(`${label}: is ${String(n.type)}, not a sequenced message`);
-  return messaging.Message.fromObject(n as Parameters<typeof messaging.Message.fromObject>[0]) as unknown as { message: { transaction: Hashable } };
+  return sdkRefusal(`${label}: sequenced message`, () => messaging.Message.fromObject(n as Parameters<typeof messaging.Message.fromObject>[0])) as unknown as { message: { transaction: Hashable } };
 }
 
-/** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). */
+/** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). Used by test/keysignatures.test.ts and test/spine-updates.test.ts, not by the verifier (see sequencedMessage). */
 export function messageHash(msg: unknown): Uint8Array {
   return sha256(encodeObject(msg));
 }
 
+/**
+ * protocol.Transaction.GetHash of a transaction's JSON, computed from the wire object the generated JSON reader makes of it - its header and body with
+ * the extra data they keep (a member $epilogue), which the SDK's classes cannot hold. A transaction with no body has no hash.
+ */
+export function transactionHashOfJson(j: unknown, label: string): Uint8Array {
+  let node;
+  try {
+    node = nodeFromJson('Transaction', j, label);
+  } catch (e) {
+    // a JSON Go's generated reader refuses (JsonError / VerifyError) or bytes its decoder refuses (WireError) is a refusal of the document; a RangeError or a
+    // TypeError is a defect of this verifier and propagates
+    if (e instanceof VerifyError || e instanceof WireError) return fail(`${label}: ${e.message}`);
+    throw e;
+  }
+  try {
+    return nodeTransactionHash(node);
+  } catch (e) {
+    if (e instanceof TransactionHashError) return fail(`transaction hash: ${e.message}`);
+    throw e;
+  }
+}
+
 /** protocol.Transaction.GetHash, through the SDK's own TransactionBase.hash. */
 export function transactionHash(tx: Hashable): Uint8Array {
-  return new Uint8Array(tx.hash());
+  return sdkRefusal('transaction hash', () => new Uint8Array(tx.hash()));
 }
 
 export function transaction(j: unknown, label: string): Hashable & Rendered {
@@ -148,7 +194,10 @@ export function verifySignature(sigJson: unknown, msgHash: Uint8Array, label: st
   const md: Record<string, unknown> = { ...s };
   delete md.signature;
   delete md.transactionHash;
-  const mdHash = sha256(encodeObject(sdk.Signature.fromObject(md)));
+  sdkRefusal(`${label}`, () => sdk.Signature.fromObject(md)); // the SDK must still accept the signature's shape
+  const sigNode = unionFromJson('Signature', md, label);
+  if (!sigNode) fail(`${label}: no signature`);
+  const mdHash = sha256(encodeNode(sigNode));
   if (ed25519(pub, combine(mdHash), sig)) return true;
 
   const signerVersion = Number(s.signerVersion ?? 0);

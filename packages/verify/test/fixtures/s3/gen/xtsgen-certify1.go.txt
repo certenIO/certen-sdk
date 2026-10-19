@@ -1,0 +1,504 @@
+// The certify1 differential corpus (RB9-F5-5): mutations of the documents of the certify1 suite (validator pkg/proof/v2/testdata/certify1, the anchored
+// certify form: evidence 2.1 links, the genesis link, the accounting of the set check, the window of an update), each applied to the base document's
+// JSON tree and judged by proofv2.VerifyPortable. A verdict is one of: verified (with the report summary), named (a NamedState with its partition and
+// block), certify (a *CertifyState with its code and fields, RB9-F5 section 3) or plain (any other refusal; its wording is not compared).
+//
+//	GOWORK=off go run ./cmd/xtsgen -fixtures <certen-sdk>/packages/verify/test/fixtures/s3-f5 -out <certen-sdk>/packages/verify/test/fixtures/s3-f5-go -per 30 certify1
+//
+// A mutation on which Go panics or answers differently on repeated runs is not recorded (counted in skipped and printed to stderr).
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"strings"
+
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+)
+
+// CExpect is what the validator's verifier answers for a certify1 document.
+type CExpect struct {
+	V       string    `json:"v"` // verified | named | certify | plain
+	State   *StateOut `json:"state,omitempty"`
+	Code    string    `json:"code,omitempty"`
+	Fields  []string  `json:"fields,omitempty"`
+	Msg     string    `json:"msg,omitempty"`
+	Summary *Summary  `json:"summary,omitempty"`
+}
+
+type CMutation struct {
+	ID      string  `json:"id"`
+	Base    int     `json:"base"`
+	Op      string  `json:"op"`
+	Patches []Patch `json:"patches"`
+	Expect  CExpect `json:"expect"`
+}
+
+type CFile struct {
+	Format      string `json:"format"`
+	Description string `json:"description"`
+	Validator   string `json:"validator"`
+	// ManifestSha256 is the hash of the certify1 manifest.json the corpus was written over: a corpus is stale when the suite is re-synced.
+	ManifestSha256 string      `json:"manifestSha256"`
+	Bases          []string    `json:"bases"`
+	BaseSha256     []string    `json:"baseSha256"`
+	BaseExpect     []CExpect   `json:"baseExpect"`
+	Mutations      []CMutation `json:"mutations"`
+	Skipped        struct {
+		Panics int `json:"panics"`
+		Flaky  int `json:"flaky"`
+	} `json:"skipped"`
+}
+
+func judgeC(doc []byte) (e CExpect, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			lastPanic = fmt.Sprintf("%v | %s", r, topFrames(debug.Stack(), 6))
+		}
+	}()
+	p := new(proofv2.Portable)
+	if err := json.Unmarshal(doc, p); err != nil {
+		return CExpect{V: "plain", Msg: err.Error()}, true
+	}
+	rep, err := proofv2.VerifyPortable(p)
+	if err == nil {
+		return CExpect{V: "verified", Summary: summarize(rep)}, true
+	}
+	var cs *proofv2.CertifyState
+	if errors.As(err, &cs) {
+		return CExpect{V: "certify", Code: cs.Code, Fields: append([]string{}, cs.Fields...), Msg: err.Error()}, true
+	}
+	var ns *proofv2.NamedState
+	if errors.As(err, &ns) {
+		return CExpect{V: "named", State: &StateOut{ns.Code, ns.Partition, ns.Block}, Msg: err.Error()}, true
+	}
+	return CExpect{V: "plain", Msg: err.Error()}, true
+}
+
+func sameC(a, b CExpect) bool {
+	if a.V != b.V {
+		return false
+	}
+	switch a.V {
+	case "plain":
+		return true // the wording may differ between runs by map order; the class is what is stable
+	}
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	return string(ja) == string(jb)
+}
+
+func judgeCStable(doc []byte, f *CFile) (CExpect, bool) {
+	runs := 4
+	if len(doc) > 100_000 {
+		runs = 2
+	}
+	a, ok := judgeC(doc)
+	if !ok {
+		f.Skipped.Panics++
+		return a, false
+	}
+	for i := 1; i < runs; i++ {
+		b, ok := judgeC(doc)
+		if !ok {
+			f.Skipped.Panics++
+			return a, false
+		}
+		if !sameC(a, b) {
+			f.Skipped.Flaky++
+			lastFlaky = a.V + " vs " + b.V
+			return a, false
+		}
+	}
+	return a, true
+}
+
+// receiptLike reports whether a node is a merkle receipt as the document spells it.
+func receiptLike(v any) bool {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	_, hasStart := m["start"]
+	_, hasAnchor := m["anchor"]
+	_, hasEntries := m["entries"]
+	return hasStart && hasAnchor && hasEntries
+}
+
+var epilogues = []string{"05010a", "07010a", "08020102", "0a00", "1f01aa", "2001aa", "2101aa", "00", "80", "0101", "0601", "06020a0b", "ff", "", "0701", "09"}
+
+// targeted returns the structural mutations of the certify form for a base document: every one a change a certify1 verifier must judge as Go does.
+func targeted(r *rand.Rand, doc map[string]any) ([]Patch, string) {
+	ev, _ := doc["evidence"].(map[string]any)
+	var nodes []node
+	collect(ev, []any{"evidence"}, &nodes)
+	var receipts, records []node
+	// An unknown trailing field is aimed where the certify form reads it: the receipts of the links and of the genesis link (a link that does not
+	// decode is certify_link_invalid) and the minor-root records of certify and of the set check's hops (a record tolerates a trailing field 5..32
+	// and refuses one it cannot place). Every other receipt of a document is decoded by the verifier's older code, which is not under test here.
+	for _, n := range nodes {
+		if len(n.path) >= 2 && (n.path[1] == "links" || n.path[1] == "genesisLink") && receiptLike(n.v) && len(n.path) <= 3 {
+			receipts = append(receipts, n)
+		}
+		isRun := (len(n.path) == 3 && n.path[1] == "certify") || (len(n.path) == 4 && n.path[1] == "check" && n.path[2] == "hops")
+		if m, ok := n.v.(map[string]any); ok && isRun {
+			if _, has := m["signatures"]; has {
+				if _, has2 := m["anchor"]; has2 {
+					records = append(records, n)
+				}
+			}
+		}
+	}
+	pick := func(l []node) (node, bool) {
+		if len(l) == 0 {
+			return node{}, false
+		}
+		return l[r.Intn(len(l))], true
+	}
+	links, _ := ev["links"].([]any)
+	certify, _ := ev["certify"].([]any)
+	switch r.Intn(14) {
+	case 0:
+		if n, ok := pick(receipts); ok {
+			return []Patch{{Path: append(append([]any(nil), n.path...), "$epilogue"), Op: "set", Value: epilogues[r.Intn(len(epilogues))], HasV: true}}, "epilogue-receipt@" + pathString(n.path)
+		}
+	case 1:
+		if n, ok := pick(records); ok {
+			return []Patch{{Path: append(append([]any(nil), n.path...), "$epilogue"), Op: "set", Value: epilogues[r.Intn(len(epilogues))], HasV: true}}, "epilogue-record@" + pathString(n.path)
+		}
+	case 2:
+		return []Patch{{Path: []any{"evidence", "version"}, Op: "set", Value: "2.0", HasV: true}}, "version20"
+	case 3:
+		if len(certify) > 0 {
+			i := r.Intn(len(certify))
+			if m, ok := certify[i].(map[string]any); ok {
+				if _, has := m["rootProof"]; has {
+					return []Patch{{Path: []any{"evidence", "certify", i, "rootProof"}, Op: "delete"}}, fmt.Sprintf("rootproof-drop@%d", i)
+				}
+			}
+		}
+	case 4:
+		if len(links) > 0 {
+			i := r.Intn(len(links))
+			return []Patch{{Path: []any{"evidence", "links"}, Op: "dropIndex", I: i}}, fmt.Sprintf("link-drop@%d", i)
+		}
+	case 5:
+		if len(links) > 0 {
+			i := r.Intn(len(links))
+			return []Patch{{Path: []any{"evidence", "links"}, Op: "dup", I: i}}, fmt.Sprintf("link-dup@%d", i)
+		}
+	case 6:
+		if len(links) >= 2 {
+			return []Patch{{Path: []any{"evidence", "links"}, Op: "swap", I: 0, J: len(links) - 1}}, "link-swap"
+		}
+	case 7:
+		return []Patch{{Path: []any{"evidence", "genesisLink"}, Op: "delete"}}, "genesis-link-drop"
+	case 8:
+		return []Patch{{Path: []any{"evidence", "genesisLink"}, Op: "set", Value: nil, HasV: true}}, "genesis-link-null"
+	case 9:
+		return []Patch{{Path: []any{"evidence", "links"}, Op: "set", Value: nil, HasV: true}}, "links-null"
+	case 10:
+		if len(links) > 0 {
+			i := r.Intn(len(links))
+			return []Patch{{Path: []any{"evidence", "links", i}, Op: "set", Value: nil, HasV: true}}, fmt.Sprintf("link-null@%d", i)
+		}
+	case 11:
+		if len(links) > 0 {
+			i := r.Intn(len(links))
+			return []Patch{{Path: []any{"evidence", "links", i, "entries"}, Op: "set", Value: []any{}, HasV: true}}, fmt.Sprintf("link-entries-empty@%d", i)
+		}
+	case 12:
+		if len(certify) > 0 {
+			i := r.Intn(len(certify))
+			return []Patch{{Path: []any{"evidence", "certify"}, Op: "dropIndex", I: i}}, fmt.Sprintf("certify-drop@%d", i)
+		}
+	case 13:
+		if len(certify) >= 2 {
+			return []Patch{{Path: []any{"evidence", "certify"}, Op: "swap", I: 0, J: len(certify) - 1}}, "certify-swap"
+		}
+	}
+	return nil, ""
+}
+
+func certify1Mutations(fixtures, out string, per int) error {
+	raw, err := os.ReadFile(filepath.Join(fixtures, "certify1", "manifest.json"))
+	if err != nil {
+		return err
+	}
+	msum := sha256.Sum256(raw)
+	var m struct {
+		Cases []struct {
+			File string `json:"file"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return err
+	}
+	f := &CFile{Format: "certen:certify1-mutations:v1",
+		Description: "Mutations of the certify1 vectors (RB9-F5 anchored certify form), each applied to the base document's JSON tree and judged by proofv2.VerifyPortable: the verdict is verified (summary), named (state, partition, block), certify (code, fields) or plain (class only). A mutation on which Go panics or answers differently on two runs is not recorded."}
+	f.ManifestSha256 = hex.EncodeToString(msum[:])
+	// The suite's documents, then the evidence 2.0 documents of the earlier corpora (relative to the fixtures directory, XTS_EXTRA_BASES, comma-separated;
+	// a .gz is read decompressed and hashed as stored): the sweeps reach the 2.0 form's receipts too.
+	var bpaths []string
+	for _, c := range m.Cases {
+		bpaths = append(bpaths, "certify1/"+c.File)
+	}
+	if extra := os.Getenv("XTS_EXTRA_BASES"); extra != "" {
+		bpaths = append(bpaths, strings.Split(extra, ",")...)
+	}
+	for bi, bpath := range bpaths {
+		f.Bases = append(f.Bases, bpath)
+		stored, err := os.ReadFile(filepath.Join(fixtures, bpath))
+		if err != nil {
+			return err
+		}
+		rawDoc, err := readDoc(filepath.Join(fixtures, bpath))
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(stored)
+		f.BaseSha256 = append(f.BaseSha256, hex.EncodeToString(sum[:]))
+		var base any
+		if err := json.Unmarshal(rawDoc, &base); err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		canon, _ := json.Marshal(base)
+		be, ok := judgeCStable(canon, f)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+
+		var nodes []node
+		collect(base.(map[string]any)["evidence"], []any{"evidence"}, &nodes)
+		doc := base.(map[string]any)
+		for _, k := range []string{"pin", "format"} {
+			nodes = append(nodes, node{[]any{k}, doc[k]})
+		}
+		if g, ok := doc["genesis"].(map[string]any); ok {
+			for _, k := range []string{"rootChainAnchor", "stateTreeAnchor", "networkRecord", "globalsRecord"} {
+				nodes = append(nodes, node{[]any{"genesis", k}, g[k]})
+			}
+		}
+		for k := 0; k < per; k++ {
+			r := rand.New(rand.NewSource(seedOf(bpath, fmt.Sprint(k))))
+			var ps []Patch
+			var ops []string
+			if k%3 == 0 { // a third of the mutations are the certify form's own structural changes
+				p, name := targeted(r, doc)
+				if p == nil {
+					continue
+				}
+				ps, ops = p, []string{name}
+			} else {
+				count := 1
+				if r.Intn(4) == 0 {
+					count = 2
+				}
+				for cc := 0; cc < count; cc++ {
+					t := nodes[r.Intn(len(nodes))]
+					for tries := 0; tries < 4; tries++ {
+						switch t.v.(type) {
+						case map[string]any, []any:
+							if r.Intn(3) != 0 {
+								t = nodes[r.Intn(len(nodes))]
+								continue
+							}
+						}
+						break
+					}
+					p, name := mutate(r, t, "")
+					ps = append(ps, p)
+					ops = append(ops, name+"@"+pathString(p.Path))
+				}
+			}
+			mutated, ok := applyPatches(base, ps)
+			if !ok {
+				continue
+			}
+			docBytes, err := json.Marshal(mutated)
+			if err != nil {
+				continue
+			}
+			lastPanic = ""
+			e, ok := judgeCStable(docBytes, f)
+			if !ok {
+				if lastPanic != "" {
+					fmt.Fprintf(os.Stderr, "PANIC %s#%02d [%s]: %s\n", bpath, k, strings.Join(ops, " + "), lastPanic)
+				} else {
+					fmt.Fprintf(os.Stderr, "FLAKY %s#%02d [%s]: %s\n", bpath, k, strings.Join(ops, " + "), lastFlaky)
+				}
+				continue
+			}
+			f.Mutations = append(f.Mutations, CMutation{ID: fmt.Sprintf("%s#%02d", bpath, k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: e})
+		}
+		sweepCertify1(base, bi, bpath, f)
+	}
+	return writeJSON(filepath.Join(out, "certify1-mutations.json.gz"), f)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the sweeps (TS parity round B6 after F5-5): every receipt member of every base document is given each unplaceable and placeable trailing field,
+// and every number of every base document is set to the edge values of a uint64. They are exhaustive per path class (a path with every array index
+// replaced by *), not drawn at random, so a verifier that reads one receipt or one number differently from Go is found by construction.
+
+// classOf spells a path with every array index as *.
+func classOf(p []any) string {
+	parts := make([]string, len(p))
+	for i, e := range p {
+		if _, ok := e.(int); ok {
+			parts[i] = "*"
+		} else {
+			parts[i] = fmt.Sprint(e)
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+// sweepEpilogues are the trailing fields (merkle.Receipt, ReceiptEntry and api.MinorRootRecord keep what follows their last known field as extra data;
+// the reader refuses a field number it cannot place after what it has read, or above 32): EVERY field number 0-8 and 31-33 and 64 with a value, the bare
+// bytes that open such a field (01 03 04 21 ff 80 8001), field 4 as a record's root proof (0400, 04020100), a field 6 that reads as one more entry
+// (0601, 06020a0b), 05010a (an unplaceable field 5 after the entries) and 07010a (an unknown field 7 kept as extra data).
+var sweepEpilogues = func() []string {
+	var out []string
+	for _, n := range []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 31, 32, 33, 64} {
+		out = append(out, fmt.Sprintf("%02x01aa", n))
+	}
+	return append(out, "01", "03", "04", "21", "ff", "80", "8001", "0400", "04020100", "0601", "06020a0b", "05010a", "07010a")
+}()
+
+// sweepBases is the number of documents a path class is swept in (see sweepCertify1).
+const sweepBases = 3
+
+var sweepUse = map[string]int{}
+
+var u64Values = []string{"9007199254740991", "9007199254740992", "9223372036854775808", "18446744073709551615", "18446744073709551616"}
+
+func isReceiptNode(n node) bool {
+	m, ok := n.v.(map[string]any)
+	if !ok {
+		return false
+	}
+	if receiptLike(m) {
+		return true
+	}
+	if len(n.path) > 0 {
+		switch n.path[len(n.path)-1] {
+		case "receipt", "continuedReceipt", "genesisLink", "stateReceipt":
+			return true
+		}
+	}
+	return false
+}
+
+func isEntryNode(n node) bool {
+	m, ok := n.v.(map[string]any)
+	if !ok || len(n.path) < 2 {
+		return false
+	}
+	_, hasHash := m["hash"]
+	_, hasRight := m["right"]
+	_, isInList := n.path[len(n.path)-1].(int)
+	return hasHash && hasRight && isInList && n.path[len(n.path)-2] == "entries"
+}
+
+func isRecordNode(n node) bool {
+	m, ok := n.v.(map[string]any)
+	if !ok {
+		return false
+	}
+	_, a := m["signatures"]
+	_, b := m["anchor"]
+	return a && b
+}
+
+func sweepCertify1(base any, bi int, bpath string, f *CFile) {
+	doc := base.(map[string]any)
+	var nodes []node
+	collect(doc, nil, &nodes)
+	seq := 0
+	record := func(ops string, ps []Patch) {
+		mutated, ok := applyPatches(base, ps)
+		if !ok {
+			return
+		}
+		docBytes, err := json.Marshal(mutated)
+		if err != nil {
+			return
+		}
+		lastPanic = ""
+		e, ok := judgeCStable(docBytes, f)
+		id := fmt.Sprintf("%s#sweep%03d", bpath, seq)
+		seq++
+		if !ok {
+			if lastPanic != "" {
+				fmt.Fprintf(os.Stderr, "PANIC %s [%s]: %s\n", id, ops, lastPanic)
+			} else {
+				fmt.Fprintf(os.Stderr, "FLAKY %s [%s]: %s\n", id, ops, lastFlaky)
+			}
+			return
+		}
+		f.Mutations = append(f.Mutations, CMutation{ID: id, Base: bi, Op: ops, Patches: ps, Expect: e})
+	}
+	form := "2.1"
+	if ev, ok := doc["evidence"].(map[string]any); ok {
+		if v, ok := ev["version"].(string); ok {
+			form = v
+		}
+	}
+	seen := map[string]bool{}
+	once := func(kind string, n node) bool {
+		k := kind + "|" + classOf(n.path)
+		if seen[k] {
+			return false
+		}
+		seen[k] = true
+		k = form + "|" + k // a class is swept in the first sweepBases documents of each form (2.1 and 2.0)
+		// A class is swept in the first sweepBases documents that hold it, so a corpus over 46 documents does not repeat the same member 46 times; the
+		// anchor's own block and root chain index are swept in every document, as what follows them (a link, a window, a replay) differs by document.
+		last, _ := n.path[len(n.path)-1].(string)
+		if last != "minorBlockIndex" && last != "rootChainIndex" {
+			sweepUse[k]++
+			if sweepUse[k] > sweepBases {
+				return false
+			}
+		}
+		return true
+	}
+	for _, n := range nodes {
+		if isReceiptNode(n) || isEntryNode(n) || isRecordNode(n) {
+			kind := "receipt"
+			if isEntryNode(n) {
+				kind = "entry"
+			}
+			if isRecordNode(n) {
+				kind = "record"
+			}
+			if once("epi-"+kind, n) {
+				for _, e := range sweepEpilogues {
+					record("sweep-epilogue-"+e+"@"+pathString(n.path), []Patch{{Path: append(append([]any(nil), n.path...), "$epilogue"), Op: "set", Value: e, HasV: true}})
+				}
+			}
+		}
+		if _, isNum := n.v.(float64); isNum && len(n.path) > 0 && once("u64", n) {
+			for _, v := range u64Values {
+				record("sweep-u64-"+v+"@"+pathString(n.path), []Patch{{Path: n.path, Op: "setNumber", To: v}})
+			}
+		}
+		// a member a document may lack: an absent or null message or receipt is judged at the import (finding RB9-F5-5-F3)
+		if len(n.path) > 0 {
+			if last, ok := n.path[len(n.path)-1].(string); ok && (last == "message" || last == "receipt") && once("drop", n) {
+				record("sweep-delete@"+pathString(n.path), []Patch{{Path: n.path, Op: "delete"}})
+				record("sweep-null@"+pathString(n.path), []Patch{{Path: n.path, Op: "set", Value: nil, HasV: true}})
+			}
+		}
+	}
+}

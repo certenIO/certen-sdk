@@ -1,0 +1,970 @@
+﻿// Command xtsgen writes the Go side of the TypeScript parity corpora for evidence 2.1 (RB9 Phase D, certen-sdk packages/verify/test/fixtures/s3).
+//
+// It is a scratch program: the validator's repository is not changed by it. Its source is kept beside the corpora in certen-sdk
+// (test/fixtures/s3/gen/xtsgen-*.go.txt, one file per source file here) so that anyone can regenerate them from the validator at the commit
+// named in MANIFEST.json (validatorCommit):
+//
+//	mkdir <validator>/cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile; do
+//	  cp test/fixtures/s3/gen/xtsgen-$f.go.txt <validator>/cmd/xtsgen/$f.go; done
+//	cd <validator>
+//	S3=<certen-sdk>/packages/verify/test/fixtures/s3
+//	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written -per 100 real intent facts decode tables votes
+//	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written -per 12 mutations bytes fold
+//
+// The two receipt-spelling corpora are separate commands writing their own files (the earlier corpora stay as they were judged):
+//
+//	GOWORK=off go run ./cmd/xtsgen -validator . -fixtures $S3 -out $S3/go-written firstsibling
+//	GOWORK=off go build -trimpath -o xtsgen ./cmd/xtsgen && for i in 0 1 2 3 4 5 6 7 8 9 10; do
+//	  XTS_SHARD=$i/11 ./xtsgen -fixtures $S3 -out <dir> receiptspell & done; wait
+//	node $S3/gen/merge-receiptspell.mjs <dir>   # writes <dir>/bytes-cases-receiptspell.json.gz (30475 cases); copy it to $S3/go-written
+//
+// The path-class corpus (the first occurrence of every hex or partition / URL string member of every base document, by path class, spelled
+// 0x / 0X / upper / space and, for names, U+FEFF / U+0085 / U+00A0 / tab-newline; classes receiptspell already spells are skipped) is a third such command:
+//
+//	GOWORK=off go build -trimpath -o xtsgen ./cmd/xtsgen && for i in 0 1 2 3 4 5 6 7 8 9 10; do
+//	  XTS_SHARD=$i/11 ./xtsgen -fixtures $S3 -out <dir> pathspell & done; wait
+//	node $S3/gen/merge-pathspell.mjs <dir>   # writes <dir>/bytes-cases-pathspell.json.gz (51131 cases, 217 path classes); copy it to $S3/go-written
+//
+// (mutations.json, bytes-cases.json.gz and fold-orbits.json are written at -per 12: a larger -per writes a different, larger mutations.json.
+// At a larger -per three intent refusals differ from the checked-in corpus only in the binary decoder's wording, one facts case in the wording
+// of a URL percent escape, and one votes case is a harness applyPatches TypeError on a null parent: the verdict and the bytes are the same.)
+//
+// The certify1 differential corpus (RB9-F5-5; the anchored certify form, over the synced certify1 suite) is a fourth such command; it is written beside the
+// synced suite, not into go-written, because a re-sync of the suite replaces its directory:
+//
+//	XTS_EXTRA_BASES=../proofv2/valid.json.gz,../proofv2/network-update.json.gz GOWORK=off go run ./cmd/xtsgen //	  -fixtures <certen-sdk>/packages/verify/test/fixtures/s3-f5 -out <certen-sdk>/packages/verify/test/fixtures/s3-f5-go -per 30 certify1
+//
+// (about 7 minutes: the random mutations, then the sweeps - every field number of a trailing field on every receipt, entry and record path class, the
+// uint64 edge values on every number path class, delete and null of every message and receipt member - over the suite's documents and the two
+// evidence 2.0 documents named by XTS_EXTRA_BASES, each class in the first three documents that hold it.)
+//
+// The corpus of consensus.judgeProofV2 needs the unexported function, so it is a test of that package
+// (test/fixtures/s3/gen/xts_judge_test.go.txt -> <validator>/pkg/consensus/xts_judge_test.go), run after the intent corpus exists:
+//
+//	XTS_FIXTURES=<certen-sdk>/packages/verify/test/fixtures/s3 go test ./pkg/consensus -run TestXtsJudgeCorpus -count=1
+//
+// Every verdict in a corpus was produced by the validator's own functions (proofv2.VerifyPortable, intentcert.BindProofV21,
+// GovRootV4FromPortable, EncodeVoteV4, GoverningFactsFromVoteEvidence, proofv2.UnmarshalCertifiedEvidence, consensus.Evidence20View and
+// judgeProofV2, proof.RoutePartition, the executor tables) over the exact document the corpus describes. A document on which Go panics or
+// answers differently on repeated runs (it ranges over a map) is not recorded: Go has no verdict there; each is printed to stderr (PANIC,
+// FLAKY) with its patches, to be reported.
+package main
+
+import (
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"hash/fnv"
+	"io"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime/debug"
+	"strings"
+
+	"github.com/certen/independant-validator/pkg/proof"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+)
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// verdicts
+
+type StateOut struct {
+	Code      string `json:"code"`
+	Partition string `json:"partition"`
+	Block     uint64 `json:"block"`
+}
+
+type Summary struct {
+	Version               string       `json:"version"`
+	Tag                   string       `json:"tag"`
+	Partition             string       `json:"partition"`
+	AnchorBlock           uint64       `json:"anchorBlock"`
+	CertifiedBlock        uint64       `json:"certifiedBlock"`
+	CertifiedRoot         string       `json:"certifiedRoot"`
+	CheckBlock            uint64       `json:"checkBlock"`
+	SetVerdict            string       `json:"setVerdict"`
+	RoutingHeight         uint64       `json:"routingHeight"`
+	Validators            int          `json:"validators"`
+	Threshold             uint64       `json:"threshold"`
+	TxHash                string       `json:"txHash"`
+	AnchorTxHash          string       `json:"anchorTxHash"`
+	AnchorStateRoot       string       `json:"anchorStateRoot"`
+	AnchorRootChainAnchor string       `json:"anchorRootChainAnchor"`
+	AccumulateSetRoot     string       `json:"accumulateSetRoot"`
+	Proven                []ProvenOut  `json:"proven"`
+	PagesBound            int          `json:"pagesBound"`
+	PageChains            []ChainOut   `json:"pageChains"`
+	Unproven              []StateOut   `json:"unproven"`
+	Disclosures           []StateOut   `json:"disclosures"`
+	AuthorizationMode     string       `json:"authorizationMode"`
+	Arrivals              []ArrivalOut `json:"arrivals"`
+}
+
+type ProvenOut struct {
+	URL       string   `json:"url"`
+	Partition string   `json:"partition"`
+	Block     uint64   `json:"block"`
+	Roles     []string `json:"roles"`
+	Declared  []string `json:"declared"`
+}
+type ChainOut struct {
+	URL        string `json:"url"`
+	Bound      bool   `json:"bound"`
+	MainHeight uint64 `json:"mainHeight"`
+}
+type ArrivalOut struct {
+	Kind      string `json:"kind"`
+	Account   string `json:"account"`
+	Partition string `json:"partition"`
+	Message   string `json:"message"`
+	Block     uint64 `json:"block"`
+}
+
+// Expect is what the validator's verifier answers for a document.
+type Expect struct {
+	V       string    `json:"v"` // verified | named | plain
+	State   *StateOut `json:"state,omitempty"`
+	Msg     string    `json:"msg,omitempty"`
+	Summary *Summary  `json:"summary,omitempty"`
+	// EvLen is len(json.Marshal(evidence)) of the Evidence the import produced (the measure of the evidence budget), -1 when the import failed.
+	EvLen int `json:"evLen"`
+}
+
+func hx(b [32]byte) string { return hex.EncodeToString(b[:]) }
+
+func stateOuts(in []proofv2.NamedState) []StateOut {
+	out := []StateOut{}
+	for _, s := range in {
+		out = append(out, StateOut{s.Code, s.Partition, s.Block})
+	}
+	return out
+}
+
+func summarize(r *proofv2.Report) *Summary {
+	s := &Summary{Version: r.Version, Tag: r.Tag, Partition: r.Partition, AnchorBlock: r.AnchorBlock, CertifiedBlock: r.CertifiedBlock,
+		CertifiedRoot: hx(r.CertifiedRoot), CheckBlock: r.CheckBlock, SetVerdict: string(r.SetVerdict), RoutingHeight: r.RoutingHeight,
+		Validators: r.Validators, Threshold: r.Threshold, TxHash: hx(r.TxHash), AnchorTxHash: hx(r.AnchorTxHash), AnchorStateRoot: hx(r.AnchorStateRoot),
+		AnchorRootChainAnchor: hx(r.AnchorRootChainAnchor), AccumulateSetRoot: hx(r.AccumulateSetRoot), AuthorizationMode: r.AuthorizationMode,
+		Proven: []ProvenOut{}, PageChains: []ChainOut{}, Arrivals: []ArrivalOut{}}
+	for _, p := range r.Proven {
+		po := ProvenOut{URL: p.URL, Partition: p.Partition, Block: p.Block, Roles: []string{}, Declared: []string{}}
+		for _, x := range p.Roles {
+			po.Roles = append(po.Roles, string(x))
+		}
+		for _, x := range p.Declared {
+			po.Declared = append(po.Declared, string(x))
+		}
+		s.Proven = append(s.Proven, po)
+	}
+	for _, c := range r.PageChains {
+		if c.Bound {
+			s.PagesBound++
+		}
+		s.PageChains = append(s.PageChains, ChainOut{c.URL, c.Bound, c.MainHeight})
+	}
+	s.Unproven = stateOuts(r.Unproven)
+	s.Disclosures = stateOuts(r.Disclosures)
+	for _, a := range r.Arrivals {
+		s.Arrivals = append(s.Arrivals, ArrivalOut{a.Kind, a.Account, a.Partition, a.Message, a.Block})
+	}
+	return s
+}
+
+// lastPanic is the panic value and the innermost frames of the last panicking judge call (reported, never swallowed).
+var lastPanic string
+
+func topFrames(stack []byte, n int) string {
+	var out []string
+	for _, l := range strings.Split(string(stack), "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "github.com/certen/") || strings.HasPrefix(l, "gitlab.com/accumulatenetwork/") {
+			out = append(out, l)
+			if len(out) == n {
+				break
+			}
+		}
+	}
+	return strings.Join(out, " <- ")
+}
+
+// judge runs VerifyPortable over document bytes. ok is false when Go panicked.
+func judge(doc []byte) (e Expect, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+			lastPanic = fmt.Sprintf("%v | %s", r, topFrames(debug.Stack(), 6))
+		}
+	}()
+	e.EvLen = -1
+	p := new(proofv2.Portable)
+	if err := json.Unmarshal(doc, p); err != nil {
+		return Expect{V: "plain", Msg: err.Error(), EvLen: -1}, true
+	}
+	if ev, _, _, _, err := proofv2.Import(p); err == nil {
+		if raw, err := json.Marshal(ev); err == nil {
+			e.EvLen = len(raw)
+		}
+	}
+	rep, err := proofv2.VerifyPortable(p)
+	if err == nil {
+		e.V, e.Summary = "verified", summarize(rep)
+		return e, true
+	}
+	var ns *proofv2.NamedState
+	if errors.As(err, &ns) {
+		e.V, e.State, e.Msg = "named", &StateOut{ns.Code, ns.Partition, ns.Block}, err.Error()
+		return e, true
+	}
+	e.V, e.Msg = "plain", err.Error()
+	return e, true
+}
+
+// judgeStable runs the verifier twice and drops a document whose verdict depends on map iteration order.
+func judgeStable(doc []byte) (Expect, bool) {
+	a, ok := judge(doc)
+	if !ok {
+		return a, false
+	}
+	b, ok := judge(doc)
+	if !ok {
+		return a, false
+	}
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	// A plain refusal's message may differ between runs only by map order; the verdict class is what is stable.
+	if a.V == "plain" && b.V == "plain" {
+		return a, true
+	}
+	return a, bytes.Equal(ja, jb)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// patches
+
+type Patch struct {
+	Path  []any  `json:"path"`
+	Op    string `json:"op"` // set | setNumber (To is the decimal text of the number) | delete | rename | swap | dup | insert
+	Value any    `json:"value,omitempty"`
+	HasV  bool   `json:"hasValue,omitempty"`
+	To    string `json:"to,omitempty"`
+	I     int    `json:"i,omitempty"`
+	J     int    `json:"j,omitempty"`
+}
+
+func deepCopy(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(x))
+		for k, e := range x {
+			m[k] = deepCopy(e)
+		}
+		return m
+	case []any:
+		s := make([]any, len(x))
+		for i, e := range x {
+			s[i] = deepCopy(e)
+		}
+		return s
+	}
+	return v
+}
+
+// at walks path[:len-1] and returns the container.
+func walk(root any, path []any) any {
+	cur := root
+	for _, p := range path {
+		switch k := p.(type) {
+		case string:
+			cur = cur.(map[string]any)[k]
+		case int:
+			cur = cur.([]any)[k]
+		case float64:
+			cur = cur.([]any)[int(k)]
+		}
+	}
+	return cur
+}
+
+func apply(root any, p Patch) any {
+	if p.Op == "setNumber" { // a number written by its decimal text, exact beyond 2^53 (the corpus file keeps the text in To)
+		p = Patch{Path: p.Path, Op: "set", Value: json.Number(p.To), HasV: true}
+	}
+	if len(p.Path) == 0 && p.Op == "set" {
+		return deepCopy(p.Value)
+	}
+	switch p.Op {
+	case "set", "delete", "rename":
+		parent := walk(root, p.Path[:len(p.Path)-1])
+		last := p.Path[len(p.Path)-1]
+		switch c := parent.(type) {
+		case map[string]any:
+			k := last.(string)
+			switch p.Op {
+			case "set":
+				c[k] = deepCopy(p.Value)
+			case "delete":
+				delete(c, k)
+			case "rename":
+				c[p.To] = c[k]
+				delete(c, k)
+			}
+		case []any:
+			i := toInt(last)
+			switch p.Op {
+			case "set":
+				c[i] = deepCopy(p.Value)
+			case "delete":
+				// handled below through the grandparent
+				panic("array element delete goes through the array path")
+			}
+		}
+	case "swap", "dup", "insert", "dropIndex":
+		arr := walk(root, p.Path).([]any)
+		gp := walk(root, p.Path[:len(p.Path)-1])
+		out := make([]any, 0, len(arr)+1)
+		switch p.Op {
+		case "swap":
+			out = append(out, arr...)
+			out[p.I], out[p.J] = out[p.J], out[p.I]
+		case "dup":
+			out = append(out, arr[:p.I+1]...)
+			out = append(out, deepCopy(arr[p.I]))
+			out = append(out, arr[p.I+1:]...)
+		case "insert":
+			out = append(out, arr[:p.I]...)
+			out = append(out, deepCopy(p.Value))
+			out = append(out, arr[p.I:]...)
+		case "dropIndex":
+			out = append(out, arr[:p.I]...)
+			out = append(out, arr[p.I+1:]...)
+		}
+		switch c := gp.(type) {
+		case map[string]any:
+			c[p.Path[len(p.Path)-1].(string)] = out
+		case []any:
+			c[toInt(p.Path[len(p.Path)-1])] = out
+		}
+	}
+	return root
+}
+
+func toInt(v any) int {
+	switch x := v.(type) {
+	case int:
+		return x
+	case float64:
+		return int(x)
+	}
+	panic("not an index")
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the mutation operators
+
+type node struct {
+	path []any
+	v    any
+}
+
+func collect(v any, path []any, out *[]node) {
+	*out = append(*out, node{append([]any(nil), path...), v})
+	switch x := v.(type) {
+	case map[string]any:
+		keys := sortedKeys(x)
+		for _, k := range keys {
+			collect(x[k], append(path, k), out)
+		}
+	case []any:
+		for i, e := range x {
+			collect(e, append(path, i), out)
+		}
+	}
+}
+
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	for i := 1; i < len(keys); i++ {
+		for j := i; j > 0 && keys[j] < keys[j-1]; j-- {
+			keys[j], keys[j-1] = keys[j-1], keys[j]
+		}
+	}
+	return keys
+}
+
+func isHex(s string) bool {
+	if len(s) < 2 || len(s)%2 != 0 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
+var otherStrings = []string{"accept", "reject", "abstain", "suggest", "sequenced", "inline", "voter", "principal-chain", "authority-page", "bogus", "2.0", "2.1", "main", "signature", "acc://bvn-BVN1.acme", "acc://bvn-BVN2.acme", "acc://dn.acme", "acc://nowhere.acme/book"}
+
+// mutate returns one patch for a target node and a name for the operator.
+func mutate(r *rand.Rand, n node, rootPath string) (Patch, string) {
+	set := func(v any, name string) (Patch, string) {
+		return Patch{Path: n.path, Op: "set", Value: v, HasV: true}, name
+	}
+	switch x := n.v.(type) {
+	case string:
+		switch {
+		case isHex(x):
+			switch r.Intn(7) {
+			case 0:
+				i := r.Intn(len(x))
+				c := "0123456789abcdef"[r.Intn(16)]
+				if byte(x[i]) == c {
+					c = "0123456789abcdef"[(strings.IndexByte("0123456789abcdef", c)+1)%16]
+				}
+				return set(x[:i]+string(c)+x[i+1:], "hexflip")
+			case 1:
+				return set(strings.ToUpper(x), "hexupper")
+			case 2:
+				return set(x[:len(x)-2], "hextrunc")
+			case 3:
+				return set(x+"00", "hexappend")
+			case 4:
+				return set("", "hexempty")
+			case 5:
+				return set(x[:len(x)-1], "hexodd")
+			default:
+				return set("0x"+x, "hex0x")
+			}
+		case strings.HasPrefix(x, "acc://"):
+			switch r.Intn(6) {
+			case 0:
+				return set(strings.ToUpper(x), "urlupper")
+			case 1:
+				return set(x+"/", "urlslash")
+			case 2:
+				return set(x+"x", "urlappend")
+			case 3:
+				return set(otherStrings[14+r.Intn(4)], "urlother")
+			case 4:
+				return set(strings.TrimPrefix(x, "acc://"), "urlnoscheme")
+			default:
+				i := r.Intn(len(x))
+				return set(x[:i]+"~"+x[i+1:], "urlchar")
+			}
+		default:
+			switch r.Intn(5) {
+			case 0:
+				return set(otherStrings[r.Intn(len(otherStrings))], "strother")
+			case 1:
+				return set(x+"x", "strappend")
+			case 2:
+				return set("", "strempty")
+			case 3:
+				return set(strings.ToUpper(x), "strupper")
+			default:
+				return set(float64(r.Intn(100)), "strtonumber")
+			}
+		}
+	case float64:
+		switch r.Intn(7) {
+		case 0:
+			return set(x+1, "numinc")
+		case 1:
+			return set(x-1, "numdec")
+		case 2:
+			return set(float64(0), "numzero")
+		case 3:
+			return set(float64(9007199254740992), "numbig")
+		case 4:
+			return set(float64(-1), "numneg")
+		case 5:
+			return set(x+0.5, "numfrac")
+		default:
+			return set(fmt.Sprintf("%v", x), "numstring")
+		}
+	case bool:
+		switch r.Intn(3) {
+		case 0:
+			return set(!x, "boolflip")
+		case 1:
+			return set(float64(1), "booltonumber")
+		default:
+			return set(nil, "boolnull")
+		}
+	case nil:
+		switch r.Intn(4) {
+		case 0:
+			return set("", "nulltostring")
+		case 1:
+			return set(float64(0), "nulltonumber")
+		case 2:
+			return set(map[string]any{}, "nulltoobject")
+		default:
+			return set([]any{}, "nulltoarray")
+		}
+	case []any:
+		switch {
+		case len(x) >= 2 && r.Intn(3) == 0:
+			i, j := r.Intn(len(x)), r.Intn(len(x))
+			if i == j {
+				j = (i + 1) % len(x)
+			}
+			return Patch{Path: n.path, Op: "swap", I: i, J: j}, "arrswap"
+		case len(x) >= 1 && r.Intn(3) == 0:
+			return Patch{Path: n.path, Op: "dropIndex", I: r.Intn(len(x))}, "arrdrop"
+		case len(x) >= 1 && r.Intn(2) == 0:
+			return Patch{Path: n.path, Op: "dup", I: r.Intn(len(x))}, "arrdup"
+		default:
+			switch r.Intn(4) {
+			case 0:
+				return set([]any{}, "arrempty")
+			case 1:
+				return set(nil, "arrnull")
+			case 2:
+				return set(map[string]any{}, "arrtoobject")
+			default:
+				return set("x", "arrtostring")
+			}
+		}
+	case map[string]any:
+		keys := sortedKeys(x)
+		switch {
+		case len(keys) >= 1 && r.Intn(3) == 0:
+			return Patch{Path: append(append([]any(nil), n.path...), keys[r.Intn(len(keys))]), Op: "delete"}, "keydelete"
+		case len(keys) >= 1 && r.Intn(2) == 0:
+			k := keys[r.Intn(len(keys))]
+			to := strings.ToUpper(k[:1]) + k[1:]
+			if r.Intn(2) == 0 {
+				to = strings.ToUpper(k)
+			}
+			return Patch{Path: append(append([]any(nil), n.path...), k), Op: "rename", To: to}, "keycase"
+		default:
+			switch r.Intn(3) {
+			case 0:
+				return set(map[string]any{}, "objempty")
+			case 1:
+				return set(nil, "objnull")
+			default:
+				return set([]any{}, "objtoarray")
+			}
+		}
+	}
+	return set(nil, "setnull")
+}
+
+// applyPatches applies the patches to a copy of the document. keyDelete patches address the key; array drops address the array.
+func applyPatches(base any, ps []Patch) (out any, ok bool) {
+	defer func() {
+		if recover() != nil {
+			out, ok = nil, false
+		}
+	}()
+	root := deepCopy(base)
+	for _, p := range ps {
+		if p.Op == "delete" {
+			parent := walk(root, p.Path[:len(p.Path)-1])
+			delete(parent.(map[string]any), p.Path[len(p.Path)-1].(string))
+			continue
+		}
+		root = apply(root, p)
+	}
+	return root, true
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the mutation corpus
+
+type Mutation struct {
+	ID      string  `json:"id"`
+	Base    int     `json:"base"`
+	Op      string  `json:"op"`
+	Patches []Patch `json:"patches"`
+	Expect  Expect  `json:"expect"`
+}
+
+type MutationFile struct {
+	Format      string     `json:"format"`
+	Description string     `json:"description"`
+	Source      string     `json:"source"`
+	Bases       []string   `json:"bases"`
+	BaseExpect  []Expect   `json:"baseExpect"`
+	Mutations   []Mutation `json:"mutations"`
+	Skipped     struct {
+		Panics int `json:"panics"`
+		Flaky  int `json:"flaky"`
+	} `json:"skipped"`
+}
+
+func readDoc(path string) ([]byte, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if strings.HasSuffix(path, ".gz") {
+		z, err := gzip.NewReader(bytes.NewReader(b))
+		if err != nil {
+			return nil, err
+		}
+		return io.ReadAll(z)
+	}
+	return b, nil
+}
+
+func seedOf(parts ...string) int64 {
+	h := fnv.New64a()
+	for _, p := range parts {
+		h.Write([]byte(p))
+		h.Write([]byte{0})
+	}
+	return int64(h.Sum64() & 0x7fffffffffffffff)
+}
+
+func mutations(fixtures, out string, per int) error {
+	var bases []string
+	for _, suite := range []string{"xpartition2", "xpartition2b", "xpartition3", "xpartition3b", "xpartition4", "xpartition5"} {
+		raw, err := os.ReadFile(filepath.Join(fixtures, suite, "manifest.json"))
+		if err != nil {
+			return err
+		}
+		var m struct {
+			Cases []struct{ File string } `json:"cases"`
+		}
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return err
+		}
+		for _, c := range m.Cases {
+			bases = append(bases, suite+"/"+c.File)
+		}
+	}
+	bases = append(bases, "go-written/real-bvn1-billing-receipts.portable.json.gz")
+	f := &MutationFile{Format: "certen:s3-mutations:v1",
+		Description: "Mutations of the shared evidence 2.1 vectors and of the real Kermit document, each applied to the base document's JSON tree and judged by proofv2.VerifyPortable (and the import's evidence length, the budget measure). A mutation on which Go panics or answers differently on two runs is not recorded.",
+		Source:      "go run ./cmd/xtsgen (certen-sdk test/fixtures/s3/gen/xtsgen.go.txt) over the validator at the commit in MANIFEST.json"}
+	f.Bases = bases
+	for bi, bpath := range bases {
+		raw, err := readDoc(filepath.Join(fixtures, bpath))
+		if err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		var base any
+		if err := json.Unmarshal(raw, &base); err != nil {
+			return fmt.Errorf("%s: %w", bpath, err)
+		}
+		// the base document as Go re-marshals it must be judged as the file is (the identity mutation)
+		canonBase, _ := json.Marshal(base)
+		be, ok := judgeStable(canonBase)
+		if !ok {
+			return fmt.Errorf("%s: Go is unstable on the base document", bpath)
+		}
+		f.BaseExpect = append(f.BaseExpect, be)
+
+		var nodes []node
+		collect(base.(map[string]any)["evidence"], []any{"evidence"}, &nodes)
+		doc := base.(map[string]any)
+		// a few targets outside the evidence: the pin, the format, the genesis and the first (needed) major blocks
+		for _, k := range []string{"pin", "format"} {
+			nodes = append(nodes, node{[]any{k}, doc[k]})
+		}
+		if g, ok := doc["genesis"].(map[string]any); ok {
+			for _, k := range []string{"minorBlockIndex", "rootChainAnchor", "stateTreeAnchor", "timeUnix", "networkRecord", "globalsRecord"} {
+				nodes = append(nodes, node{[]any{"genesis", k}, g[k]})
+			}
+		}
+		n := per
+		if strings.HasPrefix(bpath, "go-written/") {
+			n = per * 5
+		}
+		for k := 0; k < n; k++ {
+			r := rand.New(rand.NewSource(seedOf(bpath, fmt.Sprint(k))))
+			count := 1
+			if r.Intn(4) == 0 {
+				count = 2
+			}
+			var ps []Patch
+			var ops []string
+			for c := 0; c < count; c++ {
+				t := nodes[r.Intn(len(nodes))]
+				// bias away from huge subtrees: prefer leaves
+				for tries := 0; tries < 4; tries++ {
+					switch t.v.(type) {
+					case map[string]any, []any:
+						if r.Intn(3) != 0 {
+							t = nodes[r.Intn(len(nodes))]
+							continue
+						}
+					}
+					break
+				}
+				p, name := mutate(r, t, "")
+				ps = append(ps, p)
+				ops = append(ops, name+"@"+pathString(p.Path))
+			}
+			mutated, ok := applyPatches(base, ps)
+			if !ok {
+				continue
+			}
+			docBytes, err := json.Marshal(mutated)
+			if err != nil {
+				continue
+			}
+			lastPanic = ""
+			e, ok := judgeStableCounting(docBytes, &f.Skipped.Panics, &f.Skipped.Flaky)
+			if !ok {
+				if lastPanic != "" {
+					fmt.Fprintf(os.Stderr, "PANIC %s#%02d [%s]: %s\n", bpath, k, strings.Join(ops, " + "), lastPanic)
+				} else {
+					fmt.Fprintf(os.Stderr, "FLAKY %s#%02d [%s]: %s\n", bpath, k, strings.Join(ops, " + "), lastFlaky)
+				}
+				continue
+			}
+			f.Mutations = append(f.Mutations, Mutation{ID: fmt.Sprintf("%s#%02d", bpath, k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: e})
+		}
+	}
+	return writeJSON(filepath.Join(out, "mutations.json"), f)
+}
+
+func pathString(p []any) string {
+	var parts []string
+	for _, x := range p {
+		parts = append(parts, fmt.Sprint(x))
+	}
+	return strings.Join(parts, "/")
+}
+
+// lastFlaky describes the last document whose verdict differed between runs of the validator's verifier.
+var lastFlaky string
+
+func brief(e Expect) string {
+	if e.State != nil {
+		return fmt.Sprintf("%s{%s,%d}", e.State.Code, e.State.Partition, e.State.Block)
+	}
+	return e.V
+}
+
+// judgeStableCounting judges doc repeatedly: Go iterates maps in random order, so a verdict that depends on it shows only across runs.
+// A document whose verdict differs between runs has no verdict to match; it is counted and reported (lastFlaky), never recorded.
+func judgeStableCounting(doc []byte, panics, flaky *int) (Expect, bool) {
+	runs := 8
+	if len(doc) > 100_000 {
+		runs = 3
+	}
+	a, ok := judge(doc)
+	if !ok {
+		*panics++
+		return a, false
+	}
+	for i := 1; i < runs; i++ {
+		b, ok := judge(doc)
+		if !ok {
+			*panics++
+			return a, false
+		}
+		if a.V != b.V || (a.V != "plain" && !reflect.DeepEqual(a, b)) {
+			*flaky++
+			lastFlaky = brief(a) + " vs " + brief(b)
+			return a, false
+		}
+	}
+	return a, true
+}
+
+func writeJSON(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	if strings.HasSuffix(path, ".gz") {
+		var buf bytes.Buffer
+		z, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+		z.Header.ModTime = z.Header.ModTime.UTC().Truncate(0)
+		z.Write(b)
+		z.Close()
+		b = buf.Bytes()
+	}
+	return os.WriteFile(path, b, 0o644)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the real document
+
+const kermitPin = "cac6698ed49a286ad8a3de94540a3354dfe964f366a439f4fdfb34533059fda0"
+
+func realDocument(validator, out string) error {
+	gz := func(p string) []byte {
+		b, err := readDoc(p)
+		if err != nil {
+			panic(err)
+		}
+		return b
+	}
+	dir := filepath.Join(validator, "pkg", "proof", "v2", "testdata", "xpartition3", "real-bvn1-billing-receipts")
+	ev := new(proofv2.Evidence)
+	if err := json.Unmarshal(gz(filepath.Join(dir, "evidence21.json.gz")), ev); err != nil {
+		return err
+	}
+	ar, err := proofv2.UnmarshalArchive(gz(filepath.Join(dir, "archive.json.gz")))
+	if err != nil {
+		return err
+	}
+	raw, err := os.ReadFile(filepath.Join(validator, "pkg", "proof", "testdata", "incarnation", "kermit.json"))
+	if err != nil {
+		return err
+	}
+	inc := new(proof.IncarnationEvidence)
+	if err := json.Unmarshal(raw, inc); err != nil {
+		return err
+	}
+	ir, err := inc.Verify()
+	if err != nil {
+		return err
+	}
+	var pin [32]byte
+	b, _ := hex.DecodeString(kermitPin)
+	copy(pin[:], b)
+	p, err := proofv2.Export(ev, ar, ir.Inputs, pin)
+	if err != nil {
+		return err
+	}
+	doc, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	if err := writeGz(filepath.Join(out, "real-bvn1-billing-receipts.portable.json.gz"), doc); err != nil {
+		return err
+	}
+	e, ok := judge(doc)
+	if !ok {
+		return fmt.Errorf("Go panics on the real document")
+	}
+	// the document as the file stores it, judged by the validator's own pinned verifier as well
+	if rep, err := proofv2.Verify21FromGenesis(ev, ar, ir.Inputs, pin); err != nil || hx(rep.CertifiedRoot) != e.Summary.CertifiedRoot {
+		return fmt.Errorf("the exported document is judged differently from the evidence: %v", err)
+	}
+	return writeJSON(filepath.Join(out, "real-bvn1-billing-receipts.expect.json"), e)
+}
+
+func writeGz(path string, b []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	z, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	z.Write(b)
+	z.Close()
+	return os.WriteFile(path, buf.Bytes(), 0o644)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+
+func main() {
+	fixtures := flag.String("fixtures", "", "certen-sdk packages/verify/test/fixtures/s3")
+	validator := flag.String("validator", ".", "the validator checkout (for the real document)")
+	out := flag.String("out", "", "output directory")
+	per := flag.Int("per", 12, "mutations per base document")
+	id := flag.String("id", "", "a mutation id (replay)")
+	flag.Parse()
+	if flag.NArg() == 0 {
+		fmt.Fprintln(os.Stderr, "usage: xtsgen -fixtures DIR -out DIR [-validator DIR] real|mutations|...")
+		os.Exit(2)
+	}
+	for _, cmd := range flag.Args() {
+		var err error
+		switch cmd {
+		case "real":
+			err = realDocument(*validator, *out)
+		case "replay":
+			err = replay(*fixtures, *out, *id)
+		case "bytes":
+			err = bytesCorpus(*fixtures, *out, *per)
+		case "receiptspell":
+			err = receiptSpellCorpus(*fixtures, *out)
+		case "pathspell":
+			err = pathSpellCorpus(*fixtures, *out)
+		case "firstsibling":
+			err = firstSiblingCorpus(*fixtures, *out)
+		case "fold":
+			err = foldCorpus(*out)
+		case "tables":
+			err = tablesCorpus(*out)
+		case "votes":
+			err = votesCorpus(*validator, *out, *per)
+		case "facts":
+			err = factsCorpus(*validator, *out, *per)
+		case "decode":
+			err = decodeCorpus(*validator, *fixtures, *out, *per)
+		case "intent":
+			err = intentCorpus(*validator, *out, *per)
+		case "mutations":
+			err = mutations(*fixtures, *out, *per)
+		case "objsweep":
+			err = objSweepCorpus(*fixtures, *out)
+		case "judgefile":
+			err = judgeFile()
+		case "certify1":
+			err = certify1Mutations(*fixtures, *out, *per)
+		default:
+			err = fmt.Errorf("unknown command %q", cmd)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, cmd+":", err)
+			os.Exit(1)
+		}
+		fmt.Println(cmd, "done")
+	}
+	_ = sha256.Sum256
+}
+
+// replay applies one recorded mutation and prints what Go does with it (a diagnostic for a disagreement).
+func replay(fixtures, out, id string) error {
+	raw, err := os.ReadFile(filepath.Join(out, "mutations.json"))
+	if err != nil {
+		return err
+	}
+	var f MutationFile
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return err
+	}
+	for _, m := range f.Mutations {
+		if m.ID != id {
+			continue
+		}
+		bdoc, err := readDoc(filepath.Join(fixtures, f.Bases[m.Base]))
+		if err != nil {
+			return err
+		}
+		var base any
+		if err := json.Unmarshal(bdoc, &base); err != nil {
+			return err
+		}
+		mutated, ok := applyPatches(base, m.Patches)
+		if !ok {
+			return fmt.Errorf("patches do not apply")
+		}
+		doc, _ := json.Marshal(mutated)
+		p := new(proofv2.Portable)
+		if err := json.Unmarshal(doc, p); err != nil {
+			fmt.Println("decode:", err)
+			return nil
+		}
+		ev, _, _, _, err := proofv2.Import(p)
+		fmt.Println("import:", err)
+		if err == nil {
+			b, _ := json.Marshal(ev)
+			fmt.Println("evidence length:", len(b))
+		}
+		e, _ := judge(doc)
+		eb, _ := json.Marshal(e)
+		fmt.Println("judge:", string(eb)[:min(len(eb), 600)])
+		return nil
+	}
+	return fmt.Errorf("no mutation %s", id)
+}

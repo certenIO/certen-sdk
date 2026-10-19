@@ -4,6 +4,7 @@ import { core } from 'accumulate-sdk-opendlt';
 import { encodeObject, messageHash, networkDefinition, networkGlobals, sequencedMessage, transaction, transactionHash } from '../src/proof-v2/accumulate.js';
 import { sha256, toHex, VerifyError } from '../src/proof-v2/bytes.js';
 import { genesisGlobals, Spine } from '../src/proof-v2/spine.js';
+import { importSequenced } from '../src/s3/seqmsg.js';
 
 /**
  * The Directory spine applies a proven write to acc://dn.acme/network or acc://dn.acme/globals, as Go's applyProvenUpdate
@@ -64,7 +65,7 @@ function major(index: number, minor: number, root: string) {
     destination: DN,
     number: minor,
   };
-  return { index, entry: { source: 1, blockIndex: index, blockTime: '2026-01-01T00:00:00Z', rootIndexIndex: 1 }, anchor: msg };
+  return { index, entry: { source: 1, blockIndex: index, blockTime: '2026-01-01T00:00:00Z', rootIndexIndex: 1 }, anchor: importSequenced(msg, 'anchor').canonical };
 }
 function record_(index: number, minor: number, signers: Val[], updates: ReturnType<typeof update>[] = [], root?: string, type = 'ed25519') {
   const r = major(index, minor, root ?? (updates[0]?.h ?? toHex(sha256(new Uint8Array([index])))));

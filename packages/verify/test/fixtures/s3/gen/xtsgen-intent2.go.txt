@@ -1,0 +1,130 @@
+package main
+
+// The real stored 2.1 document as a scenario (pkg/intentcert/bind_v21_real_test.go: loadReal21, factsOf, g0g1), and small helpers.
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"strings"
+
+	"github.com/certen/independant-validator/accumulate-lite-client-2/liteclient/proof/govvote"
+	"github.com/certen/independant-validator/pkg/intentcert"
+	"github.com/certen/independant-validator/pkg/proof"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+func bigOne() *big.Int { return big.NewInt(1) }
+
+func stackNow() []byte { return debug.Stack() }
+
+type real21 struct {
+	ev  *proofv2.Evidence
+	rep *proofv2.Report
+}
+
+func loadReal21(validator string) (real21, error) {
+	dir := filepath.Join(validator, "pkg", "proof", "v2", "testdata", "xpartition3", "real-bvn1-billing-receipts")
+	evRaw, err := readDoc(filepath.Join(dir, "evidence21.json.gz"))
+	if err != nil {
+		return real21{}, err
+	}
+	ev := new(proofv2.Evidence)
+	if err := json.Unmarshal(evRaw, ev); err != nil {
+		return real21{}, err
+	}
+	arRaw, err := readDoc(filepath.Join(dir, "archive.json.gz"))
+	if err != nil {
+		return real21{}, err
+	}
+	ar, err := proofv2.UnmarshalArchive(arRaw)
+	if err != nil {
+		return real21{}, err
+	}
+	raw, err := os.ReadFile(filepath.Join(validator, "pkg", "proof", "testdata", "incarnation", "kermit.json"))
+	if err != nil {
+		return real21{}, err
+	}
+	inc := new(proof.IncarnationEvidence)
+	if err := json.Unmarshal(raw, inc); err != nil {
+		return real21{}, err
+	}
+	ir, err := inc.Verify()
+	if err != nil {
+		return real21{}, err
+	}
+	var pin [32]byte
+	b, _ := hex.DecodeString(kermitPin)
+	copy(pin[:], b)
+	rep, err := proofv2.Verify21FromGenesis(ev, ar, ir.Inputs, pin)
+	if err != nil {
+		return real21{}, fmt.Errorf("the stored real document does not verify: %w", err)
+	}
+	return real21{ev: ev, rep: rep}, nil
+}
+
+func (r real21) voteEvidence() (*govvote.Evidence, string, error) {
+	ev := &govvote.Evidence{Version: govvote.EvidenceVersion, Account: r.ev.Account, Transaction: r.ev.Transaction}
+	for _, a := range r.rep.Pages {
+		if strings.EqualFold(a.GetUrl().String(), r.ev.Account) {
+			fa, ok := a.(protocol.FullAccount)
+			if !ok {
+				return nil, "", fmt.Errorf("the principal is %T", a)
+			}
+			for _, e := range fa.GetAuth().Authorities {
+				ev.Authorities = append(ev.Authorities, govvote.AccountAuthority{URL: e.Url.String(), Disabled: e.Disabled})
+			}
+		}
+	}
+	for _, v := range r.ev.Votes {
+		for _, h := range append(append([]proofv2.VoteHop(nil), v.Hops...), v.Counted...) {
+			ev.Signatures = append(ev.Signatures, govvote.SignatureEvidence{Fact: govvote.SigFact{ID: h.Message, Signer: h.Page, Block: int64(h.Block)}, Signature: h.Signature})
+		}
+		ev.Votes = append(ev.Votes, govvote.VoteEvidence{Fact: govvote.RecordedVote{ID: v.Message, Authority: v.Authority, Origin: v.Origin, Block: int64(r.rep.AnchorBlock)}})
+	}
+	var page string
+	for _, p := range r.rep.Proven {
+		for _, d := range p.Declared {
+			if d == proofv2.RoleCertifiedKeyPage {
+				page = p.URL
+			}
+		}
+	}
+	if page == "" {
+		return nil, "", fmt.Errorf("the real document records no certified key page")
+	}
+	return ev, page, nil
+}
+
+func realIntentBase(validator string) (*RootCase, error) {
+	r, err := loadReal21(validator)
+	if err != nil {
+		return nil, err
+	}
+	ve, page, err := r.voteEvidence()
+	if err != nil {
+		return nil, err
+	}
+	facts, err := intentcert.GoverningFactsFromVoteEvidence(ve)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(page)
+	if err != nil {
+		return nil, err
+	}
+	bk, ok := u.Parent()
+	if !ok {
+		return nil, fmt.Errorf("%s has no book", page)
+	}
+	g0 := &proof.G0Result{EntryHashExec: hx(r.rep.TxHash), ExecWitness: hx(r.rep.AnchorRootChainAnchor), ExecMBI: int64(r.rep.AnchorBlock)}
+	g0.Receipt.Start = g0.EntryHashExec
+	raw, _ := json.Marshal(ve)
+	return caseOf(r.rep, r.ev, g0, page, page, bk.String(), facts, raw, hashesOf(60), "root"), nil
+}

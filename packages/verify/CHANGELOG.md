@@ -1,5 +1,19 @@
 # Changelog — @certen.io/proof-verify
 
+## Unreleased — RB9 Phase D: cross-identity and delegated approvals in TypeScript (2026-10-18)
+
+### Added
+- `verifyPortable21` / `verifyPortableAny`: the validator's evidence 2.1 verifier (pages on every partition at their own block, roles, the certified timeline, the routing proof, the
+  executor-version table, delegation to depth 20) with its report and its named states (`NamedState`, `State`); reaches the validator's verdict on all 100 documents of its seven
+  `xpartition` suites, the real Kermit document and 1,257 Go-judged mutations of them.
+- `bindProofV21`, `bindProofV2`, `governingFactsFromVoteEvidence`, `govRootV4FromPortable`, `govRootV4FromHashes`, `encodeVoteV4`, `proofV2Root`, `judgeProofV2`,
+  `unmarshalCertifiedEvidence`, `evidence20View`: the consensus-side binding, the cross-partition govRoot (reproducing the committed golden), and the decode and gating of a certificate's
+  proof v2, each checked against corpora the validator wrote.
+
+### Changed
+- `verifyPortable` (evidence 2.0) refuses a document that carries evidence 2.1 members (anchors, votes, a routing proof, a page's partition or roles), as the validator's does; before, they
+  were ignored.
+
 ## Unreleased — RB8 Phase C: every key-signature type Accumulate accepts (2026-10-17)
 
 ### Added

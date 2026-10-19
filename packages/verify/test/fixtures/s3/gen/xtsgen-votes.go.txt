@@ -1,0 +1,161 @@
+package main
+
+// EncodeVoteV4 (pkg/intentcert govroot_v4.go): the canonical length-prefixed encoding of one vote record that govRoot v4 commits, over the
+// votes of the fixture, the real document, and typed mutations of them.
+
+import (
+	"bytes"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/certen/independant-validator/pkg/intentcert"
+	proofv2 "github.com/certen/independant-validator/pkg/proof/v2"
+)
+
+type VoteEnc struct {
+	Hex string `json:"hex,omitempty"`
+	Err string `json:"err,omitempty"`
+}
+
+func encodeVote(v *proofv2.Vote) (out VoteEnc, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			lastPanic = fmt.Sprintf("%v | %s", r, topFrames(stackNow(), 6))
+			ok = false
+		}
+	}()
+	b, err := intentcert.EncodeVoteV4(v)
+	if err != nil {
+		return VoteEnc{Err: err.Error()}, true
+	}
+	return VoteEnc{Hex: hex.EncodeToString(b)}, true
+}
+
+type VoteMutation struct {
+	ID      string  `json:"id"`
+	Base    int     `json:"base"`
+	Op      string  `json:"op"`
+	Patches []Patch `json:"patches"`
+	Expect  VoteEnc `json:"expect"`
+}
+
+type VoteFile struct {
+	Format     string         `json:"format"`
+	Bases      []any          `json:"bases"`
+	BaseNames  []string       `json:"baseNames"`
+	BaseExpect []VoteEnc      `json:"baseExpect"`
+	Mutations  []VoteMutation `json:"mutations"`
+	NoVerdict  int            `json:"noVerdict"`
+}
+
+func votesCorpus(validator, out string, per int) error {
+	f := &VoteFile{Format: "certen-sdk/s3-votes-corpus/v1"}
+	add := func(name string, v proofv2.Vote) error {
+		var tree any
+		if err := json.Unmarshal(mustJSON(v), &tree); err != nil {
+			return err
+		}
+		f.Bases = append(f.Bases, tree)
+		f.BaseNames = append(f.BaseNames, name)
+		e, ok := encodeVote(&v)
+		if !ok || e.Err != "" {
+			return fmt.Errorf("base %s: %+v", name, e)
+		}
+		f.BaseExpect = append(f.BaseExpect, e)
+		return nil
+	}
+	if err := add("fixture", x21Vote()); err != nil {
+		return err
+	}
+	inline := x21Vote()
+	inline.Transport = proofv2.VoteTransport{Kind: proofv2.TransportInline}
+	inline.Cause = ""
+	inline.Hops, inline.Counted = nil, nil
+	inline.Produced = &proofv2.Production{Account: xPrincipal, Chain: "signature", Message: hx32(10), Receipt: "1011", Arrival: proofv2.Arrival{At: proofv2.IndexProof{Position: 3, Entry: hx32(30), Receipt: "00"}}}
+	if err := add("inline", inline); err != nil {
+		return err
+	}
+	if err := add("empty", proofv2.Vote{}); err != nil {
+		return err
+	}
+	r, err := loadReal21(validator)
+	if err != nil {
+		return err
+	}
+	for i, v := range r.ev.Votes {
+		if err := add(fmt.Sprintf("real-%d", i), v); err != nil {
+			return err
+		}
+	}
+	for bi, base := range f.Bases {
+		var nodes []node
+		collect(base, nil, &nodes)
+		var usable []node
+		for _, n := range nodes {
+			if len(n.path) > 0 {
+				usable = append(usable, n)
+			}
+		}
+		for k := 0; k < per; k++ {
+			rr := rand.New(rand.NewSource(seedOf("votes", f.BaseNames[bi], fmt.Sprint(k))))
+			count := 1
+			if rr.Intn(4) == 0 {
+				count = 2
+			}
+			var ps []Patch
+			var ops []string
+			for c := 0; c < count; c++ {
+				t := usable[rr.Intn(len(usable))]
+				for tries := 0; tries < 4; tries++ {
+					switch t.v.(type) {
+					case map[string]any, []any:
+						if rr.Intn(3) != 0 {
+							t = usable[rr.Intn(len(usable))]
+							continue
+						}
+					}
+					break
+				}
+				p, name := mutate(rr, t, "")
+				if p.Op == "rename" {
+					continue
+				}
+				ps = append(ps, p)
+				ops = append(ops, name+"@"+pathString(p.Path))
+			}
+			if len(ps) == 0 {
+				continue
+			}
+			mutated, ok := applyPatches(base, ps)
+			if !ok {
+				continue
+			}
+			raw, err := json.Marshal(mutated)
+			if err != nil {
+				continue
+			}
+			var v proofv2.Vote
+			d := json.NewDecoder(bytes.NewReader(raw))
+			d.DisallowUnknownFields()
+			if err := d.Decode(&v); err != nil {
+				f.NoVerdict++
+				continue
+			}
+			lastPanic = ""
+			e, ok := encodeVote(&v)
+			if !ok {
+				if lastPanic != "" {
+					fmt.Fprintf(os.Stderr, "PANIC votes/%s#%02d [%s]: %s\n", f.BaseNames[bi], k, strings.Join(ops, " + "), lastPanic)
+				}
+				continue
+			}
+			f.Mutations = append(f.Mutations, VoteMutation{ID: fmt.Sprintf("votes/%s#%02d", f.BaseNames[bi], k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: e})
+		}
+	}
+	return writeGz(filepath.Join(out, "votes-cases.json.gz"), mustJSON(f))
+}

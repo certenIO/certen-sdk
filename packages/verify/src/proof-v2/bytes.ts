@@ -27,6 +27,40 @@ export function hexBytes(s: unknown, label: string, len?: number): Uint8Array {
   return b;
 }
 
+/**
+ * encoding/hex.DecodeString and nothing else: an even number of hex digits of either case, no 0x prefix, no space, no trim. Go reads the
+ * document members evidence.txHash, pin, genesis.rootChainAnchor / stateTreeAnchor and the like with it (hex.DecodeString, then len == 32).
+ * `hexBytes` above is Go's more tolerant `pkg/proof hexBytes` (lower-cases, strips one 0x); a member Go reads strictly must not use it.
+ */
+export function goHexStrict(s: unknown, label: string, len?: number): Uint8Array {
+  if (typeof s !== 'string') fail(`${label}: not a hex string`);
+  if (s.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(s)) fail(`${label}: invalid hex: encoding/hex: invalid byte or odd length`);
+  const b = new Uint8Array(Buffer.from(s, 'hex'));
+  if (len !== undefined && b.length !== len) fail(`${label}: ${b.length} bytes, want ${len}`);
+  return b;
+}
+
+/** The characters strings.TrimSpace removes (Unicode White_Space); String.prototype.trim differs (it removes U+FEFF and keeps U+0085). */
+function isGoSpace(c: number): boolean {
+  return (c >= 0x09 && c <= 0x0d) || c === 0x20 || c === 0x85 || c === 0xa0 || c === 0x1680 || (c >= 0x2000 && c <= 0x200a) || c === 0x2028 || c === 0x2029 || c === 0x202f || c === 0x205f || c === 0x3000;
+}
+
+/** strings.TrimSpace. The one copy: every TrimSpace in this package is this function, never String.prototype.trim. */
+export function goTrimSpace(s: string): string {
+  let a = 0;
+  let b = s.length;
+  while (a < b && isGoSpace(s.charCodeAt(a))) a++;
+  while (b > a && isGoSpace(s.charCodeAt(b - 1))) b--;
+  return s.slice(a, b);
+}
+
+/** strings.ToLower: unicode.ToLower one code point at a time (JavaScript's full mapping differs for U+0130, which Go lowers to "i"). */
+export function goLower(s: string): string {
+  let out = '';
+  for (const ch of s) out += ch.codePointAt(0) === 0x130 ? 'i' : ch.toLowerCase();
+  return out;
+}
+
 export function toHex(b: Uint8Array): string {
   return Buffer.from(b).toString('hex');
 }
@@ -50,23 +84,26 @@ export function uvarint(v: number | bigint): Uint8Array {
 }
 
 /**
- * merkle.State: a sparse list of subtree roots. AddEntry and Anchor mirror state.go exactly, including pad(); the
- * Count field the Go struct also carries is metadata the root never depends on, so it is not modelled.
+ * merkle.State: a sparse list of subtree roots and the count of entries. AddEntry and Anchor mirror state.go exactly, including pad() and
+ * the rule that a state whose Count is 0 has no anchor, whatever its pending list holds.
  */
 export class MerkleState {
   pending: (Uint8Array | null)[];
-  constructor(pending: (Uint8Array | null)[] = []) {
+  count: number;
+  constructor(pending: (Uint8Array | null)[] = [], count = 0) {
     this.pending = [...pending];
+    this.count = count;
   }
 
-  static fromJSON(pending: unknown, label: string): MerkleState {
-    if (pending === undefined || pending === null) return new MerkleState();
+  static fromJSON(pending: unknown, label: string, count = 0): MerkleState {
+    if (pending === undefined || pending === null) return new MerkleState([], count);
     if (!Array.isArray(pending)) fail(`${label}: pending is not a list`);
-    return new MerkleState(pending.map((p, i) => (p === null ? null : hexBytes(p, `${label}.pending[${i}]`, 32))));
+    return new MerkleState(pending.map((p, i) => (p === null ? null : hexBytes(p, `${label}.pending[${i}]`, 32))), count);
   }
 
   addEntry(h: Uint8Array): void {
     let hash = h;
+    this.count++;
     if (this.pending.length === 0 || this.pending[this.pending.length - 1] !== null) this.pending.push(null);
     for (let i = 0; i < this.pending.length; i++) {
       const v = this.pending[i];
@@ -79,8 +116,9 @@ export class MerkleState {
     }
   }
 
-  /** merkle.State.Anchor: nil when nothing was added. */
+  /** merkle.State.Anchor: nil when the count is 0. */
   anchor(): Uint8Array | undefined {
+    if (this.count === 0) return undefined;
     let anchor: Uint8Array | undefined;
     for (const v of this.pending) {
       if (anchor === undefined) {
@@ -112,9 +150,16 @@ export interface Receipt {
   entries: ReceiptEntry[];
 }
 
+/**
+ * Set on the canonical JSON of a receipt (or a record) whose binary form merkle.Receipt.UnmarshalBinary does not decode: the importer cannot refuse it
+ * where it is read, because Go refuses it where it is USED (decodeReceipt, decodeMinorRoot), so the reader of the receipt refuses it there.
+ */
+export const UNDECODABLE: unique symbol = Symbol('undecodable receipt');
+
 /** A merkle.Receipt as Go marshals it to JSON (start, anchor, entries[{hash, right}]). */
 export function receiptFromJSON(j: unknown, label: string): Receipt {
   if (!j || typeof j !== 'object') fail(`${label}: not a receipt`);
+  if ((j as { [UNDECODABLE]?: boolean })[UNDECODABLE]) fail(`${label}: receipt: fields are out of order`);
   const r = j as Record<string, unknown>;
   const entries = r.entries === undefined || r.entries === null ? [] : r.entries;
   if (!Array.isArray(entries)) fail(`${label}: entries is not a list`);
@@ -150,17 +195,45 @@ export function receiptPrefixTo(r: Receipt, value: Uint8Array): Receipt | undefi
   }
 }
 
+/** merkle.State.Count (int64): absent or null is 0, and anything but a whole number is not a count. */
+function merkleCount(v: unknown, label: string): number {
+  if (v === undefined || v === null) return 0;
+  if (typeof v !== 'number' || !Number.isInteger(v)) fail(`${label}: count is not a whole number`);
+  return v;
+}
+
 /** merkle.ReceiptList.Validate. */
 export function receiptListValid(j: unknown, label: string): { start: Uint8Array; anchor: Uint8Array; end: Uint8Array } {
+  const p = receiptListParts(j, label);
+  const end = p.validate();
+  return { start: p.start, anchor: p.anchor, end };
+}
+
+/**
+ * A root proof in the phases Go judges it in (AdvanceEpoch): present, where it starts and where it ends are read first; whether the chain from one
+ * to the other validates is judged by validate(), which returns the recomputed end or fails with `invalid root proof`.
+ */
+export function receiptListParts(j: unknown, label: string): { start: Uint8Array; anchor: Uint8Array; validate: () => Uint8Array } {
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const rl = j as Record<string, unknown>;
   const ms = rl.merkleState as Record<string, unknown> | undefined;
   if (!ms || !rl.receipt) fail(`${label}: incomplete root proof`);
-  const state = MerkleState.fromJSON(ms.pending, `${label}.merkleState`);
+  const state = MerkleState.fromJSON(ms.pending, `${label}.merkleState`, merkleCount(ms.count, `${label}.merkleState`));
   const start = state.anchor();
+  const receiptAnchor = (() => {
+    try {
+      return receiptFromJSON(rl.receipt, `${label}.receipt`).anchor;
+    } catch {
+      return new Uint8Array(0);
+    }
+  })();
+  return { start: start ?? new Uint8Array(0), anchor: receiptAnchor, validate: () => validateReceiptList(rl, state, label) };
+}
+
+function validateReceiptList(rl: Record<string, unknown>, state: MerkleState, label: string): Uint8Array {
   const elements = rl.elements;
   if (!Array.isArray(elements) || elements.length === 0) fail(`${label}: invalid root proof`);
-  const work = new MerkleState(state.pending);
+  const work = new MerkleState(state.pending, state.count);
   let last: Uint8Array | undefined;
   for (const [i, e] of elements.entries()) {
     last = hexBytes(e, `${label}.elements[${i}]`);
@@ -176,5 +249,5 @@ export function receiptListValid(j: unknown, label: string): { start: Uint8Array
     const c = receiptFromJSON(rl.continuedReceipt, `${label}.continuedReceipt`);
     if (!equal(anchor, c.start) || !receiptValid(c)) fail(`${label}: invalid root proof`);
   }
-  return { start: start ?? new Uint8Array(0), anchor: receipt.anchor, end: anchor };
+  return anchor;
 }
