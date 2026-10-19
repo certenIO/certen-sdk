@@ -23,3 +23,4 @@ export type { SigningData, SigningSummary, SummaryLeg, Expectation, ExpectedLeg,
 export { encodeCall, parseSignature, AbiUnsupported } from './abi.js';
 export * from './sigtypes/index.js';
 export * from './s3/index.js';
+export * from './s6/index.js';
