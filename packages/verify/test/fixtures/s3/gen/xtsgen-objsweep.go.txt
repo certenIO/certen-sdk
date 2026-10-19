@@ -19,8 +19,15 @@ package main
 // the file is read by the same consumer (helpers/s3-bytes.ts). The bases are the earlier byte corpora's (xpartition .. xpartition5, both 2.0 fixtures,
 // the real document) and the synced suites certify1, xpartition6 and robust1 (named relative to the s3 fixtures directory: ../s3-f5/certify1/...).
 //
-//	GOWORK=off go build -trimpath -o xtsgen ./cmd/xtsgen && for i in 0 1 2 3 4 5 6 7; do XTS_SHARD=$i/8 ./xtsgen -fixtures $S3 -out <dir> objsweep & done; wait
-//	(each shard is its own file, bytes-cases-objsweep-<i>.json.gz, consumed by test/s3-bytes-objsweep-<i>.test.ts)
+// Regeneration (12 shards, three Go processes at a time; it writes the pinned files byte for byte, sha256 in test/s3-bytes-objsweep-{1..12}.test.ts):
+//
+//	git -C <validator> worktree add --detach <judge> f16dc64
+//	cd <judge> && git diff 8a6790b^ 8a6790b -- pkg/proof/v2/xverify.go | git apply
+//	mkdir cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold objsweep judgefile; do cp <certen-sdk>/packages/verify/test/fixtures/s3/gen/xtsgen-$f.go.txt cmd/xtsgen/$f.go; done
+//	S3=<certen-sdk>/packages/verify/test/fixtures/s3
+//	GOWORK=off go build -trimpath -o xtsgen ./cmd/xtsgen && for g in 0 3 6 9; do for i in $g $((g+1)) $((g+2)); do XTS_SHARD=$i/12 ./xtsgen -fixtures $S3 -out <dir> objsweep & done; wait; done
+//
+// (each shard is its own file, <dir>/bytes-cases-objsweep-<i>.json.gz for i = 0..11, consumed by test/s3-bytes-objsweep-<i+1>.test.ts)
 
 import (
 	"encoding/binary"
