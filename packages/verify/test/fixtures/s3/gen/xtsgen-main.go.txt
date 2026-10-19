@@ -4,7 +4,7 @@
 // (test/fixtures/s3/gen/xtsgen-*.go.txt, one file per source file here) so that anyone can regenerate them from the validator at the commit
 // named in MANIFEST.json (validatorCommit):
 //
-//	mkdir <validator>/cmd/xtsgen && for f in main x21 intent intent2 facts consensus tables votes bytes fold; do
+//	mkdir <validator>/cmd/xtsgen && for f in main certify1 x21 intent intent2 facts consensus tables votes bytes fold; do
 //	  cp test/fixtures/s3/gen/xtsgen-$f.go.txt <validator>/cmd/xtsgen/$f.go; done
 //	cd <validator>
 //	S3=<certen-sdk>/packages/verify/test/fixtures/s3
@@ -28,6 +28,11 @@
 // (mutations.json, bytes-cases.json.gz and fold-orbits.json are written at -per 12: a larger -per writes a different, larger mutations.json.
 // At a larger -per three intent refusals differ from the checked-in corpus only in the binary decoder's wording, one facts case in the wording
 // of a URL percent escape, and one votes case is a harness applyPatches TypeError on a null parent: the verdict and the bytes are the same.)
+//
+// The certify1 differential corpus (RB9-F5-5; the anchored certify form, over the synced certify1 suite) is a fourth such command; it is written beside the
+// synced suite, not into go-written, because a re-sync of the suite replaces its directory:
+//
+//	GOWORK=off go run ./cmd/xtsgen -fixtures <certen-sdk>/packages/verify/test/fixtures/s3-f5 -out <certen-sdk>/packages/verify/test/fixtures/s3-f5-go -per 30 certify1
 //
 // The corpus of consensus.judgeProofV2 needs the unexported function, so it is a test of that package
 // (test/fixtures/s3/gen/xts_judge_test.go.txt -> <validator>/pkg/consensus/xts_judge_test.go), run after the intent corpus exists:
