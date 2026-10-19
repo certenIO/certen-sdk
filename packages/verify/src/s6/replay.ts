@@ -733,13 +733,47 @@ const ONE32 = (() => {
 })();
 const ZERO32 = new Uint8Array(32);
 
+/** The canonical RLP encoding of an item tree: a single byte below 0x80 as itself, every length in its shortest form. */
+function rlpEncodeItem(it: Item): Uint8Array {
+  if (it.kind === 'byte') return Uint8Array.from(it.content);
+  let body: Uint8Array;
+  if (it.kind === 'list') {
+    const parts = listItems(it.content).map(rlpEncodeItem);
+    body = new Uint8Array(parts.reduce((n, x) => n + x.length, 0));
+    let o = 0;
+    for (const x of parts) {
+      body.set(x, o);
+      o += x.length;
+    }
+  } else {
+    if (it.content.length === 1 && it.content[0]! < 0x80) return Uint8Array.from(it.content);
+    body = it.content;
+  }
+  const short = it.kind === 'list' ? 0xc0 : 0x80;
+  let head: number[];
+  if (body.length < 56) head = [short + body.length];
+  else {
+    const len: number[] = [];
+    for (let n = body.length; n > 0; n = Math.floor(n / 256)) len.unshift(n % 256);
+    head = [short + 55 + len.length, ...len];
+  }
+  return concat2(Uint8Array.from(head), body);
+}
+
+/** decodeReplayHeader: the header decodes, carries a number, and its bytes are the canonical RLP of the header it decodes to
+ * (s6replay3 SPEC §2), so that keccak256 of the raw bytes is the decoded header's hash. */
 function decodeReplayHeader(raw: Uint8Array, what: string): S6Header {
+  let h: S6Header;
   try {
-    return decodeS6Header(raw);
+    h = decodeS6Header(raw);
   } catch (e) {
     if (e instanceof RlpError) return unproven(R.proofDoesNotVerify, `${what} does not decode: ${e.message}`);
     throw e;
   }
+  if (!eq(rlpEncodeItem(split(raw)), raw)) {
+    unproven(R.proofDoesNotVerify, `${what} is not the canonical RLP encoding of the header it decodes to`);
+  }
+  return h;
 }
 
 /** SlotProof.verify: the proof at stateRoot for account and slot, and its declarations equal to what it proves. */
@@ -883,7 +917,57 @@ export function verifyReplayGuardEvidence(ev: S6ReplayGuardEvidence, s: S6Decode
   if (!eq(st.txHash, s.tx.hash) || !eq(st.blockHash, s.header.hash) || BigInt(st.blockNumber) !== s.header.numberU64) {
     unproven(R.blockMismatch, 'the named state is about another transaction or block than the settlement');
   }
+  // The chain and the contract the state names are the settlement's (s6replay3 SPEC §3 steps 3-4): the chain id when the
+  // transaction carries one, and the transaction's target; only a state named before the capture had the transaction
+  // (receipt_unavailable), or about a contract creation, names no contract.
+  if (s.tx.chainId > 0n && s.tx.chainId !== BigInt(st.chainId)) {
+    unproven(R.contractMismatch, `the transaction is of chain ${s.tx.chainId}, the named state of chain ${st.chainId}`);
+  }
+  const to = s.tx.to;
+  if (!(to !== undefined && eq(st.contract, to)) && !(eq(st.contract, ZERO20) && (to === undefined || st.reason === R.receiptUnavailable))) {
+    unproven(R.contractMismatch, `the named state is about contract ${checksumAddress(st.contract)}, the transaction's target is ${to === undefined ? 'none' : checksumAddress(to)}`);
+  }
+  if (st.state === S6_REPLAY_REFUTED && st.reason === R.slotSetAtParent) {
+    return { state: st.state, reason: st.reason, beforeVerified: true, established: [verifyRefutation(st, s)], named: st };
+  }
   return { state: st.state, reason: st.reason, beforeVerified: false, established: [], named: st };
+}
+
+const ZERO20 = new Uint8Array(20);
+
+/** verifyRefutation (s6replay3 SPEC §3 step 5): a refutation slot_set_at_parent is stated only with its Before verified - the
+ * parent header is the settlement block's parent, and the proof proves, at its state root, the slot of a LeafConsumed key
+ * the contract emitted in this receipt to be 1. */
+function verifyRefutation(st: S6ReplayNamedState, s: S6DecodedSettlement): string {
+  if (st.before === undefined) return unproven(R.proofDoesNotVerify, `the refutation ${R.slotSetAtParent} carries no Before proof`);
+  let parent: S6Header;
+  try {
+    parent = decodeReplayHeader(st.before.parentHeader, "the refutation's parent header");
+  } catch (e) {
+    if (e instanceof S6ReplayError) return unproven(R.parentHeaderUnproven, e.message);
+    throw e;
+  }
+  if (!eq(parent.hash, s.header.parentHash) || BigInt.asUintN(64, parent.numberU64 + 1n) !== s.header.numberU64) {
+    unproven(R.parentHeaderUnproven, `the refutation's parent header is block ${parent.numberU64}, the settlement block names another parent`);
+  }
+  const sel = s.tx.data.length >= 4 ? toHex(s.tx.data.subarray(0, 4)).slice(2) : undefined;
+  const layout = sel === undefined ? undefined : Object.values(S6_REPLAY_LAYOUTS).find((l) => l.selectors.includes(sel));
+  if (layout === undefined) return unproven(R.accountGeneration, 'the transaction is no settlement call of a pinned generation');
+  for (const lg of s.logs) {
+    if (!eq(lg.address, st.contract) || lg.topics.length !== 3 || !eq(lg.topics[0]!, S6_LEAF_CONSUMED_TOPIC)) continue;
+    const slot = replaySlotFor(lg.topics[2]!, layout.base);
+    let res: StorageResult;
+    try {
+      res = verifySlotProof(st.before.proof, parent.root, st.contract, slot);
+    } catch (e) {
+      if (e instanceof MptError || e instanceof RlpError) continue;
+      throw e;
+    }
+    if (eq(res.value, ONE32)) {
+      return `S6 refuted: ${checksumAddress(st.contract)}'s replay-guard slot ${toHex(slot)} (leaf ${toHex(lg.topics[2]!)}) is already 1 in the state of block ${parent.numberU64} (${toHex(parent.hash)}), the settlement block's parent`;
+    }
+  }
+  return unproven(R.proofDoesNotVerify, `the refutation's Before does not prove the slot of any LeafConsumed key of ${checksumAddress(st.contract)} to be 1 at block ${parent.numberU64}`);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
