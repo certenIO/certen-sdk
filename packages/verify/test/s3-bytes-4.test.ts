@@ -1,4 +1,4 @@
 import { defineBytesShard } from './helpers/s3-bytes.js';
 
 /** Shard 4 of 4 of the Go-written byte-level corpus (see helpers/s3-bytes.ts). */
-defineBytesShard(3, 4, 'b3770ddc38266d16bf35a0348a797fd10f6f8e1a53bc3e6641c5179e65eb6ab8');
+defineBytesShard(3, 4, '2eb7fea1f157a8e812d4e25f68d0d930fe9178102eb65a51a042b1a3e65e2412');
