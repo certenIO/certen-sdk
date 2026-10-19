@@ -217,6 +217,43 @@ function checkObject(path: string, v: JVal, schema: readonly Field[]): void {
   }
 }
 
+/**
+ * The second stage of replaydecode.go: json.Unmarshal into the Go types. common.Hash, common.Address and hexutil.Bytes
+ * unmarshal the raw JSON text between the quotes (go-ethereum v1.17.7 common/hexutil/json.go Bytes.UnmarshalJSON,
+ * UnmarshalFixedJSON), not the unescaped string, so a hash, address or bytes value written with any escape is not hex there
+ * and is refused wrong_type, after the whole schema check has passed. String-typed fields unescape as usual.
+ */
+function noEscapedHex(path: string, v: JVal, schema: readonly Field[], esc: WeakMap<object, Set<number>>): void {
+  const o = v as JObj;
+  for (const fd of schema) {
+    const idx = o.pairs.findIndex(([k]) => k === fd.key);
+    if (idx < 0) continue;
+    const x = o.pairs[idx]![1];
+    const at = `${path}.${fd.key}`;
+    const escaped = (container: object, i: number): boolean => esc.get(container)?.has(i) === true;
+    switch (fd.kind) {
+      case 'hash':
+      case 'address':
+      case 'bytes':
+        if (escaped(o.pairs, idx)) wrongType(at, 'hex: its JSON text holds an escape, which the raw-token hex decoding refuses');
+        break;
+      case 'bytesList':
+        (x as JVal[]).forEach((_, i) => {
+          if (escaped(x as JVal[], i)) wrongType(`${at}[${i}]`, 'hex: its JSON text holds an escape, which the raw-token hex decoding refuses');
+        });
+        break;
+      case 'object':
+        noEscapedHex(at, x, fd.schema!, esc);
+        break;
+      case 'objectList':
+        (x as JVal[]).forEach((e, i) => noEscapedHex(`${at}[${i}]`, e, fd.schema!, esc));
+        break;
+      default:
+        break;
+    }
+  }
+}
+
 function noDuplicateKeys(v: JVal): void {
   if (Array.isArray(v)) v.forEach(noDuplicateKeys);
   else if (v instanceof JObj) {
@@ -320,19 +357,22 @@ function readBefore(v: JVal | undefined): S6ReplayBefore | undefined {
  * DecodeReplayGuardEvidence: strict decoding, every refusal s6_replay_unproven{reason}:
  *  1. one JSON value, no duplicate key, nothing after it - else malformed_json;
  *  2. the schema, depth first in schema order - unknown_field, missing_field, wrong_type;
- *  3. exactly one of proof and state - else no_evidence_or_state;
- *  4. the evidence's version, then the proof's, is certen:s6-replay:v1 - else unknown_version.
+ *  3. the Go types' own decoding: a hash, address or bytes value whose JSON text holds an escape - wrong_type;
+ *  4. exactly one of proof and state - else no_evidence_or_state;
+ *  5. the evidence's version, then the proof's, is certen:s6-replay:v1 - else unknown_version.
  */
 export function decodeReplayGuardEvidence(raw: Uint8Array): S6ReplayGuardEvidence {
   let doc: JVal;
+  const esc = new WeakMap<object, Set<number>>();
   try {
-    doc = parseGoJson(raw);
+    doc = parseGoJson(raw, esc);
     noDuplicateKeys(doc);
   } catch (e) {
     if (e instanceof JsonError) return unproven(R.malformedJson, e.message);
     throw e;
   }
   checkObject('$', doc, wireEvidence);
+  noEscapedHex('$', doc, wireEvidence, esc);
   const top = obj(doc);
   const ev: S6ReplayGuardEvidence = { version: top.get('version') as string };
   if (top.has('proof')) {
@@ -448,7 +488,71 @@ function accessList(it: Item): void {
 }
 const toNil = (it: Item): Uint8Array | undefined => (it.kind === 'string' && it.content.length === 0 ? undefined : Uint8Array.from(fixedOf(it, 20)));
 
-/** Transaction.UnmarshalBinary: legacy RLP, or an EIP-2718 envelope of type 1, 2, 3 (canonical, without a blob sidecar) or 4. */
+/** BlobTx's canonical fields (rlp.DecodeBytes into types.BlobTx, 14 fields) from the encoding of its list. */
+function blobTxFields(enc: Uint8Array): { to: Uint8Array; chainId: bigint; data: Uint8Array } {
+  const it = structItems(enc, 14);
+  const chainId = uintOf(it[0]!, 32);
+  uintOf(it[1]!, 8);
+  uintOf(it[2]!, 32);
+  uintOf(it[3]!, 32);
+  uintOf(it[4]!, 8);
+  const to = Uint8Array.from(fixedOf(it[5]!, 20));
+  uintOf(it[6]!, 32);
+  const data = bytesOf(it[7]!);
+  accessList(it[8]!);
+  uintOf(it[9]!, 32);
+  for (const h of listOf(it[10]!)) fixedOf(h, 32);
+  for (const i of [11, 12, 13]) uintOf(it[i]!, 32);
+  return { to, chainId, data: Uint8Array.from(data) };
+}
+
+/** kzg4844 sizes: a blob, a commitment and a proof. */
+const BLOB_BYTES = 131072;
+const KZG_BYTES = 48;
+
+/**
+ * BlobTx.decode (go-ethereum v1.17.7 core/types/tx_blob.go:369-435): the canonical form [chainID, nonce, ...], or the
+ * network form with a sidecar - v0 [tx, blobs, commitments, proofs] when the second element is a list, else v1
+ * [tx, version, blobs, commitments, proofs] with the version byte 1. The transaction's hash is keccak256(0x03 || the
+ * canonical encoding of the inner transaction): Transaction.Hash encodes the transaction without its sidecar, and the strict
+ * decode makes that re-encoding the inner list's own bytes.
+ */
+function decodeBlobTx(body: Uint8Array): S6Transaction {
+  const outer = split(body);
+  if (outer.kind !== 'list') throw new RlpError('expected List');
+  const first = split(outer.content);
+  if (first.kind !== 'list') {
+    return { hash: keccak_256(concat2(Uint8Array.of(3), body)), ...blobTxFields(body) };
+  }
+  const second = split(first.rest);
+  const v1 = second.kind !== 'list';
+  const it = structItems(body, v1 ? 5 : 4);
+  const inner = outer.content.subarray(0, outer.content.length - first.rest.length);
+  const tx = blobTxFields(inner);
+  let k = 1;
+  if (v1) {
+    const version = uintOf(it[k++]!, 1);
+    for (const x of listOf(it[k]!)) fixedOf(x, BLOB_BYTES);
+    for (const x of listOf(it[k + 1]!)) fixedOf(x, KZG_BYTES);
+    for (const x of listOf(it[k + 2]!)) fixedOf(x, KZG_BYTES);
+    if (version !== 1n) throw new RlpError(`unsupported blob tx version ${version}`);
+  } else {
+    for (const x of listOf(it[k]!)) fixedOf(x, BLOB_BYTES);
+    for (const x of listOf(it[k + 1]!)) fixedOf(x, KZG_BYTES);
+    for (const x of listOf(it[k + 2]!)) fixedOf(x, KZG_BYTES);
+  }
+  return { hash: keccak_256(concat2(Uint8Array.of(3), inner)), ...tx };
+}
+
+function concat2(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+}
+
+/** Transaction.UnmarshalBinary: legacy RLP, or an EIP-2718 envelope of type 1, 2, 3 (canonical, or in its network form with a
+ * v0 or v1 blob sidecar, as BlobTx.decode reads it) or 4. */
 export function decodeS6Transaction(b: Uint8Array): S6Transaction {
   const hash = keccak_256(b);
   if (b.length > 0 && b[0]! > 0x7f) {
@@ -497,27 +601,8 @@ export function decodeS6Transaction(b: Uint8Array): S6Transaction {
       for (const i of [9, 10, 11]) uintOf(it[i]!);
       return { hash, to, chainId, data: Uint8Array.from(data) };
     }
-    case 3: {
-      const outer = split(body);
-      if (outer.kind !== 'list') throw new RlpError('expected List');
-      if (split(outer.content).kind === 'list') {
-        throw new RlpError('a blob transaction in its network encoding (with a sidecar) is not a block transaction');
-      }
-      const it = structItems(body, 14);
-      const chainId = uintOf(it[0]!, 32);
-      uintOf(it[1]!, 8);
-      uintOf(it[2]!, 32);
-      uintOf(it[3]!, 32);
-      uintOf(it[4]!, 8);
-      const to = Uint8Array.from(fixedOf(it[5]!, 20));
-      uintOf(it[6]!, 32);
-      const data = bytesOf(it[7]!);
-      accessList(it[8]!);
-      uintOf(it[9]!, 32);
-      for (const h of listOf(it[10]!)) fixedOf(h, 32);
-      for (const i of [11, 12, 13]) uintOf(it[i]!, 32);
-      return { hash, to, chainId, data: Uint8Array.from(data) };
-    }
+    case 3:
+      return decodeBlobTx(body);
     case 4: {
       const it = structItems(body, 13);
       const chainId = uintOf(it[0]!, 32);
