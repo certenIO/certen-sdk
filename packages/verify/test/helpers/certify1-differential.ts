@@ -82,6 +82,24 @@ function differences(want: GoExpect, got: CertJudged): string[] {
 }
 
 const CHUNK = 40;
+/**
+ * What judging a mutation costs grows with the size of its base: the 2.0 fixture proofv2/valid.json.gz (1.5 MB) takes over a second a mutation on a quiet host and
+ * several under load, the certify1 vectors a few tens of milliseconds. A chunk is one test: it closes at CHUNK mutations or when their bases add up to CHUNK_CHARS
+ * characters of JSON (about five seconds of work alone), and has a time limit of its own that grows with them (RB9-F6 review V-Q D2: forty mutations of valid.json.gz
+ * were a minute of work against the package's 20 s default, and passed only with a longer limit).
+ */
+const CHUNK_CHARS = 6_000_000;
+const CHUNK_BASE_MS = 60_000;
+const CHUNK_MS_PER_MEGACHAR = 30_000;
+const baseChars = new Map<number, number>();
+const charsOf = (base: number): number => {
+  let n = baseChars.get(base);
+  if (n === undefined) {
+    n = JSON.stringify(bases[base]).length;
+    baseChars.set(base, n);
+  }
+  return n;
+};
 
 /**
  * One shard of the differential (of `total`): the shards are separate test files so the suite runs them in parallel (at most four vitest processes at
@@ -180,17 +198,28 @@ export function defineDifferential(index: number, total: number): void {
   }
   describe('certify1 differential: every mutation reaches the verdict Go gave it', () => {
     const mine = corpus.mutations.filter((_, i) => i % total === index);
-    for (let c = 0; c < mine.length; c += CHUNK) {
-      const part = mine.slice(c, c + CHUNK);
-      it(`mutations ${index + 1}/${total}: ${c + 1}-${c + part.length}`, () => {
-        const wrong: string[] = [];
-        for (const m of part) {
-          const doc = applyPatches(bases[m.base], m.patches);
-          const d = differences(m.expect, judgeCertifyText(numberText(JSON.stringify(doc))));
-          if (d.length > 0) wrong.push(`${m.id} [${m.op}]: ${d.join(' | ')}`);
-        }
-        expect(wrong).toEqual([]);
-      });
+    for (let c = 0; c < mine.length; ) {
+      let chars = 0;
+      let end = c;
+      while (end < mine.length && end - c < CHUNK && (end === c || chars + charsOf(mine[end]!.base) <= CHUNK_CHARS)) {
+        chars += charsOf(mine[end]!.base);
+        end++;
+      }
+      const part = mine.slice(c, end);
+      it(
+        `mutations ${index + 1}/${total}: ${c + 1}-${c + part.length}`,
+        () => {
+          const wrong: string[] = [];
+          for (const m of part) {
+            const doc = applyPatches(bases[m.base], m.patches);
+            const d = differences(m.expect, judgeCertifyText(numberText(JSON.stringify(doc))));
+            if (d.length > 0) wrong.push(`${m.id} [${m.op}]: ${d.join(' | ')}`);
+          }
+          expect(wrong).toEqual([]);
+        },
+        CHUNK_BASE_MS + Math.ceil(chars / 1_000_000) * CHUNK_MS_PER_MEGACHAR,
+      );
+      c = end;
     }
   });
 
