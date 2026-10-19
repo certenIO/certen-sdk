@@ -1,0 +1,31 @@
+package main
+
+// The judge command (TS parity round B8): print the verdict the validator's VerifyPortable gives the portable document in the file named by XTS_FILE
+// (a .json or .json.gz), in the corpora's own vocabulary. It is a diagnostic: it answers "what does Go say about this exact document" for a base
+// document or a case reconstructed from a corpus.
+//
+//	XTS_FILE=<file> ./xtsgen judgefile
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+func judgeFile() error {
+	path := os.Getenv("XTS_FILE")
+	if path == "" {
+		return fmt.Errorf("XTS_FILE is not set")
+	}
+	doc, err := readDoc(path)
+	if err != nil {
+		return err
+	}
+	e, ok := judgeStable(doc)
+	if !ok {
+		return fmt.Errorf("Go panicked or answered differently on two runs")
+	}
+	b, _ := json.Marshal(e)
+	fmt.Println(string(b))
+	return nil
+}
