@@ -80,16 +80,45 @@ probes.push({ name: 'headers a 1000000-deep array', evidence: swapHeaders(1_000_
 probes.push({ name: 'a 1000000-deep array is the whole document', evidence: nest(1_000_000), go: refused('wrong_type') });
 
 const sha = (s: string): string => createHash('sha256').update(s).digest('hex');
+
+/** sha256 of each probe's evidence bytes as the Go throwaway test (pkg/ethproof 7ad629d, s6replay1.Judge) judged them: the TypeScript
+ * probe must be the same bytes, or its verdict says nothing about Go's. */
+const GO_SHA256: Record<string, string> = {
+  'unknown field 6000-deep array': '054b28a819b141db2981ce4da4823e512b05c1542871e0c14d5e399782a4206c',
+  'unknown field 9000-deep array': '2c32860db636655441be5a846283a162980bcdb831a2d4d251dec2d7f5fb8c42',
+  'unknown field 9998-deep array': 'd065ce073597936fa2278731c46453858216412c70728e540e2630504c9b14c4',
+  'unknown field 9999-deep array': 'd527f9a851c8f6eb808beab29360f42fcf0029373c27328889e98177446cbcf6',
+  'unknown field 10000-deep array': '7c274000c52e4bee4c2a2c887b91e742b72db2efecdcbe8189afd3ac9be0f1fd',
+  'unknown field 20000-deep array': '43e02bf67e3ac9858e70bbdf40007470805e2a021d269c61e313168ae736a28a',
+  'headers 9990-deep array': 'b889a722d2106cd3f632a9f71bd11691c6b403bffeef48213e9592581561ee0a',
+  'headers 19990-deep array': '752ced5df4d186c16d525e1887cc55aed9f9560cc95004a9bcf109b8265c8691',
+  'unknown field 10005-deep array then a duplicate version': '8d538a6afb92573ee90dcd623e86864d9a3de147cb6b2e913d02090210508f14',
+  'unknown field 10001-deep object chain': 'bc16382e2d808ebf592f75b386e9dc88f7db27fe2f6184f2f062c09c02476dd7',
+  'unknown field 50000-deep object chain': '0c20654908d9bda3ccdf3ea149dd5d4f9cfe19d462c8d9dbe9bba6a51a06bac3',
+  'headers an array holding a 12000-deep object chain': '62d92b741a21454b130ffcf1bbfd80256cdb7635e16922c890fb719debba2efa',
+  'proof a 15000-deep array': '7d252b5d90c03ce11e2a403694ce4d8aa89eb53e056cf69dd2e655be68c7ee98',
+  'state a 15000-deep object chain': '554b9df57468256207aa441b5e1ad700573c6cbafb87e64008887ec3280878bb',
+  'duplicate key at the bottom of a 20000-deep object chain': 'fa29c12d9ee35799c62622ad92ba757135bdd4ad6accb0f70d889884621edb44',
+  'duplicate key in a 20000-deep array chain': '4ca66fd0d7565ef47aae4c9a1c659a33347c2e9e8539a9299937a40513e44ea9',
+  '20000-deep unknown field, document unterminated': '4119110f8f3509d94a374bd27179fef71ac92ba4fc7f5174a5bf36b7f4ecd9cc',
+  '20000-deep unknown field closed with the wrong bracket': 'f40f565333212cfb5a1f01b77b9d18ab71b9dd6c9c36d765a2e187dee4224fcd',
+  '20000-deep unknown field, trailing garbage after the document': 'ef3555b0b108b2542087e059bf16590a3f02ddd8340a298ef784a7159c6f61c3',
+  'unknown field a 1000000-deep array': '8cf4b540c1044a5624416dda003179d921605f48096f42b1c582b488806111bd',
+  'headers a 1000000-deep array': 'dbba0467731817a3d5879275bece7edf12de628043f82901c2da77178a615941',
+  'a 1000000-deep array is the whole document': 'd3f611065be2714144ee27f93911a8c710790700e3d1548bd9095f29f6237b88',
+};
+
 const bytes = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 describe('S6 replay evidence of any nesting depth is judged as Go judges it (V-R10C2 D1)', () => {
   it('the base evidence is the unmodified vector 001 evidence and proves', () => {
-    expect(sha(base)).toBe(sha(vector.evidence));
+    expect(sha(base)).toBe('99f771ca0f4867771e6cdec267ba026dc887ef8653eda68634753016e630a5fb');
     expect(judgeS6Replay(settlement, bytes(base)).result).toBe('proven');
   });
 
   for (const p of probes) {
     it(`${p.name}: Go ${p.go.result}/${p.go.state}/${p.go.reason}`, () => {
+      expect(sha(p.evidence)).toBe(GO_SHA256[p.name]);
       // judgeS6Replay must return a named verdict: an exception of any kind (a RangeError from the stack) fails here.
       const got = judgeS6Replay(settlement, bytes(p.evidence));
       expect(got).toEqual(p.go);
