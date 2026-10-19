@@ -3,13 +3,14 @@
  * Import reads them: the binary form Go's MarshalBinary writes for a minor-root record (the evidence document carries it as hex and the
  * evidence budget measures it), and the canonical JSON - exact keys, canonical names, lower-case hex - that the spine's walk reads.
  */
-import { VerifyError, sha256 } from '../proof-v2/bytes.js';
+import { UNDECODABLE, VerifyError, sha256 } from '../proof-v2/bytes.js';
 import { app, cat } from './bytebuf.js';
 import { encodeNode } from '../sigtypes/wire.js';
 import { afterLastNull, mergedPairs, Occ, occurrences } from './occ.js';
 import { goHex, i64big, JsonError, jsonList, strptr, struct, u64 } from './gojson.js';
 import { nodeToJson } from './nodejson.js';
 import { nodeFromJson, unionFromJson } from './jsonwire.js';
+import { decodeReceiptBin, recordDecodes } from './certify.js';
 import { importReceipt, type Rcpt } from './rcpt.js';
 import { importSequenced, type SeqMsg } from './seqmsg.js';
 
@@ -29,11 +30,41 @@ const varint = (v: number | bigint): number[] => uvarint(BigInt.asUintN(64, (Big
 const field = (n: number, body: Uint8Array | number[]): number[] => cat(uvarint(n), uvarint(body.length), body);
 const bytesWithLen = (b: Uint8Array): number[] => cat(uvarint(b.length), b);
 
-export const canonReceipt = (r: Rcpt): Record<string, unknown> => ({
+/**
+ * The receipt in the spelling the spine's walk reads - as merkle.Receipt.UnmarshalBinary reads its binary form (a trailing field the reader places as an
+ * entry is an entry). One that does not decode is marked (UNDECODABLE) and refused by the reader that uses it.
+ */
+export const canonReceiptJson = (r: Rcpt): Record<string, unknown> => ({
   start: Buffer.from(r.start).toString('hex'),
   anchor: Buffer.from(r.anchor).toString('hex'),
   entries: r.entries.map((e) => ({ hash: Buffer.from(e.hash).toString('hex'), right: e.right })),
 });
+
+export const canonReceipt = (r: Rcpt): Record<string, unknown> => {
+  const d = decodeReceiptBin(r.bin);
+  const x = d ?? r;
+  const out: Record<string, unknown> = {
+    start: Buffer.from(x.start).toString('hex'),
+    anchor: Buffer.from(x.anchor).toString('hex'),
+    entries: x.entries.map((e) => ({ hash: Buffer.from(e.hash).toString('hex'), right: e.right })),
+  };
+  if (d === undefined) Object.defineProperty(out, UNDECODABLE, { value: true });
+  return out;
+};
+
+/**
+ * A receipt nested in a record, as the record's UnmarshalBinary reads it: the receipt its binary form decodes to (a trailing field the reader places
+ * as an entry is an entry, whatever the JSON said). A receipt that does not decode - a trailing field it cannot place after the entries - clears
+ * ok.v: the record does not decode, and is refused at its turn in the walk (decodeMinorRoot), not at the import.
+ */
+function nestedReceipt(r: Rcpt, ok: { v: boolean }): Rcpt {
+  const d = decodeReceiptBin(r.bin);
+  if (d === undefined) {
+    ok.v = false;
+    return r;
+  }
+  return d;
+}
 
 interface State {
   bin: Uint8Array;
@@ -78,7 +109,7 @@ function ptr(v: unknown, decode: (x: unknown) => unknown): unknown {
   return value;
 }
 
-function receiptListFromJson(j: unknown): State {
+function receiptListFromJson(j: unknown, ok: { v: boolean }): State {
   const s = struct(j, ['merkleState', 'elements', 'receipt', 'continuedReceipt'], 'merkle.ReceiptList');
   const out: number[] = [];
   const canonical: Record<string, unknown> = {};
@@ -107,13 +138,13 @@ function receiptListFromJson(j: unknown): State {
   if (rc !== undefined) {
     const r = importReceipt(rc, 'rootProof.receipt');
     app(out, field(3, r.bin));
-    canonical.receipt = canonReceipt(r);
+    canonical.receipt = canonReceipt(nestedReceipt(r, ok));
   }
   const cr = ptr(s.continuedReceipt, (x) => importReceipt(x, 'rootProof.continuedReceipt'));
   if (cr !== undefined) {
     const r = importReceipt(cr, 'rootProof.continuedReceipt');
     app(out, field(4, r.bin));
-    canonical.continuedReceipt = canonReceipt(r);
+    canonical.continuedReceipt = canonReceipt(nestedReceipt(r, ok));
   }
   return { bin: Uint8Array.from(out), canonical };
 }
@@ -124,6 +155,8 @@ export interface MinorRoot {
   /** The record in the spelling the spine's walk reads. */
   canonical: Record<string, unknown>;
   anchor?: SeqMsg;
+  /** Whether every receipt nested in the record (its root proof's two, each update's) decodes as merkle.Receipt.UnmarshalBinary decodes it. */
+  nestedDecodes: boolean;
 }
 
 /**
@@ -172,6 +205,7 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
   const s = struct(j, ['anchor', 'signatures', 'updates', 'rootProof', '$epilogue'], `api.MinorRootRecord (${label})`);
   const out: number[] = [];
   const canonical: Record<string, unknown> = {};
+  const ok = { v: true };
   let anchor: SeqMsg | undefined;
   if (s.anchor !== undefined && s.anchor !== null) {
     anchor = importSequenced(s.anchor, `${label}.anchor`);
@@ -198,15 +232,15 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
     if (us.receipt !== undefined && us.receipt !== null) {
       const r = importReceipt(us.receipt, `${label}.updates.receipt`);
       app(inner, field(2, r.bin));
-      cu.receipt = canonReceipt(r);
+      cu.receipt = canonReceipt(nestedReceipt(r, ok));
     }
     app(out, field(3, Uint8Array.from(inner.length === 0 ? [0x80] : inner)));
     updates.push(cu);
   }
   canonical.updates = updates;
-  const rootProof = ptr(s.rootProof, receiptListFromJson);
+  const rootProof = ptr(s.rootProof, (x) => receiptListFromJson(x, { v: true }));
   if (rootProof !== undefined) {
-    const rp = receiptListFromJson(rootProof);
+    const rp = receiptListFromJson(rootProof, ok);
     app(out, field(4, rp.bin));
     canonical.rootProof = rp.canonical;
   }
@@ -217,7 +251,10 @@ export function minorRootFromJson(j: unknown, label: string): MinorRoot {
     if (!b) throw new JsonError(`error decoding ${label}.$epilogue: encoding/hex: invalid byte`);
     app(out, b);
   }
-  return { bin: Uint8Array.from(out), canonical, anchor };
+  // A record that does not decode (an unplaceable trailing field of its own or of a receipt nested in it) is refused where the walk reaches it.
+  const decodes = ok.v && recordDecodes(Uint8Array.from(out));
+  if (!decodes) Object.defineProperty(canonical, UNDECODABLE, { value: true });
+  return { bin: Uint8Array.from(out), canonical, anchor, nestedDecodes: ok.v };
 }
 
 /** An api.MajorHeaderRecord from its JSON, in the spelling the spine's walk reads (the archive is never re-encoded). */
@@ -235,7 +272,8 @@ export function majorFromJson(j: unknown, label: string): Record<string, unknown
     const us = struct(u, ['transaction', 'receipt'], 'NetworkUpdateProof');
     const cu: Record<string, unknown> = {};
     if (us.transaction !== undefined && us.transaction !== null) cu.transaction = nodeToJson(nodeFromJson('Transaction', us.transaction, `${label}.updates.transaction`));
-    if (us.receipt !== undefined && us.receipt !== null) cu.receipt = canonReceipt(importReceipt(us.receipt, `${label}.updates.receipt`));
+    // the archive keeps the structs json.Unmarshal built (portable.go Import): a receipt nested in a major record is not decoded from binary
+    if (us.receipt !== undefined && us.receipt !== null) cu.receipt = canonReceiptJson(importReceipt(us.receipt, `${label}.updates.receipt`));
     updates.push(cu);
   }
   canonical.updates = updates;

@@ -32,7 +32,11 @@
 // The certify1 differential corpus (RB9-F5-5; the anchored certify form, over the synced certify1 suite) is a fourth such command; it is written beside the
 // synced suite, not into go-written, because a re-sync of the suite replaces its directory:
 //
-//	GOWORK=off go run ./cmd/xtsgen -fixtures <certen-sdk>/packages/verify/test/fixtures/s3-f5 -out <certen-sdk>/packages/verify/test/fixtures/s3-f5-go -per 30 certify1
+//	XTS_EXTRA_BASES=../proofv2/valid.json.gz,../proofv2/network-update.json.gz GOWORK=off go run ./cmd/xtsgen //	  -fixtures <certen-sdk>/packages/verify/test/fixtures/s3-f5 -out <certen-sdk>/packages/verify/test/fixtures/s3-f5-go -per 30 certify1
+//
+// (about 7 minutes: the random mutations, then the sweeps - every field number of a trailing field on every receipt, entry and record path class, the
+// uint64 edge values on every number path class, delete and null of every message and receipt member - over the suite's documents and the two
+// evidence 2.0 documents named by XTS_EXTRA_BASES, each class in the first three documents that hold it.)
 //
 // The corpus of consensus.judgeProofV2 needs the unexported function, so it is a test of that package
 // (test/fixtures/s3/gen/xts_judge_test.go.txt -> <validator>/pkg/consensus/xts_judge_test.go), run after the intent corpus exists:
@@ -246,7 +250,7 @@ func judgeStable(doc []byte) (Expect, bool) {
 
 type Patch struct {
 	Path  []any  `json:"path"`
-	Op    string `json:"op"` // set | delete | rename | swap | dup | insert
+	Op    string `json:"op"` // set | setNumber (To is the decimal text of the number) | delete | rename | swap | dup | insert
 	Value any    `json:"value,omitempty"`
 	HasV  bool   `json:"hasValue,omitempty"`
 	To    string `json:"to,omitempty"`
@@ -289,6 +293,9 @@ func walk(root any, path []any) any {
 }
 
 func apply(root any, p Patch) any {
+	if p.Op == "setNumber" { // a number written by its decimal text, exact beyond 2^53 (the corpus file keeps the text in To)
+		p = Patch{Path: p.Path, Op: "set", Value: json.Number(p.To), HasV: true}
+	}
 	if len(p.Path) == 0 && p.Op == "set" {
 		return deepCopy(p.Value)
 	}

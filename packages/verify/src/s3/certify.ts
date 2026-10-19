@@ -119,6 +119,16 @@ class Rd {
     return true;
   }
 
+  /**
+   * Reset: what follows the last field the type knows is extra data, and its first field number must be above the last known one and at most 32
+   * (a smaller one cannot be placed: ErrFieldsOutOfOrder; a larger one is not a field number).
+   */
+  trailing(last: number): void {
+    if (this.err) return;
+    if (this.current === 0 && !this.nextField()) return;
+    if (this.current !== EMPTY_OBJECT && this.current <= last) this.err = true;
+  }
+
   private readField(n: number): boolean {
     if (this.err) return false;
     if (this.current === 0 && !this.nextField()) return false;
@@ -204,7 +214,12 @@ export function receiptDecodes(bin: Uint8Array): boolean {
  * entry, so the verifier judges the receipt it decoded and not the one the JSON appeared to describe.
  */
 export function decodeReceiptBin(bin: Uint8Array): Rcpt | undefined {
-  const r = new Rd(bin, 0, bin.length);
+  const d = readReceipt(new Rd(bin, 0, bin.length));
+  return d === undefined ? undefined : { ...d, bin };
+}
+
+/** merkle.Receipt.UnmarshalBinaryFrom over a reader (the whole stream, or the value of a field of the object that holds the receipt). */
+function readReceipt(r: Rd): { start: Uint8Array; anchor: Uint8Array; entries: { right: boolean; hash: Uint8Array }[] } | undefined {
   const start = r.readBytes(1);
   r.readInt(2);
   r.readBytes(3);
@@ -223,7 +238,15 @@ export function decodeReceiptBin(bin: Uint8Array): Rcpt | undefined {
     entries.push(e!);
   }
   if (r.err) return undefined;
-  return { start: start ?? new Uint8Array(0), anchor: anchor ?? new Uint8Array(0), entries, bin };
+  return { start: start ?? new Uint8Array(0), anchor: anchor ?? new Uint8Array(0), entries };
+}
+
+/** api.NetworkUpdateProof.UnmarshalBinaryFrom: its transaction (judged by the import that wrote it), its receipt, and extra data that opens above field 2. */
+function updateDecodes(sub: Rd): boolean {
+  sub.readValue(1, () => true);
+  sub.readValue(2, (s) => readReceipt(s) !== undefined);
+  sub.trailing(2);
+  return !sub.err;
 }
 
 /**
@@ -236,9 +259,22 @@ export function recordDecodes(bin: Uint8Array): boolean {
   const skip = (): boolean => true;
   r.readValue(1, skip);
   while (r.readValue(2, skip));
-  while (r.readValue(3, skip));
+  while (r.readValue(3, updateDecodes));
   r.readValue(4, skip);
   return !r.err;
+}
+
+/**
+ * Whether the record's binary form carries a root proof (field 4): decodeMinorRoot reads mr.RootProof from the bytes, so a record whose JSON has no
+ * rootProof but whose extra data opens with field 4 (0400, 04020100) is a record WITH a root proof, a continuous item that Go refuses as incomplete.
+ */
+export function recordHasRootProof(bin: Uint8Array): boolean {
+  const r = new Rd(bin, 0, bin.length);
+  const skip = (): boolean => true;
+  r.readValue(1, skip);
+  while (r.readValue(2, skip));
+  while (r.readValue(3, updateDecodes));
+  return r.readValue(4, skip) && !r.err;
 }
 
 // --------------------------------------------------------------------------------------------------------------------------------
@@ -296,17 +332,18 @@ export function rootChainLeafIndex(entries: readonly { right: boolean }[], size:
  */
 export class UpdateWindow {
   constructor(
-    private readonly prev: number,
+    private readonly prev: bigint,
     private readonly prevKnown: boolean,
-    private readonly thisIndex: number,
-    private readonly block: number,
+    private readonly thisIndex: bigint,
+    private readonly block: bigint,
   ) {}
 
   /** Judge one update whose receipt already validates and ends at the anchor's root chain anchor: certify_update_unproven{principal,txHash,anchorBlock}. */
   check(principal: string, txHash: Uint8Array, entries: readonly { right: boolean }[]): void {
     const state = (): CertifyState => certifyState(CertifyCode.CertifyUpdateUnproven, principal, toHex(txHash), String(this.block));
-    if (!this.prevKnown) throw state();
-    const idx = rootChainLeafIndex(entries, BigInt(this.thisIndex) + 1n);
-    if (idx === undefined || idx <= BigInt(this.prev) || idx > BigInt(this.thisIndex)) throw state();
+    // w.this == math.MaxUint64: the tree size RootChainIndex + 1 does not exist
+    if (!this.prevKnown || this.thisIndex === (1n << 64n) - 1n) throw state();
+    const idx = rootChainLeafIndex(entries, this.thisIndex + 1n);
+    if (idx === undefined || idx <= this.prev || idx > this.thisIndex) throw state();
   }
 }

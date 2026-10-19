@@ -120,6 +120,8 @@ export interface Evidence {
   certify: unknown[];
   /** The binary encoding of each certify run (api.MinorRootRecord.MarshalBinary), computed at import. */
   certifyBin: Uint8Array[];
+  /** Per certify run: whether the receipts nested in the record decode (see MinorRoot.nestedDecodes). */
+  certifyNested: boolean[];
   anchor: PartitionAnchorX;
   pages: PageState[];
   /** undefined is nil (absent or empty: Import copies only a non-empty map). */
@@ -136,6 +138,8 @@ export interface Evidence {
     majors: number;
     hops: unknown[];
     hopsBin: Uint8Array[];
+    /** Per hop: whether the receipts nested in the record decode. */
+    hopsNested: boolean[];
     incarnation: string;
     network: CheckAccount;
     globals: CheckAccount;
@@ -298,6 +302,7 @@ export interface Imported {
 export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: Error }): Evidence {
   const e = struct(doc.evidence, ['version', 'account', 'txHash', 'receipt', 'majors', 'certify', 'anchor', 'pages', 'anchors', 'votes', 'transaction', 'links', 'genesisLink', 'check'], 'PortableEvidence');
   const anchorS = struct(e.anchor, ['message', 'receipt'], 'PortableEvidence.anchor');
+  if (anchorS.message === undefined) throw new JsonError('anchor message: unexpected end of JSON input'); // an absent json.RawMessage is not JSON at all
   const ev: Evidence = {
     version: str(e.version, 'evidence.version'),
     account: str(e.account, 'evidence.account'),
@@ -306,12 +311,13 @@ export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: 
     majors: u64(e.majors, 'evidence.majors'),
     certify: [],
     certifyBin: [],
+    certifyNested: [],
     anchor: { message: importSequenced(anchorS.message, 'anchor message'), receipt: importReceipt(anchorS.receipt, 'anchor receipt') },
     pages: [],
     votes: [],
     links: [],
     transaction: str(e.transaction, 'evidence.transaction'),
-    check: { majors: 0, hops: [], hopsBin: [], incarnation: '', network: undefined as unknown as CheckAccount, globals: undefined as unknown as CheckAccount },
+    check: { majors: 0, hops: [], hopsBin: [], hopsNested: [], incarnation: '', network: undefined as unknown as CheckAccount, globals: undefined as unknown as CheckAccount },
   };
   const pages = list(e.pages, 'evidence.pages') ?? [];
   ev.pages = pages.map((p, i) => importPage(p, i));
@@ -333,6 +339,7 @@ export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: 
   const certify = (list(e.certify, 'evidence.certify') ?? []).map((r, i) => minorRootFromJson(r, `certify run ${i}`));
   ev.certify = certify.map((m) => m.canonical);
   ev.certifyBin = certify.map((m) => m.bin);
+  ev.certifyNested = certify.map((m) => m.nestedDecodes);
   if (ev.version === '2.1') {
     // portable.go Import: a 2.1 document's links member is a list of receipts (null: none), its genesis link one receipt (null: none).
     if (e.links !== undefined && e.links !== null) {
@@ -344,6 +351,7 @@ export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: 
   const hops = (list(c.hops, 'check.hops') ?? []).map((r, i) => minorRootFromJson(r, `set check hop ${i}`));
   ev.check.hops = hops.map((m) => m.canonical);
   ev.check.hopsBin = hops.map((m) => m.bin);
+  ev.check.hopsNested = hops.map((m) => m.nestedDecodes);
   ev.check.incarnation = str(c.incarnation, 'check.incarnation');
   const account = (raw: unknown, cls: string, label: string): CheckAccount => {
     if (!held) return importCheckAccount(raw as Record<string, unknown>, cls, label);

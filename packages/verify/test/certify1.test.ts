@@ -26,7 +26,9 @@ import {
   checkEvidenceCheckpointLags,
   receiptDecodes,
   rootChainLeafIndex,
+  UpdateWindow,
 } from '../src/s3/certify.js';
+import { checkAssembledBudget } from '../src/s3/budget.js';
 import { judgeCertify, PINS, read, sha256hex } from './helpers/certify1.js';
 
 /**
@@ -392,5 +394,90 @@ describe('certify1: checkpoint_stale and the budget constants', () => {
     }
     expect((over as CertifyState).code).toBe('certificate_budget');
     expect(maxUpdateWindows(0, 0)).toBe(0);
+  });
+});
+
+describe('certify1: an update window whose lower bound is not established, and the exact uint64 heights', () => {
+  // A path that is the root-chain path of leaf 3 in a tree of 8 leaves (3 right-hand steps from the leaf's side: bits of 3 = 011, Right when the bit is 0).
+  const path = [{ right: false }, { right: false }, { right: true }];
+  const tx = Uint8Array.from({ length: 32 }, (_, i) => i);
+  const stateOf = (e: unknown): string => {
+    expect(e, 'a CertifyState').toBeInstanceOf(CertifyState);
+    return `${(e as CertifyState).code}{${(e as CertifyState).fields.join(',')}}`;
+  };
+  const run = (w: UpdateWindow): string | undefined => {
+    try {
+      w.check('acc://dn.acme/globals', tx, path);
+    } catch (e) {
+      return stateOf(e);
+    }
+    return undefined;
+  };
+  const txHex = Buffer.from(tx).toString('hex');
+  const run2 = (w: UpdateWindow, entries: ReturnType<typeof windowEntries>, leaf: number): string | undefined => {
+    try {
+      w.check('acc://dn.acme/globals', tx, trackedReceipt(entries, leaf));
+    } catch (e) {
+      return stateOf(e);
+    }
+    return undefined;
+  };
+
+  it('refuses every update of an anchor whose previous RootChainIndex is not established (Go: a spine restored from a checkpoint without root_chain_index)', () => {
+    // the same update is inside its window when the lower bound is known, and unproven when it is not
+    expect(rootChainLeafIndex(path, 8n)).toBe(3n);
+    expect(run(new UpdateWindow(2n, true, 7n, 120n))).toBeUndefined();
+    expect(run(new UpdateWindow(0n, false, 7n, 120n))).toBe(`certify_update_unproven{acc://dn.acme/globals,${txHex},120}`);
+  });
+
+  it('judges the window on the heights as uint64: the bounds above 2^53 and the size RootChainIndex + 1 that does not exist at MaxUint64', () => {
+    const max = (1n << 64n) - 1n;
+    // this == MaxUint64: the tree size would be 2^64, which no root chain has
+    expect(run(new UpdateWindow(2n, true, max, max))).toBe(`certify_update_unproven{acc://dn.acme/globals,${txHex},18446744073709551615}`);
+    // 2^53 and 2^53 + 1 are distinct heights (their nearest double is the same): leaf 3 of a tree of 2^53 + 1 leaves is not in (2^53, 2^53 + 1]
+    expect(run(new UpdateWindow(1n << 53n, true, (1n << 53n) + 1n, (1n << 53n) + 1n))).toBe(`certify_update_unproven{acc://dn.acme/globals,${txHex},9007199254740993}`);
+  });
+
+  it('mirrors TestWindowResidualALateProofOfAnOldEntryIsNotExcluded: the window bounds the root chain position of the anchor the receipt ends in', () => {
+    // a root chain of 100 entries (RootChainIndex 99) and the window (79, 99]
+    const entries = windowEntries(100);
+    const w = new UpdateWindow(79n, true, 99n, 120n);
+    // an entry appended at 90, inside the window, is accepted
+    expect(() => w.check('acc://dn.acme/globals', tx, trackedReceipt(entries, 90))).not.toThrow();
+    // an honest receipt of an entry at 10 (appended before the window) is refused there; what the check cannot see is WHEN a proof of a position in
+    // the window was made (a late proof of an entry already inside it), which is the residual Go pins and the verifier states
+    let refused: unknown;
+    try {
+      w.check('acc://dn.acme/globals', tx, trackedReceipt(entries, 10));
+    } catch (e) {
+      refused = e;
+    }
+    expect(stateOf(refused)).toBe(`certify_update_unproven{acc://dn.acme/globals,${txHex},120}`);
+    // the bounds are exclusive below and inclusive above
+    expect(() => w.check('acc://dn.acme/globals', tx, trackedReceipt(entries, 99))).not.toThrow();
+    expect(() => w.check('acc://dn.acme/globals', tx, trackedReceipt(entries, 80))).not.toThrow();
+    expect(run2(w, entries, 79)).toBe(`certify_update_unproven{acc://dn.acme/globals,${txHex},120}`);
+  });
+
+  it('wraps the builder check text with where it judged (fmt.Errorf("%w (%s)")) and leaves the update-windows check bare', () => {
+    expect(() => checkUpdateWindows(1, 16, 0)).not.toThrow();
+    const over = maxUpdateWindows(16, 0) + 1;
+    const links = Array.from({ length: over }, () => ({}));
+    let bare = '';
+    try {
+      checkUpdateWindows(over, 16, 0);
+    } catch (e) {
+      bare = (e as Error).message;
+    }
+    let wrapped = '';
+    try {
+      checkAssembledBudget({ links, pages: [] } as never, 16, 'acc://bvn-BVN1.acme', 77);
+    } catch (e) {
+      wrapped = (e as Error).message;
+    }
+    expect(bare).toContain('the update windows');
+    expect(bare.endsWith(')')).toBe(true);
+    expect(wrapped.endsWith(' (acc://bvn-BVN1.acme block 77)')).toBe(true);
+    expect(wrapped.startsWith(bare)).toBe(true);
   });
 });

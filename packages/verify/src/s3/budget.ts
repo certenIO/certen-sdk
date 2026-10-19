@@ -50,8 +50,8 @@ export const FIXED_EVIDENCE_BYTES_20 = 760_000;
 export const certificateEstimate = (evidenceBytes: number, pages: number): number => evidenceBytes + REST_FLAT_BYTES + VOTE_EVIDENCE_BYTES_PER_PAGE * pages;
 
 /** certificate_budget{size,limit}: the whole certificate does not fit the path (the same decision as the transaction path's tx_too_large), judged at where. */
-function certificateBudget(size: number, where: string, why: string): CertifyState {
-  return new CertifyState(CertifyCode.CertificateBudget, [String(size), String(CONSENSUS_TX_LIMIT)], `: judged at ${where}: ${why}`);
+function certificateBudget(size: number, where: string, why: string, wrapped = ''): CertifyState {
+  return new CertifyState(CertifyCode.CertificateBudget, [String(size), String(CONSENSUS_TX_LIMIT)], `: judged at ${where}: ${why}${wrapped}`);
 }
 
 /** CheckCertificateFits judges the whole certificate before it is signed: the estimate must be inside ConsensusTxLimit, else certificate_budget{size,limit}. */
@@ -77,7 +77,12 @@ export function maxUpdateWindows(validators: number, otherBytes: number): number
 }
 
 /** CheckUpdateWindows refuses, by certificate_budget{size,limit}, a certify of k update windows at V validators whose signature entries alone are over the evidence budget (the k x V bound). */
-export function checkUpdateWindows(k: number, validators: number, otherBytes: number, suffix = ''): void {
+export function checkUpdateWindows(k: number, validators: number, otherBytes: number): void {
+  updateWindowsFit(k, validators, otherBytes, '');
+}
+
+/** CheckUpdateWindows, with the text the builder's check wraps around its refusal (fmt.Errorf("%w (%s)", err, where)): wrapped is appended after it. */
+function updateWindowsFit(k: number, validators: number, otherBytes: number, wrapped: string): void {
   const sig = updateWindowsBytes(k, validators);
   const ev = FIXED_EVIDENCE_BYTES + otherBytes + sig;
   if (ev > MAX_EVIDENCE_BYTES) {
@@ -85,6 +90,7 @@ export function checkUpdateWindows(k: number, validators: number, otherBytes: nu
       ev + CERTIFICATE_RESERVE,
       'the update windows',
       `k=${k} windows x validators=${validators} x ${VALIDATOR_SIGNATURE_BYTES} bytes = ${sig} bytes of signature entries with the ${FIXED_EVIDENCE_BYTES}-byte fixed part and ${otherBytes} other bytes is over the ${MAX_EVIDENCE_BYTES}-byte evidence budget (largest k at this V: ${maxUpdateWindows(validators, otherBytes)}; tx_too_large)`,
+      wrapped,
     );
   }
 }
@@ -95,7 +101,7 @@ export function checkUpdateWindows(k: number, validators: number, otherBytes: nu
  */
 export function checkAssembledBudget(ev: Evidence, validators: number, partition: string, block: number): void {
   const where = `${partition} block ${block}`;
-  checkUpdateWindows(ev.links.length, validators, 0, ` (${where})`);
+  updateWindowsFit(ev.links.length, validators, 0, ` (${where})`);
   checkCertificateFits(utf8Length(evidenceJson(ev)), ev.pages.length, where);
 }
 

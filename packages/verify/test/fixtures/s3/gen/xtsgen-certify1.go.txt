@@ -245,14 +245,26 @@ func certify1Mutations(fixtures, out string, per int) error {
 	f := &CFile{Format: "certen:certify1-mutations:v1",
 		Description: "Mutations of the certify1 vectors (RB9-F5 anchored certify form), each applied to the base document's JSON tree and judged by proofv2.VerifyPortable: the verdict is verified (summary), named (state, partition, block), certify (code, fields) or plain (class only). A mutation on which Go panics or answers differently on two runs is not recorded."}
 	f.ManifestSha256 = hex.EncodeToString(msum[:])
-	for bi, c := range m.Cases {
-		bpath := "certify1/" + c.File
+	// The suite's documents, then the evidence 2.0 documents of the earlier corpora (relative to the fixtures directory, XTS_EXTRA_BASES, comma-separated;
+	// a .gz is read decompressed and hashed as stored): the sweeps reach the 2.0 form's receipts too.
+	var bpaths []string
+	for _, c := range m.Cases {
+		bpaths = append(bpaths, "certify1/"+c.File)
+	}
+	if extra := os.Getenv("XTS_EXTRA_BASES"); extra != "" {
+		bpaths = append(bpaths, strings.Split(extra, ",")...)
+	}
+	for bi, bpath := range bpaths {
 		f.Bases = append(f.Bases, bpath)
-		rawDoc, err := os.ReadFile(filepath.Join(fixtures, bpath))
+		stored, err := os.ReadFile(filepath.Join(fixtures, bpath))
 		if err != nil {
 			return err
 		}
-		sum := sha256.Sum256(rawDoc)
+		rawDoc, err := readDoc(filepath.Join(fixtures, bpath))
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(stored)
 		f.BaseSha256 = append(f.BaseSha256, hex.EncodeToString(sum[:]))
 		var base any
 		if err := json.Unmarshal(rawDoc, &base); err != nil {
@@ -304,10 +316,6 @@ func certify1Mutations(fixtures, out string, per int) error {
 						break
 					}
 					p, name := mutate(r, t, "")
-					// A number of 2^53 in the anchor's own block or root chain index is read by the TypeScript spine as a double (finding RB9-F5-5-F1).
-					if name == "numbig" && len(p.Path) > 0 && (p.Path[len(p.Path)-1] == "minorBlockIndex" || p.Path[len(p.Path)-1] == "rootChainIndex") {
-						p, name = Patch{Path: p.Path, Op: "set", Value: float64(1), HasV: true}, "numone"
-					}
 					ps = append(ps, p)
 					ops = append(ops, name+"@"+pathString(p.Path))
 				}
@@ -332,6 +340,165 @@ func certify1Mutations(fixtures, out string, per int) error {
 			}
 			f.Mutations = append(f.Mutations, CMutation{ID: fmt.Sprintf("%s#%02d", bpath, k), Base: bi, Op: strings.Join(ops, " + "), Patches: ps, Expect: e})
 		}
+		sweepCertify1(base, bi, bpath, f)
 	}
 	return writeJSON(filepath.Join(out, "certify1-mutations.json.gz"), f)
+}
+
+// ---------------------------------------------------------------------------------------------------------------------------------
+// the sweeps (TS parity round B6 after F5-5): every receipt member of every base document is given each unplaceable and placeable trailing field,
+// and every number of every base document is set to the edge values of a uint64. They are exhaustive per path class (a path with every array index
+// replaced by *), not drawn at random, so a verifier that reads one receipt or one number differently from Go is found by construction.
+
+// classOf spells a path with every array index as *.
+func classOf(p []any) string {
+	parts := make([]string, len(p))
+	for i, e := range p {
+		if _, ok := e.(int); ok {
+			parts[i] = "*"
+		} else {
+			parts[i] = fmt.Sprint(e)
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
+// sweepEpilogues are the trailing fields (merkle.Receipt, ReceiptEntry and api.MinorRootRecord keep what follows their last known field as extra data;
+// the reader refuses a field number it cannot place after what it has read, or above 32): EVERY field number 0-8 and 31-33 and 64 with a value, the bare
+// bytes that open such a field (01 03 04 21 ff 80 8001), field 4 as a record's root proof (0400, 04020100), a field 6 that reads as one more entry
+// (0601, 06020a0b), 05010a (an unplaceable field 5 after the entries) and 07010a (an unknown field 7 kept as extra data).
+var sweepEpilogues = func() []string {
+	var out []string
+	for _, n := range []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 31, 32, 33, 64} {
+		out = append(out, fmt.Sprintf("%02x01aa", n))
+	}
+	return append(out, "01", "03", "04", "21", "ff", "80", "8001", "0400", "04020100", "0601", "06020a0b", "05010a", "07010a")
+}()
+
+// sweepBases is the number of documents a path class is swept in (see sweepCertify1).
+const sweepBases = 3
+
+var sweepUse = map[string]int{}
+
+var u64Values = []string{"9007199254740991", "9007199254740992", "9223372036854775808", "18446744073709551615", "18446744073709551616"}
+
+func isReceiptNode(n node) bool {
+	m, ok := n.v.(map[string]any)
+	if !ok {
+		return false
+	}
+	if receiptLike(m) {
+		return true
+	}
+	if len(n.path) > 0 {
+		switch n.path[len(n.path)-1] {
+		case "receipt", "continuedReceipt", "genesisLink", "stateReceipt":
+			return true
+		}
+	}
+	return false
+}
+
+func isEntryNode(n node) bool {
+	m, ok := n.v.(map[string]any)
+	if !ok || len(n.path) < 2 {
+		return false
+	}
+	_, hasHash := m["hash"]
+	_, hasRight := m["right"]
+	_, isInList := n.path[len(n.path)-1].(int)
+	return hasHash && hasRight && isInList && n.path[len(n.path)-2] == "entries"
+}
+
+func isRecordNode(n node) bool {
+	m, ok := n.v.(map[string]any)
+	if !ok {
+		return false
+	}
+	_, a := m["signatures"]
+	_, b := m["anchor"]
+	return a && b
+}
+
+func sweepCertify1(base any, bi int, bpath string, f *CFile) {
+	doc := base.(map[string]any)
+	var nodes []node
+	collect(doc, nil, &nodes)
+	seq := 0
+	record := func(ops string, ps []Patch) {
+		mutated, ok := applyPatches(base, ps)
+		if !ok {
+			return
+		}
+		docBytes, err := json.Marshal(mutated)
+		if err != nil {
+			return
+		}
+		lastPanic = ""
+		e, ok := judgeCStable(docBytes, f)
+		id := fmt.Sprintf("%s#sweep%03d", bpath, seq)
+		seq++
+		if !ok {
+			if lastPanic != "" {
+				fmt.Fprintf(os.Stderr, "PANIC %s [%s]: %s\n", id, ops, lastPanic)
+			} else {
+				fmt.Fprintf(os.Stderr, "FLAKY %s [%s]: %s\n", id, ops, lastFlaky)
+			}
+			return
+		}
+		f.Mutations = append(f.Mutations, CMutation{ID: id, Base: bi, Op: ops, Patches: ps, Expect: e})
+	}
+	form := "2.1"
+	if ev, ok := doc["evidence"].(map[string]any); ok {
+		if v, ok := ev["version"].(string); ok {
+			form = v
+		}
+	}
+	seen := map[string]bool{}
+	once := func(kind string, n node) bool {
+		k := kind + "|" + classOf(n.path)
+		if seen[k] {
+			return false
+		}
+		seen[k] = true
+		k = form + "|" + k // a class is swept in the first sweepBases documents of each form (2.1 and 2.0)
+		// A class is swept in the first sweepBases documents that hold it, so a corpus over 46 documents does not repeat the same member 46 times; the
+		// anchor's own block and root chain index are swept in every document, as what follows them (a link, a window, a replay) differs by document.
+		last, _ := n.path[len(n.path)-1].(string)
+		if last != "minorBlockIndex" && last != "rootChainIndex" {
+			sweepUse[k]++
+			if sweepUse[k] > sweepBases {
+				return false
+			}
+		}
+		return true
+	}
+	for _, n := range nodes {
+		if isReceiptNode(n) || isEntryNode(n) || isRecordNode(n) {
+			kind := "receipt"
+			if isEntryNode(n) {
+				kind = "entry"
+			}
+			if isRecordNode(n) {
+				kind = "record"
+			}
+			if once("epi-"+kind, n) {
+				for _, e := range sweepEpilogues {
+					record("sweep-epilogue-"+e+"@"+pathString(n.path), []Patch{{Path: append(append([]any(nil), n.path...), "$epilogue"), Op: "set", Value: e, HasV: true}})
+				}
+			}
+		}
+		if _, isNum := n.v.(float64); isNum && len(n.path) > 0 && once("u64", n) {
+			for _, v := range u64Values {
+				record("sweep-u64-"+v+"@"+pathString(n.path), []Patch{{Path: n.path, Op: "setNumber", To: v}})
+			}
+		}
+		// a member a document may lack: an absent or null message or receipt is judged at the import (finding RB9-F5-5-F3)
+		if len(n.path) > 0 {
+			if last, ok := n.path[len(n.path)-1].(string); ok && (last == "message" || last == "receipt") && once("drop", n) {
+				record("sweep-delete@"+pathString(n.path), []Patch{{Path: n.path, Op: "delete"}})
+				record("sweep-null@"+pathString(n.path), []Patch{{Path: n.path, Op: "set", Value: nil, HasV: true}})
+			}
+		}
+	}
 }

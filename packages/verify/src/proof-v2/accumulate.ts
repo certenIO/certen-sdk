@@ -46,13 +46,16 @@ export function encodeObject(o: unknown): Uint8Array {
 /**
  * The SDK refuses a value it cannot encode or hash (a number past 2^53, a transaction without a body) by throwing a plain Error with its
  * reason. That is a refusal of the document - Go's verdict is a plain refusal of the same document (the signature or the update does not
- * verify) - so it is carried as a VerifyError with the SDK's reason. Any other throw (a TypeError, a RangeError) is a defect and propagates.
+ * verify) - so it is carried as a VerifyError with the SDK's reason. A URL the SDK cannot parse (a TypeError "Invalid URL" from new URL, for example
+ * a name ending in U+0085) is the same: Go refuses the document plainly (its URL parser refuses the name), so it is a refusal and not a defect. Any
+ * other throw (another TypeError, a RangeError) is a defect and propagates.
  */
 function sdkRefusal<T>(what: string, f: () => T): T {
   try {
     return f();
   } catch (e) {
     if (e instanceof Error && e.constructor === Error) return fail(`${what}: ${e.message}`);
+    if (e instanceof TypeError && e.message === 'Invalid URL') return fail(`${what}: ${e.message}`);
     throw e;
   }
 }
@@ -65,7 +68,7 @@ export function sequencedMessage(j: unknown, label: string): { message: { transa
   if (!j || typeof j !== 'object') fail(`${label}: missing`);
   const n = j as Record<string, unknown>;
   if (n.type !== 'sequenced') fail(`${label}: is ${String(n.type)}, not a sequenced message`);
-  return messaging.Message.fromObject(n as Parameters<typeof messaging.Message.fromObject>[0]) as unknown as { message: { transaction: Hashable } };
+  return sdkRefusal(`${label}: sequenced message`, () => messaging.Message.fromObject(n as Parameters<typeof messaging.Message.fromObject>[0])) as unknown as { message: { transaction: Hashable } };
 }
 
 /** Message.Hash for a sequenced message: sha256 of its binary encoding (encoding.Hash). */

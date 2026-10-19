@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { CertifyState } from '../../src/s3/certify.js';
-import { NamedState, verifyPortableAny } from '../../src/s3/index.js';
+import { NamedState, verifyPortableAny, verifyPortableAnyBytes } from '../../src/s3/index.js';
 import { summarize, type ReportSummary } from './s3.js';
 
 /**
@@ -11,9 +11,9 @@ import { summarize, type ReportSummary } from './s3.js';
  */
 /** THE pins: a re-sync of the suite is a copy of the files and a change of these hashes (and of the validator commit prefix) and nothing else. */
 export const PINS = {
-  validatorCommit: '31393e0',
+  validatorCommit: '2d98ff9',
   namesSha256: '2413c2baac002a4f5a0b34d1331d41079a1c50e8b4792e1263b690ed8df84878',
-  suiteManifestSha256: 'bb200d6decb7a809ada325e376d2f95ea460b80a91b58ca021dc766cf032c312',
+  suiteManifestSha256: '33be0bea5a1289b25f2071a1e365c33f9bdc0c4da98d515a372bd61d3c35ad38',
   liveLinksSha256: '98ba7ccd2e71a7631f836ad597dcab25df1e908a82aa82443daa0d729ae7b70f',
 } as const;
 export const dir = new URL('../fixtures/s3-f5/', import.meta.url);
@@ -42,9 +42,19 @@ export type CertJudged =
   | { v: 'plain'; message: string }
   | { v: 'fault'; message: string };
 
+/** The judgement of a document received as parsed JSON (the tree is re-serialised: see verifyPortableAny). */
 export function judgeCertify(doc: unknown): CertJudged {
+  return judgeWith(() => verifyPortableAny(doc));
+}
+
+/** The judgement of a document received as text: a number the document spells beyond 2^53 reaches the verifier exactly. */
+export function judgeCertifyText(text: string): CertJudged {
+  return judgeWith(() => verifyPortableAnyBytes(text));
+}
+
+function judgeWith(run: () => ReturnType<typeof verifyPortableAny>): CertJudged {
   try {
-    const out = verifyPortableAny(doc);
+    const out = run();
     if (out.version === '2.0') {
       const r = out.report;
       return {

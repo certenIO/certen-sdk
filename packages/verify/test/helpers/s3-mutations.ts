@@ -13,7 +13,7 @@ import { judgeDocument, readS3, readS3Json, sha256hex, type Judged, type ReportS
  */
 export interface Patch {
   path: (string | number)[];
-  op: 'set' | 'delete' | 'rename' | 'swap' | 'dup' | 'insert' | 'dropIndex';
+  op: 'set' | 'setNumber' | 'delete' | 'rename' | 'swap' | 'dup' | 'insert' | 'dropIndex';
   value?: unknown;
   hasValue?: boolean;
   to?: string;
@@ -53,10 +53,16 @@ function walk(root: unknown, path: (string | number)[]): unknown {
   return cur;
 }
 
+/** The marker setNumber writes into the tree; numberText turns the serialised marker into the number's own decimal text. */
+export const NUMBER_MARK = '\u0001NUM:';
+export const numberText = (text: string): string => text.replace(/"\\u0001NUM:(\d+)"/g, '$1');
+
 /** The patch semantics of cmd/xtsgen (apply): a path addresses object keys and array indices of the document's JSON tree. */
 export function applyPatch(root: unknown, patch: Patch): unknown {
   // the Go program writes the root's (empty) path as null
   const p: Patch = { ...patch, path: patch.path ?? [] };
+  // a number written by its decimal text (exact beyond 2^53): the tree holds a marker that numberText() replaces in the serialised document
+  if (p.op === 'setNumber') return applyPatch(root, { path: p.path, op: 'set', value: NUMBER_MARK + p.to!, hasValue: true });
   if (p.path.length === 0 && p.op === 'set') return p.value === undefined ? null : clone(p.value);
   switch (p.op) {
     case 'set':

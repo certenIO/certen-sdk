@@ -150,9 +150,16 @@ export interface Receipt {
   entries: ReceiptEntry[];
 }
 
+/**
+ * Set on the canonical JSON of a receipt (or a record) whose binary form merkle.Receipt.UnmarshalBinary does not decode: the importer cannot refuse it
+ * where it is read, because Go refuses it where it is USED (decodeReceipt, decodeMinorRoot), so the reader of the receipt refuses it there.
+ */
+export const UNDECODABLE: unique symbol = Symbol('undecodable receipt');
+
 /** A merkle.Receipt as Go marshals it to JSON (start, anchor, entries[{hash, right}]). */
 export function receiptFromJSON(j: unknown, label: string): Receipt {
   if (!j || typeof j !== 'object') fail(`${label}: not a receipt`);
+  if ((j as { [UNDECODABLE]?: boolean })[UNDECODABLE]) fail(`${label}: receipt: fields are out of order`);
   const r = j as Record<string, unknown>;
   const entries = r.entries === undefined || r.entries === null ? [] : r.entries;
   if (!Array.isArray(entries)) fail(`${label}: entries is not a list`);

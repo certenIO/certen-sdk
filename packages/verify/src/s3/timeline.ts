@@ -17,6 +17,7 @@ import { equal, MerkleState, receiptValid, sha256, toHex, VerifyError } from '..
 import { AccUrl, goEqualFold, goLower, LEDGER, partitionUrl, SYNTHETIC } from './acc.js';
 import type { ChainRoot, Evidence, IndexProof, Arrival, PageState, Production, Rcpt, Vote } from './evidence.js';
 import type { XAnchor } from './executor.js';
+import { decodeReceiptBin } from './certify.js';
 import { goHex } from './gojson.js';
 import {
   type AccountAuthority,
@@ -260,7 +261,9 @@ function rootOf(c: ChainRoot): Uint8Array {
 function checkIndexProof(ip: IndexProof, ir: ChainRoot): IndexEntryX {
   const { e, raw } = decodeIndexEntry(ip.entry);
   const root = rootOf(ir);
-  const r = ip.receipt;
+  // decodeReceipt: the receipt is the one its binary form decodes to; one that does not decode refuses the index entry
+  const r = decodeReceiptBin(ip.receipt.bin);
+  if (r === undefined) throw new VerifyError('receipt: fields are out of order');
   if (!equal(r.start, raw) || !equal(r.anchor, root) || !receiptValid(r)) {
     throw new VerifyError(`the index entry ${ip.position} is not a member of the ${ir.name} chain bound at the block`);
   }
@@ -275,7 +278,10 @@ function checkIndexProof(ip: IndexProof, ir: ChainRoot): IndexEntryX {
 export function inChain(r: Rcpt, messageHex: string, root: Uint8Array): boolean {
   const msg = goHex(messageHex);
   if (!msg || msg.length !== 32) return false;
-  return equal(r.start, msg) && equal(r.anchor, root) && receiptValid(r);
+  // decodeReceipt: the receipt is the one its binary form decodes to; one that does not decode is not a membership
+  const d = decodeReceiptBin(r.bin);
+  if (d === undefined) return false;
+  return equal(d.start, msg) && equal(d.anchor, root) && receiptValid(d);
 }
 
 /**
@@ -293,7 +299,7 @@ export function deriveArrival(pa: ProvenAcct, p: PageState, chain: string, msgHe
   if (!cr || !ir) throw bad(`no ${chain} or ${chain}-index chain is bound at the block`);
   const root = rootOf(cr);
   if (!inChain(rcpt, msgHex, root)) throw refusal21(State.BlockBeforeArrival, id, blk, `the entry is not a member of ${p.url}'s ${chain} chain at the block`);
-  const ps = receiptPositions(rcpt.entries, cr.count);
+  const ps = receiptPositions(decodeReceiptBin(rcpt.bin)!.entries, cr.count); // inChain has decoded it
   if (ps.length !== 1) throw bad(`the entry's receipt allows positions [${ps.join(' ')}] in a chain of ${cr.count}: the position is not established`);
   const pos = ps[0]!;
   let at: IndexEntryX;

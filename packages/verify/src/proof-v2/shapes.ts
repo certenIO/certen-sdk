@@ -7,6 +7,7 @@
  * length. A missing field is a VerifyError, never an `undefined` that flows into a hash or a comparison and makes a check
  * pass or fail for the wrong reason. Nothing past this module reads a document with `any`.
  */
+import { exactUint } from '../s3/nodejson.js';
 import { fail, hexBytes } from './bytes.js';
 
 export type Hex = string;
@@ -37,6 +38,18 @@ export function str(v: unknown, label: string): string {
 export function uint(v: unknown, label: string): number {
   if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 0) fail(`${label}: missing or not a whole non-negative number`);
   return v;
+}
+
+/**
+ * A uint64 exactly, as Go reads it: a JSON number that a double holds, or the exact value the canonical record kept beside the nearest double of a
+ * number above 2^53 (exactUint). A number above 2^53 with no exact value beside it is refused, never rounded.
+ */
+export function uintExact(o: Rec, name: string, label: string, optional: boolean): bigint {
+  const exact = exactUint(o, name);
+  if (exact !== undefined) return exact;
+  const v = o[name];
+  if (optional && (v === undefined || v === null)) return 0n;
+  return BigInt(uint(v, label));
 }
 
 /** A number that may be absent, as Go omits a zero. */
@@ -106,9 +119,12 @@ export function anchorMessage(v: unknown, label: string): AnchorMessage {
 }
 
 export interface AnchorBody {
+  /** The anchor's minor block as a double (the report's number); minorBlock is the uint64 exactly. */
   minorBlockIndex: number;
-  /** The root chain index of the anchor (a zero Go omits). */
+  minorBlock: bigint;
+  /** The root chain index of the anchor (a zero Go omits) as a double; rootChain is the uint64 exactly. */
   rootChainIndex: number;
+  rootChain: bigint;
   rootChainAnchor: Uint8Array;
   stateTreeAnchor: Uint8Array;
   /** The partition the anchor is from (blockValidatorAnchor / directoryAnchor `source`). */
@@ -116,9 +132,13 @@ export interface AnchorBody {
 }
 
 export function anchorBody(body: Rec, label: string): AnchorBody {
+  const minorBlock = uintExact(body, 'minorBlockIndex', `${label}.minorBlockIndex`, false);
+  const rootChain = uintExact(body, 'rootChainIndex', `${label}.rootChainIndex`, true);
   return {
-    minorBlockIndex: uint(body.minorBlockIndex, `${label}.minorBlockIndex`),
-    rootChainIndex: optUint(body.rootChainIndex, `${label}.rootChainIndex`),
+    minorBlockIndex: Number(minorBlock),
+    minorBlock,
+    rootChainIndex: Number(rootChain),
+    rootChain,
     rootChainAnchor: hex32(body.rootChainAnchor, `${label}.rootChainAnchor`),
     stateTreeAnchor: hex32(body.stateTreeAnchor, `${label}.stateTreeAnchor`),
     source: typeof body.source === 'string' ? body.source : '',
@@ -135,15 +155,18 @@ export function signatures(v: unknown, label: string): SignatureJSON[] {
 // ── network updates and records of the spine ───────────────────────────────────────────────────────
 
 export interface NetworkUpdateJSON {
-  transaction: Rec;
-  receipt: Rec;
+  /** Absent in an incomplete update: refused when the update is reached (applyProvenUpdate), as Go refuses it there and not when the record is read. */
+  transaction?: Rec;
+  receipt?: Rec;
 }
 
 export function networkUpdates(v: unknown, label: string): NetworkUpdateJSON[] {
   return optList(v, label).map((u, i) => {
     const r = rec(u, `${label}[${i}]`);
-    if (!r.transaction || !r.receipt) fail(`${label}[${i}]: incomplete network update proof`);
-    return { transaction: rec(r.transaction, `${label}[${i}].transaction`), receipt: rec(r.receipt, `${label}[${i}].receipt`) };
+    return {
+      transaction: r.transaction ? rec(r.transaction, `${label}[${i}].transaction`) : undefined,
+      receipt: r.receipt ? rec(r.receipt, `${label}[${i}].receipt`) : undefined,
+    };
   });
 }
 

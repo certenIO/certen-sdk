@@ -42,6 +42,18 @@ function typeName(union: string, tag: bigint): string | number {
   return n;
 }
 
+/**
+ * The heights a spine compares are uint64 in Go. The canonical JSON carries a number, which holds a uint64 exactly up to 2^53 - 1 only; for the
+ * members below it keeps the exact value of a larger one on the side, keyed by the object it is a member of, so that the reader of the anchor
+ * (proof-v2/shapes.ts anchorBody) takes the value Go decoded and not its nearest double. A reader that finds an unsafe number without an exact
+ * value refuses it: a height is never rounded.
+ */
+const EXACT_UINTS = new Set(['minorBlockIndex', 'rootChainIndex']);
+const exactUints = new WeakMap<object, Map<string, bigint>>();
+export function exactUint(o: object, name: string): bigint | undefined {
+  return exactUints.get(o)?.get(name);
+}
+
 const utf8 = new TextDecoder('utf-8');
 const text = (bin: string): string => utf8.decode(binaryBytes(bin));
 const hex = (b: Uint8Array): string => Buffer.from(b).toString('hex');
@@ -87,6 +99,11 @@ export function nodeToJson(n: WireNode, union?: string): Record<string, unknown>
           /* no name: the number */
         }
       }
+    }
+    if (typeof v === 'bigint' && v > BigInt(Number.MAX_SAFE_INTEGER) && EXACT_UINTS.has(d.name)) {
+      const m = exactUints.get(out) ?? new Map<string, bigint>();
+      m.set(d.name, v);
+      exactUints.set(out, m);
     }
     out[d.name] = jsonOf(v, u);
   }

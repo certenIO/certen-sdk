@@ -10,6 +10,7 @@
  */
 import { equal, receiptValid, sha256, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { AccUrl, DELEGATION_DEPTH_LIMIT, formatKeyPageUrl, goEqualFold, goLower, goStringCompare } from './acc.js';
+import { decodeReceiptBin } from './certify.js';
 import { decodeAnchor21, partitionOfAnchor } from './directory.js';
 import type { Evidence, PageState, PartitionAnchorX } from './evidence.js';
 import {
@@ -62,7 +63,9 @@ export function verifyAnchor21(key: string, a: PartitionAnchorX, certRoot: Uint8
   const derived = pa.body.source!.toString();
   const block = pa.body.minorBlockIndex;
   if (!goEqualFold(key, derived)) throw refusal21(State.ForeignPartitionMismatch, id, block, `url anchors[${key}]: claimed ${key}, derived ${derived}`);
-  const r = a.receipt;
+  // decodeReceipt: the receipt is the one its binary form decodes to
+  const r = decodeReceiptBin(a.receipt.bin);
+  if (r === undefined) throw new VerifyError(`anchors[${key}]: receipt: fields are out of order`);
   if (pa.tx.length !== 32 || !equal(r.start, pa.tx) || !equal(r.anchor, certRoot) || !receiptValid(r)) {
     throw refusal21(State.PartitionAnchorUnavailable, id, block, 'the receipt does not prove the anchor transaction into the certified Directory root');
   }
@@ -71,7 +74,9 @@ export function verifyAnchor21(key: string, a: PartitionAnchorX, certRoot: Uint8
 
 /** verifyPage checks one page against the block's state root and returns the account as proven, and what is proven about its chains. */
 function verifyPage(p: PageState, stateRoot: Uint8Array): { acct: WireNode; pc: PageChainX } {
-  const r = p.receipt;
+  // decodeReceipt: the receipt is the one its binary form decodes to
+  const r = decodeReceiptBin(p.receipt.bin);
+  if (r === undefined) throw new VerifyError(`${p.url}: receipt: fields are out of order`);
   if (!equal(r.start, sha256(p.state))) throw new VerifyError(`${p.url}: the receipt does not start at the state's hash`);
   if (!equal(r.anchor, stateRoot)) throw new VerifyError(`${p.url}: the receipt ends at ${toHex(r.anchor)}, not the block's state root ${toHex(stateRoot)}`);
   if (!receiptValid(r)) throw new VerifyError(`${p.url}: the receipt does not validate`);
@@ -174,7 +179,8 @@ export function verify21(ev: Evidence, rep: Report21, inn: XIn): void {
     try {
       ({ acct, pc } = verifyPage(p, xa.stateRoot));
     } catch (e) {
-      if (!equal(p.receipt.anchor, xa.stateRoot)) {
+      const dr = decodeReceiptBin(p.receipt.bin);
+      if (dr !== undefined && !equal(dr.anchor, xa.stateRoot)) {
         throw refusal21(State.PageBlockMismatch, xa.id, xa.block, `${p.url}: ${(e as Error).message}`);
       }
       throw new VerifyError(`page: ${(e as Error).message}`);

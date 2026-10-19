@@ -22,7 +22,7 @@ export { MODE_ALL_AUTHORITIES_DISABLED, MODE_AUTHORITIES_REQUIRED } from './xtyp
 export { hasExecutorOverride, executorOverrideTypes, executorFloorAt, kermitExecutorActivations, normalizeExecutorPartition } from './executor.js';
 export { routePartition } from './routing.js';
 export { receiptPositions } from './timeline.js';
-export { CertifyState, CertifyCode, CERTIFY_FIELDS, CERTIFY_DETAILS, CERTIFY_SIDE, CHECKPOINT_LAG, checkCheckpointLag, checkEvidenceCheckpointLags, decodeReceiptBin, receiptDecodes, recordDecodes, rootChainLeafIndex, UpdateWindow } from './certify.js';
+export { CertifyState, CertifyCode, CERTIFY_FIELDS, CERTIFY_DETAILS, CERTIFY_SIDE, CHECKPOINT_LAG, checkCheckpointLag, checkEvidenceCheckpointLags, decodeReceiptBin, receiptDecodes, recordDecodes, recordHasRootProof, rootChainLeafIndex, UpdateWindow } from './certify.js';
 export { CERTIFICATE_RESERVE, CERTIFICATE_RESERVE_20, FIXED_EVIDENCE_BYTES, FIXED_EVIDENCE_BYTES_20, MAX_EVIDENCE_BYTES, MAX_EVIDENCE_BYTES_20, checkAssembledBudget, checkCertificateFits, checkClosureBudget, checkUpdateWindows, maxUpdateWindows } from './budget.js';
 
 /**

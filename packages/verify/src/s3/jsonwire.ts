@@ -370,6 +370,25 @@ export function nodeFromJson(cls: string, j: unknown, label: string, member_ = f
     const x = lastScalar(cls, d, vals, lab);
     if (x !== undefined) node.fields.set(d.name, x);
   }
+  if (cls === 'merkle.Receipt' || cls === 'merkle.ReceiptEntry') {
+    // A receipt and its entries keep what follows their last known field as extra data, and the JSON reader takes it from the member $epilogue (hex; every
+    // occurrence is a string or null, the last is used): a receipt nested in a message (a DirectoryAnchor's receipts) is part of the bytes the quorum signed.
+    let extra: string | undefined;
+    for (const x of occurrences(pairs, '$epilogue')) {
+      if (x === undefined) continue;
+      if (x === null) {
+        extra = undefined;
+        continue;
+      }
+      if (typeof x !== 'string') return bad(`json: cannot unmarshal ${describe(x)} into Go struct field ${label}.$epilogue of type string`);
+      extra = x;
+    }
+    if (extra !== undefined) {
+      const b = goHex(extra);
+      if (!b) return bad(`error decoding ${label}.$epilogue: encoding/hex: invalid byte`);
+      node.extra = b;
+    }
+  }
   return node;
 }
 

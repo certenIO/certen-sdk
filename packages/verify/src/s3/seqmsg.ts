@@ -177,6 +177,7 @@ function sequencedFromPairs(pairs: Pairs, label: string): SeqMsg {
   if (destination) canonical.destination = destination.toString();
   if (number !== 0n) canonical.number = Number(number);
   const res: SeqMsg = { source, destination, number, hash: sha256(bin), bin, kind: m?.kind ?? 'nil', canonical };
+  sequencedHashes.set(canonical, res.hash);
   if (m?.kind === 'transaction' && m.txn) {
     res.txn = m.txn;
     // A transaction with no body has no hash: the anchor check refuses it by name before the hash is read.
@@ -189,6 +190,14 @@ function sequencedFromPairs(pairs: Pairs, label: string): SeqMsg {
   if (m?.kind === 'signature') res.sigHash = m.sigHash;
   return res;
 }
+
+/**
+ * The hash of the message a canonical JSON came from: sha256 of its binary form as Go decodes it, extra data included (messaging.SequencedMessage.Hash
+ * of the decoded struct). A trailing field in any nested value of the message is part of what the validators signed over, so the quorum is checked
+ * against this hash and not against a re-encoding of the canonical JSON, which has no place for it.
+ */
+const sequencedHashes = new WeakMap<object, Uint8Array>();
+export const sequencedHashOf = (canonical: object): Uint8Array | undefined => sequencedHashes.get(canonical);
 
 /** importSequenced: a SequencedMessage from its JSON (portable.go importSequenced / importAnchor). */
 export function importSequenced(j: unknown, label: string): SeqMsg {

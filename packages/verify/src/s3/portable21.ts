@@ -8,7 +8,7 @@
 import { createHash } from 'node:crypto';
 import { equal, fail, goHexStrict, hexBytes, receiptPrefixTo, receiptValid, toHex, VerifyError } from '../proof-v2/bytes.js';
 import { genesisGlobals, selfAnchorBlock, Spine } from '../proof-v2/spine.js';
-import { CertifyCode, certifyState, CertifyState, checkGenesisLink, decodeReceiptBin, recordDecodes } from './certify.js';
+import { CertifyCode, certifyState, CertifyState, checkGenesisLink, decodeReceiptBin, recordDecodes, recordHasRootProof } from './certify.js';
 import type { Rcpt } from './rcpt.js';
 import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
@@ -148,13 +148,14 @@ function reindex(err: unknown, index: number): unknown {
  * sequences) and is advanced by advanceAnchored, and an anchored item that has no effect (it carries no update, or none that the walk applies) is
  * refused unless it is the last of its sequence. first is the position of runs[0] in certify followed by hops. Go's per-item order is kept.
  */
-function walkRuns(sp: Spine, runs: unknown[], bins: Uint8Array[], label: string, links: Rcpt[], used: { n: number }, first: number): void {
+function walkRuns(sp: Spine, runs: unknown[], bins: Uint8Array[], nested: boolean[], label: string, links: Rcpt[], used: { n: number }, first: number): void {
   runs.forEach((run, i) => {
     const r = run as Record<string, unknown>;
     const lab = `${label} ${i}`;
     // decodeMinorRoot: the record is decoded at its turn; one whose trailing bytes the reader cannot place is a plain refusal
-    if (!recordDecodes(bins[i]!)) throw new VerifyError(`${lab}: fields are out of order`);
-    if (r.rootProof === undefined) {
+    if (!recordDecodes(bins[i]!) || !nested[i]) throw new VerifyError(`${lab}: fields are out of order`);
+    // whether the record has a root proof is read from its binary form (decodeMinorRoot), which includes a field 4 the JSON never spelled
+    if (r.rootProof === undefined && !recordHasRootProof(bins[i]!)) {
       const updates = r.updates;
       const block = selfAnchorBlock(r.anchor);
       if (block !== undefined && (!Array.isArray(updates) || updates.length === 0) && i !== runs.length - 1) {
@@ -192,7 +193,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   const links = ev.links.map((l, i) => decodeReceiptBin(l.bin) ?? certifyFail(i));
   const genesisLink = ev.genesisLink ? (decodeReceiptBin(ev.genesisLink.bin) ?? certifyFail('genesis')) : undefined;
   const used = { n: 0 };
-  walkRuns(cert, ev.certify, ev.certifyBin, 'certify run', links, used, 0);
+  walkRuns(cert, ev.certify, ev.certifyBin, ev.certifyNested, 'certify run', links, used, 0);
   // The chain identity (V-E A1b, F-VE-2): a document with links ties the certified root to the genesis root of the pinned incarnation.
   if (links.length > 0 || genesisLink !== undefined) checkGenesisLink(genesisLink, genesisRoot, cert.rootChainAnchor);
   // decodeReceipt: the transaction's receipt is the one its binary form decodes to
@@ -237,7 +238,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
     chk = start.clone();
   }
   chk.refuseReplay = true;
-  walkRuns(chk, ev.check.hops, ev.check.hopsBin, 'set check hop', links, used, ev.certify.length);
+  walkRuns(chk, ev.check.hops, ev.check.hopsBin, ev.check.hopsNested, 'set check hop', links, used, ev.certify.length);
   if (used.n !== links.length) throw certifyState(CertifyCode.CertifyLinkInvalid, String(used.n)); // a link no anchored item takes: the same bytes would otherwise carry two encodings
   if (chk.lastMinorBlock < cert.lastMinorBlock) {
     fail(`the set is checked at DN ${chk.lastMinorBlock}, before the certified DN ${cert.lastMinorBlock}: updates between are unaccounted`);
