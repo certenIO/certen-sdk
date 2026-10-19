@@ -1,6 +1,6 @@
 {
  "format": "certen:s3-vectors-manifest:v1",
- "validatorCommit": "2d98ff9a89e27cf89772c30397a65c4b5fe8cd0d",
+ "validatorCommit": "d1bbe407d6cabb20cc10708378ad7d98ebc68732",
  "suites": [
   {
    "name": "certify1",
@@ -12,7 +12,7 @@
     },
     {
      "name": "MANIFEST.sha256",
-     "sha256": "75bc99e7f1809d748b2e60b7ea9b2d5bc04886796c0c46810ac7c5a8198376ad",
+     "sha256": "e0c6af53ed120bcc58beafd3f0309f45aa9b8be2bbfe47868937cafb57eeaf07",
      "bytes": 80
     },
     {
@@ -106,6 +106,16 @@
      "bytes": 26399
     },
     {
+     "name": "continuous-chain-of-another-incarnation-with-its-own-link.json",
+     "sha256": "e02863234f2a201cfce4382fe1ffe4dfb25a8041ff2147f40f765c162526550e",
+     "bytes": 31135
+    },
+    {
+     "name": "continuous-chain-of-another-incarnation-without-a-link.json",
+     "sha256": "cc859a9aa913cba5f3e7d613c55df8c6990e3589006e2c7f6eabb0299f891d5a",
+     "bytes": 30689
+    },
+    {
      "name": "continuous-chain-verified-g.json",
      "sha256": "0637a20d5620b4b3ad7edc10fb92039836e6274b75738992783296a6d1aef861",
      "bytes": 31135
@@ -114,6 +124,11 @@
      "name": "continuous-chain-verified.json",
      "sha256": "b718fad48518de8dc8637f6447f083e2ea5dcb7180ffe54a2dd1c37901697331",
      "bytes": 29376
+    },
+    {
+     "name": "continuous-genesis-link-absent.json",
+     "sha256": "c65be5352ae78724cc281ee018feacf66246012a25e2651499a5b2761c1b1fde",
+     "bytes": 30689
     },
     {
      "name": "continuous-item-wrongly-rooted-then-anchored-g.json",
@@ -317,8 +332,8 @@
     },
     {
      "name": "manifest.json",
-     "sha256": "33be0bea5a1289b25f2071a1e365c33f9bdc0c4da98d515a372bd61d3c35ad38",
-     "bytes": 77664
+     "sha256": "3106933de49a46d1c177d89a4af628d75b3651250001092b9849e16090968088",
+     "bytes": 80177
     },
     {
      "name": "mixed-chain-verified-g.json",
@@ -411,7 +426,7 @@
      "bytes": 26709
     }
    ],
-   "manifestSha256": "33be0bea5a1289b25f2071a1e365c33f9bdc0c4da98d515a372bd61d3c35ad38"
+   "manifestSha256": "3106933de49a46d1c177d89a4af628d75b3651250001092b9849e16090968088"
   },
   {
    "name": "certify1-live",
@@ -435,5 +450,5 @@
   }
  ],
  "goldens": [],
- "manifestHash": "05803f3b6b8c9a6bbad2a1495687788a7f4c30d23be65658edfef18d53c8f73d"
+ "manifestHash": "bfbe175af739f52fbc9c4c87e0c73a5c8606d7726e6826bdf7d00d491b5455a9"
 }

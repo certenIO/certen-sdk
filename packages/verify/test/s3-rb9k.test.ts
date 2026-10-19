@@ -37,13 +37,13 @@ interface Case {
 const MANIFEST = JSON.parse(read('MANIFEST.json').toString('utf8')) as Mfst;
 const suite = JSON.parse(read('xpartition6/manifest.json').toString('utf8')) as { format: string; domain: string; portableFormat: string; cases: Case[] };
 
-const MANIFEST_HASH = '6be370f8dbb9dfb258f6f81b83d189b524815c6e1582a6dcf18033f92a49c5b9';
-const SUITE_MANIFEST_SHA256 = 'aaa46baffca8969bbbd8ec40bb1bc622f6fbd1c9d9779c48d1d9849d16f27685';
+const MANIFEST_HASH = 'ab41b4c6b3d95aaaa3178a58fb8d6d762b8dd2e8a742a0614cc5bb05f703a801';
+const SUITE_MANIFEST_SHA256 = '85d3aadfd175872e02e2ccb0b27109799b0a064f4abfb070d71ca71620bc2950';
 
 describe('xpartition6: the shared vectors are the ones Go wrote', () => {
   it('every file hashes to what the manifest pins, and the manifest to the hash this suite was written against', () => {
     expect(MANIFEST.format).toBe('certen:s3-vectors-manifest:v1');
-    expect(MANIFEST.validatorCommit).toBe('92d9a9b0907baaef6ff749e96d079e67f76d4bfa');
+    expect(MANIFEST.validatorCommit).toBe('d1bbe407d6cabb20cc10708378ad7d98ebc68732');
     const h = createHash('sha256');
     let files = 0;
     for (const s of MANIFEST.suites) {
@@ -58,7 +58,7 @@ describe('xpartition6: the shared vectors are the ones Go wrote', () => {
     expect(MANIFEST.goldens).toEqual([]);
     expect(h.digest('hex')).toBe(MANIFEST.manifestHash);
     expect(MANIFEST.manifestHash).toBe(MANIFEST_HASH);
-    expect(files).toBe(20);
+    expect(files).toBe(26);
     expect(MANIFEST.suites.map((s) => s.name)).toEqual(['xpartition6']);
   });
 
@@ -69,14 +69,22 @@ describe('xpartition6: the shared vectors are the ones Go wrote', () => {
     expect(MANIFEST.suites[0]!.manifestSha256).toBe(SUITE_MANIFEST_SHA256);
   });
 
-  it('has the 17 documents of the suite, 6 verified and 11 refused, and the RB9-K-F4 carve-out vector among them', () => {
+  it('has the 23 documents of the suite (the 17 frozen ones and the 6 linked siblings of those that verified), 6 verified and 17 refused, and the RB9-K-F4 carve-out vector among them', () => {
     expect(suite.format).toBe('certen-xpartition6-conformance/1');
     expect(suite.domain).toBe('certen:g1:v4');
     expect(suite.portableFormat).toBe('certen-proof-v2-accumulate-portable/1');
-    expect(suite.cases.length).toBe(17);
-    expect(new Set(suite.cases.map((c) => c.file)).size).toBe(17);
+    expect(suite.cases.length).toBe(23);
+    expect(new Set(suite.cases.map((c) => c.file)).size).toBe(23);
     expect(suite.cases.filter((c) => c.expect === 'verified').length).toBe(6);
-    expect(suite.cases.filter((c) => c.expect === 'refused').length).toBe(11);
+    expect(suite.cases.filter((c) => c.expect === 'refused').length).toBe(17);
+    // F-VE-2 (b): the 6 entries that verified are frozen as certify_link_missing{genesis}, each with its '-g' sibling that carries the link and verifies
+    const moved = suite.cases.filter((c) => c.note !== undefined);
+    expect(moved.length).toBe(6);
+    for (const c of moved) {
+      expect(c.state).toBe('certify_link_missing');
+      expect(c.fields).toEqual(['genesis']);
+      expect(suite.cases.find((x) => x.name === `${c.name}-g`)?.expect).toBe('verified');
+    }
     expect(suite.cases.map((c) => c.name)).toContain('disable-op-voter-outside-the-list-every-authority-disabled');
   });
 });
@@ -108,6 +116,11 @@ describe("xpartition6: every document reaches Go's verdict", () => {
       if (c.expect === 'verified') {
         expect(got.verdict, got.verdict === 'verified' ? '' : `refused: ${got.message}`).toBe('verified');
         if (got.verdict === 'verified') expectReport(c, got.summary);
+        return;
+      }
+      if (c.fields) {
+        expect(got.verdict, `want ${c.state}{${c.fields.join(',')}}`).toBe('plain');
+        if (got.verdict === 'plain') expect(got.message.startsWith(`${c.state}{${c.fields.join(',')}}`), got.message).toBe(true);
         return;
       }
       if (c.state) {
