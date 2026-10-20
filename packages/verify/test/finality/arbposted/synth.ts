@@ -5,6 +5,7 @@
  * accumulator need a synthetic L1 whose storage the test controls.
  */
 import { keccak_256 } from '@noble/hashes/sha3';
+import { sha256 } from '@noble/hashes/sha2';
 import { brotliCompressSync } from 'node:zlib';
 import { buildTrie, rlpBytes, rlpListOf } from '../../../src/proof-v2/finality/baseposted/trie.js';
 import { rlpUint } from '../../../src/proof-v2/finality/baseposted/ethtx.js';
@@ -12,7 +13,7 @@ import type { BlockRef } from '../../../src/proof-v2/finality/evidence.js';
 import type { ArbPins } from '../../../src/proof-v2/finality/arbposted/pins.js';
 import { ArbPostedKind } from '../../../src/proof-v2/finality/arbposted/verify.js';
 import { accumulator, arrayElementSlot, dataHash, delayedMessageHash } from '../../../src/proof-v2/finality/arbposted/delayed.js';
-import { DataCalldata, type Delayed, type Evidence } from '../../../src/proof-v2/finality/arbposted/wire.js';
+import { DataBlobs, DataCalldata, type Blob, type Delayed, type Evidence } from '../../../src/proof-v2/finality/arbposted/wire.js';
 import type { Verdict } from '../../../src/proof-v2/finality/registry.js';
 
 export const hex = (b: Uint8Array): string => `0x${Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')}`;
@@ -108,6 +109,8 @@ export interface SynthOpts {
   noImplAccount?: boolean;
   /** the accumulator stored for the batch (default: the recomputed one) */
   storedAcc?: Uint8Array;
+  /** carry these blobs instead of calldata (the versioned hashes are derived from their commitments) */
+  blobs?: Blob[];
   /** a non-zero word in the delayed accumulator slot just BEFORE element 0 (the slot k = 0 must not read) */
   poisonBeforeFirst?: boolean;
 }
@@ -154,6 +157,16 @@ export function makeSynth(o: SynthOpts = {}): Synth {
     delayed: o.delayed?.msg ?? null,
     nodes: [],
   };
+  if (o.blobs !== undefined) {
+    ev.dataKind = DataBlobs;
+    ev.blobs = o.blobs;
+    ev.calldata = new Uint8Array(0);
+    ev.versionedHashes = o.blobs.map((b) => {
+      const h = sha256(b.commitment);
+      h[0] = 0x01;
+      return h;
+    });
+  }
   const pins = newPins();
   // the Bridge storage: the implementation word, acc[N] and (optionally) the delayed accumulators
   const acc = o.storedAcc ?? accumulator(beforeAcc, dataHash(ev), delayedAcc);

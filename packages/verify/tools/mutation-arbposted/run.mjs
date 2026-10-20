@@ -29,7 +29,7 @@ const TESTS = {
   'arbposted/delayed.ts': `${U}units_delayed.test.ts,${U}units_kind.test.ts`,
   'arbposted/wire.ts': `${U}units_wire.test.ts,${U}units_kind.test.ts,${V}`,
   'arbposted/pins.ts': `${U}units_pins.test.ts,${U}units_kind.test.ts`,
-  'arbposted/verify.ts': `${U}units_kind.test.ts,${U}units_pins.test.ts,${U}units_wire.test.ts,${V}`,
+  'arbposted/verify.ts': `${U}units_kind.test.ts,${U}units_blobs.test.ts,${U}units_pins.test.ts,${U}units_wire.test.ts,${V}`,
   'pins.ts': `${U}units_pins.test.ts`,
 };
 const mutants = JSON.parse(readFileSync(join(here, 'mutants.json'), 'utf8')).mutants.map((m, i) => ({ id: i + 1, ...m }));
