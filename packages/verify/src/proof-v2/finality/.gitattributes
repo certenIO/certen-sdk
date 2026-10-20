@@ -1,0 +1,2 @@
+# finality-pins.json is hashed (PINS_SHA256) and mirrored byte-identically: its bytes are the contract, never converted.
+finality-pins.json -text

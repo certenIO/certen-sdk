@@ -1,0 +1,2 @@
+# The finality conformance files are hashed in the MANIFEST files: their bytes are the contract, never converted.
+* -text
