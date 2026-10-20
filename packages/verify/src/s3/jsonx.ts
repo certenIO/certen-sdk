@@ -71,8 +71,29 @@ export function quoteChar(c: number): string {
   return `'${String.fromCharCode(c)}'`;
 }
 
-/** encoding/json's syntax: RFC 8259, nothing else; invalid UTF-8 in a string is read as U+FFFD. */
-export function parseGoJson(input: Uint8Array | string): JVal {
+/** encoding/json's maxNestingDepth: the containers the scanner json.Unmarshal uses allows open at once. */
+export const GO_JSON_MAX_DEPTH = 10000;
+
+export interface ParseGoJsonOptions {
+  /** Containers allowed open at once; `Number.POSITIVE_INFINITY` for none. Default GO_JSON_MAX_DEPTH. */
+  maxDepth?: number;
+}
+
+/**
+ * encoding/json's syntax: RFC 8259, nothing else; invalid UTF-8 in a string is read as U+FFFD.
+ *
+ * `escaped`, when given, records which string values were written with an escape in their source text: for each object
+ * (keyed by its `pairs` array) and each array, the set of indices whose value is such a string. A Go type that reads its
+ * raw JSON token instead of the unescaped string (go-ethereum's hexutil.Bytes, common.Hash, common.Address) judges that
+ * text, not the string, so a verifier mirroring it needs to know. Without it the parse is unchanged.
+ *
+ * `opts.maxDepth` is the number of containers that may be open at once (default GO_JSON_MAX_DEPTH, json.Unmarshal's own limit, which
+ * every caller whose Go side is json.Unmarshal keeps); a document nested deeper is `exceeded max depth`. A caller whose Go side
+ * reads the document with a json.Decoder.Token() pass, which has no limit (the S6 evidence, replaydecode.go parseJSONValue), passes
+ * `Number.POSITIVE_INFINITY`: the parse is iterative, so any depth is read, never a stack overflow.
+ */
+export function parseGoJson(input: Uint8Array | string, escaped?: WeakMap<object, Set<number>>, opts?: ParseGoJsonOptions): JVal {
+  const maxDepth = opts?.maxDepth ?? GO_JSON_MAX_DEPTH;
   const b = typeof input === 'string' ? new TextEncoder().encode(input) : input;
   let i = 0;
   const bad = (what: string): never => {
@@ -103,8 +124,10 @@ export function parseGoJson(input: Uint8Array | string): JVal {
     }
     return v;
   };
+  let sawEscape = false;
   const str = (): string => {
     i++; // the opening quote
+    sawEscape = false;
     const bytes: number[] = [];
     let out = '';
     const flush = (): void => {
@@ -123,6 +146,7 @@ export function parseGoJson(input: Uint8Array | string): JVal {
       }
       if (c < 0x20) bad('in string literal');
       if (c === 0x5c) {
+        sawEscape = true;
         i++;
         const e = b[i];
         flush();
@@ -183,7 +207,7 @@ export function parseGoJson(input: Uint8Array | string): JVal {
     }
     return new JNum(new TextDecoder().decode(b.subarray(start, i)));
   };
-  /** One value, with an explicit stack: a document nested to Go's limit (10000 containers) is read, not a stack overflow. */
+  /** One value, with an explicit stack: a document nested to the limit (Go's 10000 containers by default) is read, not a stack overflow. */
   type Frame = { obj: true; pairs: [string, JVal][]; key: string } | { obj: false; arr: JVal[] };
   const parseValue = (): JVal => {
     const stack: Frame[] = [];
@@ -193,8 +217,9 @@ export function parseGoJson(input: Uint8Array | string): JVal {
       if (i >= b.length) bad('');
       const c = b[i]!;
       let v: JVal;
+      let vEscaped = false;
       if (c === 0x7b) {
-        if (stack.length >= 10000) bad('exceeded max depth');
+        if (stack.length >= maxDepth) bad('exceeded max depth');
         i++;
         ws();
         if (b[i] === 0x7d) {
@@ -210,7 +235,7 @@ export function parseGoJson(input: Uint8Array | string): JVal {
           continue;
         }
       } else if (c === 0x5b) {
-        if (stack.length >= 10000) bad('exceeded max depth');
+        if (stack.length >= maxDepth) bad('exceeded max depth');
         i++;
         ws();
         if (b[i] === 0x5d) {
@@ -220,18 +245,30 @@ export function parseGoJson(input: Uint8Array | string): JVal {
           stack.push({ obj: false, arr: [] });
           continue;
         }
-      } else if (c === 0x22) v = str();
+      } else if (c === 0x22) {
+        v = str();
+        vEscaped = sawEscape;
+      }
       else if (c === 0x74) v = lit('true', true);
       else if (c === 0x66) v = lit('false', false);
       else if (c === 0x6e) v = lit('null', null);
       else if (c === 0x2d || (c >= 0x30 && c <= 0x39)) v = num();
       else return bad('looking for beginning of value');
       // a value is complete: attach it to its container and close every container it ends
+      const noteEscaped = (container: object, index: number): void => {
+        if (vEscaped && escaped !== undefined) {
+          let set = escaped.get(container);
+          if (set === undefined) escaped.set(container, (set = new Set()));
+          set.add(index);
+        }
+        vEscaped = false;
+      };
       for (;;) {
         const f = stack[stack.length - 1];
         if (f === undefined) return v;
         if (f.obj) {
           f.pairs.push([f.key, v]);
+          noteEscaped(f.pairs, f.pairs.length - 1);
           ws();
           if (b[i] === 0x2c) {
             i++;
@@ -252,6 +289,7 @@ export function parseGoJson(input: Uint8Array | string): JVal {
           bad('after object key:value pair');
         } else {
           f.arr.push(v);
+          noteEscaped(f.arr, f.arr.length - 1);
           ws();
           if (b[i] === 0x2c) {
             i++;
