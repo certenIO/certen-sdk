@@ -55,6 +55,11 @@ export interface EthSepoliaPins {
   chainId: bigint;
   genesisValidatorsRoot: string;
   genesisTime: bigint;
+  /**
+   * The LEGACY location of the KZG setup pin (pins files published with finality_arb_posted1). Read it through kzgSetupPin, never directly;
+   * '' when the file does not carry it.
+   */
+  kzgSetupSha256: string;
   forks: ForkPin[];
   spec: string;
   syncCommitteeSize: bigint;
@@ -64,6 +69,18 @@ export interface EthSepoliaPins {
   maxSpineHeaders: bigint;
   anchors: AnchorPin[];
 }
+
+/**
+ * The top-level `shared` section: values more than one chain kind reads, held once so the kinds cannot diverge (the twin of pins.go
+ * SharedPins). Unknown keys inside it are refused like everywhere else.
+ */
+export interface SharedPins {
+  /** SHA-256 (64 lower-case hex, no prefix) of the EIP-4844 trusted setup file the blob kinds load */
+  kzgSetupSha256: string;
+}
+
+/** The pins key a missing, malformed or conflicting KZG setup pin is reported under. */
+export const KZG_SETUP_SHARED_KEY = 'shared.kzg_setup_sha256';
 
 /** The optional on-chain commitment of the file hash (D3). */
 export interface OnchainCommitment {
@@ -82,6 +99,8 @@ export interface Pins {
   onchainCommitment: OnchainCommitment | null;
   ethSepolia: EthSepoliaPins | null;
   sections: Map<string, JVal>;
+  /** the `shared` section (pins more than one chain kind reads), or null when the file has none */
+  shared: SharedPins | null;
   /** the SHA-256 of the raw bytes this Pins was loaded from */
   sha256: Uint8Array;
   source: string;
@@ -114,6 +133,7 @@ const sepoliaSch: Sch = {
     chain_id: 'u64',
     genesis_validators_root: 'str',
     genesis_time: 'u64',
+    kzg_setup_sha256: 'str',
     forks: { list: forkSch },
     spec: 'str',
     sync_committee_size: 'int',
@@ -133,6 +153,7 @@ const fileSch: Sch = {
     base_sepolia: 'raw',
     arb_sepolia: 'raw',
     adiri: 'raw',
+    shared: { ptr: { struct: { kzg_setup_sha256: 'str' } } },
   },
 };
 
@@ -249,6 +270,8 @@ function validateSepolia(e: Record<string, unknown>): EthSepoliaPins {
   if (chainId !== ChainSepolia) throw pinsCorrupt(PinsReason.ChainIDMismatch);
   const gvr = e.genesis_validators_root as string;
   if (!hexN(gvr, 32, true)) throw pinsCorrupt(PinsReason.GenesisRootMalformed);
+  const kzgLegacy = e.kzg_setup_sha256 as string;
+  if (kzgLegacy !== '' && !hexN(kzgLegacy, 32, false)) throw pinsCorrupt(PinsReason.BadValue, { key: 'kzg_setup_sha256' });
   const size = e.sync_committee_size as bigint;
   const minP = e.min_participants as bigint;
   const epp = e.epochs_per_period as bigint;
@@ -302,6 +325,7 @@ function validateSepolia(e: Record<string, unknown>): EthSepoliaPins {
     chainId,
     genesisValidatorsRoot: gvr,
     genesisTime: e.genesis_time as bigint,
+    kzgSetupSha256: kzgLegacy,
     forks,
     spec: e.spec as string,
     syncCommitteeSize: size,
@@ -346,12 +370,16 @@ function parsePins(raw: Uint8Array, sum: Uint8Array, source: string): Pins {
   }
   const oc = f.onchain_commitment as Record<string, unknown> | null;
   const eth = f.eth_sepolia as Record<string, unknown> | null;
+  const ethSepolia = eth === null ? null : validateSepolia(eth);
+  const sh = f.shared as Record<string, unknown> | null;
+  if (sh !== null && !hexN(sh.kzg_setup_sha256 as string, 32, false)) throw pinsCorrupt(PinsReason.BadValue, { key: KZG_SETUP_SHARED_KEY });
   return {
     format: f.format as string,
     publishedUtc: f.published_utc as string,
     onchainCommitment: oc === null ? null : { chain: oc.chain as bigint, tx: oc.tx as string, block: oc.block as bigint },
-    ethSepolia: eth === null ? null : validateSepolia(eth),
+    ethSepolia,
     sections,
+    shared: sh === null ? null : { kzgSetupSha256: sh.kzg_setup_sha256 as string },
     sha256: sum,
     source,
   };
@@ -389,6 +417,25 @@ export function embeddedPins(): Pins {
 export function sepoliaPins(p: Pins | null | undefined): EthSepoliaPins {
   if (p === null || p === undefined || p.ethSepolia === null) throw newState(Code.PinUnknown, { chain: ChainSepolia, kind: 'eth_sepolia' });
   return p.ethSepolia;
+}
+
+/**
+ * The pinned SHA-256 of the KZG ceremony setup and the pins key it was read from (the twin of Pins.KZGSetupPin).
+ *
+ * The pin lives in the `shared` section (the embedded file carries it nowhere else). Pins files published before that section existed
+ * carry a copy in the chain section of the kind that used it (finality_base_posted1: base_sepolia.kzg_setup_sha256; finality_arb_posted1:
+ * eth_sepolia.kzg_setup_sha256) and a published vector set is never edited, so legacyKey/legacyValue name that copy. It is read when the
+ * file has no `shared` section; when the file has both and they differ the file is finality_pins_corrupt (never "the shared one wins");
+ * when it has neither the pin is missing: finality_pins_corrupt{bad_value} under KZG_SETUP_SHARED_KEY.
+ */
+export function kzgSetupPin(p: Pins | null | undefined, legacyKey: string, legacyValue: string): { value: string; key: string } {
+  if (p === null || p === undefined) throw newState(Code.PinUnknown, { kind: 'kzg_setup_sha256' });
+  if (p.shared !== null) {
+    if (legacyValue !== '' && legacyValue !== p.shared.kzgSetupSha256) throw pinsCorrupt(PinsReason.BadValue, { key: legacyKey });
+    return { value: p.shared.kzgSetupSha256, key: KZG_SETUP_SHARED_KEY };
+  }
+  if (legacyValue !== '') return { value: legacyValue, key: legacyKey };
+  throw pinsCorrupt(PinsReason.BadValue, { key: KZG_SETUP_SHARED_KEY });
 }
 
 /**
