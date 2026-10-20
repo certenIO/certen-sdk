@@ -1,0 +1,16 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "88 hand mutants (comparison flips, negations, boundary shifts, guard removals, domain/field swaps) over src/proof-v2/finality/*.ts, each run against `npx vitest run test/finality --bail=1`: 77 killed by the first 6 suites, 9 more killed by test/finality/boundaries.test.ts, 2 equivalent (below)",
+  "equivalents": [
+    {
+      "file": "report.ts",
+      "mutant": "if (l > rep.headline) rep.headline = l;  ->  rep.headline = l;",
+      "reason": "the levels are visited in ascending order (L1Posted then Finalized) and rep.headline starts at Included (1), so every verified level visited is already greater than the headline when it is reached; the guard can never be false"
+    },
+    {
+      "file": "report.ts",
+      "mutant": "if (st && st.code === Code.NotApplicable) return  ->  if (st) return",
+      "reason": "absentOrNA is only called with a supported chain (verifyLeg returns first for an unsupported one) and a stored level (2 or 3), for which kindFor can throw nothing but level_not_applicable, so the code comparison is always true when a state is thrown"
+    }
+  ]
+}
