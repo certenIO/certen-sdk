@@ -92,6 +92,12 @@ describe('batcher authentication', () => {
     expect(e.fields.judged_at).toBe(1000n);
     expect(hex(e.fields.address as Uint8Array)).toBe('0xaeb75e200b9bcf9343ff1a2d2b1b3976e7339ca4');
   });
+  it('a storage leaf that is not an RLP string is a slot proof failure', () => {
+    expectState(makeSynth({ badSlot: true }), 'l1_state_proof_invalid', { which: 'slot' });
+  });
+  it('an account that is not an RLP list of four items is an account proof failure', () => {
+    expectState(makeSynth({ shortAccount: true }), 'l1_state_proof_invalid', { which: 'account' });
+  });
   it('an absent batcherHash slot reads zero and is no sender; an absent implementation slot points at an absent account', () => {
     expectState(makeSynth({ omitSlot: 'batcher' }), 'batcher_sender_mismatch');
     expectState(makeSynth({ omitSlot: 'impl' }), 'l1_state_proof_invalid', { which: 'account' });
@@ -243,6 +249,9 @@ describe('batch lookup and binding', () => {
     notDeposit.body.deposits = [Uint8Array.from(notDeposit.deposit)];
     notDeposit.body.deposits[0]![0] = 0x02;
     expectState(notDeposit, 'batch_binding_mismatch', { field: 'l1_info_deposit' });
+    const brokenRlp = makeSynth({});
+    brokenRlp.body.deposits = [Uint8Array.of(0x7e, 0xc5, 0x01)];
+    expectState(brokenRlp, 'batch_binding_mismatch', { field: 'l1_info_deposit' });
     const garbled = makeSynth({});
     garbled.body.deposits = [Uint8Array.of(0x7e, 0xc0)];
     expectState(garbled, 'batch_binding_mismatch', { field: 'l1_info_deposit' });

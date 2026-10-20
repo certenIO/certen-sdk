@@ -1,0 +1,17 @@
+{
+  "tool": "scratchpad mutd2: operator/condition enumeration (===/!==, < <= > >=, && ||, true/false, if-negation, +1/-1) applied one at a time through a vite transform plugin; tier 1 = units + synth tests, tier 2 (survivors) = kind + units + synth + the four vector shards",
+  "files": ["wire.ts", "blob.ts", "channel.ts", "pins.ts", "trie.ts", "verify.ts"],
+  "equivalents": [
+    {"file": "blob.ts", "line": 16, "mutant": "n > 0 -> n >= 0", "reason": "copying zero bytes into the destination is a no-op"},
+    {"file": "blob.ts", "line": 51, "mutant": "i < 1024 -> i <= 1024 (decode loop)", "reason": "the second conjunct opos < outLen stops the loop first: after 1023 rounds opos is exactly BLOB_MAX_DATA, which is >= every accepted outLen"},
+    {"file": "blob.ts", "line": 67, "mutant": "readOffset >= data.length -> > (read1)", "reason": "reading data[length] yields undefined, which every caller uses only inside bitwise operators where undefined behaves as 0"},
+    {"file": "blob.ts", "line": 70, "mutant": "readOffset >= data.length -> > (read31)", "reason": "subarray(length, length+31) is empty and Uint8Array.set(empty) is a no-op: buf31 stays zero"},
+    {"file": "blob.ts", "line": 82, "mutant": "round < 1024 -> <= 1024 (encode loop)", "reason": "readOffset < data.length stops first for every accepted length (<= BLOB_MAX_DATA, which fills exactly 1024 rounds)"},
+    {"file": "blob.ts", "line": 82, "mutant": "round < 1024 && readOffset < len -> ||", "reason": "extra rounds after the data is consumed only write zeros into a zero-initialised blob; the output is byte-identical"},
+    {"file": "trie.ts", "line": 107, "mutant": "e.key.length > depth -> >=", "reason": "an entry whose key ends at depth has e.key[depth] undefined, which never equals the nibble, so it is excluded either way"},
+    {"file": "trie.ts", "line": 116, "mutant": "byPath comparator a.key[i] !== b.key[i] -> ===", "reason": "build() groups by filter and finds the common prefix with every(): its result does not depend on the order of the entries, so the sort is only for readability"},
+    {"file": "verify.ts", "line": 185, "mutant": "distinctSorted comparator a < b -> <=", "reason": "the values come from a Set (distinct), so the comparator is never asked about two equal values"},
+    {"file": "wire.ts", "line": 92, "mutant": "spineMax > lim.maxSpineHeaders -> >=", "reason": "when equal the assignment spineMax = lim.maxSpineHeaders writes the same value"},
+    {"file": "verify.ts", "line": 211, "mutant": "guard removed: encodeBody(body) !== c.body", "reason": "decodeBody is strict and bijective (unsorted or duplicate nodes, trailing bytes and non-canonical counts are all refused), so encode(decode(x)) == x for every accepted x; the check is a belt-and-braces mirror of the Go Kind.Verify"}
+  ]
+}

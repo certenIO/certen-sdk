@@ -88,6 +88,10 @@ export interface SynthOpts {
   /** a non-zero byte above the 20-byte batcher address in batcherHash: [index 0..11, value] */
   dirtyBatcherHash?: [number, number];
   omitImpl?: boolean;
+  /** the SystemConfig account is stored as an RLP list of three items instead of four */
+  shortAccount?: boolean;
+  /** the batcherHash slot leaf holds an RLP list instead of an RLP string */
+  badSlot?: boolean;
   /** leave a SystemConfig storage slot out of the storage trie (an absent slot reads zero) */
   omitSlot?: 'batcher' | 'impl';
   /** compress the stream of these raw bytes instead of the generated one */
@@ -299,11 +303,11 @@ export function makeSynth(o: SynthOpts = {}): Synth {
     }
     const txT = buildTrie(raws.map((value, k) => ({ key: rlpIndexKey(k), value })));
     const storageEntries = [
-      { key: keccak_256(SLOT_BATCHER), value: encBytes(trimLeft(batcherHash)) },
+      { key: keccak_256(SLOT_BATCHER), value: o.badSlot ? Uint8Array.of(0xc0) : encBytes(trimLeft(batcherHash)) },
       { key: keccak_256(SLOT_IMPL), value: encBytes(trimLeft(pad32(TEST_IMPL))) },
     ].filter((e, k) => !(o.omitSlot === 'batcher' && k === 0) && !(o.omitSlot === 'impl' && k === 1));
     const storage = buildTrie(storageEntries);
-    const stateEntries = [{ key: keccak_256(TEST_SYSCFG), value: account(storage.root, keccak_256(utf8('proxy'))) }];
+    const stateEntries = [{ key: keccak_256(TEST_SYSCFG), value: o.shortAccount ? rlpListOf([rlpUint(1n), rlpUint(0n), encBytes(storage.root)]) : account(storage.root, keccak_256(utf8('proxy'))) }];
     if (!o.omitImpl) stateEntries.push({ key: keccak_256(TEST_IMPL), value: account(EMPTY_ROOT, TEST_IMPL_CODE) });
     const state = buildTrie(stateEntries);
     nodes.push(...txT.nodes, ...storage.nodes, ...state.nodes);
