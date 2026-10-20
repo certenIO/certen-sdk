@@ -132,3 +132,14 @@ export function judge(v: Vec, opts: VerifierOptions = {}): string {
   const ev = evidenceOf(v);
   return outcome(() => kind.verify(pins, leg, ev));
 }
+
+/** The vectors decided before any signature work on a long chain, or on a chain of a few records: cheap in either signature mode. */
+export const isFast = (v: { name: string; group: string; expect: string; evidence?: string }): boolean => {
+  if (v.group === 'live') return false;
+  const j = JSON.parse(v.expect) as { code: string; fields: Record<string, unknown> };
+  if (j.code === 'finalized') return v.name.startsWith('syn');
+  if (j.code === 'committee_chain_broken') return j.fields.check !== 'signature_invalid';
+  if (j.code === 'finality_block_mismatch') return j.fields.field === 'blockHash' || j.fields.field === 'blockNumber';
+  if (j.code === 'finality_link_broken' || j.code === 'finality_header_chain_broken') return v.name.startsWith('syn');
+  return true;
+};
