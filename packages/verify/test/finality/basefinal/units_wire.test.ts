@@ -9,8 +9,9 @@ import { describe, expect, it } from 'vitest';
 import { decodeContainer, defaultLimits } from '../../../src/proof-v2/finality/codec.js';
 import { ethl1PinsFrom } from '../../../src/proof-v2/finality/ethl1/index.js';
 import { sepoliaPins, parsePinsOverride } from '../../../src/proof-v2/finality/pins.js';
-import { BaseFinalKind, decodeBody, encodeBody, lcExtent } from '../../../src/proof-v2/finality/basefinal/index.js';
+import { BaseFinalKind, decodeBody, encodeBody } from '../../../src/proof-v2/finality/basefinal/index.js';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
+import { offsets } from './evlayout.js';
 import { assertRegistered, registryInt } from './regcheck.js';
 import { legRef, read, type LegFile } from './vectorset.js';
 
@@ -21,37 +22,7 @@ const EV = Uint8Array.from(read('evidence/valid_leg_47604755.bin'));
 const LEG = legRef(JSON.parse(read('legs/leg_47604755.json').toString('utf8')) as LegFile);
 const kind = new BaseFinalKind();
 
-/** The offsets of the parts of a container (header, LC, spines, game, nodes), walked with plain length reads. */
-function offsets(ev: Uint8Array) {
-  const dv = new DataView(ev.buffer, ev.byteOffset, ev.length);
-  const c = decodeContainer(ev, lim);
-  const hdr = ev.length - c.body.length;
-  const body = hdr;
-  let p = body;
-  const profLen = dv.getUint32(p, false);
-  const linksCount = body + 4 + profLen + 1 + 8 + 32 + 1 + 4 + dv.getUint32(body + 4 + profLen + 1 + 8 + 32 + 1, false);
-  const n = lcExtent(c.body, lim, ep.maxLinks);
-  p = body + n;
-  const l1Count = p;
-  const cnt1 = dv.getUint32(p, false);
-  p += 4;
-  for (let i = 0; i < cnt1; i++) p += 4 + dv.getUint32(p, false);
-  const stateBlock = p;
-  p += 8;
-  const gameProxy = p;
-  p += 20;
-  const codeLen = p;
-  p += 4 + dv.getUint32(p, false);
-  const outIdx = p;
-  p += 4;
-  const l2Count = p;
-  const cnt2 = dv.getUint32(p, false);
-  p += 4;
-  for (let i = 0; i < cnt2; i++) p += 4 + dv.getUint32(p, false);
-  const nodesCount = p;
-  return { hdr, body, linksCount, lcEnd: body + n, l1Count, stateBlock, gameProxy, codeLen, outIdx, l2Count, nodesCount, cnt1, cnt2, level: 4 + 4 + 'base-sepolia/finalized/v1'.length + 8 };
-}
-const O = offsets(EV);
+const O = offsets(EV, ep, lim);
 
 const setU32 = (ev: Uint8Array, off: number, v: number): Uint8Array => {
   const out = Uint8Array.from(ev);
