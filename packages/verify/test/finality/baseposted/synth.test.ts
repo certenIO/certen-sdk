@@ -10,6 +10,7 @@ import { encodeNodes } from '../../../src/proof-v2/finality/codec.js';
 import { buildTrie, rlpIndexKey } from '../../../src/proof-v2/finality/baseposted/trie.js';
 import { type SynthOpts, type Synth, addressOf, compress, hex, makeSynth, testKey, concat, utf8 } from './synth.js';
 import { keccak_256 } from '@noble/hashes/sha3';
+import { assertRegistered } from './regcheck.js';
 
 const run = (s: Synth) => verifyChannel(s.bp, s.body, s.covered, s.l2, s.head);
 
@@ -26,6 +27,7 @@ function state(s: Synth): FinalityStateError {
 function expectState(s: Synth, code: string, fields: Record<string, string> = {}): void {
   const e = state(s);
   expect(e.code, e.canonical()).toBe(code);
+  assertRegistered(e);
   for (const [k, v] of Object.entries(fields)) expect(JSON.parse(canonValue(e.fields[k]!)), `${code}.${k}`).toBe(v);
 }
 
