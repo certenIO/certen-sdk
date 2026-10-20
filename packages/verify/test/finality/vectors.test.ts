@@ -107,8 +107,27 @@ describe('finality_chain2 is chain1 re-issued, differing in exactly the 13 super
 
 // ---- chains.json: CheckLegChain with strict addendum reading ----
 
-describe.each(['finality_chain2'])('%s/chains.json', (set) => {
-  const vectors = fixtureJSON(set, 'chains.json').vectors as any[];
+function judgeChain(v: any): string {
+  const leg = asLeg(v.leg);
+  const carried = asLeg(v.carried);
+  const adds = [];
+  for (const el of v.addenda ?? []) {
+    try {
+      adds.push(parseAddendum(JSON.stringify(el)));
+    } catch (e) {
+      return canonOf(e);
+    }
+  }
+  try {
+    checkLegChain(leg, carried, adds);
+    return 'ok';
+  } catch (e) {
+    return canonOf(e);
+  }
+}
+
+describe('finality_chain2/chains.json', () => {
+  const vectors = fixtureJSON('finality_chain2', 'chains.json').vectors as any[];
   it('has the vectors the Go suite names', () => {
     const names = new Set(vectors.map((v) => v.name));
     for (const want of [
@@ -120,27 +139,7 @@ describe.each(['finality_chain2'])('%s/chains.json', (set) => {
     expect(vectors.length).toBe(19);
   });
   it.each(vectors.map((v) => [v.name, v]))('%s', (_name, v) => {
-    const leg = asLeg(v.leg);
-    const carried = asLeg(v.carried);
-    let got = '';
-    const adds = [];
-    for (const el of v.addenda ?? []) {
-      try {
-        adds.push(parseAddendum(JSON.stringify(el)));
-      } catch (e) {
-        got = canonOf(e);
-        break;
-      }
-    }
-    if (got === '') {
-      try {
-        checkLegChain(leg, carried, adds);
-        got = 'ok';
-      } catch (e) {
-        got = canonOf(e);
-      }
-    }
-    expect(got).toBe(v.expect);
+    expect(judgeChain(v)).toBe(v.expect);
   });
 });
 
@@ -287,6 +286,43 @@ describe('finality_chain2/pins.json', () => {
       got = canonOf(e);
     }
     expect(got).toBe(v.expect);
+  });
+});
+
+// ---- finality_chain1: the superseded set, judged too ----
+
+describe('finality_chain1 (superseded by chain2) is judged as well', () => {
+  // chain2 re-issues every chain1 vector in order, changing only the 13 expectations Go superseded; each chain1 vector must give
+  // chain2's expectation and, unless it is one of the 13, chain1's own written string
+  const judgers: Record<string, (v: any) => string> = {
+    'chains.json': judgeChain,
+    'containers.json': (v) => judgeContainer(v.hex, v.limits),
+    'codec_probe.json': (v) => judgeProbe(v.hex, v.limits),
+    'table.json': (q) => {
+      try {
+        return `kind:${kindFor(BigInt(q.chain), q.level)}`;
+      } catch (e) {
+        return canonOf(e);
+      }
+    },
+  };
+  it('gives the written (or the superseded) expectation for all 49 vectors', () => {
+    let judged = 0;
+    let superseded = 0;
+    for (const [f, judge] of Object.entries(judgers)) {
+      const a = fixtureJSON('finality_chain1', f);
+      const b = fixtureJSON('finality_chain2', f);
+      const old = (a.vectors ?? a.queries) as any[];
+      const nw = (b.vectors ?? b.queries) as any[];
+      old.forEach((v, i) => {
+        const got = judge(v);
+        expect(got, `${f}[${i}] ${v.name ?? ''}`).toBe(nw[i].expect);
+        if (v.expect === got) judged++;
+        else superseded++;
+      });
+    }
+    expect(judged + superseded).toBe(49);
+    expect(superseded).toBe(13);
   });
 });
 
