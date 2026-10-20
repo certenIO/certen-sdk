@@ -109,9 +109,9 @@ function hashToField(data: Uint8Array): bigint {
   return beInt(sha256(data)) % R;
 }
 
-/** point * k for any k (0 gives the identity; noble's multiply refuses it). */
+/** point * k for any k in [0, r] (0 and r give the identity; noble's multiplyUnsafe refuses them). */
 function mul<T extends { multiplyUnsafe(k: bigint): T }>(p: T, zero: T, k: bigint): T {
-  const s = ((k % R) + R) % R;
+  const s = k % R;
   return s === 0n ? zero : p.multiplyUnsafe(s);
 }
 
@@ -198,7 +198,7 @@ function domain(): Domain {
 }
 
 /** evaluate_polynomial_in_evaluation_form: the polynomial given by its values on the bit-reversed domain, at z. */
-function evaluateInEvaluationForm(poly: bigint[], z: bigint): bigint {
+export function evaluateInEvaluationForm(poly: bigint[], z: bigint): bigint {
   const d = domain();
   const at = d.index.get(z);
   if (at !== undefined) return poly[at]!;
@@ -222,6 +222,11 @@ function evaluateInEvaluationForm(poly: bigint[], z: bigint): bigint {
   }
   const factor = (modpow(z, BigInt(n), R) - 1n + R) % R;
   return (((sum % R) * factor) % R * d.invWidth) % R;
+}
+
+/** compute_challenge: the Fiat-Shamir point z a blob is opened at. */
+export function computeChallenge(raw: Uint8Array, commitment: Uint8Array): bigint {
+  return hashToField(concat(FIAT_SHAMIR_PROTOCOL_DOMAIN, u128be(FIELD_ELEMENTS_PER_BLOB), raw, commitment));
 }
 
 // ---- verification ----
@@ -275,7 +280,7 @@ export class KzgContext {
     } catch {
       return undefined;
     }
-    const z = hashToField(concat(FIAT_SHAMIR_PROTOCOL_DOMAIN, u128be(FIELD_ELEMENTS_PER_BLOB), b.raw, b.commitment));
+    const z = computeChallenge(b.raw, b.commitment);
     const y = evaluateInEvaluationForm(poly, z);
     return { commitment, commitmentBytes: b.commitment, proof, proofBytes: b.proof, z, y };
   }

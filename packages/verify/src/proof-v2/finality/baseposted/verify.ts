@@ -239,7 +239,7 @@ export function registerBasePosted(reg: Registry): void {
 type Covered = ReturnType<typeof covers>;
 
 /** O3-O5 over a covered L1 spine. */
-function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: HeaderFields, head: { slot: bigint; epoch: bigint }): Verdict {
+export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: HeaderFields, head: { slot: bigint; epoch: bigint }): Verdict {
   const db = new NodeDb(body.nodes);
   const frames: Frame[] = [];
   const frameL1: bigint[] = [];

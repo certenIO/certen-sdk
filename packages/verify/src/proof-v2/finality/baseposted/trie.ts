@@ -70,12 +70,19 @@ interface Entry {
   value: Uint8Array;
 }
 
+/** Receives every trie node that a parent references by hash (an encoding of 32 bytes or more), so a proof database can be assembled. */
+type Sink = Uint8Array[] | undefined;
+
 const EMPTY_STRING = Uint8Array.of(0x80);
 
 /** The reference a parent holds for an encoded child: the encoding itself when shorter than 32 bytes, else the RLP string of its hash. */
-const ref = (enc: Uint8Array): Uint8Array => (enc.length < 32 ? enc : rlpBytes(keccak_256(enc)));
+function ref(enc: Uint8Array, sink: Sink): Uint8Array {
+  if (enc.length < 32) return enc;
+  sink?.push(enc);
+  return rlpBytes(keccak_256(enc));
+}
 
-function build(entries: Entry[], depth: number): Uint8Array {
+function build(entries: Entry[], depth: number, sink: Sink): Uint8Array {
   if (entries.length === 1) {
     const e = entries[0]!;
     return rlpListOf([rlpBytes(compact(e.key.slice(depth), true)), rlpBytes(e.value)]);
@@ -90,31 +97,42 @@ function build(entries: Entry[], depth: number): Uint8Array {
     common++;
   }
   if (common > 0) {
-    const child = build(entries, depth + common);
-    return rlpListOf([rlpBytes(compact(first.slice(depth, depth + common), false)), ref(child)]);
+    const child = build(entries, depth + common, sink);
+    return rlpListOf([rlpBytes(compact(first.slice(depth, depth + common), false)), ref(child, sink)]);
   }
   const items: Uint8Array[] = [];
   let valueHere: Uint8Array = EMPTY_STRING;
   for (const e of entries) if (e.key.length === depth) valueHere = rlpBytes(e.value);
   for (let n = 0; n < 16; n++) {
     const group = entries.filter((e) => e.key.length > depth && e.key[depth] === n);
-    items.push(group.length === 0 ? EMPTY_STRING : ref(build(group, depth + 1)));
+    items.push(group.length === 0 ? EMPTY_STRING : ref(build(group, depth + 1, sink), sink));
   }
   items.push(valueHere);
   return rlpListOf(items);
 }
 
+const byPath = (a: Entry, b: Entry): number => {
+  const n = Math.min(a.key.length, b.key.length);
+  for (let i = 0; i < n; i++) if (a.key[i] !== b.key[i]) return a.key[i]! - b.key[i]!;
+  return a.key.length - b.key.length;
+};
+
+/**
+ * The root and the hash-referenced nodes of the trie over keyed values (keys are arbitrary byte strings, e.g. keccak256 of an address for a
+ * state trie). An empty value leaves no entry. The nodes are what a proof database for any key of the trie is made of; the root node is
+ * always included, whatever its length.
+ */
+export function buildTrie(entries: readonly { key: Uint8Array; value: Uint8Array }[]): { root: Uint8Array; nodes: Uint8Array[] } {
+  const list: Entry[] = entries.filter((e) => e.value.length > 0).map((e) => ({ key: nibbles(e.key), value: e.value }));
+  if (list.length === 0) return { root: keccak_256(EMPTY_STRING), nodes: [] };
+  list.sort(byPath);
+  const nodes: Uint8Array[] = [];
+  const rootEnc = build(list, 0, nodes);
+  nodes.push(rootEnc);
+  return { root: keccak_256(rootEnc), nodes };
+}
+
 /** The root of the trie over the given consensus encodings, keyed by rlp(index). */
 export function trieRoot(values: readonly Uint8Array[]): Uint8Array {
-  const entries: Entry[] = [];
-  values.forEach((v, i) => {
-    if (v.length > 0) entries.push({ key: nibbles(rlpIndexKey(i)), value: v });
-  });
-  if (entries.length === 0) return keccak_256(EMPTY_STRING);
-  entries.sort((a, b) => {
-    const n = Math.min(a.key.length, b.key.length);
-    for (let i = 0; i < n; i++) if (a.key[i] !== b.key[i]) return a.key[i]! - b.key[i]!;
-    return a.key.length - b.key.length;
-  });
-  return keccak_256(build(entries, 0));
+  return buildTrie(values.map((value, i) => ({ key: rlpIndexKey(i), value }))).root;
 }
