@@ -1,0 +1,1335 @@
+{
+ "format": "certen-arbposted-ts-mutants/1",
+ "mutants": [
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 4619,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:106 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 5308,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:115 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 6330,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:142 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 6491,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:145 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7262,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:163 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7293,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:164 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7332,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:165 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7414,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:168 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 9053,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/nitro.ts:215 eq -> neq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 2790,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/nitro.ts:57 neq -> eq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 3554,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/nitro.ts:84 neq -> eq"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 3177,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/nitro.ts:67 >= -> >"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 6416,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/nitro.ts:144 >= -> >"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7444,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/nitro.ts:169 >= -> >"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7561,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/nitro.ts:172 >= -> >"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 2873,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/nitro.ts:58 < -> <="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 3046,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/nitro.ts:64 < -> <="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 5026,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/nitro.ts:111 < -> <="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 4923,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/nitro.ts:110 > -> >="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 6155,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/nitro.ts:134 > -> >="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7698,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/nitro.ts:175 > -> >="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7733,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/nitro.ts:175 > -> >="
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7728,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/nitro.ts:175 || -> &&"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 10133,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/nitro.ts:258 || -> &&"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 2778,
+   "find": "blob.length !== BLOB_BYTES",
+   "replace": "false",
+   "note": "arbposted/nitro.ts:57 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 3445,
+   "find": "e instanceof RlpError",
+   "replace": "false",
+   "note": "arbposted/nitro.ts:81 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 2941,
+   "find": "1",
+   "replace": "0",
+   "note": "arbposted/nitro.ts:59 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 4722,
+   "find": "1",
+   "replace": "0",
+   "note": "arbposted/nitro.ts:107 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "arbposted/nitro.ts",
+   "offset": 7853,
+   "find": "1",
+   "replace": "0",
+   "note": "arbposted/nitro.ts:177 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1430,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:24 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1444,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:24 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1458,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:24 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1472,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:24 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1685,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:28 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 3464,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:78 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 5151,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:122 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 6134,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:146 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 6170,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:146 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 6820,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:163 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7872,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/delayed.ts:184 eq -> neq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 5179,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/delayed.ts:123 neq -> eq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 5213,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/delayed.ts:123 neq -> eq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7717,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/delayed.ts:182 neq -> eq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7745,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/delayed.ts:182 neq -> eq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7787,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/delayed.ts:182 neq -> eq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 8067,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/delayed.ts:189 neq -> eq"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 4988,
+   "find": "<=",
+   "replace": "<",
+   "note": "arbposted/delayed.ts:114 <= -> <"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1702,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/delayed.ts:28 >= -> >"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7075,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/delayed.ts:167 >= -> >"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 2511,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/delayed.ts:52 < -> <="
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 2781,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/delayed.ts:59 < -> <="
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7091,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/delayed.ts:167 < -> <="
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 5420,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/delayed.ts:131 > -> >="
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7060,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/delayed.ts:167 > -> >="
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7470,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/delayed.ts:177 > -> >="
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 6147,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/delayed.ts:146 && -> ||"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1439,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:24 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1453,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:24 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1467,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:24 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1691,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:28 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 5192,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:123 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7068,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:167 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7084,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:167 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7336,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:172 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7732,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:182 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7770,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:182 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7956,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:186 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7996,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:187 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 8048,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/delayed.ts:188 || -> &&"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 6818,
+   "find": "d === null",
+   "replace": "false",
+   "note": "arbposted/delayed.ts:163 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7058,
+   "find": "n > after || d.k >= after || d.k < after - n",
+   "replace": "false",
+   "note": "arbposted/delayed.ts:167 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7312,
+   "find": "err instanceof MptError || err instanceof RlpError",
+   "replace": "false",
+   "note": "arbposted/delayed.ts:172 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7520,
+   "find": "!sameBytes(keccak_256(concat(prev, delayedMessageHash(d))), accK)",
+   "replace": "false",
+   "note": "arbposted/delayed.ts:178 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7715,
+   "find": "t !== TX_DEPOSIT || d.msgKind !== MSG_KIND_ETH_DEPOSIT || d.data.length !== 52",
+   "replace": "false",
+   "note": "arbposted/delayed.ts:182 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7868,
+   "find": "dep === undefined",
+   "replace": "false",
+   "note": "arbposted/delayed.ts:184 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 1773,
+   "find": "1n",
+   "replace": "0n",
+   "note": "arbposted/delayed.ts:32 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "arbposted/delayed.ts",
+   "offset": 7488,
+   "find": "1n",
+   "replace": "0n",
+   "note": "arbposted/delayed.ts:177 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 3227,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/wire.ts:94 eq -> neq"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 3494,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/wire.ts:103 eq -> neq"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 3556,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/wire.ts:106 eq -> neq"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 6473,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/wire.ts:185 eq -> neq"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 5889,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/wire.ts:168 neq -> eq"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 6941,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/wire.ts:194 neq -> eq"
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 4565,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/wire.ts:140 < -> <="
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 5243,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/wire.ts:154 < -> <="
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 5654,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/wire.ts:164 < -> <="
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 5803,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/wire.ts:166 < -> <="
+  },
+  {
+   "file": "arbposted/wire.ts",
+   "offset": 5878,
+   "find": "raw.length !== BLOB_BYTES",
+   "replace": "false",
+   "note": "arbposted/wire.ts:168 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4211,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:93 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4271,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:94 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4390,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:96 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5151,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:115 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5165,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:115 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5303,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:117 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5897,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:130 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 7171,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/pins.ts:160 eq -> neq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4600,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/pins.ts:102 neq -> eq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5713,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/pins.ts:127 neq -> eq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5782,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/pins.ts:128 neq -> eq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6006,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/pins.ts:132 neq -> eq"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6074,
+   "find": "<=",
+   "replace": "<",
+   "note": "arbposted/pins.ts:133 <= -> <"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6138,
+   "find": "<=",
+   "replace": "<",
+   "note": "arbposted/pins.ts:134 <= -> <"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6214,
+   "find": "<=",
+   "replace": "<",
+   "note": "arbposted/pins.ts:135 <= -> <"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4817,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/pins.ts:108 > -> >="
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4403,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/pins.ts:96 && -> ||"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4588,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/pins.ts:102 || -> &&"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5160,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/pins.ts:115 || -> &&"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 4268,
+   "find": "fd === undefined",
+   "replace": "false",
+   "note": "arbposted/pins.ts:94 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5149,
+   "find": "p === null || p === undefined",
+   "replace": "false",
+   "note": "arbposted/pins.ts:115 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5299,
+   "find": "raw === undefined",
+   "replace": "false",
+   "note": "arbposted/pins.ts:117 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5568,
+   "find": "e instanceof JsonError",
+   "replace": "false",
+   "note": "arbposted/pins.ts:123 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5698,
+   "find": "big('ChainID') !== CHAIN",
+   "replace": "false",
+   "note": "arbposted/pins.ts:127 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5761,
+   "find": "big('ParentChainID') !== ChainSepolia",
+   "replace": "false",
+   "note": "arbposted/pins.ts:128 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5890,
+   "find": "bridge === undefined",
+   "replace": "false",
+   "note": "arbposted/pins.ts:130 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 5997,
+   "find": "lay.Name !== LAYOUT_NAME",
+   "replace": "false",
+   "note": "arbposted/pins.ts:132 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6058,
+   "find": "big('MaxBlobs') <= 0n",
+   "replace": "false",
+   "note": "arbposted/pins.ts:133 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6119,
+   "find": "big('MaxSegments') <= 0n",
+   "replace": "false",
+   "note": "arbposted/pins.ts:134 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/pins.ts",
+   "offset": 6186,
+   "find": "big('MaxUncompressedBatch') <= 0n",
+   "replace": "false",
+   "note": "arbposted/pins.ts:135 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 3880,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:87 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 5809,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:133 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7556,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:166 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7931,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:172 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7979,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:173 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8527,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:185 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10019,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:218 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10040,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:218 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10336,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:224 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10500,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:227 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10755,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:231 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 12173,
+   "find": "===",
+   "replace": "!==",
+   "note": "arbposted/verify.ts:265 eq -> neq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4735,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:114 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4767,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:114 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4795,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:114 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 5022,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:121 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8093,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:175 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8116,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:175 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8142,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:175 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8162,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:175 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8569,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:186 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 11364,
+   "find": "!==",
+   "replace": "===",
+   "note": "arbposted/verify.ts:249 neq -> eq"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 5245,
+   "find": "<=",
+   "replace": "<",
+   "note": "arbposted/verify.ts:124 <= -> <"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 9982,
+   "find": "<=",
+   "replace": "<",
+   "note": "arbposted/verify.ts:217 <= -> <"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 11299,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/verify.ts:248 >= -> >"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 12373,
+   "find": ">=",
+   "replace": ">",
+   "note": "arbposted/verify.ts:268 >= -> >"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 11992,
+   "find": "<",
+   "replace": "<=",
+   "note": "arbposted/verify.ts:260 < -> <="
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10650,
+   "find": ">",
+   "replace": ">=",
+   "note": "arbposted/verify.ts:229 > -> >="
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 3893,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/verify.ts:87 && -> ||"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8111,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/verify.ts:175 && -> ||"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8137,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/verify.ts:175 && -> ||"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8157,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/verify.ts:175 && -> ||"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10506,
+   "find": "&&",
+   "replace": "||",
+   "note": "arbposted/verify.ts:227 && -> ||"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4144,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/verify.ts:94 || -> &&"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4749,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/verify.ts:114 || -> &&"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4777,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/verify.ts:114 || -> &&"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7563,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/verify.ts:166 || -> &&"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7583,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/verify.ts:166 || -> &&"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10035,
+   "find": "||",
+   "replace": "&&",
+   "note": "arbposted/verify.ts:218 || -> &&"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 4122,
+   "find": "e instanceof MptError || e instanceof RlpError",
+   "replace": "false",
+   "note": "arbposted/verify.ts:94 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 5015,
+   "find": "kzgPin !== USED_KZG_SETUP_SHA256",
+   "replace": "false",
+   "note": "arbposted/verify.ts:121 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 5660,
+   "find": "!sameBytes(trieRoot(e.blockTxs), headerTxRoot)",
+   "replace": "false",
+   "note": "arbposted/verify.ts:132 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 5798,
+   "find": "e.dataKind === DataNone",
+   "replace": "false",
+   "note": "arbposted/verify.ts:133 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 6086,
+   "find": "err instanceof FinalityStateError",
+   "replace": "false",
+   "note": "arbposted/verify.ts:139 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 6332,
+   "find": "err instanceof FinalityStateError",
+   "replace": "false",
+   "note": "arbposted/verify.ts:146 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7185,
+   "find": "!bridge.exists",
+   "replace": "false",
+   "note": "arbposted/verify.ts:162 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 7961,
+   "find": "e.calldata.length === 0",
+   "replace": "false",
+   "note": "arbposted/verify.ts:173 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8554,
+   "find": "e.blobs.length !== e.versionedHashes.length",
+   "replace": "false",
+   "note": "arbposted/verify.ts:186 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 8747,
+   "find": "err instanceof BlobPayloadError",
+   "replace": "false",
+   "note": "arbposted/verify.ts:191 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 9449,
+   "find": "res.exceededUncompressed",
+   "replace": "false",
+   "note": "arbposted/verify.ts:206 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 10489,
+   "find": "std.length === 0 && !delayedOrigin",
+   "replace": "false",
+   "note": "arbposted/verify.ts:227 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 12088,
+   "find": "!sameBytes(h, e.versionedHashes[j]!)",
+   "replace": "false",
+   "note": "arbposted/verify.ts:263 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 12351,
+   "find": "kz.verifyBlobs(items) >= 0",
+   "replace": "false",
+   "note": "arbposted/verify.ts:268 guard removed (if (false) throw)"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 9555,
+   "find": "1n",
+   "replace": "0n",
+   "note": "arbposted/verify.ts:206 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "arbposted/verify.ts",
+   "offset": 9663,
+   "find": "1n",
+   "replace": "0n",
+   "note": "arbposted/verify.ts:207 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 15100,
+   "find": "===",
+   "replace": "!==",
+   "note": "pins.ts:382 eq -> neq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17709,
+   "find": "===",
+   "replace": "!==",
+   "note": "pins.ts:432 eq -> neq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17723,
+   "find": "===",
+   "replace": "!==",
+   "note": "pins.ts:432 eq -> neq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 10030,
+   "find": "!==",
+   "replace": "===",
+   "note": "pins.ts:274 neq -> eq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 14712,
+   "find": "!==",
+   "replace": "===",
+   "note": "pins.ts:375 neq -> eq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17816,
+   "find": "!==",
+   "replace": "===",
+   "note": "pins.ts:433 neq -> eq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17848,
+   "find": "!==",
+   "replace": "===",
+   "note": "pins.ts:434 neq -> eq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17870,
+   "find": "!==",
+   "replace": "===",
+   "note": "pins.ts:434 neq -> eq"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 14693,
+   "find": ">",
+   "replace": ">=",
+   "note": "pins.ts:374 > -> >="
+  },
+  {
+   "file": "pins.ts",
+   "offset": 10037,
+   "find": "&&",
+   "replace": "||",
+   "note": "pins.ts:274 && -> ||"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 14721,
+   "find": "&&",
+   "replace": "||",
+   "note": "pins.ts:375 && -> ||"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17855,
+   "find": "&&",
+   "replace": "||",
+   "note": "pins.ts:434 && -> ||"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17718,
+   "find": "||",
+   "replace": "&&",
+   "note": "pins.ts:432 || -> &&"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 10020,
+   "find": "kzgLegacy !== '' && !hexN(kzgLegacy, 32, false)",
+   "replace": "false",
+   "note": "pins.ts:274 guard removed (if (false) throw)"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 14709,
+   "find": "sh !== null && !hexN(sh.kzg_setup_sha256 as string, 32, false)",
+   "replace": "false",
+   "note": "pins.ts:375 guard removed (if (false) throw)"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17707,
+   "find": "p === null || p === undefined",
+   "replace": "false",
+   "note": "pins.ts:432 guard removed (if (false) throw)"
+  },
+  {
+   "file": "pins.ts",
+   "offset": 17836,
+   "find": "legacyValue !== '' && legacyValue !== p.shared.kzgSetupSha256",
+   "replace": "false",
+   "note": "pins.ts:434 guard removed (if (false) throw)"
+  }
+ ]
+}
