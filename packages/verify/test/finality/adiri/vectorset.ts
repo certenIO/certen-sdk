@@ -16,6 +16,7 @@ import { FinalityStateError, asNamed, hexLower, newState } from '../../../src/pr
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const SET_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri3');
+export const SET4_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri4');
 export const REGISTRY_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri3_registry');
 
 /** The sha256 of the Go-written MANIFEST.json (= MANIFEST.json.sha256) of finality_adiri3 at pv2/rb11-int@ee6d106. */
@@ -26,6 +27,10 @@ export const ADIRI_PINS_SHA256 = '12217758b3a8074a07873cd3d26cc46edab7782d31f393
 export const STATES_SHA256 = '0521d55f101e6815872ccd11884d710594b79329f073226d7d5c05437fae2e60';
 
 export const readSet = (name: string): Buffer => readFileSync(join(SET_DIR, ...name.split('/')));
+export const readSet4 = (name: string): Buffer => readFileSync(join(SET4_DIR, ...name.split('/')));
+
+/** The sha256 of the Go-written MANIFEST.json (= MANIFEST.json.sha256) of finality_adiri4 at pv2/rb11-gate-a@a74f662. */
+export const MANIFEST4_SHA256 = 'f4516883372992ca6fe5d65181dc25852b2c3414e9e3b82b758ac42576776250';
 export const sha256Hex = (b: Uint8Array): string => hexLower(sha256(b));
 export const bytesOfHex = (s: string): Uint8Array => {
   const h = s.startsWith('0x') ? s.slice(2) : s;
@@ -55,15 +60,18 @@ export interface VecFile {
 }
 
 export const loadVectors = (): VecFile => JSON.parse(readSet('vectors.json').toString('utf8'));
+export const loadVectors4 = (): VecFile => JSON.parse(readSet4('vectors.json').toString('utf8'));
+let cached4: VecFile | undefined;
+export const vectors4 = (): Vec[] => (cached4 ??= loadVectors4()).vectors;
 let cached: VecFile | undefined;
 export const vectors = (): Vec[] => (cached ??= loadVectors()).vectors;
 
 /** A vector's evidence: its own file, or its base's with the edits applied (highest offset first). */
-export function evidenceOf(v: Vec, all: readonly Vec[] = vectors()): Uint8Array {
-  if (v.evidence !== undefined && v.evidence !== '') return Uint8Array.from(readSet(`evidence/${v.evidence}`));
+export function evidenceOf(v: Vec, all: readonly Vec[] = vectors(), read: (name: string) => Buffer = readSet): Uint8Array {
+  if (v.evidence !== undefined && v.evidence !== '') return Uint8Array.from(read(`evidence/${v.evidence}`));
   const base = all.find((x) => x.name === v.base);
   if (base === undefined) throw new Error(`${v.name}: base ${v.base} not found`);
-  let out = evidenceOf(base, all);
+  let out = evidenceOf(base, all, read);
   for (const e of [...(v.edits ?? [])].sort((a, b) => b.offset - a.offset)) {
     const ins = bytesOfHex(e.insert);
     const next = new Uint8Array(e.offset + ins.length + (out.length - e.offset - e.delete));
@@ -125,11 +133,11 @@ export function outcome(run: () => { fields: Record<string, any> }): string {
   }
 }
 
-export function judge(v: Vec, opts: VerifierOptions = {}): string {
+export function judge(v: Vec, opts: VerifierOptions = {}, set: 3 | 4 = 3): string {
   const kind = new AdiriVerifier(opts);
   const pins = pinsOf(v);
   const leg = legOf(v);
-  const ev = evidenceOf(v);
+  const ev = set === 4 ? evidenceOf(v, vectors4(), readSet4) : evidenceOf(v);
   return outcome(() => kind.verify(pins, leg, ev));
 }
 

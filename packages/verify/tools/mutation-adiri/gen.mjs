@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Generates mutants.json for the Adiri kind: every comparison, equality, boolean operator, boundary constant and single-line guard
- * (`if (cond) throw`) of src/proof-v2/finality/adiri/{cfa1,record,chain,sigs,kind}.ts, as exact (offset, find, replace) edits of the
+ * (`if (cond) throw`) of src/proof-v2/finality/adiri/{cfa1,record,chain,sigs,kind,genesislink}.ts, as exact (offset, find, replace) edits of the
  * source text. Comments and string literals are masked first. Usage, from packages/verify: node tools/mutation-adiri/gen.mjs
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..', '..');
-const FILES = ['cfa1.ts', 'record.ts', 'chain.ts', 'sigs.ts', 'kind.ts'];
+const FILES = ['cfa1.ts', 'record.ts', 'chain.ts', 'sigs.ts', 'kind.ts', 'genesislink.ts'];
 const mutants = [];
 
 for (const file of FILES) {

@@ -18,6 +18,7 @@ import { readHeader, type HeaderFields } from '../rlpheader.js';
 import { FinalityStateError, blockMismatch, evidenceUnrecognised, malformed, type Fields } from '../state.js';
 import { ChainAdiri } from '../table.js';
 import { decodeCFA1 } from './cfa1.js';
+import { checkEmbeddedGenesisLink } from './genesislink.js';
 import { verifyCommitteeChain, type ChainResult } from './chain.js';
 import { Name, parsePins, type Params } from './record.js';
 import type { Mode, Rand } from './sigs.js';
@@ -106,8 +107,6 @@ export function buildContainer(leg: BlockRef, b: Body): Uint8Array {
   });
 }
 
-const U64 = (1n << 64n) - 1n;
-const u64 = (v: bigint): bigint => v & U64;
 
 /** parentBeaconBlockRoot (item 19) of a header, or the zero hash when absent; reported, never required. */
 export function consensusRootOf(raw: Uint8Array): Uint8Array {
@@ -126,7 +125,7 @@ export function consensusRootOf(raw: Uint8Array): Uint8Array {
   return zero;
 }
 
-interface LinkResult {
+export interface LinkResult {
   consensusRootMatches: boolean;
 }
 
@@ -137,12 +136,17 @@ function verifyLink(par: Params, res: ChainResult, body: Body, leg: BlockRef): L
   return body.linkKind === LinkSpine ? verifySpine(res, body.spine, leg) : verifySlot(par, res, body, leg);
 }
 
+/** top - i, saturating at 0: it only labels a refusal and must not wrap. */
+const numberAt = (top: bigint, i: number): bigint => (BigInt(i) > top ? 0n : top - BigInt(i));
+/** n - 1, saturating at 0. */
+const numberBelow = (n: bigint): bigint => (n === 0n ? 0n : n - 1n);
+
 /**
  * keccak256(h_0) = F.hash and number(h_0) = F.number; for i >= 1 keccak256(h_i) = parentHash(h_{i-1}) and number(h_i) = number(h_{i-1}) - 1;
- * h_k is the leg's own header (byte-identical to Settlement.Header when the caller holds it, else equal by hash and number). Block numbers are
- * uint64 and wrap as Go's do.
+ * h_k is the leg's own header (byte-identical to Settlement.Header when the caller holds it, else equal by hash and number). The step is
+ * wrap-free: a header after number 0 has no number below it, and h.number + 1 never wraps to prev.number. Exported for the tests of its arithmetic.
  */
-function verifySpine(res: ChainResult, spine: readonly Uint8Array[], leg: BlockRef): LinkResult {
+export function verifySpine(res: ChainResult, spine: readonly Uint8Array[], leg: BlockRef): LinkResult {
   const F = res.final;
   const out: LinkResult = { consensusRootMatches: false };
   let prev: HeaderFields | undefined;
@@ -152,7 +156,7 @@ function verifySpine(res: ChainResult, spine: readonly Uint8Array[], leg: BlockR
     try {
       h = readHeader(raw);
     } catch (e) {
-      if (e instanceof FinalityStateError) throw linkBroken(LinkHeaderDecode, F.number, leg.number, u64(F.number - BigInt(i)), { index: BigInt(i) });
+      if (e instanceof FinalityStateError) throw linkBroken(LinkHeaderDecode, F.number, leg.number, numberAt(F.number, i), { index: BigInt(i) });
       throw e;
     }
     if (prev === undefined) {
@@ -161,8 +165,8 @@ function verifySpine(res: ChainResult, spine: readonly Uint8Array[], leg: BlockR
       }
       out.consensusRootMatches = sameBytes(consensusRootOf(raw), res.finalConsensus.hash);
     } else {
-      if (!sameBytes(h.hash, prev.parentHash)) throw headerChainBroken(u64(prev.number - 1n), prev.parentHash, h.hash, ReasonParentHash);
-      if (u64(h.number + 1n) !== prev.number) throw headerChainBroken(u64(prev.number - 1n), prev.parentHash, h.hash, ReasonNumberGap);
+      if (!sameBytes(h.hash, prev.parentHash)) throw headerChainBroken(numberBelow(prev.number), prev.parentHash, h.hash, ReasonParentHash);
+      if (prev.number === 0n || h.number !== prev.number - 1n) throw headerChainBroken(numberBelow(prev.number), prev.parentHash, h.hash, ReasonNumberGap);
     }
     prev = h;
   }
@@ -276,7 +280,14 @@ export class AdiriVerifier implements Kind {
   }
 }
 
-/** Registers the Adiri Kind. It is explicit: the module has no side effect, and wiring into defaultRegistry is the integration package's job. */
-export function registerAdiri(reg: Registry, opts: VerifierOptions = {}): void {
+/**
+ * Wires the Adiri Kind into reg, FAILING CLOSED. First the embedded genesis link is checked once against the pins (checkEmbeddedGenesisLink:
+ * genesis_link_sha256, and the 290-header chain from genesis_hash block 1 to epoch0_final_state): a refusal rejects the promise as the named
+ * finality_pins_corrupt state and nothing is registered, exactly as a verifier whose embedded pins do not hash to PINS_SHA256 does not
+ * start. This is the TypeScript equivalent of the Go wiring, where proofverify and the validator call CheckEmbeddedGenesisLink right after
+ * EmbeddedPins. The module has no side effect: wiring into defaultRegistry stays the integration package's call.
+ */
+export async function registerAdiri(reg: Registry, pins: Pins | null | undefined, opts: VerifierOptions = {}): Promise<void> {
+  await checkEmbeddedGenesisLink(pins);
   reg.registerKind(new AdiriVerifier(opts));
 }

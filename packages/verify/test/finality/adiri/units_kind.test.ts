@@ -13,9 +13,12 @@ import {
   encodeBody,
   parsePins,
   registerAdiri,
+  verifySpine,
+  type ChainResult,
   type Body,
 } from '../../../src/proof-v2/finality/adiri/index.js';
 import { assertRegistered } from './regcheck.js';
+import { embeddedAdiriPins } from './vectorset.js';
 import { buildChain, eip2935State, filled, hashOf, hex, makeHeader, makeSpine, numberOf, pinsOfSection, pinsSection, type RecSpec } from './synth.js';
 
 const CR = filled(32, 0x5c);
@@ -76,13 +79,13 @@ describe('a spine link (linkKind 1)', () => {
       `{"code":"finalized","fields":{"chain_len":"1","committee_shrunk":[],"committee_size":"5","consensus_root_matches":true,"distance":"3","epoch":"0","final_hash":"0x${hex(hashOf(s.body.spine[0]!))}","final_number":"1003","link_kind":"1","signers":"5"}}`,
     );
   });
-  it('is the same in both signature modes and registers as a Kind of the table', () => {
+  it('is the same in both signature modes and registers as a Kind of the table', async () => {
     const s = spineScenario();
     expect(verify(s, s.evidence, s.leg, new AdiriVerifier({ mode: 'oneByOne' })).fields).toEqual(verify(s).fields);
     const reg = new Registry();
-    registerAdiri(reg);
+    await registerAdiri(reg, embeddedAdiriPins());
     expect(reg.kind('adiri/finalized/v1')).toBeDefined();
-    expect(() => registerAdiri(reg)).toThrow();
+    await expect(registerAdiri(reg, embeddedAdiriPins())).rejects.toThrow();
     const v = reg.judgeAddendum(s.leg, { level: 3, chain: 2017n, kind: 'adiri/finalized/v1', evidence: s.evidence } as never, s.pins);
     expect(v.level).toBe(3);
   });
@@ -123,14 +126,14 @@ describe('a spine link (linkKind 1)', () => {
     const first = s.body.spine.map((h, i) => (i === 0 ? Uint8Array.of(0x01) : h));
     expect(canon(() => verify(s, buildContainer(s.leg, { ...s.body, spine: first })))).toBe('{"code":"finality_link_broken","fields":{"at":"1003","check":"header_decode","from":"1003","index":"0","to":"1000"}}');
   });
-  it('block numbers wrap as uint64 where Go wraps them', () => {
-    // F = 1 and a decode failure at index 2: at = 1 - 2 = 2^64 - 1
+  it('a header that cannot be read labels the refusal with a saturating number, never a wrapped one', () => {
+    // F = 1 and a decode failure at index 2: 1 - 2 saturates at 0
     const s = spineScenario({ F: 1n, L: 0n });
     const spine = [s.body.spine[0]!, s.body.spine[1]!, Uint8Array.of(1)];
-    const leg = s.leg;
-    const e = refuse(() => verify(s, buildContainer(leg, { ...s.body, spine })));
+    const e = refuse(() => verify(s, buildContainer(s.leg, { ...s.body, spine })));
     expect(e.fields.check).toBe('header_decode');
-    expect(e.fields.at).toBe(18446744073709551615n);
+    expect(e.fields.at).toBe(0n);
+    expect(e.fields.index).toBe(2n);
   });
   it('a broken parent link and a number gap are finality_header_chain_broken', () => {
     const s = spineScenario();
@@ -298,5 +301,87 @@ describe('an EIP-2935 slot link (linkKind 2)', () => {
     const s = slotScenario({ value: lead });
     const leg = { ...s.leg, hash: lead };
     expect(new AdiriVerifier().verify(s.pins, leg, buildContainer(leg, s.body)).level).toBe(3);
+  });
+});
+
+const MAX = (1n << 64n) - 1n;
+const sealed = (number: bigint, hash: Uint8Array): ChainResult => ({
+  epoch: 0,
+  digests: [],
+  shrunk: [],
+  signers: 5,
+  committeeSize: 5,
+  final: { number, hash },
+  finalConsensus: { number, hash: new Uint8Array(32) },
+});
+const refuseSpine = (res: ChainResult, spine: Uint8Array[], leg: BlockRef): FinalityStateError => refuse(() => verifySpine(res, spine, leg));
+
+describe('the spine step never wraps at 64 bits', () => {
+  it('a header numbered 2^64-1 after one numbered 0 is a gap, not a consecutive pair', () => {
+    const h1 = makeHeader({ number: MAX });
+    const h0 = makeHeader({ number: 0n, parentHash: hashOf(h1) });
+    const e = refuseSpine(sealed(0n, hashOf(h0)), [h0, h1], { chain: 2017n, number: MAX, hash: hashOf(h1) });
+    expect(e.canonical()).toBe(
+      `{"code":"finality_header_chain_broken","fields":{"at_number":"0","got_hash":"0x${hex(hashOf(h1))}","reason":"number_gap","spine":"adiri","want_hash":"0x${hex(hashOf(h1))}"}}`,
+    );
+  });
+  it('the same through the kind: the leg is below the seal, the spine runs through number 0 to 2^64-1', () => {
+    const h2 = makeHeader({ number: MAX });
+    const h1 = makeHeader({ number: 0n, parentHash: hashOf(h2) });
+    const h0 = makeHeader({ number: 1n, parentHash: hashOf(h1), consensusRoot: CR });
+    const chain = buildChain([{ committee: K5, next: K5, fsNumber: 1n, fsHash: hashOf(h0), fcHash: CR }]);
+    const pins = pinsOfSection(pinsSection({ genesisCommittee: K5, epoch0Number: 1n, epoch0Hash: hashOf(h0) }));
+    const leg = { chain: 2017n, number: 0n, hash: hashOf(h1), headerRlp: h1 };
+    const body: Body = { cfa1: chain.bytes, linkKind: 1, spine: [h0, h1, h2], finalHeader: new Uint8Array(0), nodes: [] };
+    const e = refuse(() => new AdiriVerifier().verify(pins, leg, buildContainer(leg, body)));
+    expect(e.code).toBe('finality_header_chain_broken');
+    expect(e.fields.reason).toBe('number_gap');
+    expect(e.fields.at_number).toBe(0n);
+    expect(hex(e.fields.got_hash as Uint8Array)).toBe(hex(hashOf(h2)));
+  });
+  it('a header numbered above the tip is not a descending chain, and the parent link is judged first', () => {
+    const g1 = makeHeader({ number: 1n });
+    const g0 = makeHeader({ number: 0n, parentHash: hashOf(g1) });
+    const leg = { chain: 2017n, number: 1n, hash: hashOf(g1) };
+    expect(refuseSpine(sealed(0n, hashOf(g0)), [g0, g1], leg).fields.reason).toBe('number_gap');
+    // a wrong parent hash at number 0 labels at_number 0
+    const wrong = makeHeader({ number: 0n, parentHash: filled(32, 0x44) });
+    const e = refuseSpine(sealed(0n, hashOf(wrong)), [wrong, g1], leg);
+    expect(e.fields.reason).toBe('parent_hash_mismatch');
+    expect(e.fields.at_number).toBe(0n);
+    // a consecutive descending pair is accepted
+    const c1 = makeHeader({ number: 4n });
+    const c0 = makeHeader({ number: 5n, parentHash: hashOf(c1) });
+    const ok = verifySpine(sealed(5n, hashOf(c0)), [c0, c1], { chain: 2017n, number: 4n, hash: hashOf(c1) });
+    // a header without item 19 reads as the zero root, which is what `sealed` certifies
+    expect(ok.consensusRootMatches).toBe(true);
+  });
+  it('an unreadable header names a saturating block number at every depth', () => {
+    const spine = makeSpine(10n, 4); // 10, 9, 8, 7
+    const leg = { chain: 2017n, number: 7n, hash: hashOf(spine[3]!) };
+    const at = (top: bigint, garbage: number, chain: Uint8Array[]): bigint => {
+      const s = [...chain.slice(0, garbage), Uint8Array.of(1)];
+      return refuseSpine(sealed(top, hashOf(chain[0]!)), s, leg).fields.at as bigint;
+    };
+    expect(at(10n, 3, spine)).toBe(7n);
+    expect(at(10n, 1, spine)).toBe(9n);
+    const top5 = makeSpine(5n, 6); // 5 .. 0
+    expect(at(5n, 5, top5)).toBe(0n);
+    const top3 = makeSpine(3n, 4);
+    expect(at(3n, 3, top3)).toBe(0n);
+    const big = [makeHeader({ number: MAX, parentHash: filled(32, 1) })];
+    big.push(makeHeader({ number: MAX - 1n }));
+    expect(refuseSpine(sealed(MAX, hashOf(big[0]!)), [big[0]!, Uint8Array.of(1)], leg).fields.at).toBe(MAX - 1n);
+  });
+  it('the sealed number must match the tip header, and the caller header bytes are compared', () => {
+    const h0 = makeHeader({ number: 5n });
+    const hash = hashOf(h0);
+    const leg = { chain: 2017n, number: 5n, hash };
+    expect(refuseSpine(sealed(6n, hash), [h0], leg).fields.check).toBe('tip_not_final_state');
+    expect(verifySpine(sealed(5n, hash), [h0], leg).consensusRootMatches).toBe(true);
+    expect(verifySpine(sealed(5n, hash), [h0], { ...leg, headerRlp: Uint8Array.from(h0) }).consensusRootMatches).toBe(true);
+    const flipped = Uint8Array.from(h0);
+    flipped[flipped.length - 1]! ^= 1;
+    expect(refuseSpine(sealed(5n, hash), [h0], { ...leg, headerRlp: flipped }).fields.field).toBe('spineLastHeader');
   });
 });

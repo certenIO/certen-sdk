@@ -201,30 +201,28 @@ function decodeStruct(v: JVal, def: readonly FieldDef[], path: string, into: Dec
   }
 }
 
-/** Go's hex.DecodeString on an even-length string, returning the bytes decoded before the first invalid pair (common.FromHex ignores the error). */
-function hexPrefix(s: string): Uint8Array {
-  const out: number[] = [];
-  for (let i = 0; i + 1 < s.length; i += 2) {
-    const a = nibble(s.charCodeAt(i));
-    const b = nibble(s.charCodeAt(i + 1));
-    if (a < 0 || b < 0) break;
-    out.push((a << 4) | b);
-  }
-  return Uint8Array.from(out);
-}
 const nibble = (c: number): number => (c >= 48 && c <= 57 ? c - 48 : c >= 97 && c <= 102 ? c - 87 : c >= 65 && c <= 70 ? c - 55 : -1);
 
-/** common.FromHex: an optional 0x/0X prefix, an odd length gets a leading 0, and a bad digit ends the decode quietly. */
-export function fromHex(s: string): Uint8Array {
-  if (s.length >= 2 && s[0] === '0' && (s[1] === 'x' || s[1] === 'X')) s = s.slice(2);
-  if (s.length % 2 === 1) s = `0${s}`;
-  return hexPrefix(s);
+/**
+ * Go's hex.DecodeString, strictly: an odd number of digits or a character that is not a hex digit is an error (undefined), never padded
+ * with a zero and never truncated. Upper case is accepted.
+ */
+export function decodeHex(s: string): Uint8Array | undefined {
+  if (s.length % 2 !== 0) return undefined;
+  const out = new Uint8Array(s.length / 2);
+  for (let i = 0; i < s.length; i += 2) {
+    const hi = nibble(s.charCodeAt(i));
+    const lo = nibble(s.charCodeAt(i + 1));
+    if (hi < 0 || lo < 0) return undefined;
+    out[i / 2] = (hi << 4) | lo;
+  }
+  return out;
 }
 
-/** decode0x: the prefix must be a lower-case 0x. */
+/** decode0x: the prefix must be a lower-case 0x, then exact hex. */
 function decode0x(s: string): Uint8Array | undefined {
   if (s.length < 2 || s.slice(0, 2) !== '0x') return undefined;
-  return fromHex(s);
+  return decodeHex(s.slice(2));
 }
 
 function hex32(s: string): Uint8Array | undefined {
@@ -261,8 +259,8 @@ export function parsePins(p: Pins | null | undefined): Params {
   if (committee.length === 0 || committee.length > 255) throw bad('adiri.genesis_committee');
   const genesisCommittee: Uint8Array[] = [];
   committee.forEach((h, i) => {
-    const k = fromHex(`0x${h}`);
-    if (k.length !== KeyBytes) throw bad('adiri.genesis_committee', { index: BigInt(i) });
+    const k = decodeHex(h);
+    if (k === undefined || k.length !== KeyBytes) throw bad('adiri.genesis_committee', { index: BigInt(i) });
     genesisCommittee.push(k);
   });
   const chainId = big(j, 'chain_id');
@@ -276,7 +274,7 @@ export function parsePins(p: Pins | null | undefined): Params {
     if (isBad) throw bad(key);
   }
   const linkSha = str(j, 'genesis_link_sha256');
-  if (linkSha.length !== 64) throw bad('adiri.genesis_link_sha256');
+  if (new TextEncoder().encode(linkSha).length !== 64) throw bad('adiri.genesis_link_sha256');
   return {
     chainId,
     codec: str(j, 'epoch_record_codec'),

@@ -138,7 +138,7 @@ export function makeHeader(h: HeaderSpec): Uint8Array {
     rlpBytes(intBytes(h.number)),
     rlpBytes(intBytes(30_000_000n)),
     rlpBytes(intBytes(21_000n)),
-    rlpBytes(intBytes(1_700_000_000n + h.number)),
+    rlpBytes(intBytes(1_700_000_000n + (h.number % 1_000_000n))),
     rlpBytes(Uint8Array.of(h.salt ?? 0)),
     rlpBytes(filled(32, 0x77)),
     rlpBytes(filled(8, 0)),
