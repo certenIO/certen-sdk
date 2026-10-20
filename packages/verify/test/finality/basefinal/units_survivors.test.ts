@@ -9,7 +9,9 @@ import { parsePinsOverride, sepoliaPins } from '../../../src/proof-v2/finality/p
 import { decodeBody, parseBasePins, rowComplete } from '../../../src/proof-v2/finality/basefinal/index.js';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
 import { offsets } from './evlayout.js';
-import { GAME_020, mainJson, pinsOf } from './pinsvariants.js';
+import { ASR_IMPL, GAME_020, mainJson, pinsOf } from './pinsvariants.js';
+import { canonValue } from '../../../src/proof-v2/finality/state.js';
+import { judgeOutcome, worldOf } from './world.js';
 import { read } from './vectorset.js';
 
 const pins = parsePinsOverride(read('pins/main.json'));
@@ -109,5 +111,41 @@ describe('pins details', () => {
     const p = parseBasePins(pinsOf(d));
     expect(p.impl.get(GAME_020)!.intervalPairs).toEqual([[0n, 0n]]);
     expect(rowComplete(p.impl.get(GAME_020)!, p.layouts)).toBe(false);
+  });
+});
+
+describe('pins that change the judgement of a published world (parity with the Go judge: tools/xcheck-basefinal cases pv2_*)', () => {
+  const ROOT = 'synth_ok_root_claim_anchor';
+  const outcome = (mutate: (b: Record<string, any>) => void) => {
+    const d = mainJson();
+    mutate(d.base_sepolia);
+    return judgeOutcome(worldOf(ROOT), pinsOf(d));
+  };
+
+  it('an asr_impl row without finality_delay_seconds leaves the ASR implementation unproven (the delay is a pin)', () => {
+    const o = outcome((b) => delete b.impl_pins[ASR_IMPL].finality_delay_seconds);
+    expect(o.ok).toBe(false);
+    if (o.ok) return;
+    expect(o.state.code).toBe('contract_identity_unproven');
+    expect(o.state.fields.role).toBe('asr_impl');
+  });
+
+  it('a pins file without the aggregate_v1 layout is finality_pins_corrupt{bad_value, base_sepolia.game_layout} at the game, not an accepted world', () => {
+    const o = outcome((b) => {
+      b.game_layout.other = b.game_layout.aggregate_v1;
+      delete b.game_layout.aggregate_v1;
+    });
+    expect(o.ok).toBe(false);
+    if (o.ok) return;
+    expect(o.state.code).toBe('finality_pins_corrupt');
+    expect(o.state.fields.key).toBe('base_sepolia.game_layout');
+  });
+
+  it('an interval pair whose total/interval is not n_intermediate is game_unrecognised{interval_pair} carrying total and the computed n', () => {
+    const o = outcome((b) => (b.impl_pins[GAME_020].interval_pairs = [[600, 60]]));
+    expect(o.ok).toBe(false);
+    if (o.ok) return;
+    expect(o.state.code).toBe('game_unrecognised');
+    expect(canonValue(o.state.fields)).toBe('{"n":"10","reason":"interval_pair","total":"600"}');
   });
 });

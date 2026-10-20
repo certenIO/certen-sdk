@@ -26,11 +26,14 @@ const tier = opt('--tier', '1');
 const LIVE = [0, 1, 2, 3].map((i) => `${U}vectors_shard${i}.test.ts`).join(',');
 const JV = `${U}vectors_judge0.test.ts,${U}vectors_judge1.test.ts`;
 /** tier 1: the fast tests that judge each source file; tier 2 adds the live vectors (23 full containers, about 25 s) for the survivors */
+const SURV = `${U}units_survivors.test.ts`;
+const X = `${U}vectors_x.test.ts`;
+/** pass 1 ran units_survivors/vectors_x only for what existed then; the current map is the whole fast set */
 const TESTS = {
-  'proof-v2/finality/basefinal/wire.ts': `${U}units_wire.test.ts,${U}units_kind.test.ts`,
-  'proof-v2/finality/basefinal/pins.ts': `${U}units_pins.test.ts,${JV},${U}units_judge.test.ts`,
-  'proof-v2/finality/basefinal/verify.ts': `${JV},${U}units_judge.test.ts,${U}units_wire.test.ts,${U}units_pins.test.ts,${U}units_kind.test.ts`,
-  's6/mpt.ts': `${U}units_kind.test.ts,${JV},test/s6`,
+  'proof-v2/finality/basefinal/wire.ts': `${U}units_wire.test.ts,${U}units_kind.test.ts,${SURV}`,
+  'proof-v2/finality/basefinal/pins.ts': `${U}units_pins.test.ts,${JV},${U}units_judge.test.ts,${SURV},${X}`,
+  'proof-v2/finality/basefinal/verify.ts': `${JV},${U}units_judge.test.ts,${U}units_wire.test.ts,${U}units_pins.test.ts,${U}units_kind.test.ts,${SURV},${X}`,
+  's6/mpt.ts': `${U}units_kind.test.ts,${JV}`,
 };
 if (tier === '2') for (const k of Object.keys(TESTS)) TESTS[k] += `,${LIVE}`;
 const mutants = JSON.parse(readFileSync(join(here, 'mutants.json'), 'utf8')).mutants.map((m, i) => ({ id: i + 1, ...m }));

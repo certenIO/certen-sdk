@@ -1,5 +1,5 @@
 /**
- * The supplement worlds finality_base_final1_x: 199 synthetic judge-level worlds that the published finality_base_final1 does not turn (words
+ * The supplement worlds finality_base_final1_x: 204 synthetic judge-level worlds that the published finality_base_final1 does not turn (words
  * with bytes outside the 64 bits the verifier reads, every status/respected/proof-count/expected-resolution/retirement/timestamp boundary,
  * malformed storage leaves and account leaves, absent accounts, template and args variations, output-root indices, spine depths and number
  * skips). They were built by the validator's own synthetic world builder (pkg/finality/basefinal BuildSynth, pv2/rb11-d1-final@6814d26) in a
@@ -21,7 +21,7 @@ const pins = parsePinsOverride(rd('pins/main.json'));
 describe('finality_base_final1_x identity', () => {
   it('every file the manifest lists is byte-identical to what the generator wrote, and the pins are the published main.json', () => {
     for (const [f, want] of Object.entries(manifest.files)) expect(sha256Hex(rd(f)), f).toBe(want);
-    expect(manifest.judge_cases.length).toBe(199);
+    expect(manifest.judge_cases.length).toBe(204);
     expect(sha256Hex(rd('pins/main.json'))).toBe(sha256Hex(readFileSync(join(DIR, '..', 'base_final1', 'pins', 'main.json'))));
   });
 });
