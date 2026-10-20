@@ -88,6 +88,8 @@ export interface SynthOpts {
   /** a non-zero byte above the 20-byte batcher address in batcherHash: [index 0..11, value] */
   dirtyBatcherHash?: [number, number];
   omitImpl?: boolean;
+  /** leave a SystemConfig storage slot out of the storage trie (an absent slot reads zero) */
+  omitSlot?: 'batcher' | 'impl';
   /** compress the stream of these raw bytes instead of the generated one */
   rawStream?: Uint8Array;
   /** replace the generated stream by this one before compression */
@@ -296,10 +298,11 @@ export function makeSynth(o: SynthOpts = {}): Synth {
       raws.push(signedFrameTx(batcher, BigInt(i), to, frameBytes[i]!));
     }
     const txT = buildTrie(raws.map((value, k) => ({ key: rlpIndexKey(k), value })));
-    const storage = buildTrie([
+    const storageEntries = [
       { key: keccak_256(SLOT_BATCHER), value: encBytes(trimLeft(batcherHash)) },
       { key: keccak_256(SLOT_IMPL), value: encBytes(trimLeft(pad32(TEST_IMPL))) },
-    ]);
+    ].filter((e, k) => !(o.omitSlot === 'batcher' && k === 0) && !(o.omitSlot === 'impl' && k === 1));
+    const storage = buildTrie(storageEntries);
     const stateEntries = [{ key: keccak_256(TEST_SYSCFG), value: account(storage.root, keccak_256(utf8('proxy'))) }];
     if (!o.omitImpl) stateEntries.push({ key: keccak_256(TEST_IMPL), value: account(EMPTY_ROOT, TEST_IMPL_CODE) });
     const state = buildTrie(stateEntries);

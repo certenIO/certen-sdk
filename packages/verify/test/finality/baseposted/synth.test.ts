@@ -8,6 +8,7 @@ import { FinalityStateError, canonValue } from '../../../src/proof-v2/finality/s
 import { verifyChannel } from '../../../src/proof-v2/finality/baseposted/verify.js';
 import { encodeNodes } from '../../../src/proof-v2/finality/codec.js';
 import { buildTrie, rlpIndexKey } from '../../../src/proof-v2/finality/baseposted/trie.js';
+import { rlpBytes as encBytes, rlpListOf } from '../../../src/proof-v2/finality/baseposted/trie.js';
 import { type SynthOpts, type Synth, addressOf, compress, hex, makeSynth, testKey, concat, utf8 } from './synth.js';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { assertRegistered } from './regcheck.js';
@@ -91,6 +92,10 @@ describe('batcher authentication', () => {
     expect(e.fields.judged_at).toBe(1000n);
     expect(hex(e.fields.address as Uint8Array)).toBe('0xaeb75e200b9bcf9343ff1a2d2b1b3976e7339ca4');
   });
+  it('an absent batcherHash slot reads zero and is no sender; an absent implementation slot points at an absent account', () => {
+    expectState(makeSynth({ omitSlot: 'batcher' }), 'batcher_sender_mismatch');
+    expectState(makeSynth({ omitSlot: 'impl' }), 'l1_state_proof_invalid', { which: 'account' });
+  });
   it('a missing state node is an account proof failure and a missing storage node a slot failure', () => {
     const noState = makeSynth({});
     noState.body.nodes = encodeNodes([...noState.groups.tx, ...noState.groups.storage]);
@@ -105,6 +110,9 @@ describe('batcher authentication', () => {
 });
 
 describe('inclusion', () => {
+  it('a frame in L1 block 0 at index 0 is the first frame, not a repeat of a previous one', () => {
+    expect(ok({ frameBlocks: [0n], epochNum: 0n }).fields.l1_blocks).toEqual([0n]);
+  });
   it('a frame tx that is not the value at its index of the block transaction trie', () => {
     const s = makeSynth({});
     s.body.frames[0]!.txRaw = Uint8Array.from(s.body.frames[0]!.txRaw);
@@ -263,6 +271,12 @@ describe('batch lookup and binding', () => {
     const short = makeSynth({});
     short.body.deposits = [concat(Uint8Array.of(0x7e), Uint8Array.of(0xc8, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80))];
     expectState(short, 'batch_binding_mismatch', { field: 'l1_info_deposit' });
+  });
+  it('a deposit with nine items is no L1-info deposit even if its eighth item is long enough', () => {
+    const s = makeSynth({});
+    const seven = [0, 1, 2, 3, 4, 5, 6].map(() => Uint8Array.of(0x80));
+    s.body.deposits = [concat(Uint8Array.of(0x7e), rlpListOf([...seven, encBytes(new Uint8Array(164)), Uint8Array.of(0x80)]))];
+    expectState(s, 'batch_binding_mismatch', { field: 'l1_info_deposit' });
   });
   it('the transactions root differs when a deposit or a user transaction is altered or added', () => {
     const s = makeSynth({});

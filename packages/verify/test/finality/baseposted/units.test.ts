@@ -93,6 +93,8 @@ describe('frames', () => {
     expect(() => parseFrames(new Uint8Array(0))).toThrow('derivation version');
     expect(() => parseFrames(concat(Uint8Array.of(1), frame(0, new Uint8Array(0), true)))).toThrow('derivation version');
     expect(() => parseFrames(concat(Uint8Array.of(0), new Uint8Array(21)))).toThrow('frame header');
+    // exactly a 22-byte header with no is_last byte left: the header is whole, the length check refuses it
+    expect(() => parseFrames(concat(Uint8Array.of(0), new Uint8Array(22)))).toThrow('frame length');
     const long = Uint8Array.from(frame(0, Uint8Array.of(1, 2), true));
     expect(() => parseFrames(concat(Uint8Array.of(0), long.subarray(0, long.length - 1)))).toThrow('frame length');
     const bad = Uint8Array.from(frame(0, Uint8Array.of(1), true));
@@ -233,6 +235,10 @@ describe('base_sepolia pins', () => {
     bad((s) => (s.kzg_setup_sha256 = 'f8e44a31'), 'base_sepolia.kzg_setup_sha256');
     bad((s) => (s.impl_pins = {}), 'base_sepolia.impl_pins');
     bad((s) => (s.impl_pins = { '0x1234': { role: 'syscfg_impl' } }), 'base_sepolia.impl_pins');
+    // 66 lower-case hex characters without the 0x prefix are the right length but not an 0x-prefixed value
+    bad((s) => (s.impl_pins = { ['ab' + '11'.repeat(32)]: { role: 'syscfg_impl' } }), 'base_sepolia.impl_pins');
+    bad((s) => (s.impl_pins = { ['0x' + 'AB'.repeat(32)]: { role: 'syscfg_impl' } }), 'base_sepolia.impl_pins');
+    bad((s) => (s.system_config = 'ab' + 'f2'.repeat(20)), 'base_sepolia.system_config');
     bad((s) => (s.impl_pins = { [`0x${'11'.repeat(32)}`]: { role: 'other' } }), 'base_sepolia.impl_pins');
     bad((s) => (s.impl_pins = { [`0x${'11'.repeat(32)}`]: 5 }), 'base_sepolia.impl_pins');
   });
@@ -290,6 +296,21 @@ describe('the body codec', () => {
     const tooMany = { ...body, l1Spine: new Array(lim.maxSpineHeaders + 1).fill(Uint8Array.of(0xc0)) };
     expect(throwsState(() => decodeBody(encodeBody(tooMany), lim, { ...ep, maxSpineHeaders: 0 }, 32)).code).toBe('finality_evidence_too_large');
     expect(throwsState(() => decodeBody(encodeBody({ ...body, l1Spine: new Array(5).fill(Uint8Array.of(0xc0)) }), lim, { ...ep, maxSpineHeaders: 4 }, 32)).code).toBe('finality_evidence_too_large');
+  });
+
+  it('the spine bound is the pin, clamped to the framework limit; a zero pin falls back to the limit', () => {
+    const body = decodeBody(bodyBytes, lim, ep, 32);
+    const n = body.l1Spine.length;
+    expect(decodeBody(bodyBytes, lim, { ...ep, maxSpineHeaders: 0 }, 32).l1Spine.length).toBe(n);
+    expect(decodeBody(bodyBytes, lim, { ...ep, maxSpineHeaders: n }, 32).l1Spine.length).toBe(n);
+    const low = throwsState(() => decodeBody(bodyBytes, lim, { ...ep, maxSpineHeaders: n - 1 }, 32));
+    expect(low.code).toBe('finality_evidence_too_large');
+    expect(low.fields.limit).toBe(BigInt(n - 1));
+    const over = new Array(lim.maxSpineHeaders + 1).fill(Uint8Array.of(0xc0));
+    const high = throwsState(() => decodeBody(encodeBody({ ...body, l1Spine: over }), lim, { ...ep, maxSpineHeaders: 1_000_000 }, 32));
+    expect(high.fields.limit).toBe(BigInt(lim.maxSpineHeaders));
+    const onLimit = new Array(lim.maxSpineHeaders).fill(Uint8Array.of(0xc0));
+    expect(decodeBody(encodeBody({ ...body, l1Spine: onLimit }), lim, { ...ep, maxSpineHeaders: 1_000_000 }, 32).l1Spine.length).toBe(lim.maxSpineHeaders);
   });
 
   it('refuses frame txs over the framework bound and deposits over theirs', () => {
