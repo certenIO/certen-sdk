@@ -240,3 +240,41 @@ describe('decodePayload statuses', () => {
     expect(decodePayload(payload, 1 << 20, 10)).toMatchObject({ status: PayloadTooLarge, exceededUncompressed: false, exceededSegments: true });
   });
 });
+
+describe('seeded corruption of a batch payload never throws', () => {
+  it('3,000 corrupted copies of a real-shaped payload, and of the blob encoding, end in a status or a BlobPayloadError', () => {
+    let x = 0x1234567;
+    const rnd = (): number => {
+      x ^= x << 13;
+      x >>>= 0;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      x >>>= 0;
+      return x;
+    };
+    const stream = concat(
+      seg(2, new Uint8Array(0)),
+      ...Array.from({ length: 40 }, (_, i) => seg(i % 3 === 0 ? 1 : 0, i % 3 === 0 ? brotliCompressSync(msgBatch([msgTx(userTx(i)), msgTx(userTx(i + 1))])) : msgBatch([msgTx(userTx(i))]))),
+    );
+    const payload = payloadOf(stream);
+    const statuses = new Set<number>();
+    for (let i = 0; i < 3000; i++) {
+      const p = Uint8Array.from(payload);
+      for (let f = 0; f < 1 + (rnd() % 3); f++) p[rnd() % p.length] = rnd() & 0xff;
+      const r = decodePayload(p.subarray(0, rnd() % 5 === 0 ? rnd() % p.length : p.length), 1 << 20, 200);
+      statuses.add(r.status);
+    }
+    expect(statuses.has(PayloadOK)).toBe(true);
+    expect(statuses.has(PayloadUndecodable) || statuses.has(PayloadUnknownHeader) || statuses.has(PayloadOffL1)).toBe(true);
+    const blobs = encodeBlobs(payload);
+    for (let i = 0; i < 300; i++) {
+      const b = blobs.map((y) => Uint8Array.from(y));
+      for (let f = 0; f < 1 + (rnd() % 4); f++) b[0]![rnd() % b[0]!.length] = rnd() & 0xff;
+      try {
+        decodeBlobs(b);
+      } catch (e) {
+        expect(e).toBeInstanceOf(BlobPayloadError);
+      }
+    }
+  });
+});

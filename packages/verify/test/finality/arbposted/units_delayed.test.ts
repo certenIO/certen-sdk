@@ -5,6 +5,7 @@
 import { keccak_256 } from '@noble/hashes/sha3';
 import { describe, expect, it } from 'vitest';
 import {
+  verifyDelayed,
   accumulator,
   arrayElementSlot,
   dataHash,
@@ -17,7 +18,10 @@ import {
 } from '../../../src/proof-v2/finality/arbposted/delayed.js';
 import { DataBlobs, DataCalldata } from '../../../src/proof-v2/finality/arbposted/wire.js';
 import { rlpBytes, rlpListOf } from '../../../src/proof-v2/finality/baseposted/trie.js';
-import { concat, depositMessage, headerWithNonce, hex, u64be, unhex, utf8 } from './synth.js';
+import { verifyAccount } from '../../../src/s6/mpt.js';
+import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
+import type { PayloadResult } from '../../../src/proof-v2/finality/arbposted/nitro.js';
+import { BRIDGE, DEPOSITOR, RECIPIENT, concat, depositMessage, depositTx, headerWithNonce, hex, makeSynth, seg, u64be, unhex, utf8 } from './synth.js';
 
 describe('w32 and header40', () => {
   it('w32 is the big-endian 32-byte word of a uint64; header40 is five big-endian uint64', () => {
@@ -135,5 +139,42 @@ describe('txType and the delayed-origin types', () => {
   it('0x64, 0x65, 0x66 and 0x69 are delayed-origin; 0x67, 0x68, 0x6a and the standard types are not', () => {
     for (const t of [0x64, 0x65, 0x66, 0x69]) expect(isDelayedOriginType(t)).toBe(true);
     for (const t of [0, 1, 2, 3, 4, 0x63, 0x67, 0x68, 0x6a, 0x6b]) expect(isDelayedOriginType(t)).toBe(false);
+  });
+});
+
+describe('verifyDelayed reads the Bridge storage through proofs', () => {
+  const res: PayloadResult = { messages: [], segments: 1, delayedSegments: 1, headerByte: 0, status: 0, exceededUncompressed: false, exceededSegments: false };
+  const make = () => {
+    const s = makeSynth({ segments: [seg(2, new Uint8Array(0))], blockTxs: [depositTx(w32(41n), DEPOSITOR, RECIPIENT, 5n)], afterDelayed: 42n, delayed: { msg: depositMessage(41n) } });
+    const acct = verifyAccount(s.s.stateRoot, BRIDGE, s.ev.nodes);
+    return { s, root: acct.storageRoot };
+  };
+  const named = (f: () => unknown): FinalityStateError => {
+    try {
+      f();
+    } catch (e) {
+      if (e instanceof FinalityStateError) return e;
+      throw e;
+    }
+    throw new Error('accepted');
+  };
+  it('proves k and k-1 with the full node set', () => {
+    const { s, root } = make();
+    expect(verifyDelayed(s.pins, root, s.ev, res, [106n, 100n], 5n)).toBe(41n);
+  });
+  it('a node set that cannot prove the slots is l1_state_proof_invalid{slot}, not a raw proof error', () => {
+    const { s, root } = make();
+    expect(named(() => verifyDelayed(s.pins, root, { ...s.ev, nodes: [] }, res, [106n, 100n], 5n)).canonical()).toBe(
+      '{"code":"l1_state_proof_invalid","fields":{"which":"slot"}}',
+    );
+    expect(named(() => verifyDelayed(s.pins, root, { ...s.ev, nodes: [new Uint8Array([0xc0])] }, res, [106n], 5n)).code).toBe('l1_state_proof_invalid');
+    const wrongRoot = new Uint8Array(32).fill(5);
+    expect(named(() => verifyDelayed(s.pins, wrongRoot, s.ev, res, [106n], 5n)).fields).toEqual({ which: 'slot' });
+  });
+  it('no Delayed section is unproven with only the types and the nonce', () => {
+    const { s, root } = make();
+    expect(named(() => verifyDelayed(s.pins, root, { ...s.ev, delayed: null }, res, [106n, 100n], 5n)).canonical()).toBe(
+      '{"code":"l1_posted_delayed_origin_unproven","fields":{"block_tx_types":["106","100"],"header_nonce":"5"}}',
+    );
   });
 });

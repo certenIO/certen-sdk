@@ -316,3 +316,43 @@ describe('the container header', () => {
     }
   });
 });
+
+/** xorshift32: a fixed seed, so a failure reproduces */
+function prng(seed: number): () => number {
+  let x = seed >>> 0 || 1;
+  return () => {
+    x ^= x << 13;
+    x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    x >>>= 0;
+    return x;
+  };
+}
+
+describe('seeded corruption never produces an unnamed error', () => {
+  it('4,000 corrupted copies of the calldata and the delayed bodies decode to a body or a named state', () => {
+    const rnd = prng(0x5eed);
+    const bodies = ['synth_valid_calldata', 'synth_valid_delayed_deposit'].map((id) => bodyOf(id));
+    let refused = 0;
+    let decoded = 0;
+    for (let i = 0; i < 4000; i++) {
+      const b = Uint8Array.from(bodies[i % 2]!);
+      const flips = 1 + (rnd() % 3);
+      for (let f = 0; f < flips; f++) {
+        // half the flips land in the first 400 bytes, where the lengths and counts are
+        const at = rnd() % 2 === 0 ? rnd() % 400 : rnd() % b.length;
+        b[at] = rnd() & 0xff;
+      }
+      try {
+        decodeEvidence(b, bounds);
+        decoded++;
+      } catch (e) {
+        if (!(e instanceof FinalityStateError)) throw new Error(`iteration ${i}: unnamed ${String(e)}`);
+        refused++;
+      }
+    }
+    expect(refused).toBeGreaterThan(50);
+    expect(decoded).toBeGreaterThan(500);
+  });
+});

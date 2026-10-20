@@ -108,6 +108,8 @@ export interface SynthOpts {
   noImplAccount?: boolean;
   /** the accumulator stored for the batch (default: the recomputed one) */
   storedAcc?: Uint8Array;
+  /** a non-zero word in the delayed accumulator slot just BEFORE element 0 (the slot k = 0 must not read) */
+  poisonBeforeFirst?: boolean;
 }
 
 export interface Synth {
@@ -169,6 +171,7 @@ export function makeSynth(o: SynthOpts = {}): Synth {
     if (d.k > 0n) put(arrayElementSlot(pins.layout.delayedAccArraySlot, d.k - 1n), prev);
     put(arrayElementSlot(pins.layout.delayedAccArraySlot, d.k), keccak_256(concat(d.k > 0n ? prev : new Uint8Array(32), delayedMessageHash(d))));
   }
+  if (o.poisonBeforeFirst) put(arrayElementSlot(pins.layout.delayedAccArraySlot, (1n << 256n) - 1n), label('poison'));
   const st = buildTrie(storage);
   const account = (storageRoot: Uint8Array, codeHash: Uint8Array): Uint8Array =>
     rlpListOf([rlpBytes(trimmed(1n)), rlpBytes(trimmed(0n)), rlpBytes(storageRoot), rlpBytes(codeHash)]);

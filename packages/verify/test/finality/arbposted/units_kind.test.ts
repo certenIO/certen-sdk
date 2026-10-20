@@ -400,3 +400,33 @@ describe('the data kind selects what the accumulator hashes', () => {
     expect(s.run().fields.blobs).toBe(0n);
   });
 });
+
+describe('delayed-origin edge cases found by the mutation gate', () => {
+  const dep = (k: bigint): Uint8Array => depositTx(w32(k), DEPOSITOR, RECIPIENT, 5n);
+  it('k = 0 never reads the slot before the array: a non-zero word there does not change the verdict', () => {
+    const o: SynthOpts = {
+      segments: [seg(2, new Uint8Array(0))],
+      blockTxs: [dep(0n)],
+      afterDelayed: 1n,
+      delayed: { msg: depositMessage(0n) },
+      poisonBeforeFirst: true,
+    };
+    expect(makeSynth(o).run().fields.delayed_message_index).toBe(0n);
+    // and k = 1 reads element 0, not the poison
+    const o1: SynthOpts = { ...o, blockTxs: [dep(1n)], afterDelayed: 2n, delayed: { msg: depositMessage(1n), prev: new Uint8Array(32).fill(4) } };
+    expect(makeSynth(o1).run().fields.delayed_message_index).toBe(1n);
+  });
+  it('more delayed segments than delayed messages read is unproven even when k is below the count (the guard that stops after - n from wrapping)', () => {
+    const segments = Array.from({ length: 51 }, () => seg(2, new Uint8Array(0)));
+    const o: SynthOpts = { segments, blockTxs: [dep(41n)], afterDelayed: 50n, delayed: { msg: depositMessage(41n) } };
+    expect(canon(o)).toBe(state('l1_posted_delayed_origin_unproven', { block_tx_types: ['100'], header_nonce: '2224515', k: '41', message_kind: '12' }));
+    // exactly 50 segments for 50 messages read: k = 41 lies in [0, 50)
+    expect(makeSynth({ ...o, segments: segments.slice(0, 50) }).run().fields.delayed_message_index).toBe(41n);
+    // and k = 0 with a window that reaches down to 0
+    expect(makeSynth({ segments: [seg(2, new Uint8Array(0))], blockTxs: [dep(0n)], afterDelayed: 1n, delayed: { msg: depositMessage(0n) } }).run().fields.delayed_message_index).toBe(0n);
+    // the window is [after - n, after): its lower edge is included, the element below it is not
+    const two = [seg(2, new Uint8Array(0)), seg(2, new Uint8Array(0))];
+    expect(makeSynth({ segments: two, blockTxs: [dep(40n)], afterDelayed: 42n, delayed: { msg: depositMessage(40n) } }).run().fields.delayed_message_index).toBe(40n);
+    expect(canon({ segments: two, blockTxs: [dep(39n)], afterDelayed: 42n, delayed: { msg: depositMessage(39n) } })).toContain('l1_posted_delayed_origin_unproven');
+  });
+});
