@@ -173,6 +173,15 @@ describe('the LC codec', () => {
     expect(decodeLCUnder(loadPins('pins/main.json'), raw).links.length).toBe(2);
   });
 
+  it('needs 41 bytes for the anchor fields: kind, period and the 32-byte root', () => {
+    const raw = encodeLC(sample());
+    const cut = 4 + 8 + 40;
+    expect(code(() => decodeLC(raw.subarray(0, cut), 64)).canonical()).toBe(
+      '{"code":"finality_evidence_malformed","fields":{"got_len":"40","index":"0","part":"anchor","reason":"truncated","want_len":"41"}}',
+    );
+    expect(code(() => decodeLC(raw.subarray(0, cut + 1), 64)).fields.part).toBe('anchor_body');
+  });
+
   it('names the part that is truncated and keeps a non-UTF-8 profile byte-faithful', () => {
     const lc = sample();
     lc.profile = '\xff\xfe';

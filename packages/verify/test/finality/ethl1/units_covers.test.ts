@@ -272,3 +272,39 @@ describe('why covers has its own positional reader (the framework readHeader acc
     }
   });
 });
+
+describe('the positional RLP reader: length-of-length boundaries', () => {
+  const ones = (n: number): Uint8Array => Uint8Array.from({ length: n }, () => 1);
+  const tailOf = (...t: number[]): Uint8Array => list(...Array.from({ length: 12 }, () => uint(1n)), Uint8Array.from(t));
+
+  it('a list payload of exactly 55 bytes uses the short form (0xf7); 56 uses the long form', () => {
+    const item = cat(Uint8Array.of(0x80 + 42), ones(42)); // 43 bytes
+    const short = cat(Uint8Array.of(0xf7), ones(12), item);
+    expect(short.length).toBe(56);
+    expect(rlpHeaderItems(short)).toMatchObject({ reason: '', count: 13 });
+    const long = cat(Uint8Array.of(0xf8, 56), ones(12), cat(Uint8Array.of(0x80 + 43), ones(43)));
+    expect(rlpHeaderItems(long)).toMatchObject({ reason: '', count: 13 });
+  });
+
+  it('accepts a four-byte list length and a four-byte string length (a 16 MiB header)', () => {
+    const n = 1 << 24; // the last item: 0xbb + 4 length bytes (no leading zero byte needs n >= 2^24) + n bytes
+    const total = 12 + 5 + n; // payload length of the list
+    const body = new Uint8Array(total);
+    body.fill(1, 0, 12);
+    body.set([0xbb, (n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255], 12);
+    const raw = cat(Uint8Array.of(0xfb, (total >>> 24) & 255, (total >>> 16) & 255, (total >>> 8) & 255, total & 255), body);
+    expect(rlpHeaderItems(raw)).toMatchObject({ reason: '', count: 13 });
+    // five length bytes are never accepted
+    expect(rlpHeaderItems(Uint8Array.of(0xfc, 1, 0, 0, 0, 0)).reason).toBe('list_length');
+    expect(rlpHeaderItems(tailOf(0xbc, 1, 0, 0, 0, 0)).reason).toBe('string_length');
+    expect(rlpHeaderItems(tailOf(0xfc, 1, 0, 0, 0, 0)).reason).toBe('list_length');
+  });
+
+  it('a length-of-length that exactly fills the remaining bytes is parsed, not refused as truncated', () => {
+    expect(rlpHeaderItems(Uint8Array.of(0xf8, 100)).reason).toBe('list_length_mismatch');
+    expect(rlpHeaderItems(tailOf(0xb8, 100)).reason).toBe('item_overruns');
+    expect(rlpHeaderItems(tailOf(0xf8, 100)).reason).toBe('item_overruns');
+    expect(rlpHeaderItems(tailOf(0xb8)).reason).toBe('string_length');
+    expect(rlpHeaderItems(tailOf(0xf8)).reason).toBe('list_length');
+  });
+});

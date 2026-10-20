@@ -1,0 +1,77 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "320 hand mutants (tools/mutation-ethl1/mutants.json: comparison flips, negations, boundary shifts, guard removals, field and argument swaps, constant and offset changes) over src/proof-v2/finality/ethl1/*.ts, applied in memory by tools/mutation-ethl1/vitest.mutation.config.ts and run by tools/mutation-ethl1/run.mjs against test/finality/ethl1 with --bail=1. Pass 1 judged mutants 1-234 (50 survivors); the new tests added after it (units_ssz, units_verify, units_covers, units_codec additions) are re-run against the survivors and the 86 mutants pass 1 had not reached in pass 2. The mutants below are equivalent to the original; each reason is a proof from the code.",
+  "equivalents": [
+    {
+      "file": "verify.ts",
+      "mutant": "head !== undefined && lc.anchorPeriod > head  ->  lc.anchorPeriod >= head   (ledger_behind off by one)",
+      "reason": "the branch is only reached when anchorFor(p, lc.anchorPeriod) found no entry; the ledger head is itself an entry, so anchorPeriod can never equal it there: > and >= give the same result"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "n * 3 < SyncCommitteeSize * 2  ->  n * 3 <= SyncCommitteeSize * 2   (floor off by one)",
+      "reason": "n * 3 is a multiple of 3 and 1024 is not, so n * 3 == 1024 never occurs: < and <= are the same predicate"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "isFinal && fs === 0n  ->  isFinal && fs <= 0n",
+      "reason": "fs is a uint64 read from 8 bytes (bigint, never negative), so fs <= 0 is fs == 0"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "newEpoch > prevEpoch  ->  newEpoch >= prevEpoch (window rule)",
+      "reason": "for newEpoch == prevEpoch the second operand newEpoch - prevEpoch is 0, and 0 > wsp_epochs is false for every uint64 wsp_epochs, so the conjunction is false in both forms"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "finalizedPeriod === storePeriod + 1n  ->  finalizedPeriod >= storePeriod + 1n (rotation)",
+      "reason": "finalizedPeriod <= attestedPeriod <= signaturePeriod (slot order fs <= as < ss) and signaturePeriod <= storePeriod + 1 (period rules), so finalizedPeriod > storePeriod + 1 cannot occur"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "if (fs > this.finSlot) this.finSlot = fs  ->  if (fs >= this.finSlot) this.finSlot = fs",
+      "reason": "at fs == finSlot the assignment stores the value already held"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "if (isFinal) this.enforce(sigPeriod, signing.root)  ->  if (!isFinal) ... / applied to every update",
+      "reason": "the signing committee of every update is the current committee (installed from a ledger-checked anchor, or rotated in from a committee whose ledger label attestedPeriod+1 was enforced when it was learned) or the next committee (enforced with label attestedPeriod+1 == signingPeriod when learned): enforcing again against the same ledger entry at the signing step can neither fail where the earlier enforcement passed nor pass where it failed; the rule is kept as the spec's defence in depth (RB11-C1A F2) and its removal is not observable from any evidence"
+    },
+    {
+      "file": "ssz.ts",
+      "mutant": "const index = gindex % (1n << BigInt(depth))  ->  const index = gindex (normalized branch)",
+      "reason": "the fold reads only bits 0..depth-1 of index ((index >> i) & 1 for i < depth); gindex and gindex mod 2^depth have the same low depth bits"
+    },
+    {
+      "file": "electra.ts",
+      "mutant": "n > electraMaxExtraData  ->  n >= electraMaxExtraData (extra_data_length)",
+      "reason": "the header_length check before it limits the header to 860 bytes, so n = length - 828 - ... <= 32 always; the extra_data_length refusal is a second, unreachable statement of the same bound (kept as in Go)"
+    },
+    {
+      "file": "electra.ts",
+      "mutant": "fin > b.length  ->  fin >= b.length (update and final update finalized offset)",
+      "reason": "fin is at most fixed + 860 while b.length is at least fixed + 2 * 828, so fin < b.length whenever the other two bounds hold: the third bound is unreachable (kept as in Go)"
+    },
+    {
+      "file": "covers.ts",
+      "mutant": "prev.number === 0n || cur.number !== prev.number - 1n  ->  cur.number !== prev.number - 1n",
+      "reason": "for prev.number == 0 the right operand compares cur.number (a non-negative bigint) with -1n, which is always unequal: both forms refuse with reason number"
+    },
+    {
+      "file": "covers.ts",
+      "mutant": "n === 1 && p.length > 1 && p[1] < 0x80  ->  n === 1 && p[1] < 0x80 (rlp noncanonical single byte)",
+      "reason": "when p.length == 1 the element p[1] is undefined and undefined < 0x80 is false in JavaScript; the guard exists for Go, where the index would be out of range"
+    },
+    {
+      "file": "bls.ts",
+      "mutant": "if (p.is0()) throw new Error('identity public key') removed (decodeG1) / the same for decodeG2",
+      "reason": "strictCompressed has already refused every flag pattern except the finite compressed ones 100 and 101, and a finite compressed encoding never decodes to the point at infinity"
+    },
+    {
+      "file": "verify.ts",
+      "mutant": "signing domain epoch at signature slot 0 (signatureSlot === 0n ? 1n : ...)",
+      "reason": "retargeted onto signingDomainEpoch and killed by units_ssz 'the signing-domain epoch is epoch(saturating_sub(signature_slot, 1))' (slot 0 maps to epoch 0); listed here only because it was an unreachable branch of update() before the extraction"
+    }
+  ],
+  "open": []
+}

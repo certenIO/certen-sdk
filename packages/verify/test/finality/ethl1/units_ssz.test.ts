@@ -227,3 +227,31 @@ describe('the signing-domain epoch is epoch(saturating_sub(signature_slot, 1))',
     expect(e(32n * 353024n + 1n)).toBe(353024n);
   });
 });
+
+describe('hash_tree_root(ExecutionPayloadHeader) depends on every field byte', () => {
+  it('changes when any byte of the 584-byte fixed part or of extra_data changes, except the extra_data offset', async () => {
+    const { executionHeaderRoot, hexLower } = await import('../../../src/proof-v2/finality/ethl1/index.js').then(async (m) => ({
+      executionHeaderRoot: m.executionHeaderRoot,
+      hexLower: (await import('../../../src/proof-v2/finality/state.js')).hexLower,
+    }));
+    const base = new Uint8Array(584 + 5);
+    for (let i = 0; i < base.length; i++) base[i] = (i * 7 + 1) & 0xff;
+    const root = hexLower(executionHeaderRoot(base));
+    const seen = new Set<string>([root]);
+    for (let i = 0; i < base.length; i++) {
+      const b = Uint8Array.from(base);
+      b[i] = b[i]! ^ 0x55;
+      const r = hexLower(executionHeaderRoot(b));
+      if (i >= 436 && i < 440) expect(r, `offset byte ${i}`).toBe(root);
+      else {
+        expect(r, `byte ${i}`).not.toBe(root);
+        seen.add(r);
+      }
+    }
+    expect(seen.size).toBe(base.length - 4 + 1);
+    // the length of extra_data is mixed in: the same content with a different length differs
+    const longer = new Uint8Array(584 + 6);
+    longer.set(base.subarray(0, 589), 0);
+    expect(hexLower(executionHeaderRoot(longer))).not.toBe(root);
+  });
+});
