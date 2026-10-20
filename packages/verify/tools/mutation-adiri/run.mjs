@@ -24,12 +24,13 @@ const timeoutMs = Number(opt('--timeout', '240000'));
 const U = 'test/finality/adiri/units_';
 const F = 'test/finality/adiri/vectors_fast.test.ts';
 /** the test files that judge each source file (the whole set takes minutes per mutant) */
+const X = `${U}survivors.test.ts`;
 const TESTS = {
-  'cfa1.ts': `${U}cfa1.test.ts,${F}`,
-  'record.ts': `${U}record.test.ts,${F}`,
-  'chain.ts': `${U}chain.test.ts,${F}`,
-  'sigs.ts': `${U}sigs.test.ts,${U}chain.test.ts`,
-  'kind.ts': `${U}kind.test.ts,${F}`,
+  'cfa1.ts': `${X},` + `${U}cfa1.test.ts,${F}`,
+  'record.ts': `${X},` + `${U}record.test.ts,${F}`,
+  'chain.ts': `${X},` + `${U}chain.test.ts,${F}`,
+  'sigs.ts': `${X},` + `${U}sigs.test.ts,${U}chain.test.ts`,
+  'kind.ts': `${X},` + `${U}kind.test.ts,${F}`,
 };
 const mutants = JSON.parse(readFileSync(join(here, 'mutants.json'), 'utf8')).mutants.map((m, i) => ({ id: i + 1, ...m }));
 const todo = mutants.filter((m) => (!ids || ids.has(m.id)) && (!only || `${m.id} ${m.file} ${m.note}`.includes(only)));

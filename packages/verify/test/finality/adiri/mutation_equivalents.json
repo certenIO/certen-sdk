@@ -1,0 +1,33 @@
+{
+  "format": "certen-adiri-ts-mutation-equivalents/1",
+  "note": "Hand-run operator mutation gate: node tools/mutation-adiri/gen.mjs writes 282 mutants (tools/mutation-adiri/mutants.json) over cfa1.ts, record.ts, chain.ts, sigs.ts and kind.ts; node tools/mutation-adiri/run.mjs applies each in memory against the unit tests and the quick vector subset. Pass 1: 243 killed, 39 survived. Pass 2 (the 39 survivors, after units_survivors.test.ts): 15 killed, 24 survive. Each survivor below is an equivalent mutant: the mutated program returns the same value or throws the same state for every input, for the reason given. ids refer to mutants.json (order of generation).",
+  "pass1": { "mutants": 282, "killed": 243, "survived": 39 },
+  "pass2": { "rerun": 39, "killed": 15, "survived": 24 },
+  "killed_by_units_survivors": [21, 22, 34, 38, 60, 92, 99, 100, 112, 128, 129, 130, 169, 187, 216],
+  "equivalents": [
+    { "id": 9, "site": "cfa1.ts:43 committeeOf: idx >= tables.length -> >", "reason": "idx == tables.length reads tables[idx], which is undefined: the same value the guard returns" },
+    { "id": 11, "site": "cfa1.ts:49 nextOf: idx >= tables.length -> >", "reason": "same as 9 for next_idx" },
+    { "id": 20, "site": "cfa1.ts:123 signer loop j < n -> <=", "reason": "the extra pass reads signers[n] = undefined, and every comparison with undefined is false: no refusal" },
+    { "id": 28, "site": "cfa1.ts:125 j > 0 -> j >= 0", "reason": "at j = 0, signers[-1] is undefined and s <= undefined is false: the same as the j > 0 guard" },
+    { "id": 91, "site": "record.ts:219 fromHex: length >= 2 -> > 2", "reason": "the string \"0x\" alone decodes to the empty byte string with or without the prefix being stripped (x is not a digit)" },
+    { "id": 93, "site": "record.ts:207 hexPrefix: i + 1 < length -> <=", "reason": "hexPrefix is called only on even-length strings (fromHex pads an odd one), where i + 1 == length never occurs for even i" },
+    { "id": 96, "site": "record.ts:226 decode0x: length < 2 -> <= 2", "reason": "\"0x\" decodes to an empty string, which every caller (32-byte hash, 20-byte address) refuses by length anyway: undefined and a refused length are the same refusal" },
+    { "id": 131, "site": "record.ts:207 hexPrefix: i + 1 -> i + 0", "reason": "for an even-length string and even i, i < length and i + 1 < length hold together" },
+    { "id": 142, "site": "chain.ts:101 dup0 >= 0 -> > 0", "reason": "firstDuplicate names the LATER copy, so it never returns index 0" },
+    { "id": 143, "site": "chain.ts:116 dup >= 0 -> > 0", "reason": "same as 142" },
+    { "id": 144, "site": "chain.ts:51 keyStr loop i < length -> <=", "reason": "appends the same extra NUL character to every key string: equality and set membership are unchanged" },
+    { "id": 153, "site": "chain.ts:82 asCount: v > MAX_SAFE -> >=", "reason": "at v == MAX_SAFE_INTEGER both branches return MAX_SAFE_INTEGER" },
+    { "id": 205, "site": "sigs.ts:52 canonical(): coord >= p -> > p", "reason": "differs only for a coordinate equal to p exactly, which noble reduces to 0; accepting it needs a G2 subgroup point with a zero Fp2 component, none of which is known or constructible (and a signature, decodeSignature, has its own x >= p check, killed by the x = p vector in units_sigs)" },
+    { "id": 207, "site": "sigs.ts:49 canonical(): c < coordinates -> <=", "reason": "the extra pass reads the empty slice after the last coordinate, whose value 0 is below p" },
+    { "id": 209, "site": "sigs.ts:115 keyString loop i < length -> <=", "reason": "same extra NUL suffix on every key string as 144" },
+    { "id": 215, "site": "sigs.ts:84 largest = y > (p-1)/2 -> >=", "reason": "differs only for y == (p-1)/2; that point and its negation are both outside the prime-order subgroup (none in it is constructible), so the verdict is 'subgroup' either way" },
+    { "id": 218, "site": "sigs.ts:274 n > 0 -> n >= 0", "reason": "combinationHolds(terms, 0) is true, so the branch is not taken" },
+    { "id": 223, "site": "sigs.ts:39 HALF_P = (p-1)/2 -> (p-0)/2", "reason": "p is odd and BigInt division floors: (p-0)/2 == (p-1)/2" },
+    { "id": 243, "site": "kind.ts:200 slot loop i >= 0 -> > 0", "reason": "N mod 8191 < 2^16 is consumed in the two lowest bytes; the loop never reaches i = 0 with n > 0" },
+    { "id": 244, "site": "kind.ts:85 maxHeaders < limit -> <=", "reason": "at maxHeaders == limit both give the same limit" },
+    { "id": 247, "site": "kind.ts:117 consensusRootOf content.length > 0 -> >= 0", "reason": "on empty content split() throws RlpError, which is caught and returns the zero hash: the same as leaving the loop" },
+    { "id": 249, "site": "kind.ts:200 n > 0n -> n >= 0n", "reason": "n == 0 writes zero bytes into a zero slot" },
+    { "id": 250, "site": "kind.ts:258 maxHeaders > MAX_SAFE -> >=", "reason": "at MAX_SAFE_INTEGER both branches give MAX_SAFE_INTEGER" },
+    { "id": 254, "site": "kind.ts:200 i >= 0 && n > 0n -> ||", "reason": "n < 2^16 empties after two bytes and the remaining iterations write zeros; the loop ends at i = -1 either way" }
+  ]
+}
