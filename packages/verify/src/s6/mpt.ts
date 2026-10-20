@@ -80,17 +80,35 @@ function decodeRef(buf: Uint8Array): [Node, Uint8Array] {
 
 const hexOf = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
+/**
+ * A proof database: every node keyed by its own keccak256. Built once for a node set that is read many times (a kind that makes dozens
+ * of state reads from one evidence), so the nodes are hashed once and not once per read.
+ */
+export class ProofDb {
+  private readonly db = new Map<string, Uint8Array>();
+  constructor(nodes: readonly Uint8Array[]) {
+    for (const n of nodes) {
+      if (n.length === 0) fail('empty proof node');
+      this.db.set(hexOf(keccak_256(n)), n);
+    }
+  }
+
+  get(hash: Uint8Array): Uint8Array | undefined {
+    return this.db.get(hexOf(hash));
+  }
+}
+
 /** trie.VerifyProof: the value at key under root, undefined for a proven absence; MptError for anything else. */
 export function verifyProof(root: Uint8Array, key: Uint8Array, nodes: readonly Uint8Array[]): Uint8Array | undefined {
-  const db = new Map<string, Uint8Array>();
-  for (const n of nodes) {
-    if (n.length === 0) fail('empty proof node');
-    db.set(hexOf(keccak_256(n)), n);
-  }
+  return verifyProofIn(new ProofDb(nodes), root, key);
+}
+
+/** verifyProof over a proof database built once. */
+export function verifyProofIn(db: ProofDb, root: Uint8Array, key: Uint8Array): Uint8Array | undefined {
   let k = hexKey(key);
   let want = root;
   for (let i = 0; ; i++) {
-    const buf = db.get(hexOf(want));
+    const buf = db.get(want);
     if (buf === undefined) fail(`proof node ${i} (hash ${hexOf(want)}) missing`);
     let n: Node;
     try {
