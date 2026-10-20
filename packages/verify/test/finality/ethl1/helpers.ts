@@ -137,8 +137,15 @@ export const lcOf = (c: VCase): LC => {
   return lc;
 };
 
+/**
+ * The key cache the vector shards share inside one worker when ETHL1_SHARED_KEYS=1 (set only by the mutation gate, which judges the
+ * whole set hundreds of times): a key is still decoded and subgroup-checked by the code under test, once per worker. Without the
+ * variable every case uses a fresh cache, which is the cost of a real verification.
+ */
+const shared = process.env.ETHL1_SHARED_KEYS === '1' ? new KeyCache() : undefined;
+
 /** The TypeScript verdict of one case, rendered canonically. A non-named failure is a test failure, never a verdict. */
-export function judge(c: VCase, keyCache?: KeyCache): string {
+export function judge(c: VCase, keyCache: KeyCache | undefined = shared): string {
   try {
     if (c.kind === 'head') {
       const h = verifyFinalizedHead(loadPins(c.pins!), lcOf(c), { keyCache });

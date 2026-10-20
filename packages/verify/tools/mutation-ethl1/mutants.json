@@ -1,0 +1,1925 @@
+{
+ "format": "certen-ethl1-ts-mutants/1",
+ "mutants": [
+  {
+   "file": "verify.ts",
+   "find": "if (lc.profile !== ProfileLC)",
+   "replace": "if (lc.profile === ProfileLC)",
+   "note": "profile check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.links.length > p.maxLinks)",
+   "replace": "if (lc.links.length >= p.maxLinks)",
+   "note": "link bound off by one"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.anchorKind !== 1 && lc.anchorKind !== 2)",
+   "replace": "if (lc.anchorKind !== 1 || lc.anchorKind !== 2)",
+   "note": "anchor kind && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.anchorKind !== 1 && lc.anchorKind !== 2)",
+   "replace": "if (lc.anchorKind !== 1 && lc.anchorKind !== 3)",
+   "note": "anchor kind 2 -> 3"
+  },
+  {
+   "file": "verify.ts",
+   "find": "  if (lc.anchorKind === 1) {\n    if (lc.anchorBody.layout",
+   "replace": "  if (lc.anchorKind !== 1) {\n    if (lc.anchorBody.layout",
+   "note": "step-1 anchor kind branch flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.anchorBody.layout !== Layout.None)",
+   "replace": "if (lc.anchorBody.layout === Layout.None)",
+   "note": "kind-1 layout byte check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.anchorBody.ssz.length !== SyncCommitteeBytes)",
+   "replace": "if (lc.anchorBody.ssz.length === SyncCommitteeBytes)",
+   "note": "kind-1 body length check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.anchorBody.ssz.length !== SyncCommitteeBytes)",
+   "replace": "if (lc.anchorBody.ssz.length > SyncCommitteeBytes)",
+   "note": "kind-1 body length: != -> >"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lc.anchorBody.ssz.length !== SyncCommitteeBytes)",
+   "replace": "if (lc.anchorBody.ssz.length < SyncCommitteeBytes)",
+   "note": "kind-1 body length: != -> <"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (head !== undefined && lc.anchorPeriod > head)",
+   "replace": "if (head !== undefined && lc.anchorPeriod >= head)",
+   "note": "ledger_behind off by one"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (head !== undefined && lc.anchorPeriod > head)",
+   "replace": "if (head === undefined && lc.anchorPeriod > head!)",
+   "note": "ledger_behind head test negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);\n    if (!eq(lc.anchorRoot",
+   "replace": "if (eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);\n    if (!eq(lc.anchorRoot",
+   "note": "kind-1 committee root check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!eq(lc.anchorRoot, a.committeeRoot))",
+   "replace": "if (eq(lc.anchorRoot, a.committeeRoot))",
+   "note": "kind-1 anchor root check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "w.finSlot = lc.anchorPeriod * EpochsPerPeriod * SlotsPerEpoch;",
+   "replace": "w.finSlot = (lc.anchorPeriod + 1n) * EpochsPerPeriod * SlotsPerEpoch;",
+   "note": "kind-1 store slot one period late"
+  },
+  {
+   "file": "verify.ts",
+   "find": "w.finSlot = lc.anchorPeriod * EpochsPerPeriod * SlotsPerEpoch;",
+   "replace": "w.finSlot = lc.anchorPeriod * EpochsPerPeriod;",
+   "note": "kind-1 store slot in epochs"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (a.blockRoot === null) throw pinUnknown",
+   "replace": "if (a.blockRoot !== null) throw pinUnknown",
+   "note": "kind-2 missing block_root test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!eq(lc.anchorRoot, a.blockRoot))",
+   "replace": "if (eq(lc.anchorRoot, a.blockRoot))",
+   "note": "kind-2 anchor root check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (periodOf(slot) !== lc.anchorPeriod)",
+   "replace": "if (periodOf(slot) === lc.anchorPeriod)",
+   "note": "kind-2 period label check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!w.headerValid(b.header)) throw bootstrapInvalid('header_exec_branch', slot);",
+   "replace": "if (w.headerValid(b.header)) throw bootstrapInvalid('header_exec_branch', slot);",
+   "note": "bootstrap header check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!eq(root, a.blockRoot)) throw pinMismatch",
+   "replace": "if (eq(root, a.blockRoot)) throw pinMismatch",
+   "note": "bootstrap header root vs block_root negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!isValidNormalizedMerkleBranch(c.root, b.committeeBranch,",
+   "replace": "if (isValidNormalizedMerkleBranch(c.root, b.committeeBranch,",
+   "note": "bootstrap committee branch check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "gindicesOf(b.shape).current, b.header.beacon.stateRoot",
+   "replace": "gindicesOf(b.shape).next, b.header.beacon.stateRoot",
+   "note": "bootstrap committee gindex current -> next"
+  },
+  {
+   "file": "verify.ts",
+   "find": "    if (!eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);\n    w.finSlot = slot;",
+   "replace": "    if (eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);\n    w.finSlot = slot;",
+   "note": "kind-2 committee root vs ledger negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "w.finSlot = slot;",
+   "replace": "w.finSlot = lc.anchorPeriod * EpochsPerPeriod * SlotsPerEpoch;",
+   "note": "kind-2 store slot = period start"
+  },
+  {
+   "file": "verify.ts",
+   "find": "periodsCrossed: periodOf(final.signatureSlot) - lc.anchorPeriod",
+   "replace": "periodsCrossed: periodOf(final.signatureSlot) + lc.anchorPeriod",
+   "note": "periods_crossed sign"
+  },
+  {
+   "file": "verify.ts",
+   "find": "participants: aggregateCount(final.aggregate),",
+   "replace": "participants: aggregateCount(final.aggregate) - 1,",
+   "note": "participants off by one"
+  },
+  {
+   "file": "verify.ts",
+   "find": "epoch: epochOf(final.finalized.beacon.slot),",
+   "replace": "epoch: epochOf(final.attested.beacon.slot),",
+   "note": "result epoch from attested"
+  },
+  {
+   "file": "verify.ts",
+   "find": "execHash: final.finalized.execHash,",
+   "replace": "execHash: final.attested.execHash,",
+   "note": "result exec hash from attested"
+  },
+  {
+   "file": "verify.ts",
+   "find": "for (let i = 0; i < links.length; i++) w.update(i, links[i]!, false);\n  w.update(links.length, final, true);",
+   "replace": "for (let i = 0; i < links.length; i++) w.update(i, links[i]!, false);\n  w.update(links.length, final, false);",
+   "note": "final update treated as a link"
+  },
+  {
+   "file": "verify.ts",
+   "find": "w.update(links.length, final, true);",
+   "replace": "w.update(links.length - 1, final, true);",
+   "note": "final index off by one"
+  },
+  {
+   "file": "verify.ts",
+   "find": "    case Layout.None:\n      throw evidenceMalformed(part, index, 'layout_byte_zero', 0, 1);",
+   "replace": "    case 99:\n      throw evidenceMalformed(part, index, 'layout_byte_zero', 0, 1);",
+   "note": "layout byte zero case dropped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "    case Layout.Gloas:\n    case Layout.Electra:\n      return;",
+   "replace": "    case Layout.Gloas:\n      return;",
+   "note": "electra layout byte refused"
+  },
+  {
+   "file": "verify.ts",
+   "find": "  throw evidenceMalformed(part, index, 'layout_byte_unknown', lb.layout, 2);",
+   "replace": "  throw evidenceMalformed(part, index, 'layout_byte_unknown', lb.layout, 3);",
+   "note": "unknown layout want_len"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.layout === Layout.Electra) return decodeElectraBootstrap(lb.ssz);",
+   "replace": "if (lb.layout !== Layout.Electra) return decodeElectraBootstrap(lb.ssz);",
+   "note": "bootstrap layout dispatch flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.ssz.length !== LightClientBootstrapSize)",
+   "replace": "if (lb.ssz.length === LightClientBootstrapSize)",
+   "note": "gloas bootstrap length check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.ssz.length !== LightClientBootstrapSize)",
+   "replace": "if (lb.ssz.length < LightClientBootstrapSize)",
+   "note": "gloas bootstrap length: != -> <"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.layout === Layout.Electra) return decodeElectraUpdate(lb.ssz, index);",
+   "replace": "if (lb.layout !== Layout.Electra) return decodeElectraUpdate(lb.ssz, index);",
+   "note": "update layout dispatch flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.ssz.length !== LightClientUpdateSize)",
+   "replace": "if (lb.ssz.length === LightClientUpdateSize)",
+   "note": "gloas update length check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.ssz.length !== LightClientUpdateSize)",
+   "replace": "if (lb.ssz.length < LightClientUpdateSize)",
+   "note": "gloas update length: != -> <"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.layout === Layout.Electra) return decodeElectraFinalityUpdate(lb.ssz);",
+   "replace": "if (lb.layout !== Layout.Electra) return decodeElectraFinalityUpdate(lb.ssz);",
+   "note": "final update layout dispatch flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.ssz.length !== LightClientFinalityUpdateSize)",
+   "replace": "if (lb.ssz.length === LightClientFinalityUpdateSize)",
+   "note": "gloas final length check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (lb.ssz.length !== LightClientFinalityUpdateSize)",
+   "replace": "if (lb.ssz.length < LightClientFinalityUpdateSize)",
+   "note": "gloas final length: != -> <"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (f === undefined || f.layout !== layout) throw forkUnsupported(slot, epochOf(slot), layoutName(layout));",
+   "replace": "if (f === undefined && f.layout !== layout) throw forkUnsupported(slot, epochOf(slot), layoutName(layout));",
+   "note": "checkForkOfSlot || -> &&"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (f === undefined || f.layout !== layout) throw forkUnsupported(slot, epochOf(slot), layoutName(layout));",
+   "replace": "if (f === undefined || f.layout === layout) throw forkUnsupported(slot, epochOf(slot), layoutName(layout));",
+   "note": "checkForkOfSlot layout comparison flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (f === undefined || f.layout !== layout) throw forkUnsupported(slot, epochOf(slot), layoutName(layout));",
+   "replace": "if (f === undefined || f.layout !== layout) throw forkUnsupported(slot, epochOf(slot) + 1n, layoutName(layout));",
+   "note": "checkForkOfSlot epoch field"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (f === undefined) throw forkUnsupported(slot, epochOf(slot), layoutName(h.shape));",
+   "replace": "if (f !== undefined) throw forkUnsupported(slot, epochOf(slot), layoutName(h.shape));",
+   "note": "headerValid fork lookup flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      if (f.layout !== Layout.Electra) throw forkUnsupported",
+   "replace": "      if (f.layout === Layout.Electra) throw forkUnsupported",
+   "note": "electra header in non-electra fork check flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "g = gindexExecHashGloas;",
+   "replace": "g = gindexExecHashDeneb;",
+   "note": "gloas header gindex swapped for deneb"
+  },
+  {
+   "file": "verify.ts",
+   "find": "g = gindexExecHashDeneb;",
+   "replace": "g = gindexExecHashGloas;",
+   "note": "carried-forward header gindex swapped for gloas"
+  },
+  {
+   "file": "verify.ts",
+   "find": "g = gindexExecHashDeneb;",
+   "replace": "g = 412n;",
+   "note": "carried-forward header gindex deneb -> capella"
+  },
+  {
+   "file": "verify.ts",
+   "find": "return isValidMerkleBranch(executionHeaderRoot(h.exec!), h.branch, depth,",
+   "replace": "return isValidMerkleBranch(h.execHash, h.branch, depth,",
+   "note": "electra header leaf = block hash instead of payload root"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (a !== undefined && !eq(a.committeeRoot, root)) throw pinMismatch(label, a.committeeRoot, root);",
+   "replace": "if (a !== undefined && eq(a.committeeRoot, root)) throw pinMismatch(label, a.committeeRoot, root);",
+   "note": "ledger enforce negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (a !== undefined && !eq(a.committeeRoot, root)) throw pinMismatch(label, a.committeeRoot, root);",
+   "replace": "if (a === undefined || !eq(a.committeeRoot, root)) throw pinMismatch(label, a.committeeRoot, root);",
+   "note": "ledger enforce: missing entry refused"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (n * 3 < SyncCommitteeSize * 2 || n < this.p.minParticipants)",
+   "replace": "if (n * 3 <= SyncCommitteeSize * 2 || n < this.p.minParticipants)",
+   "note": "floor 3n<2*512 off by one"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (n * 3 < SyncCommitteeSize * 2 || n < this.p.minParticipants)",
+   "replace": "if (n * 3 < SyncCommitteeSize * 2 || n <= this.p.minParticipants)",
+   "note": "pins min participants off by one"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (n * 3 < SyncCommitteeSize * 2 || n < this.p.minParticipants)",
+   "replace": "if (n * 3 < SyncCommitteeSize * 2 && n < this.p.minParticipants)",
+   "note": "floor || -> &&"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (n * 3 < SyncCommitteeSize * 2 || n < this.p.minParticipants)",
+   "replace": "if (n * 3 < SyncCommitteeSize * 2)",
+   "note": "pins min participants dropped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "throw participationInsufficient(idx, n, MinParticipantsFloor, SyncCommitteeSize);",
+   "replace": "throw participationInsufficient(idx, n, this.p.minParticipants, SyncCommitteeSize);",
+   "note": "required field from pins"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!this.headerValid(u.attested)) throw li('attested_header_exec_branch');",
+   "replace": "if (this.headerValid(u.attested)) throw li('attested_header_exec_branch');",
+   "note": "attested header check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(ss > as && as >= fs)) throw li('slot_order');",
+   "replace": "if (!(ss >= as && as >= fs)) throw li('slot_order');",
+   "note": "slot order: ss > as -> >="
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(ss > as && as >= fs)) throw li('slot_order');",
+   "replace": "if (!(ss > as && as > fs)) throw li('slot_order');",
+   "note": "slot order: as >= fs -> >"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(ss > as && as >= fs)) throw li('slot_order');",
+   "replace": "if (!(ss > as || as >= fs)) throw li('slot_order');",
+   "note": "slot order && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (sigPeriod !== storePeriod && sigPeriod !== storePeriod + 1n) {",
+   "replace": "if (sigPeriod !== storePeriod || sigPeriod !== storePeriod + 1n) {",
+   "note": "next-known period rule && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (sigPeriod !== storePeriod && sigPeriod !== storePeriod + 1n) {",
+   "replace": "if (sigPeriod !== storePeriod && sigPeriod !== storePeriod + 2n) {",
+   "note": "next-known period rule +1 -> +2"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (sigPeriod !== storePeriod && sigPeriod !== storePeriod + 1n) {\n        if (isFinal) throw periodGap(sigPeriod, storePeriod);",
+   "replace": "if (sigPeriod !== storePeriod && sigPeriod !== storePeriod + 1n) {\n        if (!isFinal) throw periodGap(sigPeriod, storePeriod);",
+   "note": "next-known period rule final/link swapped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "} else if (sigPeriod !== storePeriod) {",
+   "replace": "} else if (sigPeriod === storePeriod) {",
+   "note": "next-unknown period rule negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "} else if (sigPeriod !== storePeriod) {\n      if (isFinal) throw periodGap(sigPeriod, storePeriod);",
+   "replace": "} else if (sigPeriod !== storePeriod) {\n      if (!isFinal) throw periodGap(sigPeriod, storePeriod);",
+   "note": "next-unknown period rule final/link swapped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const isSyncUpdate = !isFinal && !branchAllZero(u.nextBranch);",
+   "replace": "const isSyncUpdate = isFinal && !branchAllZero(u.nextBranch);",
+   "note": "isSyncUpdate !isFinal flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const isSyncUpdate = !isFinal && !branchAllZero(u.nextBranch);",
+   "replace": "const isSyncUpdate = !isFinal && branchAllZero(u.nextBranch);",
+   "note": "isSyncUpdate branch test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const hasNextCommittee = this.next === undefined && isSyncUpdate && attestedPeriod === storePeriod;",
+   "replace": "const hasNextCommittee = this.next !== undefined && isSyncUpdate && attestedPeriod === storePeriod;",
+   "note": "hasNextCommittee next test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const hasNextCommittee = this.next === undefined && isSyncUpdate && attestedPeriod === storePeriod;",
+   "replace": "const hasNextCommittee = this.next === undefined && isSyncUpdate && attestedPeriod !== storePeriod;",
+   "note": "hasNextCommittee period test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const hasNextCommittee = this.next === undefined && isSyncUpdate && attestedPeriod === storePeriod;",
+   "replace": "const hasNextCommittee = this.next === undefined || isSyncUpdate && attestedPeriod === storePeriod;",
+   "note": "hasNextCommittee && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(as > this.finSlot || hasNextCommittee)) throw li('not_relevant');",
+   "replace": "if (!(as >= this.finSlot || hasNextCommittee)) throw li('not_relevant');",
+   "note": "relevance: as > finSlot -> >="
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(as > this.finSlot || hasNextCommittee)) throw li('not_relevant');",
+   "replace": "if (!(as > this.finSlot && hasNextCommittee)) throw li('not_relevant');",
+   "note": "relevance || -> &&"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (branchAllZero(u.finalityBranch)) throw li('not_finality');",
+   "replace": "if (!branchAllZero(u.finalityBranch)) throw li('not_finality');",
+   "note": "zero finality branch test negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (isFinal && fs === 0n) throw li('not_finality');",
+   "replace": "if (isFinal || fs === 0n) throw li('not_finality');",
+   "note": "final slot-zero && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (isFinal && fs === 0n) throw li('not_finality');",
+   "replace": "if (!isFinal && fs === 0n) throw li('not_finality');",
+   "note": "final slot-zero isFinal flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (isFinal && fs === 0n) throw li('not_finality');",
+   "replace": "if (isFinal && fs <= 0n) throw li('not_finality');",
+   "note": "final slot-zero == -> <= (equivalent)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "    if (fs === 0n) {\n      if (!isEmptyHeader(u.finalized)) throw li('finality_branch');",
+   "replace": "    if (fs !== 0n) {\n      if (!isEmptyHeader(u.finalized)) throw li('finality_branch');",
+   "note": "empty finalized header branch flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      if (!isEmptyHeader(u.finalized)) throw li('finality_branch');",
+   "replace": "      if (isEmptyHeader(u.finalized)) throw li('finality_branch');",
+   "note": "empty finalized header check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      if (!this.headerValid(u.finalized)) throw li('finalized_header_exec_branch');",
+   "replace": "      if (this.headerValid(u.finalized)) throw li('finalized_header_exec_branch');",
+   "note": "finalized header check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      finalizedRoot = hashTreeRootBeaconHeader(u.finalized.beacon);",
+   "replace": "      finalizedRoot = hashTreeRootBeaconHeader(u.attested.beacon);",
+   "note": "finalized root from attested header"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!isValidNormalizedMerkleBranch(finalizedRoot, u.finalityBranch, gi.finalized, u.attested.beacon.stateRoot)) throw li('finality_branch');",
+   "replace": "if (isValidNormalizedMerkleBranch(finalizedRoot, u.finalityBranch, gi.finalized, u.attested.beacon.stateRoot)) throw li('finality_branch');",
+   "note": "finality branch check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "u.finalityBranch, gi.finalized, u.attested.beacon.stateRoot",
+   "replace": "u.finalityBranch, gi.current, u.attested.beacon.stateRoot",
+   "note": "finality gindex finalized -> current"
+  },
+  {
+   "file": "verify.ts",
+   "find": "u.finalityBranch, gi.finalized, u.attested.beacon.stateRoot",
+   "replace": "u.finalityBranch, gi.finalized, u.finalized.beacon.stateRoot",
+   "note": "finality branch root = finalized state root"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      if (!isSyncUpdate) throw li('not_sync_committee_update');",
+   "replace": "      if (isSyncUpdate) throw li('not_sync_committee_update');",
+   "note": "link sync-update test negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (attestedPeriod === storePeriod && this.next !== undefined && !eq(this.next.root, learned.root)) throw li('next_committee_mismatch');",
+   "replace": "if (attestedPeriod !== storePeriod && this.next !== undefined && !eq(this.next.root, learned.root)) throw li('next_committee_mismatch');",
+   "note": "next mismatch period test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (attestedPeriod === storePeriod && this.next !== undefined && !eq(this.next.root, learned.root)) throw li('next_committee_mismatch');",
+   "replace": "if (attestedPeriod === storePeriod && this.next === undefined && !eq(this.next.root, learned.root)) throw li('next_committee_mismatch');",
+   "note": "next mismatch known test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (attestedPeriod === storePeriod && this.next !== undefined && !eq(this.next.root, learned.root)) throw li('next_committee_mismatch');",
+   "replace": "if (attestedPeriod === storePeriod && this.next !== undefined && eq(this.next.root, learned.root)) throw li('next_committee_mismatch');",
+   "note": "next mismatch root test negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!isValidNormalizedMerkleBranch(learned.root, u.nextBranch, gi.next, u.attested.beacon.stateRoot)) throw li('next_committee_branch');",
+   "replace": "if (isValidNormalizedMerkleBranch(learned.root, u.nextBranch, gi.next, u.attested.beacon.stateRoot)) throw li('next_committee_branch');",
+   "note": "next branch check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "u.nextBranch, gi.next, u.attested.beacon.stateRoot",
+   "replace": "u.nextBranch, gi.current, u.attested.beacon.stateRoot",
+   "note": "next gindex next -> current"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const signing = sigPeriod !== storePeriod ? this.next : this.cur;",
+   "replace": "const signing = sigPeriod === storePeriod ? this.next : this.cur;",
+   "note": "signing committee swapped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (isFinal) this.enforce(sigPeriod, signing.root);",
+   "replace": "if (!isFinal) this.enforce(sigPeriod, signing.root);",
+   "note": "final-signer ledger rule flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (isFinal) this.enforce(sigPeriod, signing.root);",
+   "replace": "this.enforce(sigPeriod, signing.root);",
+   "note": "ledger rule applied to links too (kill by link vectors?)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (isFinal) this.enforce(sigPeriod, signing.root);",
+   "replace": "if (isFinal) this.enforce(storePeriod, signing.root);",
+   "note": "final-signer ledger label = store period"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
+   "replace": "const domainEpoch = ss === 0n ? 0n : epochOf(ss);",
+   "note": "domain epoch of signature slot (not minus one)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
+   "replace": "const domainEpoch = ss === 0n ? 0n : epochOf(as);",
+   "note": "domain epoch of attested slot"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
+   "replace": "const domainEpoch = ss === 0n ? 1n : epochOf(ss - 1n);",
+   "note": "domain epoch at slot 0 (unreachable)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
+   "replace": "const domainEpoch = ss !== 0n ? 0n : epochOf(ss - 1n);",
+   "note": "domain epoch zero test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (fk === undefined) throw forkUnsupported(ss, epochOf(ss), layoutName(u.shape));",
+   "replace": "if (fk !== undefined) throw forkUnsupported(ss, epochOf(ss), layoutName(u.shape));",
+   "note": "domain fork lookup flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const msg = signingRoot(hashTreeRootBeaconHeader(u.attested.beacon), domain);",
+   "replace": "const msg = signingRoot(hashTreeRootBeaconHeader(u.finalized.beacon), domain);",
+   "note": "signed header = finalized"
+  },
+  {
+   "file": "verify.ts",
+   "find": "throw signatureInvalid(idx, ss, version, n);",
+   "replace": "throw signatureInvalid(idx, as, version, n);",
+   "note": "signature_invalid slot field"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const prevEpoch = EpochsPerPeriod * sigPeriod;",
+   "replace": "const prevEpoch = EpochsPerPeriod * storePeriod;",
+   "note": "window start = store period"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const prevEpoch = EpochsPerPeriod * sigPeriod;",
+   "replace": "const prevEpoch = EpochsPerPeriod * attestedPeriod;",
+   "note": "window start = attested period"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (newEpoch > prevEpoch && newEpoch - prevEpoch > this.anchor.wspEpochs)",
+   "replace": "if (newEpoch > prevEpoch && newEpoch - prevEpoch >= this.anchor.wspEpochs)",
+   "note": "window bound > -> >="
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (newEpoch > prevEpoch && newEpoch - prevEpoch > this.anchor.wspEpochs)",
+   "replace": "if (newEpoch > prevEpoch || newEpoch - prevEpoch > this.anchor.wspEpochs)",
+   "note": "window && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (newEpoch > prevEpoch && newEpoch - prevEpoch > this.anchor.wspEpochs)",
+   "replace": "if (newEpoch >= prevEpoch && newEpoch - prevEpoch > this.anchor.wspEpochs)",
+   "note": "window newEpoch > prev -> >= (equivalent)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const newEpoch = epochOf(fs);",
+   "replace": "const newEpoch = epochOf(as);",
+   "note": "window epoch from attested"
+  },
+  {
+   "file": "verify.ts",
+   "find": "    if (isFinal) return;\n",
+   "replace": "    if (!isFinal) return;\n",
+   "note": "final/link return flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const updateHasFinalizedNext = this.next === undefined && periodOf(fs) === attestedPeriod;",
+   "replace": "const updateHasFinalizedNext = this.next !== undefined && periodOf(fs) === attestedPeriod;",
+   "note": "finalized-next next test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const updateHasFinalizedNext = this.next === undefined && periodOf(fs) === attestedPeriod;",
+   "replace": "const updateHasFinalizedNext = this.next === undefined && periodOf(fs) !== attestedPeriod;",
+   "note": "finalized-next period test flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "const updateHasFinalizedNext = this.next === undefined && periodOf(fs) === attestedPeriod;",
+   "replace": "const updateHasFinalizedNext = this.next === undefined || periodOf(fs) === attestedPeriod;",
+   "note": "finalized-next && -> ||"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(fs > this.finSlot || updateHasFinalizedNext)) throw li('not_applied');",
+   "replace": "if (!(fs >= this.finSlot || updateHasFinalizedNext)) throw li('not_applied');",
+   "note": "apply: fs > finSlot -> >="
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (!(fs > this.finSlot || updateHasFinalizedNext)) throw li('not_applied');",
+   "replace": "if (!(fs > this.finSlot && updateHasFinalizedNext)) throw li('not_applied');",
+   "note": "apply || -> &&"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (finalizedPeriod !== storePeriod) throw li('finalized_period');",
+   "replace": "if (finalizedPeriod === storePeriod) throw li('finalized_period');",
+   "note": "finalized period check negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      this.enforce(attestedPeriod + 1n, learned!.root);\n      this.next = learned;",
+   "replace": "      this.enforce(attestedPeriod, learned!.root);\n      this.next = learned;",
+   "note": "first-learn ledger label attested (not +1)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      this.enforce(attestedPeriod + 1n, learned!.root);\n      this.next = learned;",
+   "replace": "      this.next = learned;",
+   "note": "first-learn ledger rule removed"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      this.enforce(attestedPeriod + 1n, learned!.root);\n      this.cur = this.next;",
+   "replace": "      this.enforce(attestedPeriod, learned!.root);\n      this.cur = this.next;",
+   "note": "rotation ledger label attested (not +1)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      this.enforce(attestedPeriod + 1n, learned!.root);\n      this.cur = this.next;",
+   "replace": "      this.cur = this.next;",
+   "note": "rotation ledger rule removed"
+  },
+  {
+   "file": "verify.ts",
+   "find": "} else if (finalizedPeriod === storePeriod + 1n) {",
+   "replace": "} else if (finalizedPeriod !== storePeriod + 1n) {",
+   "note": "rotation condition negated"
+  },
+  {
+   "file": "verify.ts",
+   "find": "} else if (finalizedPeriod === storePeriod + 1n) {",
+   "replace": "} else if (finalizedPeriod >= storePeriod + 1n) {",
+   "note": "rotation condition === -> >= (equivalent?)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "      this.cur = this.next;\n      this.next = learned;",
+   "replace": "      this.next = learned;",
+   "note": "rotation: current not advanced"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (fs > this.finSlot) this.finSlot = fs;",
+   "replace": "if (fs >= this.finSlot) this.finSlot = fs;",
+   "note": "finSlot update > -> >= (equivalent)"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (fs > this.finSlot) this.finSlot = fs;",
+   "replace": "if (fs < this.finSlot) this.finSlot = fs;",
+   "note": "finSlot update flipped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (n * 3 < SyncCommitteeSize * 2",
+   "replace": "if (n * 3 < SyncCommitteeSize * 3",
+   "note": "floor 2/3 -> 3/3"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "if (numExtra < 0) return false;",
+   "replace": "if (numExtra <= 0) return false;",
+   "note": "normalized branch: numExtra < 0 -> <= 0"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "for (let i = 0; i < numExtra; i++) if (!eq(branch[i]!, ZERO32)) return false;",
+   "replace": "for (let i = 0; i < numExtra; i++) if (eq(branch[i]!, ZERO32)) return false;",
+   "note": "normalized branch: extension must be zero negated"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "for (let i = 0; i < numExtra; i++) if (!eq(branch[i]!, ZERO32)) return false;",
+   "replace": "for (let i = 0; i < numExtra - 1; i++) if (!eq(branch[i]!, ZERO32)) return false;",
+   "note": "normalized branch: last extension node unchecked"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "isValidMerkleBranch(leaf, branch.slice(numExtra), depth, index, root)",
+   "replace": "isValidMerkleBranch(leaf, branch.slice(0, depth), depth, index, root)",
+   "note": "normalized branch: takes the leading nodes"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "if (((index >> BigInt(i)) & 1n) === 1n) v = sha2(branch[i]!, v);",
+   "replace": "if (((index >> BigInt(i)) & 1n) === 0n) v = sha2(branch[i]!, v);",
+   "note": "merkle branch side flipped"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const index = gindex % (1n << BigInt(depth));\n  const numExtra",
+   "replace": "const index = gindex;\n  const numExtra",
+   "note": "normalized branch index = gindex"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "return x.toString(2).length - 1;",
+   "replace": "return x.toString(2).length;",
+   "note": "floorLog2 off by one"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "n += x & 1;",
+   "replace": "n += x & 3;",
+   "note": "popcount mask"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "return ((s.bits[i >> 3]! >> (i % 8)) & 1) === 1;",
+   "replace": "return ((s.bits[i >> 3]! >> (7 - (i % 8))) & 1) === 1;",
+   "note": "bit order msb first"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "return ((s.bits[i >> 3]! >> (i % 8)) & 1) === 1;",
+   "replace": "return ((s.bits[i >> 3]! >> (i % 8)) & 1) !== 1;",
+   "note": "bit test negated"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "if (h.shape === Layout.Electra) {\n    const e = h.exec!;",
+   "replace": "if (h.shape !== Layout.Electra) {\n    const e = h.exec!;",
+   "note": "empty header: electra shape test flipped"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "if (e.length !== electraExecFixed ||",
+   "replace": "if (e.length === electraExecFixed ||",
+   "note": "empty header: extra_data length test flipped"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "!allZero(e.subarray(0, electraExecExtraOffAt)) ||",
+   "replace": "allZero(e.subarray(0, electraExecExtraOffAt)) ||",
+   "note": "empty header: leading zero test negated"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "!allZero(e.subarray(electraExecExtraOffAt + 4))",
+   "replace": "!allZero(e.subarray(electraExecExtraOffAt + 3))",
+   "note": "empty header: tail starts inside the offset"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "!allZero(e.subarray(electraExecExtraOffAt + 4))",
+   "replace": "!allZero(e.subarray(electraExecExtraOffAt + 5))",
+   "note": "empty header: tail skips a byte"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "if (!beaconIsZero(h.beacon) || !allZero(h.execHash)) return false;",
+   "replace": "if (!beaconIsZero(h.beacon) && !allZero(h.execHash)) return false;",
+   "note": "empty header || -> &&"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "for (const n of h.branch) if (!allZero(n)) return false;",
+   "replace": "for (const n of h.branch) if (allZero(n)) return false;",
+   "note": "empty header: branch test negated"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "return h.slot === 0n && h.proposerIndex === 0n && allZero(h.parentRoot) && allZero(h.stateRoot) && allZero(h.bodyRoot);",
+   "replace": "return h.slot === 0n && h.proposerIndex === 0n && allZero(h.parentRoot) && allZero(h.stateRoot);",
+   "note": "beaconIsZero ignores body root"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "return h.slot === 0n && h.proposerIndex === 0n && allZero(h.parentRoot)",
+   "replace": "return h.slot === 0n && allZero(h.parentRoot)",
+   "note": "beaconIsZero ignores proposer"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const l: Uint8Array[] = [uintLeaf(h.slot), uintLeaf(h.proposerIndex), h.parentRoot, h.stateRoot, h.bodyRoot, ZERO32, ZERO32, ZERO32];",
+   "replace": "const l: Uint8Array[] = [uintLeaf(h.proposerIndex), uintLeaf(h.slot), h.parentRoot, h.stateRoot, h.bodyRoot, ZERO32, ZERO32, ZERO32];",
+   "note": "header root: slot/proposer swapped"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const l: Uint8Array[] = [uintLeaf(h.slot), uintLeaf(h.proposerIndex), h.parentRoot, h.stateRoot, h.bodyRoot, ZERO32, ZERO32, ZERO32];",
+   "replace": "const l: Uint8Array[] = [uintLeaf(h.slot), uintLeaf(h.proposerIndex), h.stateRoot, h.parentRoot, h.bodyRoot, ZERO32, ZERO32, ZERO32];",
+   "note": "header root: parent/state swapped"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "parentRoot: copy(b, 16, 48),",
+   "replace": "parentRoot: copy(b, 15, 47),",
+   "note": "beacon header parent offset"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "bodyRoot: copy(b, 80, 112),",
+   "replace": "bodyRoot: copy(b, 80, 111),",
+   "note": "beacon header body length"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "stateRoot: copy(b, 48, 80),",
+   "replace": "stateRoot: copy(b, 47, 79),",
+   "note": "beacon header state offset"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "second.set(pk.subarray(32, 48), 0);",
+   "replace": "second.set(pk.subarray(32, 47), 0);",
+   "note": "pubkey root: last byte dropped"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "return sha2(level[0]!, agg);",
+   "replace": "return level[0]!;",
+   "note": "committee root without aggregate key"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const agg = hashTreeRootPubkey(b.subarray(SyncCommitteeSize * 48, SyncCommitteeBytes));",
+   "replace": "const agg = hashTreeRootPubkey(b.subarray(0, 48));",
+   "note": "committee root: aggregate = first key"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "export const epochOf = (slot: bigint): bigint => slot / SlotsPerEpoch;",
+   "replace": "export const epochOf = (slot: bigint): bigint => slot / (SlotsPerEpoch + 1n);",
+   "note": "epochOf divisor"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "export const periodOf = (slot: bigint): bigint => epochOf(slot) / EpochsPerPeriod;",
+   "replace": "export const periodOf = (slot: bigint): bigint => epochOf(slot) / (EpochsPerPeriod + 1n);",
+   "note": "periodOf divisor"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "execHash: copy(b, BeaconBlockHeaderSize, BeaconBlockHeaderSize + 32),",
+   "replace": "execHash: copy(b, BeaconBlockHeaderSize, BeaconBlockHeaderSize + 31),",
+   "note": "gloas header exec hash length"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "branch: decodeBranch(b.subarray(BeaconBlockHeaderSize + 32, LightClientHeaderSize), GloasExecutionBranchLen),",
+   "replace": "branch: decodeBranch(b.subarray(BeaconBlockHeaderSize + 32, LightClientHeaderSize), GloasExecutionBranchLen - 1),",
+   "note": "gloas header branch length"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const nextBranch = decodeBranch(b.subarray(o), gloasCommitteeBranchLen);\n  o += 32 * gloasCommitteeBranchLen;",
+   "replace": "const nextBranch = decodeBranch(b.subarray(o), gloasCommitteeBranchLen);\n  o += 32 * gloasCommitteeBranchLen + 32;",
+   "note": "gloas update: next branch width"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const signatureSlot = u64At(b, o);\n  return { shape: Layout.Gloas, attested, nextCommittee,",
+   "replace": "const signatureSlot = u64At(b, o + 1);\n  return { shape: Layout.Gloas, attested, nextCommittee,",
+   "note": "gloas update: signature slot offset"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "const signatureSlot = u64At(b, o);\n  return { shape: Layout.Gloas, attested, nextCommittee: null,",
+   "replace": "const signatureSlot = u64At(b, o + 1);\n  return { shape: Layout.Gloas, attested, nextCommittee: null,",
+   "note": "gloas final: signature slot offset"
+  },
+  {
+   "file": "ssz.ts",
+   "find": "committeeBranch: decodeBranch(b.subarray(LightClientHeaderSize + SyncCommitteeBytes), gloasCommitteeBranchLen),",
+   "replace": "committeeBranch: decodeBranch(b.subarray(LightClientHeaderSize + SyncCommitteeBytes + 32), gloasCommitteeBranchLen - 1),",
+   "note": "gloas bootstrap branch offset"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (b.length < electraHeaderMin || b.length > electraHeaderMax) throw",
+   "replace": "if (b.length <= electraHeaderMin || b.length > electraHeaderMax) throw",
+   "note": "header min boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (b.length < electraHeaderMin || b.length > electraHeaderMax) throw",
+   "replace": "if (b.length < electraHeaderMin || b.length >= electraHeaderMax) throw",
+   "note": "header max boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (b.length < electraHeaderMin || b.length > electraHeaderMax) throw",
+   "replace": "if (b.length < electraHeaderMin && b.length > electraHeaderMax) throw",
+   "note": "header bounds || -> &&"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (execOff !== electraHeaderFixed)",
+   "replace": "if (execOff === electraHeaderFixed)",
+   "note": "header execution offset negated"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (extraOff !== electraExecFixed)",
+   "replace": "if (extraOff === electraExecFixed)",
+   "note": "extra_data offset negated"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (n > electraMaxExtraData)",
+   "replace": "if (n >= electraMaxExtraData)",
+   "note": "extra_data length bound"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (b.length < electraMinBootstrap)",
+   "replace": "if (b.length <= electraMinBootstrap)",
+   "note": "bootstrap min boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (off !== electraBootstrapFixed)",
+   "replace": "if (off === electraBootstrapFixed)",
+   "note": "bootstrap header offset negated"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (b.length < electraMinUpdate)",
+   "replace": "if (b.length <= electraMinUpdate)",
+   "note": "update min boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (attOff !== electraUpdateFixed)",
+   "replace": "if (attOff === electraUpdateFixed)",
+   "note": "update attested offset negated"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (fin < electraUpdateFixed + electraHeaderMin || fin > electraUpdateFixed + electraHeaderMax || fin > b.length) {\n    throw evidenceMalformed('link'",
+   "replace": "if (fin <= electraUpdateFixed + electraHeaderMin || fin > electraUpdateFixed + electraHeaderMax || fin > b.length) {\n    throw evidenceMalformed('link'",
+   "note": "update finalized offset lower boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (fin < electraUpdateFixed + electraHeaderMin || fin > electraUpdateFixed + electraHeaderMax || fin > b.length) {\n    throw evidenceMalformed('link'",
+   "replace": "if (fin < electraUpdateFixed + electraHeaderMin || fin >= electraUpdateFixed + electraHeaderMax || fin > b.length) {\n    throw evidenceMalformed('link'",
+   "note": "update finalized offset upper boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (fin < electraUpdateFixed + electraHeaderMin || fin > electraUpdateFixed + electraHeaderMax || fin > b.length) {\n    throw evidenceMalformed('link'",
+   "replace": "if (fin < electraUpdateFixed + electraHeaderMin || fin > electraUpdateFixed + electraHeaderMax || fin >= b.length) {\n    throw evidenceMalformed('link'",
+   "note": "update finalized offset vs length"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (b.length < electraMinFinalityUpdate)",
+   "replace": "if (b.length <= electraMinFinalityUpdate)",
+   "note": "final update min boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (attOff !== electraFinalityUpdateFixed)",
+   "replace": "if (attOff === electraFinalityUpdateFixed)",
+   "note": "final update attested offset negated"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (fin < electraFinalityUpdateFixed + electraHeaderMin || fin > electraFinalityUpdateFixed + electraHeaderMax || fin > b.length) {",
+   "replace": "if (fin <= electraFinalityUpdateFixed + electraHeaderMin || fin > electraFinalityUpdateFixed + electraHeaderMax || fin > b.length) {",
+   "note": "final update finalized offset lower boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (fin < electraFinalityUpdateFixed + electraHeaderMin || fin > electraFinalityUpdateFixed + electraHeaderMax || fin > b.length) {",
+   "replace": "if (fin < electraFinalityUpdateFixed + electraHeaderMin || fin >= electraFinalityUpdateFixed + electraHeaderMax || fin > b.length) {",
+   "note": "final update finalized offset upper boundary"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (fin < electraFinalityUpdateFixed + electraHeaderMin || fin > electraFinalityUpdateFixed + electraHeaderMax || fin > b.length) {",
+   "replace": "if (fin < electraFinalityUpdateFixed + electraHeaderMin || fin > electraFinalityUpdateFixed + electraHeaderMax || fin >= b.length) {",
+   "note": "final update finalized offset vs length"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const attested = decodeElectraHeader(b.subarray(electraUpdateFixed, fin), 'link', index);",
+   "replace": "const attested = decodeElectraHeader(b.subarray(electraUpdateFixed, fin - 1), 'link', index);",
+   "note": "update attested slice end"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const finalized = decodeElectraHeader(b.subarray(fin), 'link', index);",
+   "replace": "const finalized = decodeElectraHeader(b.subarray(fin + 1), 'link', index);",
+   "note": "update finalized slice start"
+  },
+  {
+   "file": "electra.ts",
+   "find": "if (l === Layout.Electra) {\n    return { finalized: gindexFinalizedRootElectra",
+   "replace": "if (l !== Layout.Electra) {\n    return { finalized: gindexFinalizedRootElectra",
+   "note": "gindices dispatch flipped"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const gindexFinalizedRootElectra = 169n;",
+   "replace": "const gindexFinalizedRootElectra = 168n;",
+   "note": "electra finalized gindex"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const gindexCurrentCommitteeElectra = 86n;",
+   "replace": "const gindexCurrentCommitteeElectra = 87n;",
+   "note": "electra current committee gindex"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const gindexNextCommitteeElectra = 87n;",
+   "replace": "const gindexNextCommitteeElectra = 86n;",
+   "note": "electra next committee gindex"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const gindexExecPayloadInBody = 25n;",
+   "replace": "const gindexExecPayloadInBody = 24n;",
+   "note": "electra execution payload gindex"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[1] = chunk(e, execOffFeeRecip, 20);",
+   "replace": "leaf[1] = chunk(e, execOffFeeRecip, 21);",
+   "note": "payload root: fee recipient width"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[6] = chunk(e, execOffNumber, 8);",
+   "replace": "leaf[6] = chunk(e, execOffNumber, 7);",
+   "note": "payload root: number width"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[9] = chunk(e, execOffTimestamp, 8);",
+   "replace": "leaf[9] = chunk(e, execOffGasUsed, 8);",
+   "note": "payload root: timestamp field"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[10] = sha2(chunk(extra, 0, extra.length), length);",
+   "replace": "leaf[10] = sha2(chunk(extra, 0, extra.length), new Uint8Array(32));",
+   "note": "payload root: extra_data length mix-in dropped"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[11] = chunk(e, execOffBaseFee, 32);",
+   "replace": "leaf[11] = chunk(e, execOffBlockHash, 32);",
+   "note": "payload root: base fee field"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[14] = chunk(e, execOffWithdrawal, 32);",
+   "replace": "leaf[14] = chunk(e, execOffTxRoot, 32);",
+   "note": "payload root: withdrawals root field"
+  },
+  {
+   "file": "electra.ts",
+   "find": "leaf[16] = chunk(e, execOffExcessBlob, 8);",
+   "replace": "leaf[16] = chunk(e, execOffBlobGas, 8);",
+   "note": "payload root: excess blob gas field"
+  },
+  {
+   "file": "electra.ts",
+   "find": "for (let i = 0; i < 8; i++) bloom.push(chunk(e, execOffLogsBloom + 32 * i, 32));",
+   "replace": "for (let i = 0; i < 7; i++) bloom.push(chunk(e, execOffLogsBloom + 32 * i, 32));",
+   "note": "payload root: logs bloom chunks"
+  },
+  {
+   "file": "electra.ts",
+   "find": "execHash: Uint8Array.from(exec.subarray(execOffBlockHash, execOffBlockHash + 32)),",
+   "replace": "execHash: Uint8Array.from(exec.subarray(execOffTxRoot, execOffTxRoot + 32)),",
+   "note": "electra header exec hash field"
+  },
+  {
+   "file": "electra.ts",
+   "find": "o += 32 * electraCommitteeBranchLen + 4;",
+   "replace": "o += 32 * electraCommitteeBranchLen + 3;",
+   "note": "electra update: finalized offset width"
+  },
+  {
+   "file": "electra.ts",
+   "find": "const finalityBranch = decodeBranch(b.subarray(o, o + 32 * electraFinalityBranchLen), electraFinalityBranchLen);\n  o += 32 * electraFinalityBranchLen;\n  const aggregate = decodeSyncAggregate(b.subarray(o, o + syncAggregateSize));\n  o += syncAggregateSize;\n  const signatureSlot = u64le(b, o);\n  return { shape: Layout.Electra, attested, nextCommittee, nextBranch",
+   "replace": "const finalityBranch = decodeBranch(b.subarray(o, o + 32 * electraFinalityBranchLen), electraFinalityBranchLen);\n  o += 32 * electraFinalityBranchLen;\n  const aggregate = decodeSyncAggregate(b.subarray(o, o + syncAggregateSize));\n  o += syncAggregateSize;\n  const signatureSlot = u64le(b, o + 1);\n  return { shape: Layout.Electra, attested, nextCommittee, nextBranch",
+   "note": "electra update: signature slot offset"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "if (n < 0 || pos + n > b.length) throw",
+   "replace": "if (n < 0 || pos + n >= b.length) throw",
+   "note": "codec need: boundary"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "need('anchor', 1 + 8 + 32);",
+   "replace": "need('anchor', 1 + 8 + 31);",
+   "note": "codec anchor width"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "if (n > maxLinks) throw evidenceTooLarge('links', n, maxLinks);",
+   "replace": "if (n >= maxLinks) throw evidenceTooLarge('links', n, maxLinks);",
+   "note": "codec link bound"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "if (pos !== b.length) throw evidenceMalformed('lc', 0, 'trailing_bytes', b.length, pos);",
+   "replace": "if (pos > b.length) throw evidenceMalformed('lc', 0, 'trailing_bytes', b.length, pos);",
+   "note": "codec trailing bytes unchecked"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "const anchorPeriod = dv.getBigUint64(pos, false);",
+   "replace": "const anchorPeriod = dv.getBigUint64(pos, true);",
+   "note": "codec period endianness"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "const n = dv.getUint32(pos, false);\n    pos += 4;\n    need(part, n);",
+   "replace": "const n = dv.getUint32(pos, true);\n    pos += 4;\n    need(part, n);",
+   "note": "codec length endianness"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "need(part, 1);\n    const layout = b[pos]!;",
+   "replace": "need(part, 0);\n    const layout = b[pos]!;",
+   "note": "codec layout byte need"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "need('links', 4);",
+   "replace": "need('links', 3);",
+   "note": "codec count need"
+  },
+  {
+   "file": "lccodec.ts",
+   "find": "new DataView(period.buffer).setBigUint64(0, lc.anchorPeriod, false);",
+   "replace": "new DataView(period.buffer).setBigUint64(0, lc.anchorPeriod, true);",
+   "note": "codec encode period endianness"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (spine.length === 0) throw evidenceMalformed('spine', 0, 'empty', 0, 1);",
+   "replace": "if (spine.length !== 0) throw evidenceMalformed('spine', 0, 'empty', 0, 1);",
+   "note": "covers empty test flipped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (spine.length > max) throw evidenceTooLarge('spine', spine.length, max);",
+   "replace": "if (spine.length >= max) throw evidenceTooLarge('spine', spine.length, max);",
+   "note": "covers max boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const want = i === 0 ? head.execHash : prev!.parent;",
+   "replace": "const want = i === 0 ? prev!.parent : head.execHash;",
+   "note": "covers rlp want swapped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const at = i === 0 ? 0n : (prev!.number - 1n) & U64_MASK;",
+   "replace": "const at = i === 0 ? 1n : (prev!.number - 1n) & U64_MASK;",
+   "note": "covers rlp at_number first"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const at = i === 0 ? 0n : (prev!.number - 1n) & U64_MASK;",
+   "replace": "const at = i === 0 ? 0n : prev!.number - 1n;",
+   "note": "covers rlp at_number wrap dropped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "throw headerChainBroken('l1', at, want, keccak_256(raw), 'rlp');",
+   "replace": "throw headerChainBroken('l1', at, want, keccak_256(raw), 'hash');",
+   "note": "covers rlp reason"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (i === 0) {\n      if (!eq(cur.hash, head.execHash))",
+   "replace": "if (i !== 0) {\n      if (!eq(cur.hash, head.execHash))",
+   "note": "covers first-header branch flipped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (!eq(cur.hash, head.execHash)) throw headerChainBroken('l1', cur.number, head.execHash, cur.hash, 'hash');",
+   "replace": "if (eq(cur.hash, head.execHash)) throw headerChainBroken('l1', cur.number, head.execHash, cur.hash, 'hash');",
+   "note": "covers head hash check negated"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (!eq(cur.hash, prev!.parent)) throw headerChainBroken('l1', (prev!.number - 1n) & U64_MASK, prev!.parent, cur.hash, 'hash');",
+   "replace": "if (eq(cur.hash, prev!.parent)) throw headerChainBroken('l1', (prev!.number - 1n) & U64_MASK, prev!.parent, cur.hash, 'hash');",
+   "note": "covers parent hash check negated"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (!eq(cur.hash, prev!.parent)) throw headerChainBroken('l1', (prev!.number - 1n) & U64_MASK,",
+   "replace": "if (!eq(cur.hash, prev!.parent)) throw headerChainBroken('l1', prev!.number & U64_MASK,",
+   "note": "covers parent hash at_number"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (prev!.number === 0n || cur.number !== prev!.number - 1n) {",
+   "replace": "if (prev!.number === 0n && cur.number !== prev!.number - 1n) {",
+   "note": "covers number rule || -> &&"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (prev!.number === 0n || cur.number !== prev!.number - 1n) {",
+   "replace": "if (cur.number !== prev!.number - 1n) {",
+   "note": "covers block-zero guard dropped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (prev!.number === 0n || cur.number !== prev!.number - 1n) {",
+   "replace": "if (prev!.number === 0n || cur.number === prev!.number - 1n) {",
+   "note": "covers number comparison flipped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b.length === 0 || b[0]! < 0xc0) return bad('not_a_list');",
+   "replace": "if (b.length === 0 || b[0]! <= 0xc0) return bad('not_a_list');",
+   "note": "rlp list prefix boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b.length === 0 || b[0]! < 0xc0) return bad('not_a_list');",
+   "replace": "if (b[0]! < 0xc0) return bad('not_a_list');",
+   "note": "rlp empty input guard"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b[0]! <= 0xf7) {\n    payloadLen",
+   "replace": "if (b[0]! < 0xf7) {\n    payloadLen",
+   "note": "rlp short/long list boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (ll > 4 || 1 + ll > b.length || b[1] === 0) return bad('list_length');\n    payloadLen",
+   "replace": "if (ll >= 4 || 1 + ll > b.length || b[1] === 0) return bad('list_length');\n    payloadLen",
+   "note": "rlp list length-of-length bound"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (ll > 4 || 1 + ll > b.length || b[1] === 0) return bad('list_length');\n    payloadLen",
+   "replace": "if (ll > 4 || 1 + ll >= b.length || b[1] === 0) return bad('list_length');\n    payloadLen",
+   "note": "rlp list length truncated bound"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (ll > 4 || 1 + ll > b.length || b[1] === 0) return bad('list_length');\n    payloadLen",
+   "replace": "if (ll > 4 || 1 + ll > b.length) return bad('list_length');\n    payloadLen",
+   "note": "rlp list leading zero length"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (payloadLen < 56) return bad('list_length_noncanonical');",
+   "replace": "if (payloadLen <= 56) return bad('list_length_noncanonical');",
+   "note": "rlp list canonical boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (hdr + payloadLen !== b.length) return bad('list_length_mismatch');",
+   "replace": "if (hdr + payloadLen > b.length) return bad('list_length_mismatch');",
+   "note": "rlp list trailing bytes"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (hdr + payloadLen !== b.length) return bad('list_length_mismatch');",
+   "replace": "if (hdr + payloadLen < b.length) return bad('list_length_mismatch');",
+   "note": "rlp list truncated payload"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b0 < 0x80) {\n      start = 0;",
+   "replace": "if (b0 <= 0x80) {\n      start = 0;",
+   "note": "rlp single byte boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "} else if (b0 <= 0xb7) {\n      start = 1;",
+   "replace": "} else if (b0 < 0xb7) {\n      start = 1;",
+   "note": "rlp short string boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (n === 1 && p.length > 1 && p[1]! < 0x80) return bad('string_noncanonical');",
+   "replace": "if (n === 1 && p.length > 1 && p[1]! <= 0x80) return bad('string_noncanonical');",
+   "note": "rlp noncanonical single byte boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (n === 1 && p.length > 1 && p[1]! < 0x80) return bad('string_noncanonical');",
+   "replace": "if (n === 1 && p[1]! < 0x80) return bad('string_noncanonical');",
+   "note": "rlp noncanonical guard length"
+  },
+  {
+   "file": "covers.ts",
+   "find": "} else if (b0 <= 0xbf) {",
+   "replace": "} else if (b0 < 0xbf) {",
+   "note": "rlp long string boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (ll > 4 || 1 + ll > p.length || p[1] === 0) return bad('string_length');",
+   "replace": "if (ll >= 4 || 1 + ll > p.length || p[1] === 0) return bad('string_length');",
+   "note": "rlp string length-of-length bound"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (ll > 4 || 1 + ll > p.length || p[1] === 0) return bad('string_length');",
+   "replace": "if (ll > 4 || 1 + ll >= p.length || p[1] === 0) return bad('string_length');",
+   "note": "rlp string truncated bound"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (n < 56) return bad('string_length_noncanonical');",
+   "replace": "if (n <= 56) return bad('string_length_noncanonical');",
+   "note": "rlp string canonical boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "} else if (b0 <= 0xf7) {\n      isList = true;",
+   "replace": "} else if (b0 < 0xf7) {\n      isList = true;",
+   "note": "rlp short list item boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (ll > 4 || 1 + ll > p.length || p[1] === 0) return bad('list_length');",
+   "replace": "if (ll >= 4 || 1 + ll > p.length || p[1] === 0) return bad('list_length');",
+   "note": "rlp list item length-of-length bound"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (n < 56) return bad('list_length_noncanonical');\n      start = 1 + ll;",
+   "replace": "if (n <= 56) return bad('list_length_noncanonical');\n      start = 1 + ll;",
+   "note": "rlp list item canonical boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (start + n > p.length) return bad('item_overruns');",
+   "replace": "if (start + n >= p.length) return bad('item_overruns');",
+   "note": "rlp item overrun boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (count < hdrReadItems) {\n      if (isList) return bad('item_not_string');",
+   "replace": "if (count <= hdrReadItems) {\n      if (isList) return bad('item_not_string');",
+   "note": "rlp first-items boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (count < hdrReadItems) {\n      if (isList) return bad('item_not_string');",
+   "replace": "if (count < hdrReadItems - 1) {\n      if (isList) return bad('item_not_string');",
+   "note": "rlp first-items boundary (11)"
+  },
+  {
+   "file": "covers.ts",
+   "find": "      if (isList) return bad('item_not_string');",
+   "replace": "      if (!isList) return bad('item_not_string');",
+   "note": "rlp item_not_string negated"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (count < hdrReadItems) return { items, count, reason: 'too_few_items' };",
+   "replace": "if (count <= hdrReadItems) return { items, count, reason: 'too_few_items' };",
+   "note": "rlp too few items boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b.length > 8 || (b.length > 0 && b[0] === 0)) return undefined;",
+   "replace": "if (b.length >= 8 || (b.length > 0 && b[0] === 0)) return undefined;",
+   "note": "rlp uint64 width boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b.length > 8 || (b.length > 0 && b[0] === 0)) return undefined;",
+   "replace": "if (b.length > 8 || (b.length > 0 && b[0] !== 0)) return undefined;",
+   "note": "rlp uint64 leading zero flipped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (b.length > 8 || (b.length > 0 && b[0] === 0)) return undefined;",
+   "replace": "if (b.length > 8 || b[0] === 0) return undefined;",
+   "note": "rlp uint64 empty guard (zero as empty)"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (items[hdrParentHash]!.length !== 32 || items[hdrStateRoot]!.length !== 32) return { reason: 'hash_item_length' };",
+   "replace": "if (items[hdrParentHash]!.length !== 32 && items[hdrStateRoot]!.length !== 32) return { reason: 'hash_item_length' };",
+   "note": "header hash item lengths || -> &&"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const hdrStateRoot = 3;",
+   "replace": "const hdrStateRoot = 4;",
+   "note": "header state root position"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const hdrNumber = 8;",
+   "replace": "const hdrNumber = 9;",
+   "note": "header number position"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const hdrTimestamp = 11;",
+   "replace": "const hdrTimestamp = 10;",
+   "note": "header timestamp position"
+  },
+  {
+   "file": "covers.ts",
+   "find": "const hdrReadItems = 12;",
+   "replace": "const hdrReadItems = 13;",
+   "note": "header read items count"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (covered.length === 0) throw blockNotCovered(number, 0n);",
+   "replace": "if (covered.length !== 0) throw blockNotCovered(number, 0n);",
+   "note": "blockAt empty test flipped"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (number > top || number + BigInt(covered.length) <= top)",
+   "replace": "if (number >= top || number + BigInt(covered.length) <= top)",
+   "note": "blockAt upper boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "if (number > top || number + BigInt(covered.length) <= top)",
+   "replace": "if (number > top || number + BigInt(covered.length) < top)",
+   "note": "blockAt lower boundary"
+  },
+  {
+   "file": "covers.ts",
+   "find": "return covered[Number(top - number)]!;",
+   "replace": "return covered[Number(top - number) + 1]!;",
+   "note": "blockAt index"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (flags !== 0x80 && flags !== 0xa0) throw",
+   "replace": "if (flags !== 0x80 || flags !== 0xa0) throw",
+   "note": "flags && -> ||"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (flags !== 0x80 && flags !== 0xa0) throw",
+   "replace": "if (flags !== 0x80) throw",
+   "note": "largest-y flag refused"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (flags !== 0x80 && flags !== 0xa0) throw",
+   "replace": "if (flags !== 0xa0) throw",
+   "note": "smallest-y flag refused"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (flags !== 0x80 && flags !== 0xa0) throw",
+   "replace": "if ((flags & 0x80) === 0) throw",
+   "note": "only compressed bit required"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (c === 0) coord[0]! &= 0x1f;",
+   "replace": "if (c === 1) coord[0]! &= 0x1f;",
+   "note": "canonical check masks the wrong coordinate"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (c === 0) coord[0]! &= 0x1f;",
+   "replace": "coord[0]! &= 0x1f;",
+   "note": "canonical check masks both coordinates"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (beInt(coord) >= FIELD_P) throw",
+   "replace": "if (beInt(coord) > FIELD_P) throw",
+   "note": "canonical boundary x == p"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (beInt(coord) >= FIELD_P) throw",
+   "replace": "if (beInt(coord) >= FIELD_P + 1n) throw",
+   "note": "canonical boundary (same)"
+  },
+  {
+   "file": "bls.ts",
+   "find": "for (let c = 0; c < coordinates; c++) {",
+   "replace": "for (let c = 0; c < coordinates - 1; c++) {",
+   "note": "canonical check skips the last coordinate"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (b.length !== 48) throw new Error('public key: not 48 bytes');",
+   "replace": "if (b.length < 48) throw new Error('public key: not 48 bytes');",
+   "note": "key length bound"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (b.length !== 96) throw new Error('signature: not 96 bytes');",
+   "replace": "if (b.length < 96) throw new Error('signature: not 96 bytes');",
+   "note": "signature length bound"
+  },
+  {
+   "file": "bls.ts",
+   "find": "  b = Uint8Array.from(b);\n  strictCompressed(b, 1, 'public key');",
+   "replace": "  strictCompressed(b, 1, 'public key');",
+   "note": "key decoder copy removed"
+  },
+  {
+   "file": "bls.ts",
+   "find": "  b = Uint8Array.from(b); // see decodeG1",
+   "replace": "",
+   "note": "signature decoder copy removed"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (p.is0()) throw new Error('identity public key');",
+   "replace": "",
+   "note": "identity key check removed (unreachable)"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (v === undefined) {\n      try {",
+   "replace": "if (v !== undefined) {\n      try {",
+   "note": "cache hit test flipped"
+  },
+  {
+   "file": "bls.ts",
+   "find": "this.m.set(k, v);",
+   "replace": "",
+   "note": "cache never stores"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (v instanceof Error) throw v;",
+   "replace": "if (v instanceof Error) return v as unknown as G1Point;",
+   "note": "cached refusal returned as a key"
+  },
+  {
+   "file": "bls.ts",
+   "find": "fv.set(version.subarray(0, 4), 0);",
+   "replace": "fv.set(version.subarray(0, 3), 0);",
+   "note": "domain version width"
+  },
+  {
+   "file": "bls.ts",
+   "find": "d.set(forkDataRoot.subarray(0, 28), 4);",
+   "replace": "d.set(forkDataRoot.subarray(0, 27), 4);",
+   "note": "domain fork data root width"
+  },
+  {
+   "file": "bls.ts",
+   "find": "d.set(forkDataRoot.subarray(0, 28), 4);",
+   "replace": "d.set(forkDataRoot.subarray(0, 28), 3);",
+   "note": "domain fork data root offset"
+  },
+  {
+   "file": "bls.ts",
+   "find": "export const domainSyncCommittee: Uint8Array = Uint8Array.of(0x07, 0, 0, 0);",
+   "replace": "export const domainSyncCommittee: Uint8Array = Uint8Array.of(0x08, 0, 0, 0);",
+   "note": "domain type"
+  },
+  {
+   "file": "bls.ts",
+   "find": "const forkDataRoot = sha2(fv, gvr);",
+   "replace": "const forkDataRoot = sha2(gvr, fv);",
+   "note": "domain fork data order"
+  },
+  {
+   "file": "bls.ts",
+   "find": "buf.set(objectRoot, 0);\n  buf.set(domain, 32);",
+   "replace": "buf.set(domain, 0);\n  buf.set(objectRoot, 32);",
+   "note": "signing root order"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (!aggregateBit(agg, i)) continue;",
+   "replace": "if (aggregateBit(agg, i)) continue;",
+   "note": "participating seats negated"
+  },
+  {
+   "file": "bls.ts",
+   "find": "sum = sum.add(c.key(i));\n    n++;",
+   "replace": "sum = sum.add(c.key(i));",
+   "note": "participants count dropped"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (n === 0) throw new Error('no participants');",
+   "replace": "if (n === 1) throw new Error('no participants');",
+   "note": "no participants test"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (sum.is0()) throw new Error('identity aggregate public key');",
+   "replace": "",
+   "note": "identity aggregate check removed"
+  },
+  {
+   "file": "bls.ts",
+   "find": "if (!bls12_381.longSignatures.verify(sig, h, sum)) throw",
+   "replace": "if (bls12_381.longSignatures.verify(sig, h, sum)) throw",
+   "note": "pairing result negated"
+  },
+  {
+   "file": "bls.ts",
+   "find": "const h = bls12_381.longSignatures.hash(msg, blsDST);",
+   "replace": "const h = bls12_381.longSignatures.hash(msg, 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_');",
+   "note": "wrong DST"
+  },
+  {
+   "file": "bls.ts",
+   "find": "export const blsDST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_';",
+   "replace": "export const blsDST = 'BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP';",
+   "note": "DST truncated"
+  },
+  {
+   "file": "bls.ts",
+   "find": "return this.cache.key(this.raw.subarray(i * 48, i * 48 + 48));",
+   "replace": "return this.cache.key(this.raw.subarray(i * 48 + 48, i * 48 + 96));",
+   "note": "committee key seat offset"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodePinMismatch, { period, want_root: wantRoot, got_root: gotRoot })",
+   "replace": "newState(CodePinMismatch, { period, want_root: gotRoot, got_root: wantRoot })",
+   "note": "pin_mismatch roots swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodeNetworkMismatch, { chain_id: chainId, want_chain_id: wantChainId })",
+   "replace": "newState(CodeNetworkMismatch, { chain_id: wantChainId, want_chain_id: chainId })",
+   "note": "network_mismatch ids swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodeEvidenceMalformed, { part, index, reason, got_len: gotLen, want_len: wantLen })",
+   "replace": "newState(CodeEvidenceMalformed, { part, index, reason, got_len: wantLen, want_len: gotLen })",
+   "note": "malformed lengths swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodePinWindow, { anchor_epoch: anchorEpoch, finalized_epoch: finalizedEpoch, wsp_epochs: wspEpochs })",
+   "replace": "newState(CodePinWindow, { anchor_epoch: finalizedEpoch, finalized_epoch: anchorEpoch, wsp_epochs: wspEpochs })",
+   "note": "pin_window epochs swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodePeriodGap, { signature_period: signaturePeriod, store_period: storePeriod })",
+   "replace": "newState(CodePeriodGap, { signature_period: storePeriod, store_period: signaturePeriod })",
+   "note": "period_gap periods swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodeLedgerBehind, { needed_period: neededPeriod, ledger_head_period: ledgerHeadPeriod })",
+   "replace": "newState(CodeLedgerBehind, { needed_period: ledgerHeadPeriod, ledger_head_period: neededPeriod })",
+   "note": "ledger_behind swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodeBlockNotCovered, { block_number: blockNumber, finalized_exec_number: spineTopNumber })",
+   "replace": "newState(CodeBlockNotCovered, { block_number: spineTopNumber, finalized_exec_number: blockNumber })",
+   "note": "block_not_covered swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodeHeaderChainBroken, { spine, at_number: atNumber, want_hash: wantHash, got_hash: gotHash, reason })",
+   "replace": "newState(CodeHeaderChainBroken, { spine, at_number: atNumber, want_hash: gotHash, got_hash: wantHash, reason })",
+   "note": "header_chain_broken hashes swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodeLinkInvalid, { index, check, attested_slot: attestedSlot, signature_slot: signatureSlot, period })",
+   "replace": "newState(CodeLinkInvalid, { index, check, attested_slot: signatureSlot, signature_slot: attestedSlot, period })",
+   "note": "link_invalid slots swapped"
+  },
+  {
+   "file": "fault.ts",
+   "find": "newState(CodePinUnknown, { kind, period, root })",
+   "replace": "newState(CodePinUnknown, { kind: period, period: kind, root })",
+   "note": "pin_unknown kind/period swapped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (p.network.chainId !== chainId) throw networkMismatch(chainId, p.network.chainId);",
+   "replace": "if (p.network.chainId !== chainId) throw networkMismatch(p.network.chainId, chainId);",
+   "note": "checkNetwork args swapped"
+  },
+  {
+   "file": "verify.ts",
+   "find": "if (p.network.chainId !== chainId) throw networkMismatch(chainId, p.network.chainId);",
+   "replace": "if (p.network.chainId === chainId) throw networkMismatch(chainId, p.network.chainId);",
+   "note": "checkNetwork negated"
+  },
+  {
+   "file": "types.ts",
+   "find": "if (n.forks[mid]!.epoch > epoch) hi = mid;",
+   "replace": "if (n.forks[mid]!.epoch >= epoch) hi = mid;",
+   "note": "forkAt boundary"
+  },
+  {
+   "file": "types.ts",
+   "find": "return lo === 0 ? undefined : n.forks[lo - 1]!;",
+   "replace": "return lo === 0 ? n.forks[0]! : n.forks[lo - 1]!;",
+   "note": "forkAt before first fork"
+  },
+  {
+   "file": "types.ts",
+   "find": "for (const a of p.anchors) if (a.period === period) return a;",
+   "replace": "for (const a of p.anchors) if (a.period !== period) return a;",
+   "note": "anchorFor negated"
+  },
+  {
+   "file": "types.ts",
+   "find": "if (i === 0 || a.period > head!) head = a.period;",
+   "replace": "if (i === 0 || a.period < head!) head = a.period;",
+   "note": "ledgerHead min instead of max"
+  },
+  {
+   "file": "types.ts",
+   "find": "if (i === 0 || a.period > head!) head = a.period;",
+   "replace": "if (a.period > head!) head = a.period;",
+   "note": "ledgerHead without initial"
+  },
+  {
+   "file": "types.ts",
+   "find": "if (l === Layout.Electra) return 'electra';",
+   "replace": "if (l === Layout.Gloas) return 'electra';",
+   "note": "layout name electra"
+  },
+  {
+   "file": "types.ts",
+   "find": "if (l === Layout.Gloas) return 'gloas';",
+   "replace": "if (l === Layout.Electra) return 'gloas';",
+   "note": "layout name gloas"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (want === undefined) throw evidenceMalformed('container', 0, 'unknown_kind', 0, 0);",
+   "replace": "if (want !== undefined) throw evidenceMalformed('container', 0, 'unknown_kind', 0, 0);",
+   "note": "validateContainer unknown kind flipped"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (b.length !== want) throw evidenceMalformed(kind, 0, 'length', b.length, want);",
+   "replace": "if (b.length < want) throw evidenceMalformed(kind, 0, 'length', b.length, want);",
+   "note": "validateContainer length: != -> <"
+  },
+  {
+   "file": "api.ts",
+   "find": "Object.prototype.hasOwnProperty.call(gloasSizes, kind) ? gloasSizes[kind]! : undefined",
+   "replace": "gloasSizes[kind]",
+   "note": "validateContainer inherited key"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (b.length !== SyncCommitteeBytes) throw evidenceMalformed('sync_committee'",
+   "replace": "if (b.length < SyncCommitteeBytes) throw evidenceMalformed('sync_committee'",
+   "note": "sync committee root length bound"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (b.length !== BeaconBlockHeaderSize) throw evidenceMalformed('beacon_block_header'",
+   "replace": "if (b.length < BeaconBlockHeaderSize) throw evidenceMalformed('beacon_block_header'",
+   "note": "beacon header root length bound"
+  },
+  {
+   "file": "api.ts",
+   "find": "v = sha2(branch[extra + i]!, v);",
+   "replace": "v = sha2(branch[i]!, v);",
+   "note": "rootFromNormalizedBranch extension offset (right)"
+  },
+  {
+   "file": "api.ts",
+   "find": "else v = sha2(v, branch[extra + i]!);",
+   "replace": "else v = sha2(v, branch[i]!);",
+   "note": "rootFromNormalizedBranch extension offset (left)"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (((index >> BigInt(i)) & 1n) === 1n) v = sha2(branch[extra + i]!, v);",
+   "replace": "if (((index >> BigInt(i)) & 1n) === 0n) v = sha2(branch[extra + i]!, v);",
+   "note": "rootFromNormalizedBranch side flipped"
+  },
+  {
+   "file": "api.ts",
+   "find": "blockRoot: a.blockRoot === '' ? null : hexBytes(a.blockRoot, 32, 'block_root'),",
+   "replace": "blockRoot: a.blockRoot !== '' ? null : hexBytes(a.blockRoot, 32, 'block_root'),",
+   "note": "pins conversion: block_root presence flipped"
+  },
+  {
+   "file": "api.ts",
+   "find": "const layoutOf = (name: string | null): LayoutByte => (name === 'electra' ? Layout.Electra : name === 'gloas' ? Layout.Gloas : Layout.None);",
+   "replace": "const layoutOf = (name: string | null): LayoutByte => (name === 'electra' ? Layout.Gloas : name === 'gloas' ? Layout.Electra : Layout.None);",
+   "note": "pins conversion: layouts swapped"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (h.length !== n * 2 || !/^[0-9a-fA-F]*$/.test(h))",
+   "replace": "if (h.length < n * 2 || !/^[0-9a-fA-F]*$/.test(h))",
+   "note": "pins hex length bound"
+  },
+  {
+   "file": "api.ts",
+   "find": "if (h.length !== n * 2 || !/^[0-9a-fA-F]*$/.test(h))",
+   "replace": "if (h.length !== n * 2)",
+   "note": "pins hex charset"
+  },
+  {
+   "file": "api.ts",
+   "find": "minParticipants: Number(e.minParticipants),",
+   "replace": "minParticipants: Number(e.maxLinks),",
+   "note": "pins conversion: min participants field"
+  },
+  {
+   "file": "api.ts",
+   "find": "maxLinks: Number(e.maxLinks),",
+   "replace": "maxLinks: Number(e.maxSpineHeaders),",
+   "note": "pins conversion: max links field"
+  },
+  {
+   "file": "api.ts",
+   "find": "wspEpochs: a.wspEpochs,",
+   "replace": "wspEpochs: a.period,",
+   "note": "pins conversion: wsp field"
+  }
+ ]
+}
