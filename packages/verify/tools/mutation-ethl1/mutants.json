@@ -573,26 +573,26 @@
   },
   {
    "file": "verify.ts",
-   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
-   "replace": "const domainEpoch = ss === 0n ? 0n : epochOf(ss);",
+   "find": "return signatureSlot === 0n ? 0n : epochOf(signatureSlot - 1n);",
+   "replace": "return signatureSlot === 0n ? 0n : epochOf(signatureSlot);",
    "note": "domain epoch of signature slot (not minus one)"
   },
   {
    "file": "verify.ts",
-   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
-   "replace": "const domainEpoch = ss === 0n ? 0n : epochOf(as);",
+   "find": "return signatureSlot === 0n ? 0n : epochOf(signatureSlot - 1n);",
+   "replace": "return signatureSlot === 0n ? 0n : epochOf(signatureSlot - 2n);",
    "note": "domain epoch of attested slot"
   },
   {
    "file": "verify.ts",
-   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
-   "replace": "const domainEpoch = ss === 0n ? 1n : epochOf(ss - 1n);",
+   "find": "return signatureSlot === 0n ? 0n : epochOf(signatureSlot - 1n);",
+   "replace": "return signatureSlot === 0n ? 1n : epochOf(signatureSlot - 1n);",
    "note": "domain epoch at slot 0 (unreachable)"
   },
   {
    "file": "verify.ts",
-   "find": "const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);",
-   "replace": "const domainEpoch = ss !== 0n ? 0n : epochOf(ss - 1n);",
+   "find": "return signatureSlot === 0n ? 0n : epochOf(signatureSlot - 1n);",
+   "replace": "return signatureSlot !== 0n ? 0n : epochOf(signatureSlot - 1n);",
    "note": "domain epoch zero test flipped"
   },
   {

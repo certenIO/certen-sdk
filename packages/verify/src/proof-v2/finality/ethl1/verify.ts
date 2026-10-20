@@ -72,6 +72,11 @@ import {
   type Pins,
 } from './types.js';
 
+/** The epoch whose fork version signs an update: epoch(saturating_sub(signature_slot, 1)) (spec 5.2 step 3). */
+export function signingDomainEpoch(signatureSlot: bigint): bigint {
+  return signatureSlot === 0n ? 0n : epochOf(signatureSlot - 1n);
+}
+
 /** Throws finality_network_mismatch unless the pins describe the chain the caller is judging. */
 export function checkNetwork(p: Pins, chainId: bigint): void {
   if (p.network.chainId !== chainId) throw networkMismatch(chainId, p.network.chainId);
@@ -317,8 +322,7 @@ class Walker {
     }
     if (isFinal) this.enforce(sigPeriod, signing.root);
     // the signing-domain fork version is that of epoch(saturating_sub(signature_slot, 1))
-    const domainEpoch = ss === 0n ? 0n : epochOf(ss - 1n);
-    const fk = forkAt(this.p.network, domainEpoch);
+    const fk = forkAt(this.p.network, signingDomainEpoch(ss));
     if (fk === undefined) throw forkUnsupported(ss, epochOf(ss), layoutName(u.shape));
     const version = fk.version;
     const domain = computeDomain(version, this.gvr);
