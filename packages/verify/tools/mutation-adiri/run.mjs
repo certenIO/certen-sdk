@@ -21,13 +21,23 @@ const out = opt('--out', '');
 const ids = opt('--ids', '') ? new Set(opt('--ids', '').split(',').map(Number)) : null;
 const timeoutMs = Number(opt('--timeout', '240000'));
 
+const U = 'test/finality/adiri/units_';
+const F = 'test/finality/adiri/vectors_fast.test.ts';
+/** the test files that judge each source file (the whole set takes minutes per mutant) */
+const TESTS = {
+  'cfa1.ts': `${U}cfa1.test.ts,${F}`,
+  'record.ts': `${U}record.test.ts,${F}`,
+  'chain.ts': `${U}chain.test.ts,${F}`,
+  'sigs.ts': `${U}sigs.test.ts,${U}chain.test.ts`,
+  'kind.ts': `${U}kind.test.ts,${F}`,
+};
 const mutants = JSON.parse(readFileSync(join(here, 'mutants.json'), 'utf8')).mutants.map((m, i) => ({ id: i + 1, ...m }));
 const todo = mutants.filter((m) => (!ids || ids.has(m.id)) && (!only || `${m.id} ${m.file} ${m.note}`.includes(only)));
 
 function run(m) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const env = { ...process.env, MUTANT: JSON.stringify({ file: m.file, offset: m.offset, find: m.find, replace: m.replace }) };
+    const env = { ...process.env, MUTATION_TESTS: TESTS[m.file], MUTANT: JSON.stringify({ file: m.file, offset: m.offset, find: m.find, replace: m.replace }) };
     const p = spawn(process.execPath, [join(root, '..', '..', 'node_modules', 'vitest', 'vitest.mjs'), 'run', '--config', 'tools/mutation-adiri/vitest.mutation.config.ts', '--bail=1', '--maxWorkers=3', '--reporter=dot'], {
       cwd: root,
       env,

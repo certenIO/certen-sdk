@@ -55,6 +55,7 @@ export const pubKey = (i: number): Uint8Array => keyPair(i).pk;
 /** The aggregate signature of `signers` (key numbers) over msg. */
 export function aggregateSign(signers: readonly number[], msg: Uint8Array): Uint8Array {
   const sk = signers.reduce((a, i) => (a + keyPair(i).sk) % ORDER, 0n);
+  if (sk === 0n) return Uint8Array.of(0xc0, ...new Uint8Array(47)); // the empty sum is the identity
   return bls12_381.shortSignatures.hash(msg, SignatureDST).multiply(sk).toBytes(true);
 }
 
