@@ -1,6 +1,6 @@
 {
   "format": "certen-finality-ts-mutation-equivalents/1",
-  "run": "320 hand mutants (tools/mutation-ethl1/mutants.json) over src/proof-v2/finality/ethl1/*.ts, applied in memory by tools/mutation-ethl1/vitest.mutation.config.ts and run by tools/mutation-ethl1/run.mjs against test/finality/ethl1 with --bail=1. Pass 1 judged mutants 1-234: 184 killed, 50 survived. After pass 1 the tests units_ssz, units_verify, units_covers and units_codec were extended; the re-run of 18 survivors confirmed 14 killed (56,57,58,61,70,71,80,96,98,105,136,161,167,171) before the box ended. The mutants below are equivalent to the original; each reason is a proof from the code.",
+  "run": "320 hand mutants (tools/mutation-ethl1/mutants.json) over src/proof-v2/finality/ethl1/*.ts, applied in memory by tools/mutation-ethl1/vitest.mutation.config.ts and run by tools/mutation-ethl1/run.mjs against test/finality/ethl1 with --bail=1. Pass 1 judged mutants 1-234: 184 killed, 50 survived. After pass 1 the tests units_ssz, units_verify, units_covers and units_codec were extended; the re-run of 18 survivors (56,57,58,61,70,71,80,96,98,105,136,161,167,171,187,198,221,222) killed all 18. The mutants below are equivalent to the original; each reason is a proof from the code.",
   "equivalents": [
     {
       "file": "verify.ts",
@@ -78,7 +78,7 @@
       "reason": "box ended; run node tools/mutation-ethl1/run.mjs --ids <ids> from packages/verify"
     },
     {
-      "mutants": "survivors of pass 1 with a new test not yet re-judged: 136-144 (isEmptyHeader family, 137-144), 162, 169, 172, 174, 176, 177 (electra decoder bounds), 187 (payload number width), 198 (codec anchor width), 221, 222, 223, 225 (rlp bounds)",
+      "mutants": "survivors of pass 1 with a new test not yet re-judged: 137-144 (isEmptyHeader family), 162, 169, 172, 174, 176, 177 (electra decoder bounds), 223, 225 (rlp bounds)",
       "reason": "the tests exist and pass on the real code (units_ssz, units_codec, units_covers); their kill has not been demonstrated by a re-run"
     }
   ]
