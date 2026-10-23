@@ -172,8 +172,12 @@ describe('the strict refusals of the invariants (each with its own reason)', () 
   it('treats an integer beyond int64 as bad_value and wraps the participation product like Go int arithmetic', () => {
     const t = pinsFile.toString('utf8');
     expect(reasonOf(enc(t.replace('"max_links": 64', '"max_links": 9223372036854775808')))).toBe('finality_pins_corrupt/bad_value');
-    // 3 * 3074457345618258603 = 2^63 + 2 wraps negative in Go's int, so Go refuses the floor here where unbounded arithmetic would accept it
+    // Since Go 57d8064 (V-C2-A1 info) the committee size is not configurable (it must be 512, bad_value{key:sync_committee_size}): the same file
+    // as before, whose size is 3074457345618258604, is refused there, before the participation floor is reached
     const wrap = t.replace('"min_participants": 342', '"min_participants": 3074457345618258603').replace('"sync_committee_size": 512', '"sync_committee_size": 3074457345618258604');
-    expect(reasonOf(enc(wrap))).toBe('finality_pins_corrupt/participation_floor_invalid');
+    expect(reasonOf(enc(wrap))).toBe('finality_pins_corrupt/bad_value');
+    // 3 * 3074457345618258603 = 2^63 + 2 wraps negative in Go's int; with the size at its pinned 512 the floor is refused either way
+    const hugeMin = t.replace('"min_participants": 342', '"min_participants": 3074457345618258603');
+    expect(reasonOf(enc(hugeMin))).toBe('finality_pins_corrupt/participation_floor_invalid');
   });
 });
