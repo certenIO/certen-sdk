@@ -10,6 +10,7 @@ import {
   PARALLEL_MIN_ITEMS,
   WorkerPool,
   WorkerPoolError,
+  defaultWorkerUrl,
   disposeSharedPool,
   engineFor,
   firstFailure,
@@ -78,8 +79,12 @@ describe('where workers can run, and how many', () => {
     }
     expect(parallelUnavailable()).toBeUndefined();
     expect(parallelUnavailable(new URL('file:///x/pool-worker.ts'), false)).toContain('cannot strip types');
-    expect(parallelUnavailable(new URL('file:///x/pool-worker.ts'), 'strip')).toBeUndefined();
-    expect(parallelUnavailable(new URL('file:///x/pool-worker.js'), false)).toBeUndefined();
+    // the worker file beside the module is there; a path with nothing at it is named (a bundled copy of the module has no worker beside it)
+    expect(parallelUnavailable(defaultWorkerUrl(), 'strip')).toBeUndefined();
+    expect(parallelUnavailable(new URL('file:///x/pool-worker.js'), false)).toContain('does not exist');
+    expect(parallelUnavailable(new URL('file:///x/pool-worker.ts'), 'strip')).toContain('does not exist');
+    // a .js worker needs no type stripping
+    expect(parallelUnavailable(new URL('./fixtures_pool/worker_slow.mjs', import.meta.url), false)).toBeUndefined();
   });
 
   it('a pool size of 0, above the bound, or not an integer is refused; the worker file must exist', () => {

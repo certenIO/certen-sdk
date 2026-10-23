@@ -8,7 +8,7 @@
  * `stallMs` (a crashed or hung thread: nothing is heard from it, because a blocked thread cannot see worker events), a run longer than
  * `maxMs`, or a lost reply is a WorkerPoolError, the pool is torn down, and the caller's verification fails with it (the chain wraps it as
  * finality_verifier_failed with the cause). Where the ENVIRONMENT cannot run workers (a browser, a Node without
- * process.getBuiltinModule, no shared memory, a `.ts` worker file on a Node that cannot strip types) `parallelUnavailable()` says why and
+ * process.getBuiltinModule, no shared memory, a `.ts` worker file on a Node that cannot strip types, no worker file beside a bundled copy of this module) `parallelUnavailable()` says why and
  * 'auto' runs the same jobs in the calling thread: slower, never different.
  *
  * There is no static import of a Node module here, so the package still bundles for browsers.
@@ -86,7 +86,8 @@ export function parallelUnavailable(workerUrl: URL | string = defaultWorkerUrl()
   if (wt === undefined || typeof wt.Worker !== 'function') return 'node:worker_threads is not available (not Node >= 22.3)';
   if (typeof SharedArrayBuffer === 'undefined' || typeof Atomics === 'undefined' || typeof Atomics.wait !== 'function') return 'shared memory and Atomics.wait are not available';
   if (String(workerUrl).endsWith('.ts') && !stripsTypes) return 'the worker is a .ts file and this Node cannot strip types';
-  return undefined;
+  // a consumer that bundles this package into one file has no worker file beside it: the pool is then not runnable HERE
+  return workerFileMissing(workerUrl);
 }
 
 /** A worker file that is not there fails at start-up inside the worker, where it would only be seen as a stall: name it at construction. */
@@ -128,8 +129,6 @@ export class WorkerPool {
     const url = opts.workerUrl ?? defaultWorkerUrl();
     const why = parallelUnavailable(url);
     if (why !== undefined) throw new WorkerPoolError('unavailable', why);
-    const missing = workerFileMissing(url);
-    if (missing !== undefined) throw new WorkerPoolError('unavailable', missing);
     const cap = maxPoolSize();
     const size = opts.size ?? cap;
     if (!Number.isInteger(size) || size < 1 || size > cap) throw new RangeError(`worker pool size ${size} is outside 1..${cap} (min(4, cores - 2))`);

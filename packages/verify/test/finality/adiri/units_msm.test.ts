@@ -436,3 +436,34 @@ describe('the batched check returns the verdict of the one-by-one form and of th
     expect(draws(refused)).toBe(0);
   });
 });
+
+describe('hostile inputs to the decoder and the window choice', () => {
+  it('an over-long or trailing-byte signature is an encoding error without being parsed: 49, 96, 1 MiB, and a valid one plus one byte', () => {
+    const good = aggregateSign([0], concat(Uint8Array.of(1, 0, 1, 0x20), filled(32, 0)));
+    expect(decodeG1Signature(good).code).toBe(SigOk);
+    for (const n of [49, 50, 96, 97, 1 << 20]) {
+      const b = new Uint8Array(n);
+      b.set(good.subarray(0, Math.min(48, n)));
+      expect(decodeG1Signature(b).code, `length ${n}`).toBe(SigEncoding);
+    }
+    expect(decodeG1Signature(concat(good, Uint8Array.of(0))).code).toBe(SigEncoding);
+    expect(decodeG1Signature(good.subarray(0, 47)).code).toBe(SigEncoding);
+  });
+
+  it('windowBits stays within 1..16 for any count, including one far beyond memory (it is arithmetic, not an allocation)', () => {
+    for (const n of [2 ** 31, 2 ** 40, Number.MAX_SAFE_INTEGER]) {
+      const c = windowBits(n, 128);
+      expect(c).toBeGreaterThanOrEqual(1);
+      expect(c).toBeLessThanOrEqual(16);
+    }
+    expect(windowBits(0, 128)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a zero-bit instance accepts only zero scalars: N passes, N-1 fails exactly', () => {
+    const p = point(3n);
+    expect(msm([p, p], [0n, 0n], 0).is0()).toBe(true);
+    expect(() => msm([p], [1n], 0)).toThrow(RangeError);
+    expect(msm([p], [1n], 1).equals(p)).toBe(true);
+    expect(() => msm([p], [2n], 1)).toThrow(RangeError);
+  });
+});
