@@ -147,13 +147,21 @@ describe('F1a: verifyCommitteeChain re-applies the decoder rules to every record
   });
 
   it('a hand-built index that is not a table position at all (negative, fractional, NaN) is refused like an out-of-range one', () => {
-    for (const bad of [-1, 1.5, Number.NaN]) {
+    // the reported got_len is an integer even for a value that is no index: truncated, NaN as 0, the larger of the two indices (a negative one loses to the other index)
+    for (const [bad, got] of [[-1, 0n], [1.5, 1n], [Number.NaN, 0n], [2.9, 2n]] as const) {
       const { par, cf } = handChain(0, 0, [0, 1, 2, 3]);
       cf.records[0]!.committeeIdx = bad;
       const e = refusal(() => verifyCommitteeChain(par, cf, 'batched'));
       expect(e.code).toBe('finality_evidence_malformed');
       expect(e.fields.reason).toBe('cfa1_table_index_out_of_range');
+      expect(e.fields.got_len, String(bad)).toBe(got);
+      expect(e.fields.want_len).toBe(1n);
+      expect(e.fields.index).toBe(0n);
     }
+    // both positions count: a bad next index alone is refused too
+    const { par, cf } = handChain(0, 0, [0, 1, 2, 3]);
+    cf.records[0]!.nextIdx = -1;
+    expect(refusal(() => verifyCommitteeChain(par, cf, 'batched')).fields.got_len).toBe(0n);
   });
 
   it('checkRecordTables / checkRecordSigners are the decoder rules: N-1 passes, N fails exactly', () => {
@@ -328,6 +336,15 @@ describe('F1d: linkKind 2 binds the leg to the EIP-2935 ring', () => {
     const other = makeHeader({ number: 19991n, consensusRoot: CR });
     const wrongNumber = slot({ F: 20000n, N: 19990n, legHash: hashOf(other), legHeader: other });
     expect(slotCanon(wrongNumber)).toBe('{"code":"finality_block_mismatch","fields":{"field":"legHeaderNumber","got":"19991","want":"19990"}}');
+  });
+  it('a leg header that is present but empty is unreadable (header_decode at N), like a non-nil empty slice in Go', () => {
+    const s = slot({ F: 20000n, N: 19990n, legHeader: new Uint8Array(0) });
+    expect(slotCanon(s)).toBe('{"code":"finality_link_broken","fields":{"at":"19990","check":"header_decode","from":"20000","to":"19990"}}');
+  });
+  it('a leg header that is readable but is another block is judged by hash first, then by number', () => {
+    const hdr = makeHeader({ number: 19990n, consensusRoot: CR });
+    const both = slot({ F: 20000n, N: 19991n, legHash: filled(32, 0x33), legHeader: hdr });
+    expect(slotCanon(both)).toContain('"field":"legHeaderHash"');
   });
   it('a real leg hash over a proven-absent slot is slot_value_mismatch with a zero got (not legHash)', () => {
     const s = slot({ F: 20000n, N: 19990n, slotValue: new Uint8Array(32) });
