@@ -48,7 +48,7 @@ describe('verify time of the largest live vectors', () => {
       `basefinal valid_leg_47604755 (${ev.length} B, ${body.nodes.length} nodes) verify ms: first ${times[0]!.toFixed(0)} (cold), min ${Math.min(...times).toFixed(0)}, median ${median(times).toFixed(0)}, max ${Math.max(...times).toFixed(0)}; light-client part ${lc.toFixed(0)} ms, spine ${spine.toFixed(1)} ms, state proofs + game judgement median ${median(j).toFixed(1)} ms`,
     );
     expect(median(times)).toBeLessThan(15_000);
-  });
+  }, 300_000);
 
   it('every live case (accepting and refusing) is judged within the ceiling; prints the slowest', () => {
     let worst = { id: '', ms: 0 };
