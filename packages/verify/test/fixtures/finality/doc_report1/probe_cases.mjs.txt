@@ -1,0 +1,68 @@
+// Hand cases for the Settlement JSON reader (probe against Go encoding/json). Not committed.
+import { readFileSync, writeFileSync } from 'node:fs';
+
+const [fixture, out] = process.argv.slice(2);
+const base = JSON.parse(readFileSync(fixture, 'utf8')).settlement;
+const clone = () => structuredClone(base);
+const cases = [];
+const add = (name, v) => cases.push({ name, text: typeof v === 'string' ? v : JSON.stringify(v) });
+const mod = (name, f) => {
+  const o = clone();
+  f(o);
+  add(name, o);
+};
+add('valid', base);
+for (const t of ['null', ' null ', '[]', '"x"', '5', 'true', '{}', '{"a":1}', '{', '', 'nul', '{} x', '{"block_hash":}', "{'a':1}", '﻿{}']) add('top:' + JSON.stringify(t), t);
+for (const k of ['block_hash', 'tx_hash']) {
+  const h = base[k];
+  for (const [n, v] of [['empty', ''], ['0x', '0x'], ['0X', '0X' + h.slice(2)], ['upper digits', '0x' + h.slice(2).toUpperCase()], ['no prefix', h.slice(2)], ['short', h.slice(0, -2)], ['long', h + '00'], ['odd', h.slice(0, -1)], ['bad digit', h.slice(0, -2) + 'zz'], ['0y', '0y' + h.slice(2)], ['space', ' ' + h], ['null', null], ['num', 5], ['arr', []], ['obj', {}], ['true', true]]) mod(`${k}:${n}`, (o) => (o[k] = v));
+}
+for (const [n, v] of [['empty', ''], ['0x', '0x'], ['0X', '0Xabcd'], ['odd', '0xabc'], ['bad digit', '0xzz'], ['no prefix', 'abcd'], ['null', null], ['num', 5], ['arr', []], ['true', true]]) mod(`header:${n}`, (o) => (o.block_header_rlp = v));
+const text = JSON.stringify(base);
+add('escaped 0x in block_hash', text.replace('"block_hash":"0x', '"block_hash":"\\u0030x'));
+add('escaped digit in tx_hash', text.replace(/"tx_hash":"0x(.)/, '"tx_hash":"0x\\u0061'));
+add('escaped header 0x', text.replace('"block_header_rlp":"0x', '"block_header_rlp":"\\u0030x'));
+for (const which of ['tx_inclusion_proof', 'receipt_inclusion_proof']) {
+  const p = base[which];
+  for (const f of ['leaf_hash', 'expected_root']) {
+    for (const [n, v] of [['empty arr', []], ['31', p[f].slice(0, 31)], ['33 num', [...p[f], 1]], ['33 junk', [...p[f], 'x']], ['33 obj', [...p[f], {}]], ['null el', [null, ...p[f].slice(1)]], ['str', '0x00'], ['num', 5], ['null', null], ['obj', {}], ['256', [...p[f].slice(0, 31), 256]], ['neg', [...p[f].slice(0, 31), -1]], ['float', [...p[f].slice(0, 31), 1.5]], ['str el', [...p[f].slice(0, 31), '1']], ['bool el', [...p[f].slice(0, 31), true]], ['arr el', [...p[f].slice(0, 31), [1]]]]) mod(`${which}.${f}:${n}`, (o) => (o[which][f] = v));
+  }
+  for (const [n, v] of [['0', 0], ['999', 999], ['max', '18446744073709551615'], ['max+1', '18446744073709551616'], ['neg', -1], ['float', 1.5], ['str', '7'], ['null', null], ['true', true], ['arr', []]]) {
+    const o = clone();
+    o[which].leaf_index = '__IDX__';
+    add(`${which}.leaf_index:${n}`, JSON.stringify(o).replace('"__IDX__"', typeof v === 'string' && /^\d+$/.test(v) ? v : JSON.stringify(v)));
+  }
+  add(`${which}.leaf_index:1e1`, JSON.stringify(Object.assign(clone(), { [which]: { ...p, leaf_index: '__X__' } })).replace('"__X__"', '1e1'));
+  add(`${which}.leaf_index:-0`, JSON.stringify(Object.assign(clone(), { [which]: { ...p, leaf_index: '__X__' } })).replace('"__X__"', '-0'));
+  add(`${which}.leaf_index:1.0`, JSON.stringify(Object.assign(clone(), { [which]: { ...p, leaf_index: '__X__' } })).replace('"__X__"', '1.0'));
+  for (const [n, v] of [['str', 'yes'], ['null', null], ['num', 1], ['false', false], ['arr', []]]) mod(`${which}.verified:${n}`, (o) => (o[which].verified = v));
+  for (const [n, v] of [['null', null], ['empty', []], ['str', 'x'], ['num', 5], ['obj', {}], ['drop first', p.proof_nodes.slice(1)], ['dup', [...p.proof_nodes, ...p.proof_nodes]], ['el null', [null, ...p.proof_nodes.slice(1)]], ['el num arr', [[1, 2], ...p.proof_nodes.slice(1)]], ['el empty str', ['', ...p.proof_nodes.slice(1)]], ['el b64 nopad', [p.proof_nodes[0].replace(/=+$/, '') + (p.proof_nodes[0].endsWith('=') ? '' : 'A'), ...p.proof_nodes.slice(1)]], ['el b64 crlf', [p.proof_nodes[0].slice(0, 8) + '\r\n' + p.proof_nodes[0].slice(8), ...p.proof_nodes.slice(1)]], ['el b64 space', [p.proof_nodes[0].slice(0, 8) + ' ' + p.proof_nodes[0].slice(8), ...p.proof_nodes.slice(1)]], ['el b64 url', [p.proof_nodes[0].replace(/\+/g, '-').replace(/\//g, '_') + 'A', ...p.proof_nodes.slice(1)]], ['el bad', ['@@@@', ...p.proof_nodes.slice(1)]], ['el num 300', [[300], ...p.proof_nodes.slice(1)]], ['el obj', [{}, ...p.proof_nodes.slice(1)]]]) mod(`${which}.proof_nodes:${n}`, (o) => (o[which].proof_nodes = v));
+  for (const [n, v] of [['null', null], ['empty', []], ['str', 'x'], ['drop first', p.proof_hashes.slice(1)], ['el null', [null, ...p.proof_hashes.slice(1)]], ['el short', [p.proof_hashes[0].slice(0, 31), ...p.proof_hashes.slice(1)]], ['el long junk', [[...p.proof_hashes[0], 'x'], ...p.proof_hashes.slice(1)]], ['el str', ['x', ...p.proof_hashes.slice(1)]], ['el num', [5, ...p.proof_hashes.slice(1)]], ['el empty arr', [[], ...p.proof_hashes.slice(1)]]]) mod(`${which}.proof_hashes:${n}`, (o) => (o[which].proof_hashes = v));
+  const lv = p.leaf_value;
+  for (const [n, v] of [['null', null], ['empty', ''], ['num arr', [2, 200]], ['nopad', lv.replace(/=+$/, '')], ['crlf', lv.slice(0, 8) + '\r\n' + lv.slice(8)], ['tab', lv.slice(0, 8) + '\t' + lv.slice(8)], ['num', 5], ['obj', {}], ['true', true], ['trailing bits', 'QR==']]) mod(`${which}.leaf_value:${n}`, (o) => (o[which].leaf_value = v));
+  for (const [n, v] of [['null', null], ['num', 5], ['str', 'x'], ['arr', []], ['empty obj', {}]]) mod(`${which}:${n}`, (o) => (o[which] = v));
+}
+// members: folding, duplicates, unknown
+mod('upper keys', (o) => {
+  for (const k of Object.keys(o)) {
+    o[k.toUpperCase()] = o[k];
+    delete o[k];
+  }
+});
+add('kelvin block_hash', text.replace('"block_hash"', '"blocK_hash"'));
+add('long s tx_inclusion', text.replace('"tx_inclusion_proof"', '"tx_incluſion_proof"'));
+add('dup tx_hash last wins zero', text.slice(0, -1) + `,"tx_hash":"0x${'00'.repeat(32)}"}`);
+add('dup tx_hash first zero', `{"tx_hash":"0x${'00'.repeat(32)}",` + text.slice(1));
+add('dup proof null last', text.slice(0, -1) + ',"tx_inclusion_proof":null}');
+add('dup proof merge first', text.replace('{"block_hash"', '{"tx_inclusion_proof":{"leaf_index":99},"block_hash"'));
+add('dup proof partial last', text.slice(0, -1) + ',"tx_inclusion_proof":{"leaf_index":0}}');
+add('dup leaf_hash null el merge', text.slice(0, -1) + ',"tx_inclusion_proof":{"leaf_hash":[null,null]}}');
+add('dup proof_nodes shorter last', text.slice(0, -1) + ',"tx_inclusion_proof":{"proof_nodes":["QQ=="]}}');
+add('unknown member', text.slice(0, -1) + ',"zzz":{"a":[1,2]}}');
+add('unknown member dup', text.slice(0, -1) + ',"zzz":1,"zzz":2}');
+add('trailing comma', text.slice(0, -1) + ',}');
+add('trailing data', text + ' 1');
+add('ws around', ' \n\t' + text + ' \r\n');
+add('deep unknown', text.slice(0, -1) + ',"z":' + '['.repeat(500) + ']'.repeat(500) + '}');
+writeFileSync(out, JSON.stringify(cases));
+console.log('cases', cases.length);

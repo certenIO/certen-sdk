@@ -11,8 +11,9 @@
  * Settlement or both refuse it:
  *  - keys match by exact name, else case-insensitively (the same folding as every other Go-decoded document of this package); a repeated key is read
  *    in document order, an object member into an existing pointer MERGES into it, `null` for a pointer leaves it nil;
- *  - common.Hash and hexutil.Bytes read the RAW token: `0x`, an even count of hex digits of either case, exactly 32 bytes for a hash, and a
- *    string written with an escape is refused; null is refused (their UnmarshalJSON is called with it);
+ *  - common.Hash and hexutil.Bytes read the RAW token: `0x` or `0X`, an even count of hex digits of either case, exactly 32 bytes for a hash, and a
+ *    string written with an escape is refused; null is refused (their UnmarshalJSON is called with it); the empty string is no bytes for hexutil.Bytes
+ *    (the header) and an error for a hash;
  *  - [32]byte is a JSON array of numbers (a base64 string is refused): numbers are read as uint8 (an integer literal 0..255, null leaves the byte
  *    as it was), elements past the 32nd are skipped unread (of any type) and a short array is zero-filled;
  *  - []byte is base64 (StdEncoding: padding required, CR and LF ignored) or an array of numbers; null is nil;
@@ -44,6 +45,8 @@ const typeOf = (v: JVal): string => (v === null ? 'null' : typeof v === 'string'
 function hexToken(v: JVal, wasEscaped: boolean, want: number, what: string): Uint8Array {
   if (typeof v !== 'string') return fail(`${what}: ${typeOf(v)} is not a hex string`);
   if (wasEscaped) return fail(`${what}: the string is written with an escape and hexutil reads its raw text`);
+  // hexutil.Bytes reads the empty string as no bytes (checkText: "empty strings are allowed"); a fixed length (common.Hash) still refuses it below
+  if (v === '' && want < 0) return new Uint8Array(0);
   if (v.length < 2 || v[0] !== '0' || (v[1] !== 'x' && v[1] !== 'X')) return fail(`${what}: missing 0x prefix`);
   const digits = v.slice(2);
   if (digits.length % 2 !== 0) return fail(`${what}: odd length hex string`);

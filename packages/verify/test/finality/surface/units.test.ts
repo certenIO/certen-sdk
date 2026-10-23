@@ -248,6 +248,9 @@ describe('the Settlement reader reads what encoding/json reads into ethproof.Set
     expect(() => read(h)).toThrow(SettlementJsonError);
     h.block_header_rlp = '0x';
     expect(read(h)?.headerRlp.length).toBe(0);
+    // hexutil.Bytes reads the empty string as no bytes (the hand probe found this against Go); a hash does not
+    h.block_header_rlp = '';
+    expect(read(h)?.headerRlp.length).toBe(0);
     // `0x` written with an escape: Go reads the raw token and refuses it where the unescaped string would pass
     const text = JSON.stringify(good()).replace('"block_hash":"0x', '"block_hash":"\\u0030x');
     expect(() => parseSettlementJSON(text)).toThrow(SettlementJsonError);

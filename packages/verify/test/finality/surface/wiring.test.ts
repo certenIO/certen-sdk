@@ -74,6 +74,8 @@ describe('registration', () => {
     expect(f.text).toBe('FAILED (finality)  DOC\n  the verifier cannot be wired: its Kinds do not register: finality_pins_corrupt{key="adiri.genesis_link",reason="bad_value"}\n');
     expect(f.state?.code).toBe('finality_pins_corrupt');
     expect(f.wiring?.stage).toBe('kinds');
+    expect(f.wiring?.state?.code).toBe('finality_pins_corrupt');
+    expect(f.wiring?.message).toBe('finality_pins_corrupt{key="adiri.genesis_link",reason="bad_value"}');
     expect(JSON.parse(JSON.stringify(f))).toEqual({ class: 'failed', exit: 1, text: f.text });
     expect(ctl.calls).toBe(1);
 
@@ -87,6 +89,14 @@ describe('registration', () => {
     const r = await fresh.judgeFinalityDocumentWithKinds(JSON.parse(docOf(goodCase)), { settlement: settlement(), subject: 'DOC' });
     expect(r.exit).not.toBe(0);
     expect(r.wiring).toBeUndefined();
+  });
+
+  it('an empty subject is the subject: the report names the document as the caller said', async () => {
+    vi.resetModules();
+    const fresh = await import('../../../src/proof-v2/finality/surface.js');
+    ctl.mode = 'named';
+    const w = await fresh.wireFinalityOptions({ settlement: settlement(), subject: '' });
+    expect((w as { failure: { text: string } }).failure.text.startsWith('FAILED (finality)  \n')).toBe(true);
   });
 
   it('an error that is not a named state is reported by its message, still as a result', async () => {

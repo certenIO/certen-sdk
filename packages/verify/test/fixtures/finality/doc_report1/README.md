@@ -22,3 +22,9 @@ registry that lacks `arb-sepolia/finalized/v1` and `eth-sepolia/finalized/v1`: t
 Two lines of text differ from Go's by construction, both about HOW a caller names the Settlement (a command line flag there, an option here): the hint at the end of
 the "no Settlement" report, and (not present in any case here) the note that a call registered no Kind. The `not a portable document: <json error>` prose is encoding/json's
 own and is compared by class only.
+
+## The Settlement reader probe
+
+`settlement_probe.json` is 261 hand-made Settlement JSON texts (`probe_cases.mjs.txt` builds them from `settlements/base_sepolia_47368146.json`) with what `json.Unmarshal` into
+`*ethproof.Settlement` and `finality.DeriveIncluded` made of each in Go (`probe_generator.go.txt`, a detached validator worktree at cbb6373): whether it decoded, whether the result is nil,
+whether the Settlement verifies, and the named state when it does not. `src/proof-v2/finality/settlementjson.ts` must reach the same four answers for every text.
