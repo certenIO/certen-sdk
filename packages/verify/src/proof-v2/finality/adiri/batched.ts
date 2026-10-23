@@ -14,7 +14,8 @@
  */
 import { bls12_381 } from '@noble/curves/bls12-381';
 import { ReasonEncoding, ReasonIdentity, ReasonPairing, ReasonSubgroup, type SignatureReason } from './states.js';
-import { SigEncoding, SigIdentity, SigOk, SigSubgroup, clearG1Cofactor, combineBatch, decodeBatch, groupSums, msm, type G1Point } from './msm.js';
+import { SigEncoding, SigIdentity, SigOk, SigSubgroup, clearG1Cofactor, groupSums, msm, type G1Point } from './msm.js';
+import { engineFor, type Parallelism } from './pool.js';
 import type { Failure, G2Point, KeyEntry, Rand, SigItem } from './sigs.js';
 
 export interface BatchContext {
@@ -44,7 +45,8 @@ const reasonOf = (code: number): SignatureReason => {
 };
 
 /** The lowest failing item and its reason under the batched mode, or undefined. */
-export function firstFailureBatched(items: readonly SigItem[], rnd: Rand, ctx: BatchContext): Failure | undefined {
+export function firstFailureBatched(items: readonly SigItem[], rnd: Rand, ctx: BatchContext, parallel: Parallelism = 'auto'): Failure | undefined {
+  const engine = engineFor(parallel, items.length);
   // every signature is decoded and checked before it enters the combination; an empty signer list has no aggregate key and fails its
   // pairing (its decode, if it fails, is reported first)
   let emptyAt = items.length;
@@ -55,7 +57,7 @@ export function firstFailureBatched(items: readonly SigItem[], rnd: Rand, ctx: B
     }
   }
   const upto = Math.min(emptyAt + 1, items.length);
-  const dec = decodeBatch({ sigs: items.slice(0, upto).map((it) => it.sig) });
+  const dec = engine.decode(items.slice(0, upto).map((it) => it.sig));
   let decodeFail: Failure | undefined;
   for (let i = 0; i < upto; i++) {
     if (dec.codes[i] !== SigOk) {
@@ -97,7 +99,7 @@ export function firstFailureBatched(items: readonly SigItem[], rnd: Rand, ctx: B
     }
   };
 
-  const full = combineBatch({ points, msgs: items.slice(0, n).map((it) => it.msg), scalars, groups, dst: ctx.dst });
+  const full = engine.combine({ points, msgs: items.slice(0, n).map((it) => it.msg), scalars, groups, dst: ctx.dst });
   if (holds(full.sumSig, full.sumHash)) return decodeFail;
 
   // bisect for the lowest k such that the prefix [0..k] fails: prefix(lo) holds, prefix(hi) fails. The prefix sums are carried: the

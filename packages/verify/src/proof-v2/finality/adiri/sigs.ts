@@ -26,6 +26,7 @@ import {
 } from './states.js';
 import { SigBytes } from './cfa1.js';
 import { firstFailureBatched } from './batched.js';
+import type { Parallelism } from './pool.js';
 
 /** The RFC 9380 domain separation tag of these signatures (the "NUL_" scheme of draft-irtf-cfrg-bls-signature, min-sig). */
 export const SignatureDST = 'BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_';
@@ -202,8 +203,8 @@ function batchScalar(rnd: Rand): bigint {
  * only localised (by bisection over prefixes of the SAME combination, then one individual check of the item found), never accepted by
  * the localisation.
  */
-export function firstFailure(items: readonly SigItem[], mode: Mode, rnd: Rand = randomBytes): Failure | undefined {
+export function firstFailure(items: readonly SigItem[], mode: Mode, rnd: Rand = randomBytes, parallel: Parallelism = 'auto'): Failure | undefined {
   if (items.length === 0) return undefined;
   if (mode === 'oneByOne') return firstOneByOne(items);
-  return firstFailureBatched(items, rnd, { dst: SignatureDST, batchScalar, aggregateKey, signerGroup, verifyOne });
+  return firstFailureBatched(items, rnd, { dst: SignatureDST, batchScalar, aggregateKey, signerGroup, verifyOne }, parallel);
 }

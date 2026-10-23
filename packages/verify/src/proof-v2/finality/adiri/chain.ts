@@ -7,6 +7,7 @@ import { Code, FinalityStateError, newState, malformed } from '../state.js';
 import { ReasonCFA1NoRecords, committeeOf, nextOf, type CFA1 } from './cfa1.js';
 import { Codec, Name, recordDigests, signedMessage, type Params } from './record.js';
 import { KeyCache, firstFailure, type KeyEntry, type Mode, type Rand, type SigItem } from './sigs.js';
+import type { Parallelism } from './pool.js';
 import {
   CheckBelowQuorum,
   CheckCommitteeIncompatible,
@@ -87,7 +88,7 @@ const sameNumHash = (a: NumHash, b: NumHash): boolean => a.number === b.number &
  * Judges records 0..E of c against the pins par. The structural checks of ALL records run before any signature is verified, so the
  * verdict does not depend on the mode; mode only chooses how signatures are verified.
  */
-export function verifyCommitteeChain(par: Params, c: CFA1, mode: Mode, rnd?: Rand): ChainResult {
+export function verifyCommitteeChain(par: Params, c: CFA1, mode: Mode, rnd?: Rand, parallel?: Parallelism): ChainResult {
   if (par.codec !== Codec) throw codecUnsupported(0, par.codec, Codec);
   if (c.records.length === 0) throw malformed('cfa1.n_records', ReasonCFA1NoRecords, 0, 1);
   const keys = new KeyCache();
@@ -137,7 +138,7 @@ export function verifyCommitteeChain(par: Params, c: CFA1, mode: Mode, rnd?: Ran
 
   let fail: ReturnType<typeof firstFailure>;
   try {
-    fail = firstFailure(items, mode, rnd);
+    fail = firstFailure(items, mode, rnd, parallel);
   } catch (e) {
     if (e instanceof FinalityStateError) throw e;
     throw newState(Code.VerifierFailed, { chain: par.chainId, kind: Name, cause: e instanceof Error ? e.message : String(e) });

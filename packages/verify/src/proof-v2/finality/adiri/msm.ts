@@ -142,8 +142,8 @@ export interface DecodeResult {
   points: (G1Point | undefined)[];
 }
 
-/** Decodes the signatures in order and stops at the first refusal (the later ones are SigNotExamined). */
-export function decodeBatch(job: DecodeJob): DecodeResult {
+/** Decodes the signatures in order and stops at the first refusal (the later ones are SigNotExamined). tick is called after each record. */
+export function decodeBatch(job: DecodeJob, tick?: () => void): DecodeResult {
   const n = job.sigs.length;
   const codes = new Uint8Array(n).fill(SigNotExamined);
   const points: (G1Point | undefined)[] = new Array(n);
@@ -152,6 +152,7 @@ export function decodeBatch(job: DecodeJob): DecodeResult {
     codes[i] = d.code;
     if (d.code !== SigOk) break;
     points[i] = d.point;
+    tick?.();
   }
   return { codes, points };
 }
@@ -310,11 +311,14 @@ export function hashToG1Unclamped(msg: Uint8Array, dst: string): G1Point {
 export const clearG1Cofactor = (p: G1Point): G1Point => p.clearCofactor();
 
 /** The two sums of the random linear combination over the records of the job. */
-export function combineBatch(job: CombineJob): CombineResult {
+export function combineBatch(job: CombineJob, tick?: () => void): CombineResult {
   const n = job.points.length;
   if (job.msgs.length !== n || job.scalars.length !== n || job.groups.length !== n) throw new RangeError('combineBatch: arrays differ in length');
   const hashPts: G1Point[] = new Array(n);
-  for (let i = 0; i < n; i++) hashPts[i] = hashToG1Unclamped(job.msgs[i]!, job.dst);
+  for (let i = 0; i < n; i++) {
+    hashPts[i] = hashToG1Unclamped(job.msgs[i]!, job.dst);
+    tick?.();
+  }
   return { sumSig: msm(job.points, job.scalars), sumHash: groupSums(hashPts, job.scalars, job.groups, 0, n), hashPts };
 }
 
@@ -331,4 +335,70 @@ export function groupSums(points: readonly G1Point[], scalars: readonly bigint[]
   const out = new Map<number, G1Point>();
   for (const g of [...byGroup.keys()].sort((a, b) => a - b)) out.set(g, msm(byGroup.get(g)!.p, byGroup.get(g)!.s));
   return out;
+}
+
+// ---- the plain-data form of the two jobs, for a worker thread (pool.ts) ----------------------------------------------------------------
+
+/** Byte strings in ONE fresh buffer: structured clone copies a typed array's whole backing buffer, so views of a large evidence buffer are not sent. */
+export interface Packed {
+  data: Uint8Array;
+  /** ends[i] is the end offset of string i in data */
+  ends: Uint32Array;
+}
+export function pack(list: readonly Uint8Array[]): Packed {
+  let total = 0;
+  for (const b of list) total += b.length;
+  const data = new Uint8Array(total);
+  const ends = new Uint32Array(list.length);
+  let o = 0;
+  list.forEach((b, i) => {
+    data.set(b, o);
+    o += b.length;
+    ends[i] = o;
+  });
+  return { data, ends };
+}
+export function unpack(p: Packed): Uint8Array[] {
+  const out: Uint8Array[] = [];
+  let o = 0;
+  for (let i = 0; i < p.ends.length; i++) {
+    out.push(p.data.subarray(o, p.ends[i]!));
+    o = p.ends[i]!;
+  }
+  return out;
+}
+
+export type JobKind = 'decode' | 'combine';
+export interface DecodeWire {
+  sigs: Packed;
+}
+export interface DecodeResultWire {
+  codes: Uint8Array;
+  points: (Raw | undefined)[];
+}
+export interface CombineWire {
+  points: Raw[];
+  msgs: Packed;
+  scalars: bigint[];
+  groups: number[];
+  dst: string;
+}
+export interface CombineResultWire {
+  sumSig: Raw;
+  sumHash: [number, Raw][];
+  hashPts: Raw[];
+}
+
+/** Runs one wire job (what a worker does for each message). tick is called after each record. */
+export function runWire(kind: string, job: unknown, tick: () => void): DecodeResultWire | CombineResultWire {
+  if (kind === 'decode') {
+    const r = decodeBatch({ sigs: unpack((job as DecodeWire).sigs) }, tick);
+    return { codes: r.codes, points: r.points.map((p) => (p === undefined ? undefined : toRaw(p))) };
+  }
+  if (kind === 'combine') {
+    const w = job as CombineWire;
+    const r = combineBatch({ points: w.points.map(fromRaw), msgs: unpack(w.msgs), scalars: w.scalars, groups: w.groups, dst: w.dst }, tick);
+    return { sumSig: toRaw(r.sumSig), sumHash: [...r.sumHash].map(([g, pt]): [number, Raw] => [g, toRaw(pt)]), hashPts: r.hashPts.map(toRaw) };
+  }
+  throw new RangeError(`unknown job kind ${kind}`);
 }
