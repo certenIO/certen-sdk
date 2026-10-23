@@ -26,3 +26,6 @@ export * as baseposted from './baseposted/index.js';
 export * as ethl1 from './ethl1/index.js';
 export * as ethsepolia from './ethsepolia/index.js';
 export * from './allkinds.js';
+export * from './docreport.js';
+export * from './settlementjson.js';
+export * from './surface.js';

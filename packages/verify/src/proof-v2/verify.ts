@@ -8,6 +8,7 @@ import { account, encodeObject, keccak256, networkDefinition, networkGlobals, sa
 import { accumulateSetRoot, validatorsOf } from './accset.js';
 import { equal, fail, goHexStrict, goTrimSpace, hexBytes, merkleHashList, type Receipt, receiptFromJSON, receiptPrefixTo, receiptValid, sha256, toHex } from './bytes.js';
 import { genesisGlobals, Spine } from './spine.js';
+import { carriesFinality, judgeFinalityDocument, type DocumentFinality, type FinalityOptions } from './finality/docreport.js';
 import { anchorBody, anchorMessage, list, optList, rec, str, uint, type Rec } from './shapes.js';
 import { BadNum, decodePortable } from '../s3/gotree.js';
 import { bit, mustHex32 } from '../s3/chains.js';
@@ -54,6 +55,11 @@ export interface Report {
   /** The certen:accval:v1 root of the validator set the spine derived, with its threshold, under the pinned
    * incarnation: the value a V8.2 anchor must have committed for the proof to be about this set. Hex32. */
   accumulateSetRoot: string;
+  /**
+   * The finality section (S7), present only when the document carries a `finality` member or the caller passed `opts.finality` to verifyPortable: judged
+   * by the framework (finality/docreport.ts) and never part of what verifyPortable verified: it cannot make this call throw or change another member.
+   */
+  finality?: DocumentFinality;
 }
 
 /** What the verifier established about one page's chains (Go proofv2.PageChain). */
@@ -106,10 +112,13 @@ export type Trace = (stage: Stage, facts: Record<string, unknown>) => void;
  * Portable (src/s3/gotree.ts): every member has the type it has in Go, keys are matched as encoding/json matches them, a repeated or null member
  * is read as Go reads it. verifyPortableAnyBytes (src/s3) is the entry for a document received as text, which also keeps number literals.
  */
-export function verifyPortable(document: unknown, trace: Trace = () => {}): Report {
+export function verifyPortable(document: unknown, trace: Trace = () => {}, opts: { finality?: FinalityOptions } = {}): Report {
   const text = JSON.stringify(document);
   if (text === undefined) fail('portable proof is not JSON');
-  return verifyPortableDecoded(decodePortable(text), trace);
+  const report = verifyPortableDecoded(decodePortable(text), trace);
+  // S7: judged only when the document carries a finality member or the caller asks; any other document returns exactly what it returned before
+  if (opts.finality !== undefined || carriesFinality(document)) report.finality = judgeFinalityDocument(document, opts.finality);
+  return report;
 }
 
 /** VerifyPortable over a document already decoded by decodePortable. */

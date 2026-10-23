@@ -5,7 +5,7 @@
 ### Added
 - The TypeScript `arb-sepolia/finalized/v1` verifier (`src/proof-v2/finality/arbfinal`, exported as the `arbfinal` namespace, registered by `registerAllKinds` in the validator's order after
   `arb-sepolia/l1_posted/v1`): the body codec, the Rollup identity under S and under K, the assertion node and its parent's ConfigData under S, the L2 header spine, the node-size split
-  (`max_node_bytes` off the transaction and receipt proof paths), and the confirmation-path classifier. `UNPORTED_KIND_ROWS` now names one row, `eth-sepolia/finalized/v1`.
+  (`max_node_bytes` off the transaction and receipt proof paths), and the confirmation-path classifier. `UNPORTED_KIND_ROWS` loses this row (it is empty once the `eth-sepolia/finalized/v1` port is merged too).
 - The wallet route is proven, not read from calldata: `proveWallet` is true only if, under K's state root, the callee is an existing account with the pinned `validator_wallet_proxy` code hash, its
   EIP-1967 implementation slot holds exactly the pinned implementation address, and that implementation is an existing account with the pinned `validator_wallet_logic` code hash. Any error is
   false, never a throw. A callee that is not proven is `confirmation_path_unproven{indirect}`.
@@ -28,6 +28,32 @@
 ### Two places where Go depends on its random map order, made deterministic here
 - Case-variant duplicate `logic_pins` keys naming different roles are `pin_mismatch{logic_pins}` (Go keeps whichever its map visits last); with several bad selectors or topics the first in sorted name
   order is named (Go names a random one). A file with one defect answers identically in Go and here.
+
+## Unreleased — RB12 TS surface: the finality section in the public verifier (2026-10-23)
+
+### Added
+- `export * as finality from './proof-v2/finality/index.js'` in the package entry: the only name the entry gains (the other 171 names are unchanged); `finality.registerAllKinds` and `finality.embeddedPins` are reachable through it,
+  and the built `dist/index.d.ts` type-checks for a consumer with `skipLibCheck: false`.
+- An optional finality section (S7), the TypeScript twin of Go `proofverify --finality-file` (`reportFinalityFile` + `printReport`): the document's `finality` member (certen-finality-addenda/1) is read as Go reads it, the
+  Settlement is verified, D0 is recomputed from its block and never read from the file, the carried `leg` must equal that block, and each addendum is judged by its registered Kind. It appears as `Verification.finality` and the layer `S7`
+  in `verifyProofDocument`, and as `Report.finality` in `verifyPortable`, when the document carries a `finality` member or the caller passes `finality` (`VerifyOptions.finality`, or the third argument of `verifyPortable`):
+  `{ settlement: { chain, settlement, source }, pins, registry, subject }`, all optional. Without a Settlement the section judges no level and says so by name (`finality_included_unavailable`, summary-only).
+- `finality.verifyProofDocumentWithKinds`, `finality.verifyPortableWithKinds` and `finality.registerKinds`: the asynchronous entries that register every ported Kind first (lazily, once, under the embedded pins as Go does);
+  a registration or pins failure is a named result of the section (`DocumentFinality.wiring`), never an exception and never a skipped section. The synchronous entries judge with the `registry` the caller passes.
+- `finality.parseSettlementJSON`: reads `ethproof.Settlement` JSON as `encoding/json` does (fold-matched members, hexutil raw tokens, `[32]byte` as numbers with extra elements skipped, base64 with CR/LF ignored); `finality.judgeFinalityText`,
+  `judgeFinalityDocument`, `renderReport` and `notCoveredByThePins` are the section's pieces.
+
+### Behaviour
+- A document with no `finality` member and no option is verified byte for byte as before (the SHA-256 of `verifyProofDocument` and `verifyPortable` for the conformance document and its 21 tampered cases is unchanged from d7ca45b).
+- The section is a layer like the others and decides the overall verdict as Go's combined proofverify decides its exit code (failed beats summary-only beats verified): it can weaken `overall` and never strengthen it, a core failure stays
+  the first failure, and `covers` names `S7(<level>)` (and `notCovered` drops `S7`) only for a verified overall.
+
+### Tests
+- `test/finality/surface`: the 261-case Settlement reader probe against Go's `encoding/json` (equal on all), the Go oracle set `test/fixtures/finality/doc_report1` (51 documents judged by `reportFinalityFile` and 19 `printReport` reports, recorded at cbb6373; the same text, headline and exit code), hostile input
+  (non-object member, `null`, repeated and case-folded keys, depth bomb, 300,000-element arrays, trailing bytes, wrong format), the Settlement reader and base64 boundaries, lazy wiring and failure, the layer composition, and the public entry.
+- Two-seed differential against Go (2,380 mutated finality members, Settlements and pins overrides, 0 differences; the first run found one in the Settlement reader, fixed) and a hand-mutation gate over the files written
+  (204 mutants over the files written: 190 killed, 14 equivalent, 0 unexplained; the equivalents with reasons in `test/finality/surface/mutation_equivalents_rb12.json`).
+
 
 ## Unreleased — RB12 TS base: the Base finalized and Base l1_posted verifiers follow the Go review fixes (2026-10-23)
 
