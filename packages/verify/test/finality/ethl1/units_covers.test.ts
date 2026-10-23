@@ -11,7 +11,9 @@ import {
   type FinalizedHead,
   type L1Block,
 } from '../../../src/proof-v2/finality/ethl1/index.js';
+import { readHeader } from '../../../src/proof-v2/finality/rlpheader.js';
 import { FinalityStateError, hexLower } from '../../../src/proof-v2/finality/state.js';
+import { readSpineFile } from './helpers.js';
 
 const cat = (...p: Uint8Array[]): Uint8Array => Uint8Array.from(p.flatMap((x) => Array.from(x)));
 const lenPrefix = (base: number, n: number): Uint8Array => {
@@ -237,5 +239,72 @@ describe('blockAt', () => {
     expect(named(() => blockAt(b, 95n)).canonical()).toBe('{"code":"finality_block_not_covered","fields":{"block_number":"95","finalized_exec_number":"100"}}');
     expect(named(() => blockAt([], 7n)).canonical()).toBe('{"code":"finality_block_not_covered","fields":{"block_number":"7","finalized_exec_number":"0"}}');
     expect(blockAt(blocks(3n, 4), 0n).number).toBe(0n);
+  });
+});
+
+describe('why covers has its own positional reader (the framework readHeader accepts a different set)', () => {
+  const items = (over: Record<number, Uint8Array>): Uint8Array => {
+    const it = [str(fill(0xaa)), str(fill(1)), str(fill(2, 20)), str(fill(0xbb)), str(fill(4)), str(fill(5)), str(fill(6, 256)), uint(0n), uint(7n), uint(1n), uint(1n), uint(9n)];
+    for (const [i, v] of Object.entries(over)) it[Number(i)] = v;
+    return list(...it);
+  };
+  it('the Go ethl1 reader refuses a list in an unread slot; readHeader accepts it', () => {
+    const h = items({ 1: list(uint(1n)) });
+    expect(rlpHeaderItems(h).reason).toBe('item_not_string');
+    expect(() => readHeader(h)).not.toThrow();
+  });
+  it('the Go ethl1 reader accepts a short transactions root; readHeader refuses it', () => {
+    const h = items({ 4: str(fill(4, 31)) });
+    expect(rlpHeaderItems(h).reason).toBe('');
+    expect(() => readHeader(h)).toThrow();
+    const [b] = covers(headOf(h), [h], 1);
+    expect(b!.number).toBe(7n);
+  });
+  it('the two readers agree on every header of the published legacy spine (4,057 Fulu-era headers)', () => {
+    const spine = readSpineFile('raw/spine_legacy.bin');
+    expect(spine.length).toBe(4057);
+    for (const raw of spine) {
+      const a = readHeader(raw);
+      const r = rlpHeaderItems(raw);
+      expect(r.reason).toBe('');
+      expect(hexLower(a.stateRoot)).toBe(hexLower(r.items[3]!));
+      expect(hexLower(a.parentHash)).toBe(hexLower(r.items[0]!));
+    }
+  });
+});
+
+describe('the positional RLP reader: length-of-length boundaries', () => {
+  const ones = (n: number): Uint8Array => Uint8Array.from({ length: n }, () => 1);
+  const tailOf = (...t: number[]): Uint8Array => list(...Array.from({ length: 12 }, () => uint(1n)), Uint8Array.from(t));
+
+  it('a list payload of exactly 55 bytes uses the short form (0xf7); 56 uses the long form', () => {
+    const item = cat(Uint8Array.of(0x80 + 42), ones(42)); // 43 bytes
+    const short = cat(Uint8Array.of(0xf7), ones(12), item);
+    expect(short.length).toBe(56);
+    expect(rlpHeaderItems(short)).toMatchObject({ reason: '', count: 13 });
+    const long = cat(Uint8Array.of(0xf8, 56), ones(12), cat(Uint8Array.of(0x80 + 43), ones(43)));
+    expect(rlpHeaderItems(long)).toMatchObject({ reason: '', count: 13 });
+  });
+
+  it('accepts a four-byte list length and a four-byte string length (a 16 MiB header)', () => {
+    const n = 1 << 24; // the last item: 0xbb + 4 length bytes (no leading zero byte needs n >= 2^24) + n bytes
+    const total = 12 + 5 + n; // payload length of the list
+    const body = new Uint8Array(total);
+    body.fill(1, 0, 12);
+    body.set([0xbb, (n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255], 12);
+    const raw = cat(Uint8Array.of(0xfb, (total >>> 24) & 255, (total >>> 16) & 255, (total >>> 8) & 255, total & 255), body);
+    expect(rlpHeaderItems(raw)).toMatchObject({ reason: '', count: 13 });
+    // five length bytes are never accepted
+    expect(rlpHeaderItems(Uint8Array.of(0xfc, 1, 0, 0, 0, 0)).reason).toBe('list_length');
+    expect(rlpHeaderItems(tailOf(0xbc, 1, 0, 0, 0, 0)).reason).toBe('string_length');
+    expect(rlpHeaderItems(tailOf(0xfc, 1, 0, 0, 0, 0)).reason).toBe('list_length');
+  });
+
+  it('a length-of-length that exactly fills the remaining bytes is parsed, not refused as truncated', () => {
+    expect(rlpHeaderItems(Uint8Array.of(0xf8, 100)).reason).toBe('list_length_mismatch');
+    expect(rlpHeaderItems(tailOf(0xb8, 100)).reason).toBe('item_overruns');
+    expect(rlpHeaderItems(tailOf(0xf8, 100)).reason).toBe('item_overruns');
+    expect(rlpHeaderItems(tailOf(0xb8)).reason).toBe('string_length');
+    expect(rlpHeaderItems(tailOf(0xf8)).reason).toBe('list_length');
   });
 });
