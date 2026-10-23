@@ -1,10 +1,12 @@
 /**
  * OP Stack channel frames and channel decompression (derive/frame.go and the derivation spec's channel format), the twin of the frame and
- * decompress parts of the validator's pkg/finality/baseposted/channel.go. Zlib and Brotli run on node:zlib with the output cap enforced
- * WHILE streaming (maxOutputLength), so a decompression bomb never allocates more than the cap.
+ * decompress parts of the validator's pkg/finality/baseposted/channel.go. Zlib runs on node:zlib with the output cap enforced WHILE streaming
+ * (maxOutputLength), so a decompression bomb never allocates more than the cap; the Brotli stream is read by the shared strict reader
+ * (../strictbrotli.ts, the twin of the validator's pkg/finality/strictbrotli, which the Arbitrum batch decoder uses too).
  */
 import { kMaxLength } from 'node:buffer';
-import { brotliDecompressSync, inflateSync } from 'node:zlib';
+import { inflateSync } from 'node:zlib';
+import { StrictBrotliError, decompress as strictDecompress } from '../strictbrotli.js';
 
 /** OP MaxFrameLen: a frame's data is at most one million bytes. */
 export const MAX_FRAME_DATA = 1_000_000;
@@ -58,23 +60,10 @@ export function parseFrames(data: Uint8Array): Frame[] {
 const NODE_MAX_LENGTH = BigInt(kMaxLength);
 
 /**
- * node's output cap for a channel cap of `max` bytes: one byte past it proves an excess. A cap beyond what a Buffer can hold is no cap at
+ * node's output cap for a zlib channel cap of `max` bytes: one byte past it proves an excess. A cap beyond what a Buffer can hold is no cap at
  * all (Go reads under any uint64 cap, the largest of which no stream reaches).
  */
 const capOf = (max: bigint): number => Number(max + 1n > NODE_MAX_LENGTH ? NODE_MAX_LENGTH : max + 1n);
-
-/**
- * The Brotli stream of a channel, read the way the reference decoder reads it (the validator's pkg/finality/strictbrotli): the empty stream,
- * a stream that ends early and any byte after the end of a complete stream are refused. node:zlib refuses the empty input and a stream cut
- * short but silently ignores bytes after the end, so those are decided here from the count of input bytes the decoder consumed.
- */
-function brotliStrict(input: Uint8Array, max: bigint): Uint8Array {
-  if (input.length === 0) throw new ChannelError('brotli: empty stream');
-  const r = brotliDecompressSync(input, { maxOutputLength: capOf(max), info: true }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
-  if (BigInt(r.buffer.length) > max) throw new ChannelError('channel exceeds max_rlp_bytes_per_channel');
-  if (r.engine.bytesWritten < input.length) throw new ChannelError('brotli: bytes after the end of the stream');
-  return new Uint8Array(r.buffer.buffer, r.buffer.byteOffset, r.buffer.length);
-}
 
 /**
  * The channel decompression of the derivation spec: zlib when b0&0x0f == 8 (and the CINFO nibble is at most 7), Brotli when b0 == 1
@@ -88,12 +77,16 @@ export function decompress(ch: Uint8Array, max: bigint): Uint8Array {
       if (ch[0]! >> 4 > 7) throw new ChannelError('zlib window');
       out = inflateSync(ch, { maxOutputLength: capOf(max) });
     } else if (ch[0] === 1) {
-      out = brotliStrict(ch.subarray(1), max);
+      const r = strictDecompress(ch.subarray(1), max);
+      if (r.exceeded) throw new ChannelError('channel exceeds max_rlp_bytes_per_channel');
+      out = r.out;
     } else {
       throw new ChannelError('compression type');
     }
   } catch (e) {
     if (e instanceof ChannelError) throw e;
+    // the empty, incomplete and trailing refusals keep the reference's own texts (package strictbrotli: ErrEmpty, ErrIncomplete, ErrTrailing)
+    if (e instanceof StrictBrotliError && e.reason !== 'decode') throw new ChannelError(e.message);
     throw new ChannelError(`decompress: ${e instanceof Error ? e.message : String(e)}`);
   }
   if (BigInt(out.length) > max) throw new ChannelError('channel exceeds max_rlp_bytes_per_channel');
