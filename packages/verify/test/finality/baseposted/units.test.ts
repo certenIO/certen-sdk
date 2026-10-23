@@ -15,7 +15,7 @@ import { ChannelError, MAX_FRAME_DATA, decompress, marshalFrame, parseFrames } f
 import { parseBasePins } from '../../../src/proof-v2/finality/baseposted/pins.js';
 import { buildTrie, rlpIndexKey, trieRoot } from '../../../src/proof-v2/finality/baseposted/trie.js';
 import { BLOB_SIZE, decodeBody, encodeBody } from '../../../src/proof-v2/finality/baseposted/wire.js';
-import { read } from './vectorset.js';
+import { read, readPins } from './vectorset.js';
 import { concat, hex, unhex } from './synth.js';
 
 const throwsState = (fn: () => unknown): FinalityStateError => {
@@ -190,7 +190,7 @@ describe('ordered trie', () => {
 });
 
 describe('base_sepolia pins', () => {
-  const main = (): string => read('pins/main.json').toString('utf8');
+  const main = (): string => readPins('pins/main.json').toString('utf8');
   const withSection = (edit: (s: any) => void): ReturnType<typeof parsePinsOverride> => {
     const j = JSON.parse(main());
     edit(j.base_sepolia);
@@ -203,12 +203,14 @@ describe('base_sepolia pins', () => {
   };
 
   it('reads every field of the pinned section', () => {
-    const p = parseBasePins(parsePinsOverride(read('pins/main.json')));
+    const p = parseBasePins(parsePinsOverride(readPins('pins/main.json')));
     expect(p.chainId).toBe(84532n);
     expect(p.l1ChainId).toBe(11155111n);
     expect(hex(p.systemConfig)).toBe('0xf272670eb55e895584501d564afeb048bed26194');
     expect(hex(p.batchInbox)).toBe('0xff00000000000000000000000000000000084532');
     expect([p.seqWindowSize, p.channelTimeout, p.maxRlpBytesPerChannel]).toEqual([3600n, 300n, 100000000n]);
+    expect([p.graniteTime, p.channelTimeoutGranite]).toEqual([1723478400n, 50n]);
+    expect(p.kzgSetupKey).toBe('base_sepolia.kzg_setup_sha256');
     expect([p.isthmusTime, p.denimTime, p.l2GenesisTime, p.l2BlockTime]).toEqual([1744905600n, 1792605600n, 1695768288n, 2n]);
     expect(p.maxBlobs).toBe(32);
     expect(p.kzgSetupSha256).toBe('f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f');
@@ -226,7 +228,7 @@ describe('base_sepolia pins', () => {
     bad((s) => (s.l1_chain_id = 1), 'base_sepolia.l1_chain_id');
     bad((s) => (s.system_config = '0x1234'), 'base_sepolia.system_config');
     bad((s) => (s.batch_inbox = 'ff'), 'base_sepolia.batch_inbox');
-    for (const k of ['seq_window_size', 'channel_timeout', 'max_rlp_bytes_per_channel', 'isthmus_time', 'denim_time', 'l2_genesis_time', 'l2_block_time']) {
+    for (const k of ['seq_window_size', 'channel_timeout', 'granite_time', 'channel_timeout_granite', 'max_rlp_bytes_per_channel', 'isthmus_time', 'denim_time', 'l2_genesis_time', 'l2_block_time']) {
       bad((s) => (s[k] = 0), `base_sepolia.${k}`);
     }
     bad((s) => (s.max_blobs = 0), 'base_sepolia.max_blobs');

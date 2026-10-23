@@ -19,6 +19,46 @@ export const SET_DIR = join(here, '..', '..', 'fixtures', 'finality', 'base_post
 export const MANIFEST_SHA256 = '990d75f0792ba7543beac5934a022a9dbc2cad9777c2e6770f20ef15bd964bf5';
 
 export const read = (name: string): Buffer => readFileSync(join(SET_DIR, ...name.split('/')));
+
+/**
+ * What the harness adds to the pins files of the published set finality_base_posted1, which predates two base_sepolia pins (the Go
+ * PublishedSetPinSupply): the Granite activation time and the post-Granite channel timeout. The verifier has no default for a missing pin
+ * (finality_pins_corrupt{bad_value, base_sepolia.granite_time}), so the published values are supplied explicitly; every live frame of set 1
+ * lies within 50 L1 blocks of its channel's first frame, so the set's expected bytes are unchanged.
+ */
+export const PUBLISHED_SET_PIN_SUPPLY: Readonly<Record<string, number>> = { granite_time: 1723478400, channel_timeout_granite: 50 };
+
+const sortedKeys = (v: unknown): unknown =>
+  Array.isArray(v)
+    ? v.map(sortedKeys)
+    : v !== null && typeof v === 'object'
+      ? Object.fromEntries(
+          Object.keys(v)
+            .sort()
+            .map((k) => [k, sortedKeys((v as Record<string, unknown>)[k])]),
+        )
+      : v;
+
+/**
+ * The Go SupplyBaseSepoliaPins: the pins file with the given base_sepolia keys added where the file lacks them (a key the file has is
+ * never overwritten), in the loader's canonical form (keys sorted at every depth, two-space indent, one LF). A file without a base_sepolia
+ * object is returned as is. It refuses a file holding an integer beyond 2^53, which JSON.parse would round.
+ */
+export function supplyBaseSepoliaPins(raw: Uint8Array, supply: Readonly<Record<string, number>> = PUBLISHED_SET_PIN_SUPPLY): Buffer {
+  const doc = JSON.parse(Buffer.from(raw).toString('utf8')) as Record<string, unknown>;
+  const sec = doc.base_sepolia;
+  if (sec === null || typeof sec !== 'object' || Array.isArray(sec)) return Buffer.from(raw);
+  const unsafe = (v: unknown): boolean =>
+    typeof v === 'number' ? !Number.isSafeInteger(v) : Array.isArray(v) ? v.some(unsafe) : v !== null && typeof v === 'object' ? Object.values(v).some(unsafe) : false;
+  if (unsafe(doc)) throw new Error('a pins file number beyond 2^53 cannot be supplied through JSON.parse');
+  const s = sec as Record<string, unknown>;
+  for (const [k, v] of Object.entries(supply)) if (!(k in s)) s[k] = v;
+  return Buffer.from(`${JSON.stringify(sortedKeys(doc), null, 2)}
+`);
+}
+
+/** A pins file of the published set as the harness gives it to the verifier: with the supplied Granite pins. */
+export const readPins = (name: string): Buffer => supplyBaseSepoliaPins(read(name));
 export const sha256Hex = (b: Uint8Array): string => hexLower(sha256(b));
 export const bytesOfHex = (s: string): Uint8Array => {
   const h = s.startsWith('0x') ? s.slice(2) : s;
@@ -89,7 +129,7 @@ export function canonicalOutcome(run: () => { fields: Record<string, any> }): st
 /** Runs one case through the TypeScript kind and returns the canonical string. */
 export function runCase(c: Case, kind = new BasePostedKind()): string {
   return canonicalOutcome(() => {
-    const pins = parsePinsOverride(read(c.pins));
+    const pins = parsePinsOverride(readPins(c.pins));
     const leg = JSON.parse(read(c.leg).toString('utf8')) as { chain: string; number: string; hash: string; header: string };
     const ev = applySplice(read(c.evidence), c.splice);
     return kind.verify(pins, { chain: BigInt(leg.chain), number: BigInt(leg.number), hash: bytesOfHex(leg.hash), headerRlp: bytesOfHex(leg.header) }, ev);

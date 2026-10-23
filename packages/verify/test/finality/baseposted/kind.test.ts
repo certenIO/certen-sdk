@@ -9,10 +9,10 @@ import { Level } from '../../../src/proof-v2/finality/level.js';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
 import { BasePostedKind } from '../../../src/proof-v2/finality/baseposted/index.js';
 import { assertRegistered } from './regcheck.js';
-import { bytesOfHex, read } from './vectorset.js';
+import { bytesOfHex, read, readPins } from './vectorset.js';
 
 const kind = new BasePostedKind();
-const pins = parsePinsOverride(read('pins/main.json'));
+const pins = parsePinsOverride(readPins('pins/main.json'));
 const leg = JSON.parse(read('legs/a.json').toString('utf8')) as { chain: string; number: string; hash: string; header: string };
 const ref = { chain: BigInt(leg.chain), number: BigInt(leg.number), hash: bytesOfHex(leg.hash), headerRlp: bytesOfHex(leg.header) };
 const evidence = Uint8Array.from(read('evidence/valid_a.bin'));
@@ -78,14 +78,14 @@ describe('BasePostedKind.verify: the container, the leg and the pins', () => {
 
   it('absent pins are named: no base_sepolia section, no Sepolia section', () => {
     expect(state(() => kind.verify(null, ref, evidence)).canonical()).toBe('{"code":"finality_pin_unknown","fields":{"chain":"84532","kind":"base_sepolia"}}');
-    const onlyBase = JSON.parse(read('pins/main.json').toString('utf8'));
+    const onlyBase = JSON.parse(readPins('pins/main.json').toString('utf8'));
     delete onlyBase.eth_sepolia;
     const p = parsePinsOverride(new TextEncoder().encode(`${JSON.stringify(onlyBase, null, 2)}\n`));
     expect(state(() => kind.verify(p, ref, evidence)).canonical()).toBe('{"code":"finality_pin_unknown","fields":{"chain":"11155111","kind":"eth_sepolia"}}');
   });
 
   it('a block at or after the Denim time is the named batch_format_unsupported{post_denim}', () => {
-    const p = parsePinsOverride(read('pins/denim_at_block_a.json'));
+    const p = parsePinsOverride(readPins('pins/denim_at_block_a.json'));
     expect(state(() => kind.verify(p, ref, evidence)).canonical()).toBe('{"code":"batch_format_unsupported","fields":{"type":"post_denim"}}');
   });
 

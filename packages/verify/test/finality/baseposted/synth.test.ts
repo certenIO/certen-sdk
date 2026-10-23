@@ -166,9 +166,16 @@ describe('channel assembly', () => {
     s.body.channelId = new Uint8Array(16).fill(9);
     expectState(s, 'channel_incomplete');
   });
-  it('frames in L1 blocks inside channel_timeout verify at exactly the bound and time out one block later', () => {
-    expect(ok({ nFrames: 2, frameBlocks: [1000n, 1300n] }).fields.l1_blocks).toEqual([1000n, 1300n]);
-    expectState(makeSynth({ nFrames: 2, frameBlocks: [1000n, 1301n] }), 'channel_timed_out');
+  it('frames in L1 blocks inside the channel timeout verify at exactly the bound and time out one block later (Bedrock 300 before Granite, 50 from it)', () => {
+    const beforeGranite = (o: SynthOpts) => {
+      const s = makeSynth(o);
+      s.bp.graniteTime = 1790000000n + 1_000_000n; // Granite after every block of the synthetic world
+      return s;
+    };
+    expect(run(beforeGranite({ nFrames: 2, frameBlocks: [1000n, 1300n] })).fields.l1_blocks).toEqual([1000n, 1300n]);
+    expectState(beforeGranite({ nFrames: 2, frameBlocks: [1000n, 1301n] }), 'channel_timed_out');
+    expect(ok({ nFrames: 2, frameBlocks: [1000n, 1050n] }).fields.l1_blocks).toEqual([1000n, 1050n]);
+    expectState(makeSynth({ nFrames: 2, frameBlocks: [1000n, 1051n] }), 'channel_timed_out');
   });
   it('frames that are not in non-decreasing (block, index) order are incomplete', () => {
     const s = makeSynth({ nFrames: 2, frameBlocks: [1000n, 1001n] });

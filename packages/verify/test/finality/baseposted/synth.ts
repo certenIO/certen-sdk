@@ -60,6 +60,8 @@ export function newPins(): BasePins {
     batchInbox: TEST_INBOX,
     seqWindowSize: 3600n,
     channelTimeout: 300n,
+    graniteTime: 1723478400n,
+    channelTimeoutGranite: 50n,
     maxRlpBytesPerChannel: 100_000_000n,
     isthmusTime: 1744905600n,
     denimTime: 1792605600n,
@@ -67,6 +69,7 @@ export function newPins(): BasePins {
     l2GenesisTime: 1695768288n,
     l2BlockTime: 2n,
     kzgSetupSha256: 'f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f',
+    kzgSetupKey: 'shared.kzg_setup_sha256',
     systemConfigImplHashes: new Set([hex(TEST_IMPL_CODE)]),
   };
 }
@@ -165,11 +168,11 @@ export function compress(kind: 'zlib' | 'brotli', raw: Uint8Array): Uint8Array {
   return deflateSync(raw);
 }
 
-function rlpStreamItem(typeByte: number, payload: Uint8Array): Uint8Array {
+export function rlpStreamItem(typeByte: number, payload: Uint8Array): Uint8Array {
   return encBytes(concat(Uint8Array.of(typeByte), payload));
 }
 
-function singularPayload(parent: Uint8Array, epochNum: bigint, epochHash: Uint8Array, ts: bigint, txs: Uint8Array[]): Uint8Array {
+export function singularPayload(parent: Uint8Array, epochNum: bigint, epochHash: Uint8Array, ts: bigint, txs: Uint8Array[]): Uint8Array {
   return rlpListOf([encBytes(parent), rlpUint(epochNum), encBytes(epochHash), rlpUint(ts), rlpListOf(txs.map(encBytes))]);
 }
 

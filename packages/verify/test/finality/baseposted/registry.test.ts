@@ -10,7 +10,7 @@ import { Level } from '../../../src/proof-v2/finality/level.js';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
 import * as kindModule from '../../../src/proof-v2/finality/baseposted/verify.js';
 import { KIND_NAME } from '../../../src/proof-v2/finality/baseposted/pins.js';
-import { bytesOfHex, caseNames, loadCase, read } from './vectorset.js';
+import { bytesOfHex, caseNames, loadCase, read, readPins } from './vectorset.js';
 import { assertRegistered, registry } from './regcheck.js';
 
 describe('registry conformance', () => {
@@ -38,7 +38,7 @@ describe('registry conformance', () => {
 });
 
 describe('the kind through the framework', () => {
-  const pins = parsePinsOverride(read('pins/main.json'));
+  const pins = parsePinsOverride(readPins('pins/main.json'));
   const leg = JSON.parse(read('legs/a.json').toString('utf8')) as { chain: string; number: string; hash: string; header: string };
   const ref = { chain: BigInt(leg.chain), number: BigInt(leg.number), hash: bytesOfHex(leg.hash), headerRlp: bytesOfHex(leg.header) };
   const ev = Uint8Array.from(read('evidence/valid_a.bin'));

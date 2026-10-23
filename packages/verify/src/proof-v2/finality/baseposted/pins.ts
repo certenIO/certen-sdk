@@ -6,7 +6,7 @@
  */
 import { JsonError } from '../../../s3/gojson.js';
 import { Raw, decodeVal, type FieldDef, type GoVal, type Sch } from '../../../s3/jsonx.js';
-import type { Pins } from '../pins.js';
+import { kzgSetupPin, type Pins } from '../pins.js';
 import { Code, PinsReason, newState, pinsCorrupt, type FinalityStateError } from '../state.js';
 import { ChainBaseSepolia } from '../table.js';
 import { SepoliaChainID } from '../ethl1/index.js';
@@ -25,14 +25,26 @@ export interface BasePins {
   /** 20 bytes */
   batchInbox: Uint8Array;
   seqWindowSize: bigint;
+  /** the Bedrock channel timeout, in L1 blocks: in force for a frame whose L1 block time is before graniteTime */
   channelTimeout: bigint;
+  /** activation time of Granite (L1 block time, seconds): from it the channel timeout is channelTimeoutGranite */
+  graniteTime: bigint;
+  /** the post-Granite channel timeout, in L1 blocks (op-node params.ChannelTimeoutGranite = 50) */
+  channelTimeoutGranite: bigint;
   maxRlpBytesPerChannel: bigint;
+  /**
+   * INFORMATIONAL for l1_posted: nothing in this kind's judgement depends on it. It is required and non-zero because the base_sepolia
+   * section is shared with the finalized kind, which refuses a pre-Isthmus header (spec 5.5 O5).
+   */
   isthmusTime: bigint;
   denimTime: bigint;
   maxBlobs: number;
   l2GenesisTime: bigint;
   l2BlockTime: bigint;
+  /** from the shared section, or the legacy base_sepolia copy of a published pins file (kzgSetupPin) */
   kzgSetupSha256: string;
+  /** the pins key kzgSetupSha256 was read from, for pins_corrupt reports */
+  kzgSetupKey: string;
   /** impl_pins rows with role syscfg_impl, as lower-case 0x hex of the 32-byte code hash */
   systemConfigImplHashes: Set<string>;
 }
@@ -47,6 +59,8 @@ const baseSch: Sch = {
     f('BatchInbox', 'batch_inbox', 'string'),
     f('SeqWindowSize', 'seq_window_size', 'u64'),
     f('ChannelTimeout', 'channel_timeout', 'u64'),
+    f('GraniteTime', 'granite_time', 'u64'),
+    f('ChannelTimeoutGranite', 'channel_timeout_granite', 'u64'),
     f('MaxRLPBytesPerChannel', 'max_rlp_bytes_per_channel', 'u64'),
     f('IsthmusTime', 'isthmus_time', 'u64'),
     f('DenimTime', 'denim_time', 'u64'),
@@ -95,7 +109,9 @@ export function parseBasePins(p: Pins | null | undefined): BasePins {
   // key order, and no published vector alters two of these at once.
   for (const [k, v] of [
     ['channel_timeout', big('ChannelTimeout')],
+    ['channel_timeout_granite', big('ChannelTimeoutGranite')],
     ['denim_time', big('DenimTime')],
+    ['granite_time', big('GraniteTime')],
     ['isthmus_time', big('IsthmusTime')],
     ['l2_block_time', big('L2BlockTime')],
     ['l2_genesis_time', big('L2GenesisTime')],
@@ -106,8 +122,8 @@ export function parseBasePins(p: Pins | null | undefined): BasePins {
   }
   const maxBlobs = big('MaxBlobs');
   if (maxBlobs <= 0n) throw bad('max_blobs');
-  const kzg = str('KZGSetupSHA256');
-  if (unhex(`0x${kzg}`, 32) === undefined) throw bad('kzg_setup_sha256');
+  const kzg = kzgSetupPin(p, 'base_sepolia.kzg_setup_sha256', str('KZGSetupSHA256'));
+  if (unhex(`0x${kzg.value}`, 32) === undefined) throw pinsCorrupt(PinsReason.BadValue, { key: kzg.key });
   const hashes = new Set<string>();
   const impl = r.ImplPins;
   if (impl instanceof Map) {
@@ -132,13 +148,24 @@ export function parseBasePins(p: Pins | null | undefined): BasePins {
     batchInbox,
     seqWindowSize: big('SeqWindowSize'),
     channelTimeout: big('ChannelTimeout'),
+    graniteTime: big('GraniteTime'),
+    channelTimeoutGranite: big('ChannelTimeoutGranite'),
     maxRlpBytesPerChannel: big('MaxRLPBytesPerChannel'),
     isthmusTime: big('IsthmusTime'),
     denimTime: big('DenimTime'),
     maxBlobs: maxBlobs > 0x7fffffffn ? 0x7fffffff : Number(maxBlobs),
     l2GenesisTime: big('L2GenesisTime'),
     l2BlockTime: big('L2BlockTime'),
-    kzgSetupSha256: kzg,
+    kzgSetupSha256: kzg.value,
+    kzgSetupKey: kzg.key,
     systemConfigImplHashes: hashes,
   };
+}
+
+/**
+ * op-node's ChainSpec.ChannelTimeout(t) (op-node/rollup/chain_spec.go): the Granite value when t >= granite_time, the Bedrock value before.
+ * t is the timestamp of the L1 block the frame is included in (op-node's origin.Time at IngestFrame).
+ */
+export function channelTimeoutAt(bp: Pick<BasePins, 'graniteTime' | 'channelTimeout' | 'channelTimeoutGranite'>, l1Time: bigint): bigint {
+  return l1Time >= bp.graniteTime ? bp.channelTimeoutGranite : bp.channelTimeout;
 }

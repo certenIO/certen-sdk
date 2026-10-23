@@ -32,7 +32,7 @@ import { blobToData, BlobDecodeError } from './blob.js';
 import { ChannelError, decompress, parseFrames, type Frame } from './channel.js';
 import { EthTxError, decodeTx, senderOf, TX_BLOB } from './ethtx.js';
 import { KzgContext, loadKzgSetup, type KzgBlob } from './kzg.js';
-import { CHAIN, KIND_NAME, ROLE_SYSTEM_CONFIG_IMPL, parseBasePins, type BasePins } from './pins.js';
+import { CHAIN, KIND_NAME, ROLE_SYSTEM_CONFIG_IMPL, channelTimeoutAt, parseBasePins, type BasePins } from './pins.js';
 import { BatchFormatError, BatchStreamError, decodeBatches, type Batch } from './span.js';
 import { rlpIndexKey, trieRoot } from './trie.js';
 import { decodeBody, encodeBody, type Body } from './wire.js';
@@ -55,9 +55,6 @@ export const CodeContractIdentity = 'contract_identity_unproven';
 
 /** The reason of l1_finality_unproven when the LC part of the container is refused; the inner fault code rides in `inner`. */
 export const LC_REFUSED = 'lc_refused';
-
-const U64 = (1n << 64n) - 1n;
-const add64 = (a: bigint, b: bigint): bigint => (a + b) & U64;
 
 /** keccak256("eip1967.proxy.implementation") - 1 */
 const EIP1967_IMPL_SLOT = Uint8Array.from('360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'.match(/../g)!, (h) => parseInt(h, 16));
@@ -243,6 +240,8 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
   const db = new NodeDb(body.nodes);
   const frames: Frame[] = [];
   const frameL1: bigint[] = [];
+  /** the timestamp of the L1 block of each entry of frameL1 (selects the channel timeout, see below) */
+  const frameTime: bigint[] = [];
   let batcher: Uint8Array = new Uint8Array(20);
   let prevL1 = 0n;
   let prevIdx = 0;
@@ -297,7 +296,7 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
             try {
               kz = loadKzgSetup(bp.kzgSetupSha256);
             } catch {
-              throw pinsCorrupt(PinsReason.BadValue, { key: 'base_sepolia.kzg_setup_sha256' });
+              throw pinsCorrupt(PinsReason.BadValue, { key: bp.kzgSetupKey });
             }
           }
           pending.push(bl);
@@ -330,6 +329,7 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
           if (sameBytes(x.id, body.channelId)) {
             frames.push(x);
             frameL1.push(f.l1Block);
+            frameTime.push(hdr.timestamp);
           }
         }
       }
@@ -352,7 +352,12 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
     stream.set(x, off);
     off += x.length;
   }
-  for (const l of frameL1) if (l > add64(frameL1[0]!, bp.channelTimeout)) throw st(CodeChannelTimedOut);
+  // op-node IngestFrame ignores a frame when `currentCh.OpenBlockNumber()+cb.spec.ChannelTimeout(origin.Time) < origin.Number`: origin is the
+  // L1 block that holds the frame, so the timeout in force (50 from Granite, 300 before) is selected by that block's own timestamp, frame by
+  // frame [r2:D2FIX]. frameL1 is non-decreasing (the frames are in order), so the difference cannot go below zero.
+  frameL1.forEach((l, i) => {
+    if (l - frameL1[0]! > channelTimeoutAt(bp, frameTime[i]!)) throw st(CodeChannelTimedOut);
+  });
   let raw: Uint8Array;
   try {
     raw = decompress(stream, bp.maxRlpBytesPerChannel);
@@ -374,11 +379,16 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
   if (!prefixEq(bt.parentHash, bt.parentLen, l2.parentHash)) throw st(CodeBatchBindingMismatch, { field: 'parent_hash' });
   const dep0 = body.deposits[0];
   if (dep0 === undefined || dep0.length === 0 || dep0[0] !== 0x7e) throw st(CodeBatchBindingMismatch, { field: 'l1_info_deposit' });
+  // O2/O5: the block's transaction list is depositTxs followed by the batch's transactions and the two lists are told apart by type alone, as
+  // OP derivation does (a batch may not embed a deposit or an empty transaction: checkSingularBatch / span batch validation drop it). Without
+  // this a prover moves any block transaction the batcher never posted into depositTxs and the recomputed root still matches [r2:D2FIX].
+  for (const d of body.deposits) if (d.length === 0 || d[0] !== 0x7e) throw st(CodeBatchBindingMismatch, { field: 'deposit_txs' });
+  for (const x of bt.txs) if (x.length === 0 || x[0] === 0x7e) throw st(CodeBatchBindingMismatch, { field: 'batch_txs' });
   const info = l1Info(dep0);
   if (info === undefined) throw st(CodeBatchBindingMismatch, { field: 'l1_info_deposit' });
   if (bt.epochNum !== info.num) throw st(CodeBatchBindingMismatch, { field: 'epoch_num' });
   if (!prefixEq(bt.epochHash, bt.epochLen, info.hash)) throw st(CodeBatchBindingMismatch, { field: 'epoch_hash' });
-  for (const l of frameL1) if (l < bt.epochNum || l > add64(bt.epochNum, bp.seqWindowSize)) throw st(CodeBatchOutsideWindow);
+  for (const l of frameL1) if (l < bt.epochNum || l - bt.epochNum > bp.seqWindowSize) throw st(CodeBatchOutsideWindow);
   const all = [...body.deposits, ...bt.txs];
   if (!sameBytes(trieRoot(all), l2.transactionRoot)) throw st(CodeBatchBindingMismatch, { field: 'transactions_root' });
   return {
