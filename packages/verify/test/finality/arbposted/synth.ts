@@ -213,3 +213,57 @@ export function depositMessage(k: bigint, value: bigint = 5n): Delayed {
     k,
   };
 }
+
+/** nitro@ccc5c82 zeroheavy.ZeroheavyEncoder over a byte slice (the inverse the zero-heavy decoder is tested against; the twin of Go's zhEncode test helper). */
+export function zhEncode(input: Uint8Array): Uint8Array {
+  const out: number[] = [];
+  let pos = 0;
+  let bitsRead = 8;
+  let buffer = 0;
+  let padding = false;
+  let atEOF = false;
+  const next = (): boolean => {
+    if (padding) return true;
+    if (bitsRead === 8) {
+      if (pos >= input.length) {
+        padding = true;
+        return false;
+      }
+      buffer = input[pos++]!;
+      bitsRead = 0;
+    }
+    const r = (buffer & (1 << (7 - bitsRead))) !== 0;
+    bitsRead++;
+    return r;
+  };
+  while (!atEOF) {
+    let ret = 0;
+    if (!next()) {
+      if (next()) {
+        ret = 1;
+        for (let i = 0; i < 6; i++) {
+          ret <<= 1;
+          if (next()) ret++;
+        }
+        if (ret === 64) {
+          ret = 1;
+        } else {
+          ret = (ret << 1) & 0x7f;
+          if (next()) ret++;
+        }
+      }
+    } else {
+      ret = 1;
+      for (let i = 0; i < 7; i++) {
+        ret <<= 1;
+        if (next()) ret++;
+      }
+    }
+    out.push(ret);
+    if (padding) atEOF = true;
+  }
+  return Uint8Array.from(out);
+}
+
+/** A zero-heavy payload: the flag 0x20, then the layer encoding of the inner payload. */
+export const zhPayload = (inner: Uint8Array): Uint8Array => concat(Uint8Array.of(0x20), zhEncode(inner));

@@ -1,6 +1,7 @@
 /**
  * The harness of the finality_arb_posted1 conformance set: a byte-identical copy of the validator's
- * pkg/finality/arbposted/testdata/finality_arb_posted1 (pv2/rb11-int@ecfb4fe, manifest 79e70d62...57aa). A case is
+ * pkg/finality/arbposted/testdata/finality_arb_posted1 (pv2/rb11-int@ecfb4fe, manifest 79e70d62...57aa; unchanged at cbb6373, which adds
+ * SUPERSEDED.md: nine of its expectations are judged by the supersession table below, exactly as the Go test does). A case is
  * {pins, leg, evidence_base, evidence_patch{at,del,ins}, expect_canonical}: the evidence is base[:at] || ins || base[at+del:], the kind
  * judges it under the pins file against the leg, and the CANONICAL verdict string is compared with the Go-written expectation byte for byte.
  */
@@ -61,6 +62,29 @@ export function evidenceOf(c: Case): Uint8Array {
   out.set(base.subarray(at + del), at + ins.length);
   return out;
 }
+
+/**
+ * The nine cases of finality_arb_posted1 whose recorded expectation was superseded (SUPERSEDED.md, the Go test's supersededInSet2 and
+ * supersededInSet4): two zero-heavy cases (the layer is now decoded, so the same bytes read as l1_batch_header_unknown{byte:77}) and seven
+ * cases that pair a synthetic leg with the recorded container (Kind.Verify now binds the BlockRef: finality_block_mismatch{blockHash}, want =
+ * the case leg's hash, got = the recorded live block's hash). The set's files are not edited; finality_arb_posted4 carries the seven again.
+ */
+const LIVE_HASH = '0x83d81943ea8f2f51d14bb50594d8d0ae12cd576e8891816e26a9c17fdca0c9f4';
+const liveHashMismatch = (legHash: string): string => `{"code":"finality_block_mismatch","fields":{"field":"blockHash","got":"${LIVE_HASH}","want":"${legHash}"}}`;
+export const SUPERSEDED: Readonly<Record<string, string>> = {
+  adv_synth_calldata_flag_zeroheavy: '{"code":"l1_batch_header_unknown","fields":{"batch":"77","byte":"77"}}',
+  adv_synth_blob_payload_zeroheavy: '{"code":"l1_batch_header_unknown","fields":{"batch":"77","byte":"77"}}',
+  adv_tx_altered: liveHashMismatch('0x051307b3a477cf0b336b5dde6f044f3cd32be61872fe7fbb8a1f9027181eb2e3'),
+  adv_tx_order_swapped: liveHashMismatch('0x19a0efee390b8519ae885b8a045fc363dea85b059b25080e73a1478c1af5badc'),
+  adv_tx_missing: liveHashMismatch('0x324c892e5293309b4c7550fdd526c53057c04cf43319cfd513f6481ad1a07f5b'),
+  adv_tx_extra: liveHashMismatch('0xaabed1854d210a115872480a10b953870d1430d72e874fd92a0b72e25ee3796e'),
+  adv_no_standard_transactions: liveHashMismatch('0x55ce73fa225c341b51740cefdadfbd33856ddfd15da8a6336199e120b5670ab4'),
+  adv_unsupported_tx_type: liveHashMismatch('0xb45075a1c3c86368270bc66b00dba3c75a8bb7e96272ea8705689de893daeb60'),
+  adv_delayed_origin_without_proof: liveHashMismatch('0xe9be37ad6eb86d61c053a03e9661c179f0f40453777420851267bd65520f9127'),
+};
+
+/** The canonical verdict a case is judged against: the supersession table where the Go set records one, else the case's own expectation. */
+export const expectedOf = (c: Case): string => SUPERSEDED[c.id] ?? c.expect_canonical;
 
 export const refOf = (l: Leg): { chain: bigint; number: bigint; hash: Uint8Array; headerRlp: Uint8Array } => ({
   chain: BigInt(l.chain),

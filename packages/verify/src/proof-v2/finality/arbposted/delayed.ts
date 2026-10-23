@@ -1,14 +1,16 @@
 /**
  * Delayed-inbox origin of Arbitrum block transactions (annex A6.5; the twin of pkg/finality/arbposted/delayed.go and the helpers of
- * verify.go): the Bridge slot arithmetic, the accumulators, the delayed message hash and the proof that a 0x64 deposit transaction is the
- * one a delayed ETH-deposit message derives. Delayed message kinds other than the ETH deposit have no derivation here and stay the named
- * state l1_posted_delayed_origin_unproven, never a weaker level.
+ * verify.go): the Bridge slot arithmetic, the accumulators, the delayed message hash and the proof that the block's transactions are the
+ * ones the delayed message derives (derive.ts: ETH deposit, submit retryable, L2 message with unsigned / contract / signed / batch
+ * contents, L2 funded by L1). A message kind with no derivation (end of block, rollup event, batch posting report) stays the named state
+ * l1_posted_delayed_origin_unproven, never a weaker level.
  */
 import { keccak_256 } from '@noble/hashes/sha3';
 import { MptError, verifySlot } from '../../../s6/mpt.js';
-import { RlpError, split, splitList, structItems, uintOf, fixedOf } from '../../../s6/rlp.js';
+import { RlpError, split, splitList } from '../../../s6/rlp.js';
 import { FinalityStateError, newState } from '../state.js';
-import { CodeDelayedOriginUnproven, stateProofInvalid } from './states.js';
+import { deriveDelayed } from './derive.js';
+import { CodeDelayedOriginUnproven, ContentReason, contentNotFound, stateProofInvalid } from './states.js';
 import type { ArbPins } from './pins.js';
 import type { Delayed, Evidence } from './wire.js';
 import { DataBlobs } from './wire.js';
@@ -131,25 +133,17 @@ export function headerNonce(raw: Uint8Array): bigint | undefined {
 const delayedUnproven = (types: bigint[], nonce: bigint, extra: Record<string, bigint | number> = {}): FinalityStateError =>
   newState(CodeDelayedOriginUnproven, { block_tx_types: types, header_nonce: nonce, ...extra });
 
-/** An ArbitrumDepositTx body: [chainId, requestId, from, to, value]; undefined when it is not exactly that. */
-function decodeDeposit(body: Uint8Array): { requestId: Uint8Array; from: Uint8Array; to: Uint8Array; value: bigint } | undefined {
-  try {
-    const it = structItems(body, 5);
-    uintOf(it[0]!);
-    return { requestId: fixedOf(it[1]!, 32), from: fixedOf(it[2]!, 20), to: fixedOf(it[3]!, 20), value: uintOf(it[4]!) };
-  } catch (e) {
-    if (e instanceof RlpError) return undefined;
-    throw e;
-  }
-}
-
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => a.length === b.length && a.every((x, i) => x === b[i]);
+
+const sameTxs = (a: readonly Uint8Array[], b: readonly Uint8Array[]): boolean => a.length === b.length && a.every((x, i) => sameBytes(x, b[i]!));
 
 /**
  * Proves the delayed-origin transactions of a block (annex A6.5): the delayed message hashes into delayedInboxAccs[k] from
  * delayedInboxAccs[k-1] (both proven under stateRoot_S, slot 6); this batch consumed it (k lies in [afterDelayedMessagesRead - delayedSegments,
- * afterDelayedMessagesRead)); and each 0x64 deposit transaction of the block is the one the message derives (request id k, sender,
- * recipient, value). Returns k.
+ * afterDelayedMessagesRead)); and the block's transactions other than the internal 0x6a and the execution-derived retry 0x68 are, byte for
+ * byte and in order, what Nitro derives from the message (derive.ts). A message kind with no derivation stays the named state
+ * l1_posted_delayed_origin_unproven. A block and a message that agree on NO transaction prove nothing: that is l1_posted_content_not_found
+ * {no_standard_transactions}, the state the sequencer branch raises for a block without content. Returns k.
  */
 export function verifyDelayed(
   arb: ArbPins,
@@ -176,20 +170,16 @@ export function verifyDelayed(
   const accK = slot(d.k);
   const prev = d.k > 0n ? slot(d.k - 1n) : new Uint8Array(32);
   if (!sameBytes(keccak_256(concat(prev, delayedMessageHash(d))), accK)) throw unproven();
+  const want = deriveDelayed(arb.chainId, d);
+  if (want === null) throw unproven();
+  const got: Uint8Array[] = [];
   for (const tx of e.blockTxs) {
     const t = txType(tx);
-    if (!isDelayedOriginType(t)) continue;
-    if (t !== TX_DEPOSIT || d.msgKind !== MSG_KIND_ETH_DEPOSIT || d.data.length !== 52) throw unproven();
-    const dep = decodeDeposit(tx.subarray(1));
-    if (dep === undefined) throw unproven();
-    if (
-      !sameBytes(dep.requestId, w32(d.k)) ||
-      !sameBytes(dep.from, d.sender) ||
-      !sameBytes(dep.to, d.data.subarray(0, 20)) ||
-      dep.value !== beBig(d.data.subarray(20, 52))
-    ) {
-      throw unproven();
-    }
+    if (t !== TX_INTERNAL && t !== TX_RETRY) got.push(tx);
   }
+  if (!sameTxs(got, want)) throw unproven();
+  // The block and the message agree, but if both are empty the agreement is vacuous: the block holds nothing but the internal start-block
+  // transaction (or nothing) and the message derives nothing (an empty batch), so no transaction of the block is shown to have been posted.
+  if (got.length === 0) throw contentNotFound(ContentReason.NoStandardTransactions, { batch: e.batchSeq });
   return d.k;
 }

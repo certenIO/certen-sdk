@@ -2,7 +2,9 @@
  * The arb_sepolia pieces of finality-pins.json this kind reads (V2_SPEC_S7 section 4.2; the twin of pkg/finality/arbposted/pins.go).
  * The framework keeps the section raw (Pins.sections); it is decoded here exactly as Go decodes it: json.Decoder with
  * DisallowUnknownFields into the struct (an unknown key anywhere in the struct or its layout is pin_mismatch{section}; keys match
- * case-insensitively once exact equality fails; null is a no-op; a wrongly typed value is an error). Keys the sibling kind
+ * case-insensitively once exact equality fails; null is a no-op; a wrongly typed value is an error). bold_genesis_l2_block and the layout
+ * slots acc_array_slot and delayed_acc_array_slot must be PRESENT and non-null (value 0 is a possible value, so absence is judged by
+ * presence, not by the decoded number). Keys the sibling kind
  * arb-sepolia/finalized/v1 adds (confirm_path, proxy_slots, and the layout keys config_slot_offset, fast_confirmer_shift_bits,
  * fast_confirmer_slot, status_shift_bits) are declared and ignored, so the embedded pins load for this kind too.
  */
@@ -97,6 +99,31 @@ function refuseUnknown(v: JVal, def: StructDef): void {
   }
 }
 
+/** The member of `names` that the object key k selects: exact equality first, then the case folding encoding/json matches by. */
+const fieldFor = (names: readonly string[], k: string): string | undefined => names.find((x) => x === k) ?? names.find((x) => foldEqual(x, k));
+
+/**
+ * The three numeric pins whose value 0 is a possible value are judged by presence: an absent (or null) key decodes as 0 and must not switch
+ * the pre-BoLD guard or a storage slot silently to 0. This is the twin of the second json.Unmarshal into pointer fields in Go's loadArbPins:
+ * keys fold case, the last member of a repeated key wins (null clears it), a repeated layout object merges, unknown keys are ignored.
+ */
+function presentNumericPins(raw: JVal): { bold: boolean; acc: boolean; delayedAcc: boolean } {
+  const out = { bold: false, acc: false, delayedAcc: false };
+  if (!(raw instanceof JObj)) return out;
+  for (const [k, val] of raw.pairs) {
+    const top = fieldFor(['bold_genesis_l2_block', 'layout'], k);
+    if (top === 'bold_genesis_l2_block') out.bold = val !== null;
+    else if (top === 'layout' && val instanceof JObj) {
+      for (const [lk, lv] of val.pairs) {
+        const f = fieldFor(['acc_array_slot', 'delayed_acc_array_slot'], lk);
+        if (f === 'acc_array_slot') out.acc = lv !== null;
+        else if (f === 'delayed_acc_array_slot') out.delayedAcc = lv !== null;
+      }
+    }
+  }
+  return out;
+}
+
 /** hexAddr: 0x + 40 hex digits (either case). */
 function hexAddr(s: string): Uint8Array | undefined {
   if (!s.startsWith('0x') || s.length !== 42) return undefined;
@@ -133,6 +160,10 @@ export function loadArbPins(p: Pins | null | undefined): ArbPins {
   if (big('MaxBlobs') <= 0n) throw pinMismatch('max_blobs');
   if (big('MaxSegments') <= 0n) throw pinMismatch('max_segments');
   if (big('MaxUncompressedBatch') <= 0n) throw pinMismatch('max_uncompressed_batch');
+  const present = presentNumericPins(raw);
+  if (!present.bold) throw pinMismatch('bold_genesis_l2_block');
+  if (!present.acc) throw pinMismatch('layout.acc_array_slot');
+  if (!present.delayedAcc) throw pinMismatch('layout.delayed_acc_array_slot');
   const logic = new Map<string, string>();
   const lp = a.LogicPins;
   if (lp instanceof Map) for (const [k, v] of lp) logic.set(k, v as string);
