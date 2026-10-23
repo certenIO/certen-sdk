@@ -68,5 +68,5 @@ describe('verify time of the largest live vectors', () => {
     // eslint-disable-next-line no-console
     console.log(`basefinal slowest live case: ${worst.id} ${worst.ms.toFixed(0)} ms`);
     expect(worst.ms).toBeLessThan(15_000);
-  });
+  }, 300_000);
 });

@@ -22,7 +22,7 @@
 ### Added (tests)
 - Byte-identical copies of the validator's `finality_base_final2`, `finality_base_posted2` and `finality_base_posted3` and their parity tests.
 - Two-seed differential against the Go verifiers (3,220 mutated Base inputs, 0 verdict differences; run against the base commit it shows 232) and a 210-mutant hand-mutation gate over the changed files
-  (`mutation_equivalents_rb12.json` beside each kind's tests).
+  (199 killed, 11 equivalent with reasons in `mutation_equivalents_rb12.json` beside each kind's tests).
 
 ## Unreleased — RB12 TS integration: the staged-finality (S7) verifiers in one branch (2026-10-23)
 

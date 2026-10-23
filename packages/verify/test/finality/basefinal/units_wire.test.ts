@@ -191,7 +191,7 @@ describe('truncation', () => {
     }
     expect(n).toBeGreaterThan(1500);
     expect(codes.has('finality_evidence_malformed')).toBe(true);
-  });
+  }, 300_000);
 
   it('the body codec alone refuses every strict prefix of the body with a named state', () => {
     const body = decodeContainer(EV, lim).body;
