@@ -1,6 +1,6 @@
 /**
  * The integration of the S7 stack: the finality barrel exports every chain package, registerAllKinds wires every ported Kind (Adiri failing
- * closed), the table's remaining rows are exactly the two unported ones, and the embedded pins and state registry are the validator's
+ * closed), the table's remaining row is exactly the unported one, and the embedded pins and state registry are the validator's
  * pv2/rb11-e1-raise@cbb6373 files, byte for byte.
  */
 import { readdirSync, existsSync, readFileSync } from 'node:fs';
@@ -45,7 +45,7 @@ describe('the finality barrel', () => {
       .filter((d) => d.isDirectory() && existsSync(join(finalityDir, d.name, 'index.ts')))
       .map((d) => d.name)
       .sort();
-    expect(dirs).toEqual(['adiri', 'arbposted', 'basefinal', 'baseposted', 'ethl1']);
+    expect(dirs).toEqual(['adiri', 'arbfinal', 'arbposted', 'basefinal', 'baseposted', 'ethl1']);
     for (const d of dirs) {
       const ns = (barrel as Record<string, unknown>)[d];
       expect(typeof ns, d).toBe('object');
@@ -54,6 +54,7 @@ describe('the finality barrel', () => {
   });
   it('exports the registrars and the framework', () => {
     expect(typeof barrel.adiri.registerAdiri).toBe('function');
+    expect(typeof barrel.arbfinal.registerArbFinal).toBe('function');
     expect(typeof barrel.arbposted.registerArbPosted).toBe('function');
     expect(typeof barrel.basefinal.registerBaseFinal).toBe('function');
     expect(typeof barrel.baseposted.registerBasePosted).toBe('function');
@@ -65,7 +66,7 @@ describe('the finality barrel', () => {
 });
 
 describe('registerAllKinds', () => {
-  it('registers the four ported Kinds under the embedded pins, each on its row of the table', async () => {
+  it('registers the five ported Kinds under the embedded pins, each on its row of the table', async () => {
     const reg = new Registry();
     await registerAllKinds(reg, embeddedPins());
     const rows = new Map(kindRows().map((r) => [r.kind, r]));
@@ -77,12 +78,12 @@ describe('registerAllKinds', () => {
       expect(k!.level()).toBe(rows.get(name)!.level);
     }
   });
-  it('leaves exactly the two unported rows without a Kind, and the lists cover the table', async () => {
+  it('leaves exactly the one unported row without a Kind, and the lists cover the table', async () => {
     const reg = new Registry();
     await registerAllKinds(reg, embeddedPins());
     const table = kindRows().map((r) => r.kind).sort();
     expect([...REGISTERED_KIND_NAMES, ...UNPORTED_KIND_ROWS].sort()).toEqual(table);
-    expect(UNPORTED_KIND_ROWS).toEqual(['arb-sepolia/finalized/v1', 'eth-sepolia/finalized/v1']);
+    expect(UNPORTED_KIND_ROWS).toEqual(['eth-sepolia/finalized/v1']);
     for (const name of UNPORTED_KIND_ROWS) expect(reg.kind(name), name).toBeUndefined();
   });
   it('refuses a second registration and registers nothing new', async () => {
