@@ -4,6 +4,7 @@
  * ones the contract graph proves (annex step 5), a header without a withdrawals root has no output root, the header must be the block the
  * game implies, and the pins refuse a zero code-hash key. Every case here is also a differential case against the Go judge (see the check-in).
  */
+import { keccak_256 } from '@noble/hashes/sha3';
 import { describe, expect, it } from 'vitest';
 import { CodeContractIdentity, CodeOutputRootMismatch, parseBasePins } from '../../../src/proof-v2/finality/basefinal/index.js';
 import { canonValue } from '../../../src/proof-v2/finality/state.js';
@@ -125,5 +126,27 @@ describe('the pins refuse a zero code-hash key (an absent account would look pin
       expect((err as { code: string }).code).toBe('finality_pins_corrupt');
       expect(canonValue((err as { fields: unknown }).fields)).toBe(`{"key":"base_sepolia.${section}","reason":"bad_value"}`);
     }
+  });
+});
+
+describe('a header below the output-root header that does not decode ends the spine as header_chain_broken{rlp} (5.5 O6)', () => {
+  const world = 'synth_ok_030_fast_pair_6000_300';
+  it('names the spine, the reason, the number below the header before it and the hash of the bytes that were given', () => {
+    const w = cloneWorld(worldOf(world));
+    expect(w.body.l2Spine.length).toBeGreaterThanOrEqual(2);
+    const garbage = Uint8Array.of(0x01, 0x02, 0x03);
+    w.body.l2Spine[1] = garbage;
+    const o = judgeOutcome(w);
+    expect(o.ok).toBe(false);
+    if (o.ok) return;
+    expect(o.state.code).toBe('finality_header_chain_broken');
+    expect(o.state.fields.reason).toBe('rlp');
+    expect(o.state.fields.spine).toBe('l2');
+    expect(Buffer.from(o.state.fields.got_hash as Uint8Array).toString('hex')).toBe(Buffer.from(keccak_256(garbage)).toString('hex'));
+    expect(o.state.fields.want_hash).toBeInstanceOf(Uint8Array);
+    assertRegistered(o.state, registryInt);
+  });
+  it('the unmodified world is accepted, so the refusal above is the garbage and nothing else', () => {
+    expect(judgeOutcome(cloneWorld(worldOf(world))).ok).toBe(true);
   });
 });

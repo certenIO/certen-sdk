@@ -71,6 +71,12 @@ describe('depositTxs must all be deposits and the batch transactions must not be
   for (const [name, batch, deposits, block, field] of cases) {
     it(name, () => wantCode(() => run(synthBound(batch, deposits, block)), 'batch_binding_mismatch', { field }));
   }
+  it('a deposit entry that is only the type byte is typed: the transactions root, not the type check, decides (Go d2fix)', () => {
+    const typeOnly = Uint8Array.of(0x7e);
+    mustOK(synthBound([u1, u2], [dep0, typeOnly], [dep0, typeOnly, u1, u2]));
+    wantCode(() => run(synthBound([u1, u2], [dep0, typeOnly], [dep0, u1, u2])), 'batch_binding_mismatch', { field: 'transactions_root' });
+    wantCode(() => run(synthBound([u1, u2], [dep0, Uint8Array.of(0x02)], [dep0, Uint8Array.of(0x02), u1, u2])), 'batch_binding_mismatch', { field: 'deposit_txs' });
+  });
   it('positive controls: several leading deposits are fine when they are all deposit-typed', () => {
     mustOK(synthBound([u1, u2], [dep0], [dep0, u1, u2]));
     mustOK(synthBound([u1, u2], [dep0, depX], [dep0, depX, u1, u2]));
@@ -164,6 +170,23 @@ describe('the Granite pins are required, non-zero and read; the embedded values 
   }
 });
 
+describe('max_blobs is an int: values above the largest 32-bit int are clamped to it, below it exact', () => {
+  const blobsOf = (v: number | bigint): number => {
+    const j = JSON.parse(readPins('pins/main.json').toString('utf8'));
+    j.base_sepolia.max_blobs = v;
+    const sorted = (x: any): any => (Array.isArray(x) ? x.map(sorted) : x !== null && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map((k) => [k, sorted(x[k])])) : x);
+    return parseBasePins(parsePinsOverride(new TextEncoder().encode(`${JSON.stringify(sorted(j), null, 2)}
+`))).maxBlobs;
+  };
+  it('1 and 32 are exact, 2^31-1 is exact, 2^31 and 2^40 are clamped to 2^31-1', () => {
+    expect(blobsOf(1)).toBe(1);
+    expect(blobsOf(32)).toBe(32);
+    expect(blobsOf(2147483647)).toBe(2147483647);
+    expect(blobsOf(2147483648)).toBe(2147483647);
+    expect(blobsOf(1099511627776)).toBe(2147483647);
+  });
+});
+
 describe('the KZG setup pin is read from the shared section (Go KZGSetupPin), a legacy copy only when there is none', () => {
   const KZG = 'f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f';
   const doc = (edit: (j: any) => void) => {
@@ -219,6 +242,14 @@ describe('a Brotli channel is a complete stream and nothing else (Go e9ac28d str
   });
   it('a byte after the end of the stream is refused, whatever it is', () => {
     for (const b of [0, 1, 0xff]) expect(caught(() => decompress(Uint8Array.from([...ch, b]), 1n << 20n)), `trailing ${b}`).toBeInstanceOf(ChannelError);
+  });
+  it('the smallest complete Brotli streams are streams of zero bytes, not "empty" ones: they decode to nothing and a byte after them is refused', () => {
+    for (const b of [0x3b, 0x06]) {
+      expect(decompress(Uint8Array.of(1, b), 1n << 20n).length, `stream ${b}`).toBe(0);
+      expect(caught(() => decompress(Uint8Array.of(1, b, 0), 1n << 20n)), `stream ${b} + 1 byte`).toBeInstanceOf(ChannelError);
+    }
+    // and a one-byte stream that is not complete (an unterminated metablock header) is refused
+    for (const b of [0x03, 0x0b, 0x13, 0x1b]) expect(caught(() => decompress(Uint8Array.of(1, b), 1n << 20n)), `stream ${b}`).toBeInstanceOf(ChannelError);
   });
   it('the cap is exact: len bytes pass and one fewer refuses', () => {
     expect(decompress(ch, BigInt(data.length)).length).toBe(data.length);

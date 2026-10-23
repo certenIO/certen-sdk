@@ -106,6 +106,8 @@ export interface SynthOpts {
   extraSingular?: number;
   /** the derivation version byte of every frame transaction's calldata (default 0) */
   frameVersion?: number;
+  /** the calldata of every frame transaction, used as given instead of the marshalled frame (the Go synthOpts.txData) */
+  txData?: Uint8Array;
 }
 
 export interface Synth {
@@ -271,7 +273,7 @@ export function makeSynth(o: SynthOpts = {}): Synth {
   for (let i = 0; i < nFrames; i++) {
     const hi = Math.min((i + 1) * per, chData.length);
     const lo = Math.min(i * per, hi);
-    frameBytes.push(concat(Uint8Array.of(o.frameVersion ?? 0), marshalFrame({ id, number: i, data: chData.subarray(lo, hi), isLast: i === nFrames - 1 })));
+    frameBytes.push(o.txData ?? concat(Uint8Array.of(o.frameVersion ?? 0), marshalFrame({ id, number: i, data: chData.subarray(lo, hi), isLast: i === nFrames - 1 })));
   }
   const blocks = o.frameBlocks ?? new Array<bigint>(nFrames).fill(1000n);
   const byBlock = new Map<bigint, number[]>();

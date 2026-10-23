@@ -1,5 +1,29 @@
 # Changelog — @certen.io/proof-verify
 
+## Unreleased — RB12 TS base: the Base finalized and Base l1_posted verifiers follow the Go review fixes (2026-10-23)
+
+### Fixed (false accepts, `base-sepolia/finalized/v1`)
+- A header without a withdrawals root is `output_root_mismatch{computed: 0x00..00}` whatever the claim (a zero claim used to match the absent root); the header must be the block the game implies
+  (`header.number == outBlock`).
+- The pinned game build's `asr` is required and must be the AnchorStateRegistry proven at Portal slot 62, and its optional `dgf` the factory proven at ASR slot 1; otherwise
+  `contract_identity_unproven{role: game_impl}`.
+- A zero code-hash key in `impl_pins` / `proxy_pins` is `finality_pins_corrupt`; `ImplRow` completeness compares `args_len` without int64 wrap (`n_intermediate = 2^59 + 20` is no longer complete).
+
+### Fixed (`base-sepolia/l1_posted/v1`)
+- Every deposit transaction is type `0x7e` and no batch transaction is one or empty (`batch_binding_mismatch{field: deposit_txs | batch_txs}`).
+- The channel timeout is chosen per frame by the timestamp of the L1 block that holds it (50 from `granite_time`, the Bedrock 300 before); `granite_time` and `channel_timeout_granite` are required
+  pins; the KZG pin is read from the `shared` section (the embedded pins did not load for this kind before: it failed closed on the moved KZG pin).
+- The OP Brotli channel is read strictly (empty stream, early end, a byte after the stream); caps up to 2^64-1 neither wrap nor refuse; `frame - first` and `l - epoch` are compared without wrap.
+
+### Changed
+- `state.ts`: `EvidenceReason` +29 members, `IncludedReason.NoBlockHeader`, typed `LedgerReason` and `PinMismatchField` (the current registry's closed sets); `conformance.test.ts` is green again and covers the four
+  codes whose entry grew since the per-port registries.
+
+### Added (tests)
+- Byte-identical copies of the validator's `finality_base_final2`, `finality_base_posted2` and `finality_base_posted3` and their parity tests.
+- Two-seed differential against the Go verifiers (3,220 mutated Base inputs, 0 verdict differences; run against the base commit it shows 232) and a 210-mutant hand-mutation gate over the changed files
+  (`mutation_equivalents_rb12.json` beside each kind's tests).
+
 ## Unreleased — RB12 TS integration: the staged-finality (S7) verifiers in one branch (2026-10-23)
 
 ### Added
