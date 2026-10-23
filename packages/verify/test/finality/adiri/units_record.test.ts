@@ -7,7 +7,7 @@ import {
   Name,
   bcsRecord,
   digestOf,
-  fromHex,
+  decodeHex,
   parsePins,
   recordDigests,
   signedMessage,
@@ -102,20 +102,31 @@ describe('the BCS record and its digest', () => {
   });
 });
 
-describe('fromHex is common.FromHex', () => {
-  it('strips one 0x or 0X, pads an odd length, and stops quietly at a bad digit', () => {
-    expect(hex(fromHex('0xabcd'))).toBe('abcd');
-    expect(hex(fromHex('0Xabcd'))).toBe('abcd');
-    expect(hex(fromHex('abcd'))).toBe('abcd');
-    expect(hex(fromHex('0xabc'))).toBe('0abc');
-    expect(hex(fromHex('ABCD'))).toBe('abcd');
-    expect(hex(fromHex('0xabzz'))).toBe('ab');
-    expect(hex(fromHex('0xzzab'))).toBe('');
-    expect(hex(fromHex('0x'))).toBe('');
-    expect(hex(fromHex('0xaG'))).toBe('');
-    expect(hex(fromHex('0xaf0'))).toBe('0af0');
-    expect(hex(fromHex('09afAF'))).toBe('09afaf');
-    expect(hex(fromHex('0x0x89'))).toBe('');
+describe('decodeHex is hex.DecodeString, strictly', () => {
+  it('decodes exact hex of either case and refuses everything else: odd length, a non-hex digit, a prefix', () => {
+    expect(hex(decodeHex('abcd')!)).toBe('abcd');
+    expect(hex(decodeHex('ABCD')!)).toBe('abcd');
+    expect(hex(decodeHex('09afAF')!)).toBe('09afaf');
+    expect(hex(decodeHex('')!)).toBe('');
+    expect(decodeHex('abc')).toBeUndefined();
+    expect(decodeHex('a')).toBeUndefined();
+    expect(decodeHex('abzz')).toBeUndefined();
+    expect(decodeHex('zzab')).toBeUndefined();
+    expect(decodeHex('aG')).toBeUndefined();
+    expect(decodeHex('0xab')).toBeUndefined();
+    expect(decodeHex('ab ')).toBeUndefined();
+    expect(decodeHex('g0')).toBeUndefined();
+    expect(decodeHex('0g')).toBeUndefined();
+    expect(decodeHex('@0')).toBeUndefined();
+    expect(decodeHex('0@')).toBeUndefined();
+    expect(decodeHex('/0')).toBeUndefined();
+    expect(decodeHex('0:')).toBeUndefined();
+    expect(decodeHex('`0')).toBeUndefined();
+    expect(decodeHex('0`')).toBeUndefined();
+    expect(decodeHex('G0')).toBeUndefined();
+    expect(decodeHex('é0')).toBeUndefined();
+    expect(hex(decodeHex('fF')!)).toBe('ffff'.slice(0, 2));
+    expect(hex(decodeHex('00ff')!)).toBe('00ff');
   });
 });
 
@@ -228,10 +239,15 @@ describe('the Adiri pins', () => {
     expect(key(withMut((m) => { m.min_committee_size = 0; m.max_headers = 0; m.genesis_link_sha256 = 'ab'; }))).toBe('adiri.min_committee_size');
     expect(key(withMut((m) => { m.max_headers = 0; m.genesis_link_sha256 = 'ab'; }))).toBe('adiri.max_headers');
     expect(key(withMut((m) => (m.genesis_link_sha256 = 'ab')))).toBe('adiri.genesis_link_sha256');
-    // an odd number of hex digits is read as a leading zero nibble (common.FromHex), so 63 digits are 32 bytes
-    const p = parsePins(pinsOfSection({ ...embedded(), genesis_hash: `0x${hex(filled(32, 0x1f)).slice(1)}` }));
-    expect(hex(p.genesisHash)).toBe(`0${hex(filled(32, 0x1f)).slice(1)}`);
-    expect(hex(parsePins(pinsOfSection({ ...embedded(), genesis_hash: h(0xab).toUpperCase().replace('0X', '0x') })).genesisHash)).toBe(hex(filled(32, 0xab)));
+    // exact hex: an odd number of digits is refused, never padded with a zero; a non-hex digit is refused, never truncated; upper case is fine
+    expect(key(withMut((m) => (m.genesis_hash = `0x${hex(filled(32, 0x1f)).slice(1)}`)))).toBe('adiri.genesis_hash');
+    expect(key(withMut((m) => (m.genesis_hash = `0x${hex(filled(31, 0x1f))}zz`)))).toBe('adiri.genesis_hash');
+    expect(key(withMut((m) => (m.epoch0_final_state = { hash: `0x${hex(filled(32, 1)).slice(1)}`, number: 290 })))).toBe('adiri.epoch0_final_state.hash');
+    expect(key(withMut((m) => (m.eip2935.runtime_codehash = `0x${hex(filled(32, 1)).slice(1)}`)))).toBe('adiri.eip2935.runtime_codehash');
+    expect(key(withMut((m) => (m.eip2935.address = `0x${hex(filled(20, 1)).slice(1)}`)))).toBe('adiri.eip2935.address');
+    expect(key(withMut((m) => (m.eip2935.address = '0x')))).toBe('adiri.eip2935.address');
+    expect(hex(parsePins(pinsOfSection({ ...embedded(), genesis_hash: `0x${hex(filled(32, 0xab)).toUpperCase()}` })).genesisHash)).toBe(hex(filled(32, 0xab)));
+    expect(h(1)).toBe(`0x${hex(filled(32, 1))}`);
   });
 
   it('the committee pin: 1..255 keys of 96 bytes, the failing index named', () => {

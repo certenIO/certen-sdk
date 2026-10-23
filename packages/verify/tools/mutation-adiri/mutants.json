@@ -451,87 +451,66 @@
   },
   {
    "file": "record.ts",
-   "offset": 7791,
+   "offset": 8064,
    "find": "===",
    "replace": "!==",
-   "note": "record.ts:219 eq -> neq"
+   "note": "record.ts:230 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 7808,
+   "offset": 8623,
    "find": "===",
    "replace": "!==",
-   "note": "record.ts:219 eq -> neq"
+   "note": "record.ts:242 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 7824,
+   "offset": 9177,
    "find": "===",
    "replace": "!==",
-   "note": "record.ts:219 eq -> neq"
+   "note": "record.ts:251 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 7869,
-   "find": "===",
-   "replace": "!==",
-   "note": "record.ts:220 eq -> neq"
-  },
-  {
-   "file": "record.ts",
-   "offset": 8225,
-   "find": "===",
-   "replace": "!==",
-   "note": "record.ts:232 eq -> neq"
-  },
-  {
-   "file": "record.ts",
-   "offset": 8784,
-   "find": "===",
-   "replace": "!==",
-   "note": "record.ts:244 eq -> neq"
-  },
-  {
-   "file": "record.ts",
-   "offset": 9338,
+   "offset": 9279,
    "find": "===",
    "replace": "!==",
    "note": "record.ts:253 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 9440,
+   "offset": 9409,
    "find": "===",
    "replace": "!==",
    "note": "record.ts:255 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 9570,
+   "offset": 9526,
    "find": "===",
    "replace": "!==",
    "note": "record.ts:257 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 9687,
+   "offset": 9695,
    "find": "===",
    "replace": "!==",
    "note": "record.ts:259 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 9856,
+   "offset": 9881,
    "find": "===",
    "replace": "!==",
-   "note": "record.ts:261 eq -> neq"
+   "note": "record.ts:263 eq -> neq"
   },
   {
    "file": "record.ts",
-   "offset": 10343,
+   "offset": 10196,
    "find": "===",
    "replace": "!==",
-   "note": "record.ts:272 eq -> neq"
+   "note": "record.ts:270 eq -> neq"
   },
   {
    "file": "record.ts",
@@ -549,94 +528,94 @@
   },
   {
    "file": "record.ts",
-   "offset": 8059,
+   "offset": 7434,
    "find": "!==",
    "replace": "===",
-   "note": "record.ts:226 neq -> eq"
+   "note": "record.ts:211 neq -> eq"
   },
   {
    "file": "record.ts",
-   "offset": 8199,
+   "offset": 7887,
    "find": "!==",
    "replace": "===",
-   "note": "record.ts:232 neq -> eq"
+   "note": "record.ts:224 neq -> eq"
   },
   {
    "file": "record.ts",
-   "offset": 8980,
+   "offset": 8038,
    "find": "!==",
    "replace": "===",
-   "note": "record.ts:248 neq -> eq"
+   "note": "record.ts:230 neq -> eq"
   },
   {
    "file": "record.ts",
-   "offset": 9716,
+   "offset": 8819,
    "find": "!==",
    "replace": "===",
-   "note": "record.ts:259 neq -> eq"
+   "note": "record.ts:246 neq -> eq"
   },
   {
    "file": "record.ts",
-   "offset": 10054,
+   "offset": 9555,
    "find": "!==",
    "replace": "===",
-   "note": "record.ts:265 neq -> eq"
+   "note": "record.ts:257 neq -> eq"
   },
   {
    "file": "record.ts",
-   "offset": 10588,
+   "offset": 9907,
    "find": "!==",
    "replace": "===",
-   "note": "record.ts:279 neq -> eq"
+   "note": "record.ts:263 neq -> eq"
   },
   {
    "file": "record.ts",
-   "offset": 7508,
+   "offset": 10467,
+   "find": "!==",
+   "replace": "===",
+   "note": "record.ts:277 neq -> eq"
+  },
+  {
+   "file": "record.ts",
+   "offset": 7063,
    "find": "<=",
    "replace": "<",
-   "note": "record.ts:215 <= -> <"
+   "note": "record.ts:204 <= -> <"
   },
   {
    "file": "record.ts",
-   "offset": 7538,
+   "offset": 7093,
    "find": "<=",
    "replace": "<",
-   "note": "record.ts:215 <= -> <"
+   "note": "record.ts:204 <= -> <"
   },
   {
    "file": "record.ts",
-   "offset": 7569,
+   "offset": 7124,
    "find": "<=",
    "replace": "<",
-   "note": "record.ts:215 <= -> <"
+   "note": "record.ts:204 <= -> <"
   },
   {
    "file": "record.ts",
-   "offset": 7497,
+   "offset": 7052,
    "find": ">=",
    "replace": ">",
-   "note": "record.ts:215 >= -> >"
+   "note": "record.ts:204 >= -> >"
   },
   {
    "file": "record.ts",
-   "offset": 7527,
+   "offset": 7082,
    "find": ">=",
    "replace": ">",
-   "note": "record.ts:215 >= -> >"
+   "note": "record.ts:204 >= -> >"
   },
   {
    "file": "record.ts",
-   "offset": 7558,
+   "offset": 7113,
    "find": ">=",
    "replace": ">",
-   "note": "record.ts:215 >= -> >"
-  },
-  {
-   "file": "record.ts",
-   "offset": 7778,
-   "find": ">=",
-   "replace": ">",
-   "note": "record.ts:219 >= -> >"
+   "note": "record.ts:204 >= -> >"
   },
   {
    "file": "record.ts",
@@ -647,45 +626,45 @@
   },
   {
    "file": "record.ts",
-   "offset": 7256,
+   "offset": 7523,
    "find": "<",
    "replace": "<=",
-   "note": "record.ts:207 < -> <="
+   "note": "record.ts:213 < -> <="
   },
   {
    "file": "record.ts",
-   "offset": 7370,
+   "offset": 7640,
    "find": "<",
    "replace": "<=",
-   "note": "record.ts:210 < -> <="
+   "note": "record.ts:216 < -> <="
   },
   {
    "file": "record.ts",
-   "offset": 7379,
+   "offset": 7650,
    "find": "<",
    "replace": "<=",
-   "note": "record.ts:210 < -> <="
+   "note": "record.ts:216 < -> <="
   },
   {
    "file": "record.ts",
-   "offset": 8038,
+   "offset": 7866,
    "find": "<",
    "replace": "<=",
-   "note": "record.ts:226 < -> <="
+   "note": "record.ts:224 < -> <="
   },
   {
    "file": "record.ts",
-   "offset": 10388,
+   "offset": 10241,
    "find": "<",
    "replace": "<=",
-   "note": "record.ts:273 < -> <="
+   "note": "record.ts:271 < -> <="
   },
   {
    "file": "record.ts",
-   "offset": 10439,
+   "offset": 10292,
    "find": "<",
    "replace": "<=",
-   "note": "record.ts:274 < -> <="
+   "note": "record.ts:272 < -> <="
   },
   {
    "file": "record.ts",
@@ -703,52 +682,38 @@
   },
   {
    "file": "record.ts",
-   "offset": 9882,
+   "offset": 9721,
    "find": ">",
    "replace": ">=",
-   "note": "record.ts:261 > -> >="
+   "note": "record.ts:259 > -> >="
   },
   {
    "file": "record.ts",
-   "offset": 7503,
+   "offset": 7058,
    "find": "&&",
    "replace": "||",
-   "note": "record.ts:215 && -> ||"
+   "note": "record.ts:204 && -> ||"
   },
   {
    "file": "record.ts",
-   "offset": 7533,
+   "offset": 7088,
    "find": "&&",
    "replace": "||",
-   "note": "record.ts:215 && -> ||"
+   "note": "record.ts:204 && -> ||"
   },
   {
    "file": "record.ts",
-   "offset": 7564,
+   "offset": 7119,
    "find": "&&",
    "replace": "||",
-   "note": "record.ts:215 && -> ||"
+   "note": "record.ts:204 && -> ||"
   },
   {
    "file": "record.ts",
-   "offset": 7783,
+   "offset": 8052,
    "find": "&&",
    "replace": "||",
-   "note": "record.ts:219 && -> ||"
-  },
-  {
-   "file": "record.ts",
-   "offset": 7799,
-   "find": "&&",
-   "replace": "||",
-   "note": "record.ts:219 && -> ||"
-  },
-  {
-   "file": "record.ts",
-   "offset": 8213,
-   "find": "&&",
-   "replace": "||",
-   "note": "record.ts:232 && -> ||"
+   "note": "record.ts:230 && -> ||"
   },
   {
    "file": "record.ts",
@@ -787,24 +752,24 @@
   },
   {
    "file": "record.ts",
-   "offset": 7374,
+   "offset": 7644,
    "find": "||",
    "replace": "&&",
-   "note": "record.ts:210 || -> &&"
+   "note": "record.ts:216 || -> &&"
   },
   {
    "file": "record.ts",
-   "offset": 7816,
+   "offset": 7870,
    "find": "||",
    "replace": "&&",
-   "note": "record.ts:219 || -> &&"
+   "note": "record.ts:224 || -> &&"
   },
   {
    "file": "record.ts",
-   "offset": 8042,
+   "offset": 9540,
    "find": "||",
    "replace": "&&",
-   "note": "record.ts:226 || -> &&"
+   "note": "record.ts:257 || -> &&"
   },
   {
    "file": "record.ts",
@@ -815,80 +780,80 @@
   },
   {
    "file": "record.ts",
-   "offset": 9862,
+   "offset": 9895,
    "find": "||",
    "replace": "&&",
-   "note": "record.ts:261 || -> &&"
+   "note": "record.ts:263 || -> &&"
   },
   {
    "file": "record.ts",
-   "offset": 8780,
+   "offset": 8619,
    "find": "sec === undefined",
    "replace": "false",
-   "note": "record.ts:244 guard removed (if (false) throw)"
+   "note": "record.ts:242 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 8973,
+   "offset": 8812,
    "find": "fe.err !== undefined",
    "replace": "false",
-   "note": "record.ts:248 guard removed (if (false) throw)"
+   "note": "record.ts:246 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 9326,
+   "offset": 9165,
    "find": "genesisHash === undefined",
+   "replace": "false",
+   "note": "record.ts:251 guard removed (if (false) throw)"
+  },
+  {
+   "file": "record.ts",
+   "offset": 9272,
+   "find": "e0Hash === undefined",
    "replace": "false",
    "note": "record.ts:253 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 9433,
-   "find": "e0Hash === undefined",
+   "offset": 9400,
+   "find": "codeHash === undefined",
    "replace": "false",
    "note": "record.ts:255 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 9561,
-   "find": "codeHash === undefined",
+   "offset": 9521,
+   "find": "addr === undefined || addr.length !== 20",
    "replace": "false",
    "note": "record.ts:257 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 9682,
-   "find": "addr === undefined || addr.length !== 20",
+   "offset": 9678,
+   "find": "committee.length === 0 || committee.length > 255",
    "replace": "false",
    "note": "record.ts:259 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 9839,
-   "find": "committee.length === 0 || committee.length > 255",
+   "offset": 9879,
+   "find": "k === undefined || k.length !== KeyBytes",
    "replace": "false",
-   "note": "record.ts:261 guard removed (if (false) throw)"
+   "note": "record.ts:263 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 10045,
-   "find": "k.length !== KeyBytes",
-   "replace": "false",
-   "note": "record.ts:265 guard removed (if (false) throw)"
-  },
-  {
-   "file": "record.ts",
-   "offset": 10491,
+   "offset": 10344,
    "find": "isBad",
    "replace": "false",
-   "note": "record.ts:276 guard removed (if (false) throw)"
+   "note": "record.ts:274 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
-   "offset": 10573,
-   "find": "linkSha.length !== 64",
+   "offset": 10426,
+   "find": "new TextEncoder().encode(linkSha).length !== 64",
    "replace": "false",
-   "note": "record.ts:279 guard removed (if (false) throw)"
+   "note": "record.ts:277 guard removed (if (false) throw)"
   },
   {
    "file": "record.ts",
@@ -913,17 +878,10 @@
   },
   {
    "file": "record.ts",
-   "offset": 7254,
+   "offset": 7624,
    "find": "1",
    "replace": "0",
-   "note": "record.ts:207 boundary +/- 1 -> 0"
-  },
-  {
-   "file": "record.ts",
-   "offset": 7355,
-   "find": "1",
-   "replace": "0",
-   "note": "record.ts:209 boundary +/- 1 -> 0"
+   "note": "record.ts:215 boundary +/- 1 -> 0"
   },
   {
    "file": "chain.ts",
@@ -1571,409 +1529,577 @@
   },
   {
    "file": "kind.ts",
-   "offset": 2804,
-   "find": "===",
-   "replace": "!==",
-   "note": "kind.ts:66 eq -> neq"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 2860,
+   "offset": 2865,
    "find": "===",
    "replace": "!==",
    "note": "kind.ts:67 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 3609,
+   "offset": 2921,
    "find": "===",
    "replace": "!==",
-   "note": "kind.ts:87 eq -> neq"
+   "note": "kind.ts:68 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 4721,
+   "offset": 3670,
    "find": "===",
    "replace": "!==",
-   "note": "kind.ts:119 eq -> neq"
+   "note": "kind.ts:88 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 4749,
+   "offset": 4708,
    "find": "===",
    "replace": "!==",
-   "note": "kind.ts:119 eq -> neq"
+   "note": "kind.ts:118 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 5308,
+   "offset": 4736,
    "find": "===",
    "replace": "!==",
-   "note": "kind.ts:137 eq -> neq"
+   "note": "kind.ts:118 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 6273,
+   "offset": 5302,
    "find": "===",
    "replace": "!==",
-   "note": "kind.ts:158 eq -> neq"
+   "note": "kind.ts:136 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 7772,
+   "offset": 5639,
    "find": "===",
    "replace": "!==",
-   "note": "kind.ts:186 eq -> neq"
+   "note": "kind.ts:142 eq -> neq"
   },
   {
    "file": "kind.ts",
-   "offset": 6339,
+   "offset": 6655,
+   "find": "===",
+   "replace": "!==",
+   "note": "kind.ts:162 eq -> neq"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 7133,
+   "find": "===",
+   "replace": "!==",
+   "note": "kind.ts:169 eq -> neq"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 8177,
+   "find": "===",
+   "replace": "!==",
+   "note": "kind.ts:190 eq -> neq"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 6721,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:159 neq -> eq"
+   "note": "kind.ts:163 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 6755,
+   "offset": 7152,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:165 neq -> eq"
+   "note": "kind.ts:169 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 6928,
+   "offset": 7333,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:170 neq -> eq"
+   "note": "kind.ts:174 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 7130,
+   "offset": 7535,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:172 neq -> eq"
+   "note": "kind.ts:176 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 8112,
+   "offset": 8517,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:194 neq -> eq"
+   "note": "kind.ts:198 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 10159,
-   "find": "!==",
-   "replace": "===",
-   "note": "kind.ts:250 neq -> eq"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 10316,
-   "find": "!==",
-   "replace": "===",
-   "note": "kind.ts:253 neq -> eq"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 10382,
+   "offset": 10564,
    "find": "!==",
    "replace": "===",
    "note": "kind.ts:254 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 10467,
+   "offset": 10721,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:255 neq -> eq"
+   "note": "kind.ts:257 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 10580,
+   "offset": 10787,
    "find": "!==",
    "replace": "===",
-   "note": "kind.ts:256 neq -> eq"
+   "note": "kind.ts:258 neq -> eq"
   },
   {
    "file": "kind.ts",
-   "offset": 8466,
+   "offset": 10872,
+   "find": "!==",
+   "replace": "===",
+   "note": "kind.ts:259 neq -> eq"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 10985,
+   "find": "!==",
+   "replace": "===",
+   "note": "kind.ts:260 neq -> eq"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 8871,
    "find": ">=",
    "replace": ">",
-   "note": "kind.ts:200 >= -> >"
+   "note": "kind.ts:204 >= -> >"
   },
   {
    "file": "kind.ts",
-   "offset": 3499,
+   "offset": 3560,
    "find": "<",
    "replace": "<=",
-   "note": "kind.ts:85 < -> <="
+   "note": "kind.ts:86 < -> <="
   },
   {
    "file": "kind.ts",
-   "offset": 5959,
+   "offset": 6345,
    "find": "<",
    "replace": "<=",
-   "note": "kind.ts:149 < -> <="
+   "note": "kind.ts:153 < -> <="
   },
   {
    "file": "kind.ts",
-   "offset": 3481,
+   "offset": 3542,
    "find": ">",
    "replace": ">=",
-   "note": "kind.ts:85 > -> >="
+   "note": "kind.ts:86 > -> >="
   },
   {
    "file": "kind.ts",
-   "offset": 4664,
+   "offset": 4651,
    "find": ">",
    "replace": ">=",
-   "note": "kind.ts:117 > -> >="
+   "note": "kind.ts:116 > -> >="
   },
   {
    "file": "kind.ts",
-   "offset": 5201,
+   "offset": 5195,
    "find": ">",
    "replace": ">=",
-   "note": "kind.ts:136 > -> >="
+   "note": "kind.ts:135 > -> >="
   },
   {
    "file": "kind.ts",
-   "offset": 8476,
+   "offset": 5531,
    "find": ">",
    "replace": ">=",
-   "note": "kind.ts:200 > -> >="
+   "note": "kind.ts:140 > -> >="
   },
   {
    "file": "kind.ts",
-   "offset": 10797,
+   "offset": 8881,
    "find": ">",
    "replace": ">=",
-   "note": "kind.ts:258 > -> >="
+   "note": "kind.ts:204 > -> >="
   },
   {
    "file": "kind.ts",
-   "offset": 3485,
+   "offset": 11202,
+   "find": ">",
+   "replace": ">=",
+   "note": "kind.ts:262 > -> >="
+  },
+  {
+   "file": "kind.ts",
+   "offset": 12853,
+   "find": ">",
+   "replace": ">=",
+   "note": "kind.ts:290 > -> >="
+  },
+  {
+   "file": "kind.ts",
+   "offset": 3546,
    "find": "&&",
    "replace": "||",
-   "note": "kind.ts:85 && -> ||"
+   "note": "kind.ts:86 && -> ||"
   },
   {
    "file": "kind.ts",
-   "offset": 4728,
+   "offset": 4715,
    "find": "&&",
    "replace": "||",
-   "note": "kind.ts:119 && -> ||"
+   "note": "kind.ts:118 && -> ||"
   },
   {
    "file": "kind.ts",
-   "offset": 7144,
+   "offset": 7549,
    "find": "&&",
    "replace": "||",
-   "note": "kind.ts:172 && -> ||"
+   "note": "kind.ts:176 && -> ||"
   },
   {
    "file": "kind.ts",
-   "offset": 8471,
+   "offset": 8876,
    "find": "&&",
    "replace": "||",
-   "note": "kind.ts:200 && -> ||"
+   "note": "kind.ts:204 && -> ||"
   },
   {
    "file": "kind.ts",
-   "offset": 6327,
+   "offset": 6709,
    "find": "||",
    "replace": "&&",
-   "note": "kind.ts:159 || -> &&"
+   "note": "kind.ts:163 || -> &&"
   },
   {
    "file": "kind.ts",
-   "offset": 8100,
+   "offset": 7140,
    "find": "||",
    "replace": "&&",
-   "note": "kind.ts:194 || -> &&"
+   "note": "kind.ts:169 || -> &&"
   },
   {
    "file": "kind.ts",
-   "offset": 8725,
+   "offset": 8505,
    "find": "||",
    "replace": "&&",
-   "note": "kind.ts:208 || -> &&"
+   "note": "kind.ts:198 || -> &&"
   },
   {
    "file": "kind.ts",
-   "offset": 8863,
+   "offset": 9130,
    "find": "||",
    "replace": "&&",
-   "note": "kind.ts:211 || -> &&"
+   "note": "kind.ts:212 || -> &&"
   },
   {
    "file": "kind.ts",
-   "offset": 3596,
+   "offset": 9268,
+   "find": "||",
+   "replace": "&&",
+   "note": "kind.ts:215 || -> &&"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 3657,
    "find": "spine.length === 0",
    "replace": "false",
-   "note": "kind.ts:87 guard removed (if (false) throw)"
+   "note": "kind.ts:88 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 5190,
+   "offset": 5184,
    "find": "leg.number > F.number",
    "replace": "false",
-   "note": "kind.ts:136 guard removed (if (false) throw)"
+   "note": "kind.ts:135 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6099,
+   "offset": 6485,
    "find": "e instanceof FinalityStateError",
    "replace": "false",
-   "note": "kind.ts:155 guard removed (if (false) throw)"
+   "note": "kind.ts:159 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6598,
+   "offset": 6980,
    "find": "!sameBytes(h.hash, prev.parentHash)",
    "replace": "false",
-   "note": "kind.ts:164 guard removed (if (false) throw)"
+   "note": "kind.ts:168 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6736,
-   "find": "u64(h.number + 1n) !== prev.number",
+   "offset": 7121,
+   "find": "prev.number === 0n || h.number !== prev.number - 1n",
    "replace": "false",
-   "note": "kind.ts:165 guard removed (if (false) throw)"
+   "note": "kind.ts:169 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6915,
+   "offset": 7320,
    "find": "lastH.number !== leg.number",
    "replace": "false",
-   "note": "kind.ts:170 guard removed (if (false) throw)"
+   "note": "kind.ts:174 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 7016,
+   "offset": 7421,
    "find": "!sameBytes(lastH.hash, leg.hash)",
    "replace": "false",
-   "note": "kind.ts:171 guard removed (if (false) throw)"
+   "note": "kind.ts:175 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 7761,
+   "offset": 8166,
    "find": "leg.number === F.number",
    "replace": "false",
-   "note": "kind.ts:186 guard removed (if (false) throw)"
+   "note": "kind.ts:190 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 7949,
+   "offset": 8354,
    "find": "e instanceof FinalityStateError",
    "replace": "false",
-   "note": "kind.ts:191 guard removed (if (false) throw)"
+   "note": "kind.ts:195 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 8703,
+   "offset": 9108,
    "find": "e instanceof MptError || e instanceof RlpError",
    "replace": "false",
-   "note": "kind.ts:208 guard removed (if (false) throw)"
+   "note": "kind.ts:212 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 9067,
+   "offset": 9472,
    "find": "!sameBytes(sr.value, leg.hash)",
    "replace": "false",
-   "note": "kind.ts:214 guard removed (if (false) throw)"
+   "note": "kind.ts:218 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 10147,
+   "offset": 10552,
    "find": "par.chainId !== ChainAdiri",
-   "replace": "false",
-   "note": "kind.ts:250 guard removed (if (false) throw)"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 10309,
-   "find": "h.kind !== Name",
-   "replace": "false",
-   "note": "kind.ts:253 guard removed (if (false) throw)"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 10374,
-   "find": "h.chain !== ChainAdiri",
    "replace": "false",
    "note": "kind.ts:254 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 10459,
-   "find": "h.level !== Level.Finalized",
-   "replace": "false",
-   "note": "kind.ts:255 guard removed (if (false) throw)"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 10566,
-   "find": "h.blockNumber !== leg.number",
-   "replace": "false",
-   "note": "kind.ts:256 guard removed (if (false) throw)"
-  },
-  {
-   "file": "kind.ts",
-   "offset": 10667,
-   "find": "!sameBytes(h.blockHash, leg.hash)",
+   "offset": 10714,
+   "find": "h.kind !== Name",
    "replace": "false",
    "note": "kind.ts:257 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 4324,
-   "find": "1n",
-   "replace": "0n",
-   "note": "kind.ts:109 boundary +/- 1 -> 0"
+   "offset": 10779,
+   "find": "h.chain !== ChainAdiri",
+   "replace": "false",
+   "note": "kind.ts:258 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6677,
-   "find": "1n",
-   "replace": "0n",
-   "note": "kind.ts:164 boundary +/- 1 -> 0"
+   "offset": 10864,
+   "find": "h.level !== Level.Finalized",
+   "replace": "false",
+   "note": "kind.ts:259 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6751,
-   "find": "1n",
-   "replace": "0n",
-   "note": "kind.ts:165 boundary +/- 1 -> 0"
+   "offset": 10971,
+   "find": "h.blockNumber !== leg.number",
+   "replace": "false",
+   "note": "kind.ts:260 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 6814,
-   "find": "1n",
-   "replace": "0n",
-   "note": "kind.ts:165 boundary +/- 1 -> 0"
+   "offset": 11072,
+   "find": "!sameBytes(h.blockHash, leg.hash)",
+   "replace": "false",
+   "note": "kind.ts:261 guard removed (if (false) throw)"
   },
   {
    "file": "kind.ts",
-   "offset": 7179,
+   "offset": 5657,
+   "find": "1n",
+   "replace": "0n",
+   "note": "kind.ts:142 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 7170,
+   "find": "1n",
+   "replace": "0n",
+   "note": "kind.ts:169 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "kind.ts",
+   "offset": 7584,
    "find": "1",
    "replace": "0",
-   "note": "kind.ts:172 boundary +/- 1 -> 0"
+   "note": "kind.ts:176 boundary +/- 1 -> 0"
   },
   {
    "file": "kind.ts",
-   "offset": 7313,
+   "offset": 7718,
    "find": "1",
    "replace": "0",
-   "note": "kind.ts:173 boundary +/- 1 -> 0"
+   "note": "kind.ts:177 boundary +/- 1 -> 0"
   },
   {
    "file": "kind.ts",
-   "offset": 11203,
+   "offset": 11608,
    "find": "1n",
    "replace": "0n",
-   "note": "kind.ts:265 boundary +/- 1 -> 0"
+   "note": "kind.ts:269 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 2988,
+   "find": "===",
+   "replace": "!==",
+   "note": "genesislink.ts:56 eq -> neq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3350,
+   "find": "===",
+   "replace": "!==",
+   "note": "genesislink.ts:66 eq -> neq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 2851,
+   "find": "!==",
+   "replace": "===",
+   "note": "genesislink.ts:54 neq -> eq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3427,
+   "find": "!==",
+   "replace": "===",
+   "note": "genesislink.ts:67 neq -> eq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3615,
+   "find": "!==",
+   "replace": "===",
+   "note": "genesislink.ts:70 neq -> eq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3777,
+   "find": "!==",
+   "replace": "===",
+   "note": "genesislink.ts:75 neq -> eq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 4595,
+   "find": "!==",
+   "replace": "===",
+   "note": "genesislink.ts:89 neq -> eq"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3110,
+   "find": "<",
+   "replace": "<=",
+   "note": "genesislink.ts:58 < -> <="
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 2088,
+   "find": ">",
+   "replace": ">=",
+   "note": "genesislink.ts:34 > -> >="
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 5092,
+   "find": ">",
+   "replace": ">=",
+   "note": "genesislink.ts:99 > -> >="
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 5685,
+   "find": ">",
+   "replace": ">=",
+   "note": "genesislink.ts:109 > -> >="
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3415,
+   "find": "||",
+   "replace": "&&",
+   "note": "genesislink.ts:67 || -> &&"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3603,
+   "find": "||",
+   "replace": "&&",
+   "note": "genesislink.ts:70 || -> &&"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3795,
+   "find": "||",
+   "replace": "&&",
+   "note": "genesislink.ts:75 || -> &&"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 2207,
+   "find": "e instanceof RlpError",
+   "replace": "false",
+   "note": "genesislink.ts:39 guard removed (if (false) throw)"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 2847,
+   "find": "sum !== wantSha",
+   "replace": "false",
+   "note": "genesislink.ts:54 guard removed (if (false) throw)"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 2978,
+   "find": "hs.length === 0",
+   "replace": "false",
+   "note": "genesislink.ts:56 guard removed (if (false) throw)"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3223,
+   "find": "e instanceof FinalityStateError",
+   "replace": "false",
+   "note": "genesislink.ts:63 guard removed (if (false) throw)"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 4572,
+   "find": "hexLower(sha256(file)) !== par.genesisLinkSha",
+   "replace": "false",
+   "note": "genesislink.ts:89 guard removed (if (false) throw)"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 4807,
+   "find": "e instanceof GenesisLinkError",
+   "replace": "false",
+   "note": "genesislink.ts:93 guard removed (if (false) throw)"
+  },
+  {
+   "file": "genesislink.ts",
+   "offset": 3633,
+   "find": "1n",
+   "replace": "0n",
+   "note": "genesislink.ts:70 boundary +/- 1 -> 0"
   }
  ]
 }

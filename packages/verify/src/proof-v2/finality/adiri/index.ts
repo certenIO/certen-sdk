@@ -9,3 +9,4 @@ export * from './record.js';
 export * from './sigs.js';
 export * from './chain.js';
 export * from './kind.js';
+export * from './genesislink.js';
