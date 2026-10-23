@@ -79,6 +79,38 @@ export const EvidenceReason = {
   HeaderItemNot32Bytes: 'header_item_not_32_bytes',
   HeaderItemNotCanonUint: 'header_item_not_canonical_uint',
   HeaderItemIsList: 'header_item_is_list',
+  // The compact Adiri committee chain (pkg/finality/adiri, RB11-F1): the container body of adiri/finalized/v1.
+  CFA1BadMagic: 'cfa1_bad_magic',
+  CFA1KeyLength: 'cfa1_key_length',
+  CFA1NoRecords: 'cfa1_no_records',
+  CFA1NoTables: 'cfa1_no_tables',
+  CFA1SignersTooMany: 'cfa1_signers_too_many',
+  CFA1TableEmpty: 'cfa1_table_empty',
+  CFA1TableIndexOutOfRange: 'cfa1_table_index_out_of_range',
+  CFA1TableSize: 'cfa1_table_size',
+  CFA1TooLargeToEncode: 'cfa1_too_large_to_encode',
+  LevelNotFinalized: 'level_not_finalized',
+  LinkKind2AtSeal: 'link_kind_2_at_seal',
+  LinkKindUnknown: 'link_kind_unknown',
+  SpineEmpty: 'spine_empty',
+  BadEnumValue: 'bad_enum_value',
+  // The Sepolia L1-finality kind (pkg/finality/ethsepolia, RB11-C2): the framing reasons of the light-client part, as pkg/finality/ethl1
+  // names them, and the spine that does not end at the leg block.
+  AttestedOffset: 'attested_offset',
+  Empty: 'empty',
+  ExecutionOffset: 'execution_offset',
+  ExtraDataLength: 'extra_data_length',
+  ExtraDataOffset: 'extra_data_offset',
+  FinalizedOffset: 'finalized_offset',
+  HeaderLength: 'header_length',
+  HeaderOffset: 'header_offset',
+  LayoutByteNotZero: 'layout_byte_not_zero',
+  LayoutByteUnknown: 'layout_byte_unknown',
+  LayoutByteZero: 'layout_byte_zero',
+  Length: 'length',
+  SpineNotEndingAtBlock: 'spine_not_ending_at_block',
+  UnknownKind: 'unknown_kind',
+  UnsupportedProfile: 'unsupported_profile',
 } as const;
 
 /** The reason of finality_addendum_malformed (the JSON form of an addendum, a section and a proof id). */
@@ -128,9 +160,65 @@ export const PinsReason = {
 
 /** The reason of finality_included_unavailable. */
 export const IncludedReason = {
+  /**
+   * The bundle holds an execution proof (component 5) without its block_header_rlp, as bundles written before the header was captured do.
+   * Without the header the leg binding D0 cannot be recomputed, so nothing is judged; it is not corrupt evidence and not a failure
+   * (Go IncludedNoBlockHeader, raised by the validator's bundle reader, which has no TypeScript twin).
+   */
+  NoBlockHeader: 'no_block_header',
   NoSettlement: 'no_settlement',
   NoExecutionProof: 'no_execution_proof_component',
   SettlementNotJudged: 'no_settlement_to_recompute_d0',
+} as const;
+
+/** The reason of finality_ledger_extension_invalid (a closed set; registry enums.reason; raised by the Sepolia ledger extension, pkg/finality/ethsepolia). */
+export const LedgerReason = {
+  BaseNotPrefix: 'base_not_prefix',
+  BlockRootOnAppendedEntry: 'block_root_on_appended_entry',
+  CommitteeRootMismatch: 'committee_root_mismatch',
+  LinkMissing: 'link_missing',
+  LinkRefused: 'link_refused',
+  LinkSha256Mismatch: 'link_sha256_mismatch',
+  NonLedgerContentDiffers: 'non_ledger_content_differs',
+  PeriodNotNext: 'period_not_next',
+  PredecessorCommitteeUnavailable: 'predecessor_committee_unavailable',
+  RootPinUnverifiable: 'root_pin_unverifiable',
+  WspWidened: 'wsp_widened',
+} as const;
+
+/** The field of pin_mismatch (a closed set; registry enums.field): the pin of the Arbitrum kinds that disagrees with what the evidence is judged under. */
+export const PinMismatchField = {
+  BoldGenesisL2Block: 'bold_genesis_l2_block',
+  Bridge: 'bridge',
+  ChainId: 'chain_id',
+  ConfirmPathSelectorsConfirmAssertion: 'confirm_path.selectors.confirm_assertion',
+  ConfirmPathSelectorsFastConfirmAssertion: 'confirm_path.selectors.fast_confirm_assertion',
+  ConfirmPathSelectorsFastConfirmNewAssertion: 'confirm_path.selectors.fast_confirm_new_assertion',
+  ConfirmPathSelectorsForceConfirmAssertion: 'confirm_path.selectors.force_confirm_assertion',
+  ConfirmPathSelectorsWalletExecuteTransaction: 'confirm_path.selectors.wallet_execute_transaction',
+  ConfirmPathSelectorsWalletExecuteTransactionWithGasRefunder: 'confirm_path.selectors.wallet_execute_transaction_with_gas_refunder',
+  ConfirmPathSelectorsWalletExecuteTransactions: 'confirm_path.selectors.wallet_execute_transactions',
+  ConfirmPathSelectorsWalletExecuteTransactionsWithGasRefunder: 'confirm_path.selectors.wallet_execute_transactions_with_gas_refunder',
+  ConfirmPathTopicsAssertionConfirmed: 'confirm_path.topics.assertion_confirmed',
+  ConfirmPathTopicsAssertionForceConfirmed: 'confirm_path.topics.assertion_force_confirmed',
+  ConfirmPathValidatorWalletImpl: 'confirm_path.validator_wallet_impl',
+  KZGSetupSHA256: 'kzg_setup_sha256',
+  Layout: 'layout',
+  LayoutAccArraySlot: 'layout.acc_array_slot',
+  LayoutDelayedAccArraySlot: 'layout.delayed_acc_array_slot',
+  LogicPins: 'logic_pins',
+  LogicPinsValidatorWalletLogic: 'logic_pins.validator_wallet_logic',
+  LogicPinsValidatorWalletProxy: 'logic_pins.validator_wallet_proxy',
+  MaxBlobs: 'max_blobs',
+  MaxHeaderChain: 'max_header_chain',
+  MaxSegments: 'max_segments',
+  MaxUncompressedBatch: 'max_uncompressed_batch',
+  ParentChainId: 'parent_chain_id',
+  ProxySlotsAdminLogic: 'proxy_slots.admin_logic',
+  ProxySlotsUserLogic: 'proxy_slots.user_logic',
+  ProxySlotsWalletImpl: 'proxy_slots.wallet_impl',
+  Rollup: 'rollup',
+  Section: 'section',
 } as const;
 
 /** The reason of finality_finalized_block_unavailable. */

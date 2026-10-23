@@ -17,7 +17,9 @@ import {
   FinalityStateError,
   FinalizedBlockReason,
   IncludedReason,
+  LedgerReason,
   NotApplicableReason,
+  PinMismatchField,
   PinsReason,
   addendumMalformed,
   blockMismatch,
@@ -40,6 +42,7 @@ import {
 } from '../../src/proof-v2/finality/state.js';
 import { ChainBaseSepolia, ChainSepolia, kindFor } from '../../src/proof-v2/finality/table.js';
 import { triple } from '../../src/proof-v2/finality/evidence.js';
+import { Reader, defaultLimits } from '../../src/proof-v2/finality/codec.js';
 import { fill, fixtureJSON } from './helpers.js';
 
 interface StateSpec {
@@ -58,6 +61,21 @@ interface Registry {
 }
 
 const reg = fixtureJSON<Registry>('finality', 'states.json');
+
+/** finality_evidence_too_large{part,count,limit,index}: the framework's LIST<LP> reader names the element that exceeds its bound (Go codec.go withIndex). */
+function evidenceTooLargeAtElement(): FinalityStateError {
+  const b = new Uint8Array(4 + 4 + 3 + 4 + 40);
+  const dv = new DataView(b.buffer);
+  dv.setUint32(0, 2, false); // two elements
+  dv.setUint32(4, 3, false); // the first is three bytes
+  dv.setUint32(11, 40, false); // the second declares 40 bytes
+  try {
+    new Reader(b, defaultLimits()).lpList('list', 8, 32);
+  } catch (e) {
+    return e as FinalityStateError;
+  }
+  throw new Error('no error');
+}
 
 /** The twin of state_test.go conforms(): '' when s conforms, else why not. */
 function conforms(s: FinalityStateError): string {
@@ -150,6 +168,10 @@ describe('every state the framework builds conforms to its registry entry', () =
     IncludedUnavailable: includedUnavailable(IncludedReason.NoSettlement, { chain: 1n }),
     FinalizedBlockState: finalizedBlockUnavailable(1n, 2n, FinalizedBlockReason.HeaderUnreadable, { index: 8n }),
     EvidenceTooLarge: evidenceTooLarge('part', 5, 4),
+    'EvidenceTooLarge indexed': evidenceTooLargeAtElement(),
+    'IncludedUnavailable no block header': includedUnavailable(IncludedReason.NoBlockHeader, { proof_id: fill(7) }),
+    'LedgerExtension w/ inner': newState(Code.LedgerExtensionBad, { period: 3n, reason: LedgerReason.LinkRefused, inner: 'finality_link_invalid', index: 2n }),
+    'PinMismatch kzg': newState('pin_mismatch', { field: PinMismatchField.KZGSetupSHA256 }),
     EvidenceUnrecognised: evidenceUnrecognised('k', 'v1'),
     ChainUnsupported: chainUnsupported(1n),
     ChainBroken: chainBroken(2, Check.SeqGap, { want: 3n }),
@@ -199,6 +221,8 @@ describe('the typed reason constants are exactly the registry\'s closed sets', (
     ['finality_finalized_block_unavailable', 'reason', FinalizedBlockReason],
     ['level_not_applicable', 'reason', NotApplicableReason],
     ['finality_chain_broken', 'check', Check],
+    ['finality_ledger_extension_invalid', 'reason', LedgerReason],
+    ['pin_mismatch', 'field', PinMismatchField],
   ] as const)('%s.%s', (code, field, consts) => {
     expect(values(consts)).toEqual([...(reg.states[code]!.enums![field]!)].sort());
   });
@@ -229,6 +253,40 @@ describe('no code outside the registry is raised anywhere in the TypeScript sour
     }
     expect(seen).toBeGreaterThan(10);
     for (const c of Object.values(Code)) expect(reg.states[c], c).toBeDefined();
+  });
+});
+
+describe('the codes whose registry entry grew since the per-port registries', () => {
+  const values = (o: Record<string, string>): string[] => Object.values(o).sort();
+  it('finality_evidence_too_large names the element index of a list entry that exceeds its bound, and the registry lists it as optional', () => {
+    const e = evidenceTooLargeAtElement();
+    expect(e.code).toBe(Code.EvidenceTooLarge);
+    expect(e.fields.index).toBe(1n);
+    expect(reg.states[Code.EvidenceTooLarge]!.optional).toEqual(['index']);
+    expect(conforms(e)).toBe('');
+  });
+  it('finality_included_unavailable carries the four registered reasons, no_block_header among them', () => {
+    expect(values(IncludedReason)).toEqual(['no_block_header', 'no_execution_proof_component', 'no_settlement', 'no_settlement_to_recompute_d0']);
+    expect(IncludedReason.NoBlockHeader).toBe('no_block_header');
+  });
+  it('every pin_mismatch the TypeScript sources raise with a literal field names a member of the registered closed set', () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'proof-v2', 'finality', 'arbposted');
+    const set = new Set(reg.states.pin_mismatch!.enums!.field);
+    let seen = 0;
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts'))) {
+      for (const m of readFileSync(join(dir, f), 'utf8').matchAll(/pinMismatch\('([a-z0-9_.]+)'\)/g)) {
+        seen++;
+        expect(set.has(m[1]!), `${f}: pin_mismatch field ${m[1]}`).toBe(true);
+      }
+    }
+    expect(seen).toBeGreaterThanOrEqual(8);
+    expect(set.has(PinMismatchField.KZGSetupSHA256)).toBe(true);
+  });
+  it('the closed set of pin_mismatch.field has 31 members and finality_ledger_extension_invalid.reason 11', () => {
+    expect(reg.states.pin_mismatch!.enums!.field.length).toBe(31);
+    expect(reg.states.finality_ledger_extension_invalid!.enums!.reason.length).toBe(11);
+    expect(Object.keys(PinMismatchField).length).toBe(31);
+    expect(Object.keys(LedgerReason).length).toBe(11);
   });
 });
 
