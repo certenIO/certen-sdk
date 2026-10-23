@@ -1,5 +1,27 @@
 # Changelog — @certen.io/proof-verify
 
+## Unreleased — RB12 TS integration: the staged-finality (S7) verifiers in one branch (2026-10-23)
+
+### Added
+- The S7 finality verifiers of the RB11 TypeScript stack, integrated on one linear branch (`src/proof-v2/finality`): the framework core (container, addendum, pins, registry, the level-1
+  derivation, the report; judges the validator's `finality_chain1` and `finality_chain2` sets), the Sepolia beacon light-client verifier (`ethl1`; the 143 `finality_ethl1_v2` cases and the
+  official `single_merkle_proof` subset), `base-sepolia/l1_posted/v1` (28 Go vectors), `base-sepolia/finalized/v1` (23 live and 73 judge-level `finality_base_final1` vectors),
+  `arb-sepolia/l1_posted/v1` (63 Go vectors) and `adiri/finalized/v1` (`finality_adiri3` and `finality_adiri4`, with the genesis link checked at load).
+- `registerAllKinds(reg, pins)` (`finality/allkinds.ts`), the twin of the validator's `allkinds.Register`: wires the four ported Kinds in the validator's order; the Adiri registration is
+  asynchronous and fails closed (a genesis link the pins do not vouch for rejects with `finality_pins_corrupt` and nothing is registered). `UNPORTED_KIND_ROWS` names the two table rows
+  that have no TypeScript Kind yet (`arb-sepolia/finalized/v1`, `eth-sepolia/finalized/v1`); judging evidence of those rows answers `finality_evidence_unrecognised`.
+- The finality barrel exports every chain package under its own namespace (`adiri`, `arbposted`, `basefinal`, `baseposted`, `ethl1`; their names collide, so no `export *`).
+
+### Changed
+- The embedded finality pins and `PINS_SHA256` are the validator's `pv2/rb11-e1-raise` file (`fdba733e...5440`; before: the framework's Sepolia-only `507d72b3...`): they now carry the
+  Adiri, Arbitrum, Base and shared (KZG) sections and the Sepolia root anchor (period 1378).
+- The current state registry (`test/fixtures/finality/finality/states.json`) is the validator's `pv2/rb11-e1-raise` registry; the registry that `finality_chain2`'s manifest pins moved,
+  byte for byte, to `test/fixtures/finality/finality_chain2_registry/states.json`.
+
+### Not changed
+- No verdict of `verifyPortable`, `verifyPortable21` or any earlier layer; the finality barrel is not exported from the package entry point yet.
+- Not yet in TypeScript (see the RB12-TS-INT check-in gap table): the two missing Kinds, the Go fixes made after each port's base commit, and the registry changes they carry.
+
 ## Unreleased — RB9 Phase D: cross-identity and delegated approvals in TypeScript (2026-10-18)
 
 ### Added
