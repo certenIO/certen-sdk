@@ -1,0 +1,90 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-SURFACE hand-mutation gate over src/proof-v2/finality/{docreport,settlementjson,surface}.ts and the added parts of src/layers.ts (verifyProofDocumentWith, applyFinality, finalityLayer), src/proof-v2/verify.ts (verifyPortable) and addendum.ts (parseSectionValue): 204 mutants (operator, literal and guard flips; vite plugin, not committed), 190 killed, 14 equivalent (listed), 0 unexplained; survivors of the first pass were killed by survivors.test.ts and defensive.test.ts; control runs of the unmutated tree (pass), of an identity mutant (pass) and of a deliberate break (killed) preceded the gate",
+  "equivalents": [
+    {
+      "file": "settlementjson.ts",
+      "line": 54,
+      "mutant": "\">=\" -> \">\" in: if (want >= 0 && digits.length / 2 !== want) return fail(`${what}: hex string has length ${digits.length}, wan",
+      "reason": "hexToken is called with want 32 (a hash) or -1 (variable length) only, so `want >= 0` and `want > 0` select the same calls"
+    },
+    {
+      "file": "surface.ts",
+      "line": 81,
+      "mutant": "\"?? \" -> \"|| \" in: const w = await wireFinalityOptions(opts.finality ?? {});",
+      "reason": "`opts.finality ?? {}`: the value is undefined or an options object (the type admits nothing else); `??` and `||` differ only for null, 0, \"\" or false, which are not FinalityOptions"
+    },
+    {
+      "file": "docreport.ts",
+      "line": 78,
+      "mutant": "\"true\" -> \"false\" in: for (const [k, v] of Object.entries(hidden)) if (v !== undefined) Object.defineProperty(o, k, { value: v, enum",
+      "reason": "the `writable` flag of the non-enumerable members (report, state, wiring): the section never reassigns them and no claim or consumer depends on it; reachability by name and non-enumerability are tested"
+    },
+    {
+      "file": "settlementjson.ts",
+      "line": 214,
+      "mutant": "\"?? \" -> \"|| \" in: else next = proofInto((f === 'tx_inclusion_proof' ? tx : receipt) ?? emptyProof(), e, f);",
+      "reason": "`(tx or receipt) ?? emptyProof()`: the left side is an InclusionProof object or null; `??` and `||` differ only for falsy non-null values, which an object is not"
+    },
+    {
+      "file": "settlementjson.ts",
+      "line": 195,
+      "mutant": "\"?? \" -> \"|| \" in: const esc = escaped.get(tree.pairs) ?? new Set<number>();",
+      "reason": "`escaped.get(pairs) ?? new Set()`: a Set or undefined; `||` differs from `??` only for falsy non-undefined values"
+    },
+    {
+      "file": "settlementjson.ts",
+      "line": 115,
+      "mutant": "\"?? \" -> \"|| \" in: const field = (names: readonly string[], key: string): string | undefined => names.find((n) => n === key) ?? n",
+      "reason": "`names.find(exact) ?? names.find(folded)`: find returns a non-empty member name or undefined; `||` differs from `??` only for the empty string, and no member name is empty"
+    },
+    {
+      "file": "docreport.ts",
+      "line": 159,
+      "mutant": "\"||\" -> \"&&\" in: if (e instanceof JsonError || e instanceof VerifyError) return { error: e.message };",
+      "reason": "every error the Go-faithful parser and decodeVal raise is a JsonError, a subclass of VerifyError, so the second disjunct of `JsonError || VerifyError` never decides (s3/jsonx.ts throws nothing else)"
+    },
+    {
+      "file": "layers.ts",
+      "line": 120,
+      "mutant": "\"?? \" -> \"|| \" in: const failure = core.failure ?? (s7.verdict === 'failed' ? { layer: s7.id, message: s7.reason ?? 'the finality",
+      "reason": "`core.failure ?? (...)`: a failure object or undefined; `||` differs from `??` only for falsy non-undefined values"
+    },
+    {
+      "file": "docreport.ts",
+      "line": 78,
+      "mutant": "\"true\" -> \"false\" in: for (const [k, v] of Object.entries(hidden)) if (v !== undefined) Object.defineProperty(o, k, { value: v, enum",
+      "reason": "the `configurable` flag of the non-enumerable members: the section never deletes or redefines them and no claim or consumer depends on it"
+    },
+    {
+      "file": "docreport.ts",
+      "line": 218,
+      "mutant": "\"?? \" -> \"|| \" in: const reg = opts.registry ?? new Registry();",
+      "reason": "`opts.registry ?? new Registry()`: a Registry object or undefined; `||` differs from `??` only for falsy non-undefined values"
+    },
+    {
+      "file": "settlementjson.ts",
+      "line": 56,
+      "mutant": "\"<\" -> \"<=\" in: for (let i = 0; i < out.length; i++) out[i] = parseInt(digits.slice(2 * i, 2 * i + 2), 16);",
+      "reason": "parseInt of the empty slice written at index out.length of a Uint8Array: an out-of-range typed-array write is ignored, so `i <= out.length` stores the same bytes"
+    },
+    {
+      "file": "surface.ts",
+      "line": 72,
+      "mutant": "\"&&\" -> \"||\" in: if (opts.finality === undefined && !carriesFinality(doc)) return verifyProofDocumentWith(doc, opts, undefined)",
+      "reason": "the early return of verifyProofDocumentWithKinds is an optimisation: with no option and no member, or with an option but no member, verifyProofDocumentWith judges the same section from the same options (the section answers \"no finality section\" before any Kind is consulted); with a member and an option both forms wire"
+    },
+    {
+      "file": "surface.ts",
+      "line": 73,
+      "mutant": "\"?? \" -> \"|| \" in: const w = await wireFinalityOptions(opts.finality ?? {});",
+      "reason": "same as 29: `opts.finality ?? {}` in verifyProofDocumentWithKinds"
+    },
+    {
+      "file": "settlementjson.ts",
+      "line": 49,
+      "mutant": "\"< 0\" -> \"<= 0\" in: if (v === '' && want < 0) return new Uint8Array(0);",
+      "reason": "same as 5: hexToken is called with want 32 or -1 only, so `want < 0` and `want <= 0` are the same test"
+    }
+  ]
+}

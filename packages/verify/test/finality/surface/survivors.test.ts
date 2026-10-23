@@ -82,3 +82,22 @@ describe('applyFinality placement', () => {
     void verifyProofDocument;
   });
 });
+
+describe('the words of the S7 layer and the subject of an undecodable document', () => {
+  it('a summary-only section without a Settlement gives the explanation as the reason, not the verdict line', async () => {
+    const { cases, docOf } = await import('./support.js');
+    const c = cases().find((x) => x.id === 'go/no_settlement_named')!;
+    const core: Verification = { overall: 'partial', independent: false, layers: [{ id: 'G2', statement: 'S4', title: 't', verdict: 'not_in_document', evidence: {} }], covers: [], notCovered: [] };
+    const v = applyFinality(core, judgeFinalityText(docOf(c), { subject: 'DOC' }));
+    expect(v.layers[0]!.reason).toBe(
+      'finality_included_unavailable{chain="84532",reason="no_settlement_to_recompute_d0"} ' +
+        'S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: FinalityOptions.settlement)',
+    );
+  });
+
+  it('a value that is not JSON is named by the subject the caller gave, even an empty one', async () => {
+    const { judgeFinalityDocument } = await import('../../../src/proof-v2/finality/docreport.js');
+    expect(judgeFinalityDocument(undefined, { subject: '' }).text).toBe('FAILED (finality)  \n  not a portable document: not JSON\n');
+    expect(judgeFinalityDocument(undefined).text).toBe('FAILED (finality)  document\n  not a portable document: not JSON\n');
+  });
+});
