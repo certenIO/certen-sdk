@@ -300,7 +300,8 @@ describe('the framework eth_sepolia pins section', () => {
       want.network.forks.map((f) => [f.name, f.epoch, hexLower(f.version), f.layout]),
     );
     expect([got.minParticipants, got.maxLinks, got.maxSpineHeaders]).toEqual([342, 64, 16384]);
-    expect(got.anchors).toEqual([]);
+    expect(got.anchors.map((a) => [a.period, a.wspEpochs])).toEqual([[1378n, 279n]]);
+    expect(got.anchors.map((a) => hexLower(a.committeeRoot))).toEqual(e.anchors.map((a) => a.committeeRoot.replace(/^0x/, '')));
     expect(() => checkNetwork(got, SepoliaChainID)).not.toThrow();
   });
 

@@ -42,7 +42,7 @@ describe('the vector manifests equal the validator\'s', () => {
     expect(sha256Hex(readFixture('finality_chain2', 'MANIFEST.json'))).toBe(VALIDATOR.chain2Manifest);
     expect(readFixture('finality_chain1', 'MANIFEST.json.sha256').toString('utf8').trim()).toBe(VALIDATOR.chain1Manifest);
     expect(readFixture('finality_chain2', 'MANIFEST.json.sha256').toString('utf8').trim()).toBe(VALIDATOR.chain2Manifest);
-    expect(sha256Hex(readFixture('finality', 'states.json'))).toBe(VALIDATOR.states);
+    expect(sha256Hex(readFixture('finality_chain2_registry', 'states.json'))).toBe(VALIDATOR.states);
 
     for (const set of ['finality_chain1', 'finality_chain2']) {
       const m = fixtureJSON<{ files: Record<string, string>; set: string }>(set, 'MANIFEST.json');

@@ -22,8 +22,8 @@ const pinsFile = readFileSync(join(here, '..', '..', 'src', 'proof-v2', 'finalit
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 const want = (raw: Uint8Array): Uint8Array => hexToBytes(sha256Hex(raw));
 
-/** The sha256 of certen-validator pv2/rb11-b-finality-framework@4377bb3 pkg/finality/pins/finality-pins.json (the sync target). */
-const VALIDATOR_PINS_SHA256 = '507d72b3499fd094f3e14e0ed585edba90c7a7a4c6235c7ccd98d04db7329cca';
+/** The sha256 of certen-validator pv2/rb11-e1-raise@cbb6373 pkg/finality/pins/finality-pins.json (PinsSHA256 there; the sync target). The framework's first value, 507d72b3..., was the file at pv2/rb11-b-finality-framework@4377bb3. */
+const VALIDATOR_PINS_SHA256 = 'fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440';
 
 const codeOf = (f: () => unknown): string => {
   try {
@@ -49,26 +49,28 @@ describe('PINS_SHA256 and the embedded bytes', () => {
   });
 });
 
-describe('the initial pins hold exactly the Sepolia network section of 4.2', () => {
+describe("the embedded pins hold the Sepolia network section of 4.2 with its root anchor, the other chains' raw sections and the shared KZG pin", () => {
   it('has the section 4.2 values', () => {
     const p = embeddedPins();
     expect(p.format).toBe(PINS_FORMAT);
     expect(p.onchainCommitment).toBeNull();
-    expect(p.sections.size).toBe(0);
+    expect([...p.sections.keys()].sort()).toEqual(['adiri', 'arb_sepolia', 'base_sepolia']);
+    expect(p.shared?.kzgSetupSha256).toBe('f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f');
     const e = sepoliaPins(p);
     expect(e.chainId).toBe(11155111n);
     expect(e.genesisValidatorsRoot).toBe('0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078');
     expect(e.genesisTime).toBe(1655733600n);
     expect(e.spec).toBe('consensus-specs v1.7.0-beta.4 aa16bb4c');
     expect([e.syncCommitteeSize, e.minParticipants, e.epochsPerPeriod, e.maxLinks, e.maxSpineHeaders]).toEqual([512n, 342n, 256n, 64n, 16384n]);
-    expect(e.anchors.length).toBe(0);
+    expect(e.anchors.map((a) => [a.period, a.wspEpochs, a.linkSha256])).toEqual([[1378n, 279n, 'e55bc5ef6ede9cf7b1f09ba302d1723001bd03268672f2dd4875c8c38889c81d']]);
     expect(e.forks.map((f) => [f.name, Number(f.epoch), f.version, f.layout])).toEqual([
       ['genesis', 0, '0x90000069', null], ['altair', 50, '0x90000070', null], ['bellatrix', 100, '0x90000071', null],
       ['capella', 56832, '0x90000072', null], ['deneb', 132608, '0x90000073', null], ['electra', 222464, '0x90000074', 'electra'],
       ['fulu', 272640, '0x90000075', 'electra'], ['gloas', 353024, '0x90000076', 'gloas'],
     ]);
     expect(codeOf(() => anchorFor(e, 1000n))).toBe('finality_pin_unknown');
-    expect(pinsFile.includes('kzg')).toBe(false);
+    expect(anchorFor(e, 1378n).period).toBe(1378n);
+    expect(anchorFor(e, 5000n).period).toBe(1378n);
   });
   it('an absent Sepolia section is finality_pin_unknown and a raw section of another chain is kept', () => {
     const only = parsePinsOverride(enc('{\n  "format": "certen-finality-pins/1",\n  "onchain_commitment": null,\n  "published_utc": "2026-10-20T02:35:00Z"\n}\n'));
@@ -112,7 +114,7 @@ describe('loadPins refuses a hash mismatch and every malformed file', () => {
     ['keys unsorted', enc(text.replace('"format": "certen-finality-pins/1",', '"format": "certen-finality-pins/1", "aaa": 0,')), 'unsorted_or_unknown'],
     ['wrong format', enc(text.replace('certen-finality-pins/1', 'certen-finality-pins/2')), 'wrong_format'],
     ['not UTF-8', Uint8Array.of(...good, 0xff), 'not_utf8'],
-    ['unknown inner key', enc(text.replace('"anchors": []', '"anchors": [], "extra": 1')), 'unsorted_or_unknown'],
+    ['unknown inner key', enc(text.replace('"chain_id": 11155111,', '"chain_id": 11155111, "extra": 1,')), 'unsorted_or_unknown'],
     ['bad genesis root', enc(text.replace('0xd8ea17', '0xD8ea17')), 'genesis_validators_root_malformed'],
     ['layout', enc(text.replace('"layout": "gloas"', '"layout": "fulu"')), 'fork_layout_unknown'],
     ['trailing data', Uint8Array.of(...good, ...enc('{}')), 'not_json'],
