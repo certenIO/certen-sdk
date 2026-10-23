@@ -7,7 +7,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Writer, decodeContainer, defaultLimits } from '../../../src/proof-v2/finality/codec.js';
 import { FinalityStateError, newState } from '../../../src/proof-v2/finality/state.js';
-import { CodeHeaderChainBroken, headerChainBroken, pinUnknown, encodeLC } from '../../../src/proof-v2/finality/ethl1/index.js';
+import { CodeHeaderChainBroken, headerChainBroken, pinUnknown, encodeLC, verifyFinalizedHead, ethl1PinsFrom } from '../../../src/proof-v2/finality/ethl1/index.js';
 import { KIND_NAME, EthSepoliaKind, buildContainer, decodeBody, encodeBody, registerEthSepolia } from '../../../src/proof-v2/finality/ethsepolia/kind.js';
 import { stateOf as translate, SpineL1 } from '../../../src/proof-v2/finality/ethsepolia/states.js';
 import { embeddedPins, parsePinsOverride } from '../../../src/proof-v2/finality/pins.js';
@@ -140,6 +140,49 @@ describe('the body codec', () => {
     w.u32(0xffffffff);
     const sp = stateOf(() => decodeBody(w.bytes(), lim, 64, 16384));
     expect([sp.code, sp.fields.part, sp.fields.count, sp.fields.limit]).toEqual(['finality_evidence_too_large', 'spine', 0xffffffffn, 16384n]);
+  });
+
+  it('the link count needs 5 bytes per link at least: 5n bytes after the count pass the count check, 5n-1 do not', () => {
+    const body = (tail: number): Uint8Array => {
+      const w = new Writer();
+      w.str('eth-lc/1');
+      w.u8(1);
+      w.u64(7n);
+      w.fixed(new Uint8Array(32));
+      w.u8(0);
+      w.u32(0);
+      w.u32(2);
+      w.fixed(new Uint8Array(tail));
+      return w.bytes();
+    };
+    const ok = stateOf(() => decodeBody(body(10), lim, 64, 16384)); // two empty links, then the final update is missing
+    expect([ok.code, ok.fields.part, ok.fields.reason]).toEqual(['finality_evidence_malformed', 'lc.finalUpdate.layout', 'truncated']);
+    const short = stateOf(() => decodeBody(body(9), lim, 64, 16384));
+    expect([short.code, short.fields.part, short.fields.reason]).toEqual(['finality_evidence_malformed', 'lc.links', 'count_exceeds_remaining']);
+  });
+
+  it('a kind-1 anchor is judged against the ledger before any link is walked: a carried committee that does not hash to the pinned root, or another anchorRoot, is finality_pin_mismatch', () => {
+    const lc = recorded('eth_sepolia2', 'gloas_latest').body.lc; // kind 1 at the embedded root pin 1378, 13 links follow
+    expect(lc.anchorKind).toBe(1);
+    expect(lc.links.length).toBe(13);
+    const l1 = ethl1PinsFrom(embeddedPins().ethSepolia!);
+    const pinned = l1.anchors[0]!.committeeRoot;
+    const body = Uint8Array.from(lc.anchorBody.ssz);
+    body[48 * 5 + 3]! ^= 1; // a key of seat 5: the signature of the first link would fail, but the ledger judges the committee first
+    const s = stateOf(() => verifyFinalizedHead(l1, { ...lc, anchorBody: { ...lc.anchorBody, ssz: body } }));
+    expect([s.code, s.fields.period, s.fields.want_root]).toEqual(['finality_pin_mismatch', 1378n, pinned]);
+    expect(s.fields.got_root).not.toEqual(pinned);
+    const root = Uint8Array.from(lc.anchorRoot);
+    root[0]! ^= 1;
+    const r = stateOf(() => verifyFinalizedHead(l1, { ...lc, anchorRoot: root }));
+    expect([r.code, r.fields.period, r.fields.want_root, r.fields.got_root]).toEqual(['finality_pin_mismatch', 1378n, pinned, root]);
+  });
+
+  it('a kind-2 anchor at a period whose ledger entry has no block_root is finality_pin_unknown{kind 2}', () => {
+    const lc2 = recorded('eth_sepolia2', 'gloas_latest_kind2').body.lc;
+    const l1 = ethl1PinsFrom(parsePinsOverride(read('eth_sepolia1', 'pins/main.json')).ethSepolia!);
+    const s = stateOf(() => verifyFinalizedHead(l1, { ...lc2, anchorPeriod: 1379n }));
+    expect([s.code, s.fields.kind, s.fields.period]).toEqual(['finality_pin_unknown', 2, 1379n]);
   });
 
   it('an empty spine, a trailing byte and a profile that is not ASCII are named refusals', () => {

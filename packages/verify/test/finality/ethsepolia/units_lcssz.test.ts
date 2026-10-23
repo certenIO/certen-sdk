@@ -172,6 +172,41 @@ describe('exact boundaries (N passes, N-1 fails)', () => {
     expect(L.layoutOfBootstrap(new Uint8Array(25473))).toBe(L.Electra);
   });
 
+  it('an electra update converts at exactly its fixed size (no attested and no finalized header) and not one byte below', () => {
+    const base = L.SIZES.electraUpdateFixed;
+    const finOffAt = 4 + L.CommitteeBytes + 6 * 32;
+    const up = new Uint8Array(base);
+    const dv = new DataView(up.buffer);
+    dv.setUint32(0, base, true);
+    dv.setUint32(finOffAt, base, true);
+    for (let i = finOffAt + 4; i < base; i++) up[i] = (i * 7 + 1) & 0xff;
+    const fu = L.updateToFinalityUpdate(L.Electra, up);
+    expect(fu.length).toBe(400);
+    const fdv = new DataView(fu.buffer);
+    expect([fdv.getUint32(0, true), fdv.getUint32(4, true)]).toEqual([400, 400]);
+    // the 392 bytes of finality branch, aggregate and signature slot, verbatim
+    expect(Buffer.from(fu.subarray(8)).equals(Buffer.from(up.subarray(finOffAt + 4, base)))).toBe(true);
+    throwsLcssz(() => L.updateToFinalityUpdate(L.Electra, up.subarray(0, base - 1)), 'one byte below');
+  });
+
+  it('the 392-byte tail and both headers are copied exactly, also when the headers are shorter than 7 bytes together', () => {
+    const base = L.SIZES.electraUpdateFixed;
+    const finOffAt = 4 + L.CommitteeBytes + 6 * 32;
+    for (const [attLen, finLen] of [[3, 0], [0, 5], [2, 4], [0, 0], [1, 1]] as const) {
+      const up = new Uint8Array(base + attLen + finLen);
+      for (let i = 0; i < up.length; i++) up[i] = (i * 13 + 5) & 0xff;
+      const dv = new DataView(up.buffer);
+      dv.setUint32(0, base, true);
+      dv.setUint32(finOffAt, base + attLen, true);
+      const fu = L.updateToFinalityUpdate(L.Electra, up);
+      const tag = `att ${attLen} fin ${finLen}`;
+      expect(fu.length, tag).toBe(400 + attLen + finLen);
+      expect(Buffer.from(fu.subarray(8, 400)).equals(Buffer.from(up.subarray(finOffAt + 4, finOffAt + 4 + 392))), tag).toBe(true);
+      expect(Buffer.from(fu.subarray(400, 400 + attLen)).equals(Buffer.from(up.subarray(base, base + attLen))), tag).toBe(true);
+      expect(Buffer.from(fu.subarray(400 + attLen)).equals(Buffer.from(up.subarray(base + attLen))), tag).toBe(true);
+    }
+  });
+
   it('an electra update converts with the finalized offset in [attested offset, len] and refuses outside it', () => {
     const base = L.SIZES.electraUpdateFixed;
     const finOffAt = 4 + L.CommitteeBytes + 6 * 32;

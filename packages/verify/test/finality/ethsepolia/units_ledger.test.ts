@@ -278,6 +278,37 @@ describe('ledgerStep and ledgerStepLC', () => {
   });
 });
 
+describe('verifyLedger and ledgerStep: the states of no pins and the wrap of the period', () => {
+  it('no pins, no Sepolia section or no anchors is finality_pin_unknown{kind: eth_sepolia_ledger}', () => {
+    const p = embeddedPins();
+    const none = [null, undefined, { ...p, ethSepolia: null } as Pins, { ...p, ethSepolia: { ...p.ethSepolia!, anchors: [] } } as Pins];
+    for (const x of none) {
+      const s = stateOf(() => verifyLedger(x, new Map()));
+      expect([s.code, s.fields.kind, s.fields.chain]).toEqual(['finality_pin_unknown', 'eth_sepolia_ledger', 11155111n]);
+    }
+  });
+
+  it('the predecessor period wraps like uint64: 2^64-1 then 0 is the next period, 2^64-1 then 1 is not', () => {
+    const { pins, links } = vectorLedger();
+    const a = pins.ethSepolia!.anchors;
+    const root = links.get(1378n)!;
+    const body = lcssz.bootstrapCommittee(lcssz.layoutOfBootstrap(root), root);
+    const pred = { ...a[0]!, period: (1n << 64n) - 1n };
+    wantRefusal(() => ledgerStep(pins.ethSepolia!, pred, { ...a[1]!, period: 1n }, body, root, links.get(1379n)), 1n, LedgerReason.PeriodNotNext);
+    // period 0 follows 2^64-1: the period rule passes and the step goes on (here to the missing link)
+    wantRefusal(() => ledgerStep(pins.ethSepolia!, pred, { ...a[1]!, period: 0n }, body, root, undefined), 0n, LedgerReason.LinkMissing);
+  });
+
+  it('a root pin whose committee_root is not the bootstrap committee is refused before its anchor is judged: no inner code', () => {
+    const { p, links } = embeddedPinsAndLinks();
+    const a = p.ethSepolia!.anchors[0]!;
+    a.committeeRoot = a.committeeRoot.slice(0, -1) + (a.committeeRoot.endsWith('1') ? '0' : '1');
+    const s = stateOf(() => verifyLedger(p, links));
+    expect([s.fields.period, s.fields.reason]).toEqual([1378n, LedgerReason.RootPinUnverifiable]);
+    expect('inner' in s.fields).toBe(false);
+  });
+});
+
 describe('verifyBootstrapAnchor', () => {
   const { p } = embeddedPinsAndLinks();
   const boot = embeddedLedgerLinks().get(1378n)!;
@@ -286,6 +317,17 @@ describe('verifyBootstrapAnchor', () => {
 
   it('accepts the real root bootstrap and nothing else of the walk is run', () => {
     expect(() => verifyBootstrapAnchor(l1, 1378n, lb)).not.toThrow();
+  });
+  it('the bootstrap committee must be the pinned committee_root: finality_pin_mismatch carrying both roots', () => {
+    const pins = ethl1PinsFrom(p.ethSepolia!);
+    const real = Uint8Array.from(pins.anchors[0]!.committeeRoot);
+    const flipped = Uint8Array.from(real);
+    flipped[0]! ^= 1;
+    pins.anchors[0]!.committeeRoot = flipped;
+    const s = stateOf(() => verifyBootstrapAnchor(pins, 1378n, lb));
+    expect([s.code, s.fields.period]).toEqual(['finality_pin_mismatch', 1378n]);
+    expect(s.fields.want_root).toEqual(flipped);
+    expect(s.fields.got_root).toEqual(real);
   });
   it('an entry without a block_root or without an anchor is finality_pin_unknown{kind 2, period}', () => {
     const noRoot = ethl1PinsFrom(p.ethSepolia!);
