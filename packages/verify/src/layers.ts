@@ -94,8 +94,69 @@ export function verifyProofDocument(doc: unknown, opts: VerifyOptions = {}): Ver
   return verifyProofDocumentWith(doc, opts, undefined);
 }
 
-/** verifyProofDocument with the finality judgement already made (the asynchronous entries judge it after registering the Kinds). */
+/**
+ * verifyProofDocument with the finality judgement already made (the asynchronous entries judge it after registering the Kinds). The core layers are verified
+ * first and untouched; the section is added to the result only when the document carries one, the caller asked for one, or `supplied` is given.
+ */
 export function verifyProofDocumentWith(doc: unknown, opts: VerifyOptions, supplied: DocumentFinality | undefined): Verification {
+  const core = verifyCore(doc, opts);
+  const finality = supplied ?? (opts.finality !== undefined || carriesFinality(doc) ? judgeFinalityDocument(doc, opts.finality) : undefined);
+  return finality === undefined ? core : applyFinality(core, finality);
+}
+
+/**
+ * Adds the finality section to a verification as the layer S7, after the in-document layers and before the layers outside the document. The overall verdict is then
+ * the one the layers give, exactly as before: failed if any layer failed, verified if every layer in scope is verified, else partial. That is Go's combined
+ * proofverify (cmd/proofverify/main.go): the section's class (VERIFIED / SUMMARY-ONLY / FAILED, exit 0 / 3 / 1) is combined with worseExit over the core result, so
+ * the section can weaken the overall and never strengthen it. A core failure stays the first failure; `covers` names S7 at the level reached only for a verified overall.
+ */
+export function applyFinality(core: Verification, finality: DocumentFinality): Verification {
+  const s7 = finalityLayer(finality);
+  const at = core.layers.findIndex((l) => l.verdict === 'not_in_document');
+  const layers = at < 0 ? [...core.layers, s7] : [...core.layers.slice(0, at), s7, ...core.layers.slice(at)];
+  const inScope = layers.filter((l) => l.verdict !== 'not_in_document');
+  const overall: Overall = inScope.some((l) => l.verdict === 'failed') ? 'failed' : inScope.every((l) => l.verdict === 'verified') ? 'verified' : 'partial';
+  const covered = overall === 'verified' ? [...COVERED_STATEMENTS, `S7(${levelName(finality.headline ?? 0)})`] : [];
+  const failure = core.failure ?? (s7.verdict === 'failed' ? { layer: s7.id, message: s7.reason ?? 'the finality section does not verify' } : undefined);
+  return {
+    overall,
+    independent: overall === 'verified',
+    layers,
+    covers: covered,
+    notCovered: overall === 'verified' ? NOT_COVERED_STATEMENTS.filter((x) => x !== 'S7') : [...COVERED_STATEMENTS, ...NOT_COVERED_STATEMENTS],
+    ...(core.report ? { report: core.report } : {}),
+    finality,
+    ...(failure ? { failure } : {}),
+    ...(core.govRootV3 ? { govRootV3: core.govRootV3 } : {}),
+  };
+}
+
+/** The S7 layer: verified (VERIFIED, exit 0), not_checked (SUMMARY-ONLY, exit 3) or failed (FAILED, exit 1), with the levels it judged. */
+function finalityLayer(f: DocumentFinality): Layer {
+  const base = { id: 'S7', statement: 'S7', title: 'Staged finality of the settled leg, judged against the Settlement the caller named' };
+  const lines = f.text.split('\n');
+  const head = lines.findIndex((l) => /^(FAILED|SUMMARY-ONLY|VERIFIED) \(finality\)/.test(l));
+  const why = (head >= 0 ? lines.slice(head + 1) : lines).map((l) => l.trim()).filter((l) => l !== '').join(' ');
+  const rep = f.report;
+  const evidence: Record<string, unknown> = { class: f.class, exit: f.exit };
+  if (rep) {
+    evidence.headline = levelName(rep.headline);
+    evidence.block = { chain: String(rep.block.chain), number: String(rep.block.number), hash: hexLower(rep.block.hash) };
+    evidence.pins = { sha256: rep.pinsSha256, source: rep.pinsSource };
+    evidence.levels = Object.fromEntries(
+      LEVELS.map((l) => {
+        const st = rep.levels.get(l);
+        return [levelName(l), { status: st?.status ?? 'absent', ...(st?.state ? { state: st.state.toString() } : {}) }];
+      }),
+    );
+  } else if (f.state) {
+    evidence.state = f.state.toString();
+  }
+  if (f.class === 'verified') return { ...base, verdict: 'verified', evidence };
+  return { ...base, verdict: f.class === 'failed' ? 'failed' : 'not_checked', evidence, reason: why };
+}
+
+function verifyCore(doc: unknown, opts: VerifyOptions): Verification {
   const done = new Map<Stage, Record<string, unknown>>();
   let report: Report | undefined;
   let failure: { stage: Stage; message: string } | undefined;
@@ -159,57 +220,22 @@ export function verifyProofDocumentWith(doc: unknown, opts: VerifyOptions, suppl
     }
   }
 
-  // S7: the finality section, only when the document carries one or the caller asked. It is a layer like the others: its class decides the overall verdict
-  // the way Go's combined proofverify decides its exit code (failed beats summary-only beats verified), so it can weaken the overall but never strengthen it.
-  let finality = supplied;
-  if (finality === undefined && (opts.finality !== undefined || carriesFinality(doc))) finality = judgeFinalityDocument(doc, opts.finality);
-  if (finality !== undefined) {
-    const layer = finalityLayer(finality);
-    layers.push(layer);
-    if (layer.verdict === 'failed') {
-      failedLayer ??= layer.id;
-      failure ??= { stage: 'set', message: layer.reason ?? 'the finality section does not verify' };
-    }
-  }
-
   for (const o of OUTSIDE) layers.push({ id: o.id, statement: o.statement, title: o.title, verdict: 'not_in_document', evidence: {}, reason: o.reason });
 
   const inScope = layers.filter((l) => l.verdict !== 'not_in_document');
   const anyFailed = inScope.some((l) => l.verdict === 'failed');
   const allVerified = inScope.every((l) => l.verdict === 'verified');
   const overall: Overall = anyFailed ? 'failed' : allVerified ? 'verified' : 'partial';
-  const s7 = finality !== undefined && overall === 'verified' ? `S7(${levelName(finality.headline ?? 0)})` : undefined;
   return {
     overall,
     independent: overall === 'verified',
     layers,
-    covers: overall === 'verified' ? (s7 ? [...COVERED_STATEMENTS, s7] : COVERED_STATEMENTS) : [],
-    notCovered: overall === 'verified' ? (s7 ? NOT_COVERED_STATEMENTS.filter((x) => x !== 'S7') : NOT_COVERED_STATEMENTS) : [...COVERED_STATEMENTS, ...NOT_COVERED_STATEMENTS],
+    covers: overall === 'verified' ? COVERED_STATEMENTS : [],
+    notCovered: overall === 'verified' ? NOT_COVERED_STATEMENTS : [...COVERED_STATEMENTS, ...NOT_COVERED_STATEMENTS],
     ...(report ? { report } : {}),
-    ...(finality ? { finality } : {}),
     ...(failedLayer ? { failure: { layer: failedLayer, message: failure!.message } } : {}),
     ...(govRootV3 ? { govRootV3 } : {}),
   };
-}
-
-/** The S7 layer: verified (VERIFIED, exit 0), not_checked (SUMMARY-ONLY, exit 3) or failed (FAILED, exit 1), with the levels it judged. */
-function finalityLayer(f: DocumentFinality): Layer {
-  const base = { id: 'S7', statement: 'S7', title: 'Staged finality of the settled leg, judged against the Settlement the caller named' };
-  const lines = f.text.split('\n');
-  const head = lines.findIndex((l) => /^(FAILED|SUMMARY-ONLY|VERIFIED) \(finality\)/.test(l));
-  const why = (head >= 0 ? lines.slice(head + 1) : lines).map((l) => l.trim()).filter((l) => l !== '').join(' ');
-  const rep = f.report;
-  const evidence: Record<string, unknown> = { class: f.class, exit: f.exit };
-  if (rep) {
-    evidence.headline = levelName(rep.headline);
-    evidence.block = { chain: String(rep.block.chain), number: String(rep.block.number), hash: hexLower(rep.block.hash) };
-    evidence.pins = { sha256: rep.pinsSha256, source: rep.pinsSource };
-    evidence.levels = Object.fromEntries(LEVELS.map((l) => [levelName(l), { status: rep.levels.get(l)?.status ?? 'absent', ...(rep.levels.get(l)?.state ? { state: rep.levels.get(l)!.state!.toString() } : {}) }]));
-  } else if (f.state) {
-    evidence.state = f.state.toString();
-  }
-  if (f.class === 'verified') return { ...base, verdict: 'verified', evidence };
-  return { ...base, verdict: f.class === 'failed' ? 'failed' : 'not_checked', evidence, reason: why };
 }
 
 /** The verification for evidence that is not there at all: nothing was checked, and nothing is claimed. */
