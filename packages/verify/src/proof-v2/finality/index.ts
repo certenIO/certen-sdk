@@ -18,6 +18,7 @@ export * from './report.js';
 
 // The chain packages share many names (Body, CHAIN, pinMismatch ...), so each is exported as its own namespace.
 export * as adiri from './adiri/index.js';
+export * as arbfinal from './arbfinal/index.js';
 export * as arbposted from './arbposted/index.js';
 export * as basefinal from './basefinal/index.js';
 export * as baseposted from './baseposted/index.js';
