@@ -65,7 +65,22 @@ describe('every Go report of a finality member is reproduced', () => {
   it('the real legs that are judged here are judged by the kinds this verifier has', async () => {
     const reg = await allKindsRegistry();
     const judged = CASES.filter((c) => c.kind !== '' && reg.kind(c.kind) !== undefined).map((c) => c.id.split('/')[1]);
-    expect([...new Set(judged)].sort()).toEqual(['arb_posted', 'base_final_47604755', 'base_final_47898494', 'base_posted_a', 'base_posted_b']);
+    expect([...new Set(judged)].sort()).toEqual([
+      'arb_final_real',
+      'arb_posted',
+      'base_final_47604755',
+      'base_final_47898494',
+      'base_posted_a',
+      'base_posted_b',
+      'eth_gloas_latest',
+      'eth_gloas_latest_root_anchored',
+      'eth_gloas_period',
+      'eth_gloas_period_root_anchored',
+      'eth_legacy',
+      'eth_legacy_root_anchored',
+    ]);
+    // Every kind the Go cases name is registered here: no case is judged against the without-kinds expectation any more.
+    expect(CASES.filter((c) => c.kind !== '' && c.registry === 'all' && reg.kind(c.kind) === undefined).map((c) => c.id)).toEqual([]);
     const verifiedHere = CASES.filter((c) => c.kind !== '' && reg.kind(c.kind) !== undefined && c.expect_all.exit === 0).length;
     expect(verifiedHere).toBeGreaterThanOrEqual(5);
   });
