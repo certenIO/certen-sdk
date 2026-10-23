@@ -14,3 +14,11 @@ export * from './addendum.js';
 export * from './pins.js';
 export * from './registry.js';
 export * from './report.js';
+
+// The chain packages share many names (Body, CHAIN, pinMismatch ...), so each is exported as its own namespace.
+export * as adiri from './adiri/index.js';
+export * as arbposted from './arbposted/index.js';
+export * as basefinal from './basefinal/index.js';
+export * as baseposted from './baseposted/index.js';
+export * as ethl1 from './ethl1/index.js';
+export * from './allkinds.js';
