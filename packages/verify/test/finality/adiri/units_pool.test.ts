@@ -81,8 +81,10 @@ describe('where workers can run, and how many', () => {
     expect(parallelUnavailable(new URL('file:///x/pool-worker.ts'), false)).toContain('cannot strip types');
     // the worker file beside the module is there; a path with nothing at it is named (a bundled copy of the module has no worker beside it)
     expect(parallelUnavailable(defaultWorkerUrl(), 'strip')).toBeUndefined();
-    expect(parallelUnavailable(new URL('file:///x/pool-worker.js'), false)).toContain('does not exist');
-    expect(parallelUnavailable(new URL('file:///x/pool-worker.ts'), 'strip')).toContain('does not exist');
+    expect(parallelUnavailable(fixture('absent-worker.js'), false)).toContain('does not exist');
+    expect(parallelUnavailable(fixture('absent-worker.ts'), 'strip')).toContain('does not exist');
+    // a file URL that is no path on this platform (no drive letter on Windows) is named, not thrown
+    expect(parallelUnavailable(new URL('file:///x/pool-worker.js'), false)).toMatch(/does not exist|is not a path on this platform/);
     // a .js worker needs no type stripping
     expect(parallelUnavailable(new URL('./fixtures_pool/worker_slow.mjs', import.meta.url), false)).toBeUndefined();
   });

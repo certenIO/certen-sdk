@@ -96,7 +96,13 @@ function workerFileMissing(url: URL | string): string | undefined {
   const fs = builtin('node:fs') as { existsSync(p: string): boolean } | undefined;
   const nodeUrl = builtin('node:url') as { fileURLToPath(u: string): string } | undefined;
   if (fs === undefined || nodeUrl === undefined || !u.startsWith('file:')) return undefined;
-  const path = nodeUrl.fileURLToPath(u);
+  let path: string;
+  try {
+    path = nodeUrl.fileURLToPath(u);
+  } catch (e) {
+    // a file URL that names no path on this platform (for example no drive letter on Windows): the file is not there
+    return `the worker file ${u} is not a path on this platform (${e instanceof Error ? e.message : String(e)})`;
+  }
   return fs.existsSync(path) ? undefined : `the worker file ${path} does not exist`;
 }
 
