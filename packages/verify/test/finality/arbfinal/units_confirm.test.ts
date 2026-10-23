@@ -6,7 +6,7 @@
 import { keccak_256 } from '@noble/hashes/sha3';
 import { describe, expect, it } from 'vitest';
 import { decodeTx } from '../../../src/proof-v2/finality/baseposted/ethtx.js';
-import { rlpIndexKey } from '../../../src/proof-v2/finality/baseposted/trie.js';
+import { buildTrie, rlpIndexKey } from '../../../src/proof-v2/finality/baseposted/trie.js';
 import { decodeContainer, defaultLimits } from '../../../src/proof-v2/finality/codec.js';
 import { ethl1PinsFrom } from '../../../src/proof-v2/finality/ethl1/index.js';
 import { embeddedPins, sepoliaPins } from '../../../src/proof-v2/finality/pins.js';
@@ -230,6 +230,87 @@ describe('selectors and the proof-leaf rule', () => {
       ok(null)();
     } catch (err) {
       expect(err).not.toBeInstanceOf(FinalityStateError);
+    }
+  });
+});
+
+describe('the defences the identity rule keeps even when the pins are loosened', () => {
+  const ZERO = `0x${'00'.repeat(32)}`;
+  it('proveWallet needs an EXISTING account: an absent callee is false even if the zero code hash were pinned as the proxy', async () => {
+    const w = await world(FINAL3, 'adv_wallet_callee_account_absent');
+    const { A, arb } = w;
+    expect(A.proveWallet(arb, w.k.stateRoot, w.to, w.e.nodes)).toBe(false);
+    const loose = { ...arb, logicPins: new Map([...arb.logicPins, [ZERO, 'validator_wallet_proxy']]) };
+    expect(A.proveWallet(loose, w.k.stateRoot, w.to, w.e.nodes)).toBe(false);
+  });
+
+  it('proveWallet needs an EXISTING implementation account: an absent one is false even if the zero code hash were pinned as the logic', async () => {
+    const w = await world(FINAL3, 'adv_wallet_implementation_account_absent');
+    const { A, arb } = w;
+    expect(A.proveWallet(arb, w.k.stateRoot, w.to, w.e.nodes)).toBe(false);
+    const loose = { ...arb, logicPins: new Map([...arb.logicPins, [ZERO, 'validator_wallet_logic']]) };
+    expect(A.proveWallet(loose, w.k.stateRoot, w.to, w.e.nodes)).toBe(false);
+  });
+
+  it('when the two event topics are pinned equal the confirmation log wins: the receipt is not read as a force log (Go switch order)', async () => {
+    const w = await world(FINAL3, 'synth_valid_direct');
+    const { A, arb, e, k } = w;
+    const assertion = bytesOfHex(JSON.parse(w.expect).fields.assertion);
+    const same = { ...arb, topic: { confirmed: arb.topic.confirmed, forceConfirmed: arb.topic.confirmed } };
+    const r = A.classifyConfirmation(same, { number: e.confBlock, stateRoot: k.stateRoot }, k, null, assertion, e);
+    expect(r.route).toBe('direct');
+  });
+});
+
+describe('the fast-confirmer window of a wallet confirmation (annex A3): (word >> shift) & (2^160 - 1) is judged, nothing else', () => {
+  const slotWord = (set: (w: Uint8Array) => void): Uint8Array => {
+    const w = new Uint8Array(32);
+    set(w);
+    return w;
+  };
+  // the storage proof of the anyTrustFastConfirmer slot is built here: a one-leaf trie holding the trimmed word (or another slot only: an absence)
+  const run = async (word: Uint8Array | null): Promise<string> => {
+    const w = await world(FINAL3, WALLET);
+    const { A, arb, e, k } = w;
+    const slot = Uint8Array.from({ length: 32 }, (_, i) => (i === 31 ? Number(arb.layout.fastConfirmerSlot) : 0));
+    const other = Uint8Array.from(slot, (x, i) => (i === 31 ? x + 1 : x));
+    let trimmed = word === null ? new Uint8Array(0) : word;
+    while (trimmed.length > 0 && trimmed[0] === 0) trimmed = trimmed.subarray(1);
+    const enc = (b: Uint8Array): Uint8Array => (b.length === 1 && b[0]! < 0x80 ? Uint8Array.from(b) : cat(b.length < 56 ? Uint8Array.of(0x80 + b.length) : Uint8Array.of(0xb8, b.length), b));
+    const t = buildTrie([
+      { key: keccak_256(word === null ? other : slot), value: enc(word === null ? Uint8Array.of(1) : trimmed) },
+    ]);
+    const assertion = bytesOfHex(JSON.parse(w.expect).fields.assertion);
+    try {
+      const r = A.classifyConfirmation(arb, { number: e.confBlock, stateRoot: k.stateRoot }, k, { storageRoot: t.root }, assertion, { ...e, nodes: [...e.nodes, ...t.nodes] });
+      return r.route;
+    } catch (err) {
+      return err instanceof FinalityStateError ? JSON.stringify([err.code, err.fields.reason ?? err.fields.which]) : `ERROR ${String(err)}`;
+    }
+  };
+
+  it('an absent slot (zero) is the wallet route; the address at bits 8..167 is fast_confirmer_set', async () => {
+    expect(await run(null)).toBe('wallet');
+    expect(await run(slotWord((w) => (w[30] = 0x01)))).toBe('["confirmation_path_unproven","fast_confirmer_set"]'); // bit 8
+    expect(await run(slotWord((w) => (w[11] = 0x80)))).toBe('["confirmation_path_unproven","fast_confirmer_set"]'); // bit 167, the top of the window
+    expect(await run(slotWord((w) => w.fill(0xff, 11, 31)))).toBe('["confirmation_path_unproven","fast_confirmer_set"]');
+  });
+
+  it('bits below the shift (0..7) and bits above the address (168..255) are not an address: the route stays wallet', async () => {
+    expect(await run(slotWord((w) => (w[31] = 0xff)))).toBe('wallet'); // bits 0..7
+    expect(await run(slotWord((w) => (w[10] = 0x01)))).toBe('wallet'); // bit 168, just above the window
+    expect(await run(slotWord((w) => (w[0] = 0x80)))).toBe('wallet'); // bit 255
+    expect(await run(slotWord((w) => ((w[31] = 0xff), w.fill(0xff, 0, 11))))).toBe('wallet');
+  });
+
+  it('a slot whose proof is missing is l1_state_proof_invalid{slot}, not a pass', async () => {
+    const w = await world(FINAL3, WALLET);
+    const assertion = bytesOfHex(JSON.parse(w.expect).fields.assertion);
+    try {
+      w.A.classifyConfirmation(w.arb, { number: w.e.confBlock, stateRoot: w.k.stateRoot }, w.k, { storageRoot: keccak_256(Uint8Array.of(7)) }, assertion, w.e);
+      throw new Error('accepted');
+    } catch (err) {
+      expect((err as FinalityStateError).canonical()).toBe('{"code":"l1_state_proof_invalid","fields":{"which":"slot"}}');
     }
   });
 });

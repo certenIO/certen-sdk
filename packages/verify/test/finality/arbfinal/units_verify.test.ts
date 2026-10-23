@@ -11,6 +11,13 @@ import { KAT_HASHES, KAT_SPINES } from './kat.js';
 
 const hx = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
+describe('the statement the level proves', () => {
+  it('is the section 1.1 wording verbatim (Go arbfinal.Statement)', async () => {
+    const A = await load();
+    expect(A.STATEMENT).toBe('an assertion with status Confirmed (normal path) read at a finalized L1 block commits an L2 block that has this block as ancestor.');
+  });
+});
+
 describe('hash helpers against Go known answers', () => {
   it('AfterStateHash, AssertionHash, ConfigHash, NodeSlot, ConfigSlot and StatusOf equal Go on 12 inputs incl. the 0, 1, 2^63 and 2^64-1 edges', async () => {
     const A = await load();

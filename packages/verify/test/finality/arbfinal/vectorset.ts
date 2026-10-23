@@ -65,6 +65,15 @@ export const FINAL3: SetInfo = {
   vectors: 86,
   walletPins: false,
 };
+/** The TS-held supplement (not a Go-published set): worlds judged by the Go verifier at cbb6373, see arb_final_x/README.md. Its manifest is computed in this repository. */
+export const FINALX: SetInfo = {
+  name: 'arb_final_x',
+  dir: 'arb_final_x',
+  manifestSha256: 'd718211fb28c4f8ba82e9c2a04034568b80492e5d9318929d9a51b82130e900f',
+  format: 'arb_final_x/1',
+  vectors: 8,
+  walletPins: false,
+};
 export const FORCE1_MANIFEST_SHA256 = '7761e96e5b3219890f63c89ba383858d1286781c1adb39123003b19ab13d6192';
 
 export const sha256Hex = (b: Uint8Array): string => hexLower(sha256(b));

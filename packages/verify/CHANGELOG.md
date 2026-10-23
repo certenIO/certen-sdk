@@ -1,5 +1,34 @@
 # Changelog — @certen.io/proof-verify
 
+## Unreleased — RB12 TS arbfinal: `arb-sepolia/finalized/v1`, with the proven wallet route (2026-10-24)
+
+### Added
+- The TypeScript `arb-sepolia/finalized/v1` verifier (`src/proof-v2/finality/arbfinal`, exported as the `arbfinal` namespace, registered by `registerAllKinds` in the validator's order after
+  `arb-sepolia/l1_posted/v1`): the body codec, the Rollup identity under S and under K, the assertion node and its parent's ConfigData under S, the L2 header spine, the node-size split
+  (`max_node_bytes` off the transaction and receipt proof paths), and the confirmation-path classifier. `UNPORTED_KIND_ROWS` now names one row, `eth-sepolia/finalized/v1`.
+- The wallet route is proven, not read from calldata: `proveWallet` is true only if, under K's state root, the callee is an existing account with the pinned `validator_wallet_proxy` code hash, its
+  EIP-1967 implementation slot holds exactly the pinned implementation address, and that implementation is an existing account with the pinned `validator_wallet_logic` code hash. Any error is
+  false, never a throw. A callee that is not proven is `confirmation_path_unproven{indirect}`.
+- go-ethereum semantics where Go uses go-ethereum: `Receipt.UnmarshalBinary` (legacy and typed 1-4 receipts, status or post-state, logs), the ValidatorWallet ABI decode of the four entry points
+  with the canonical re-pack rule (unpack, then pack, must equal the input: dirty address bits, offset gaps, trailing words, padding garbage and unequal batch arrays are refused), `tx.Hash()` (the
+  sidecar of a network-form blob transaction stays out of the hash) and the pins loader in Go's order (`proxy_slots.wallet_impl`, `confirm_path.validator_wallet_impl`, the two wallet roles in
+  `logic_pins`; nothing defaulted; a pins override file without the four wallet pins is `pin_mismatch{field}`).
+- Byte-identical copies of the validator's `finality_arb_final1` (125), `finality_arb_final2` (15), `finality_arb_final3` (86, the wallet-proof set) and `finality_arb_force1` (the real owner
+  force-confirmation) at `cbb6373`, the two real wallet runtime codes, and a harness that adds the four wallet pins to the stored pins files of sets 1 and 2 re-serialized with sorted keys. The 13
+  superseded verdicts of sets 1 and 2 are judged by the verdict now (`SUPERSEDED.md`), each carried again in set 3. `test/fixtures/finality/arb_final_x` is a TS-held supplement (8 worlds judged
+  by the Go verifier; the framework header reader is applied to K's header only), not a Go-published set.
+
+### Verification
+- Every one of the 226 Go vectors and the force fixture is judged with the Go-recorded canonical verdict; the fixtures were run against the base commit in a detached worktree (516 of 551 new
+  tests fail there; the 35 that pass need no kind).
+- Two-seed differential against the Go verifier (throwaway generator over `synthworld` worlds and byte, structure, pins and leg mutations plus receipt, transaction, ABI and pins decoder corpora):
+  16,773 inputs, 0 verdict differences; the same kind corpus through the registry at the base commit differs on 2,644 of 2,804 and 2,647 of 2,801 inputs.
+- A 279-mutant hand-mutation gate over the eight files (266 killed, 12 equivalent with reasons in `test/finality/arbfinal/mutation_equivalents_rb12.json`, 1 no-op control).
+
+### Two places where Go depends on its random map order, made deterministic here
+- Case-variant duplicate `logic_pins` keys naming different roles are `pin_mismatch{logic_pins}` (Go keeps whichever its map visits last); with several bad selectors or topics the first in sorted name
+  order is named (Go names a random one). A file with one defect answers identically in Go and here.
+
 ## Unreleased — RB12 TS base: the Base finalized and Base l1_posted verifiers follow the Go review fixes (2026-10-23)
 
 ### Fixed (false accepts, `base-sepolia/finalized/v1`)
