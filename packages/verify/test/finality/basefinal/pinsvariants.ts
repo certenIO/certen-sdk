@@ -100,6 +100,26 @@ export const variants: Variant[] = [
     },
     expect: corrupt('base_sepolia.impl_pins'),
   },
+  {
+    name: 'impl_key_zero_hash',
+    mutate: (b) => {
+      b.impl_pins[`0x${'00'.repeat(32)}`] = { role: 'asr_impl', finality_delay_seconds: 0 };
+    },
+    expect: corrupt('base_sepolia.impl_pins'),
+  },
+  {
+    name: 'proxy_key_zero_hash',
+    mutate: (b) => {
+      b.proxy_pins[`0x${'00'.repeat(32)}`] = { role: 'op_proxy' };
+    },
+    expect: corrupt('base_sepolia.proxy_pins'),
+  },
+  { name: 'impl_asr_number', mutate: (b) => (impl(b).asr = 5), expect: corrupt('base_sepolia.impl_pins') },
+  { name: 'impl_dgf_number', mutate: (b) => (impl(b).dgf = 5), expect: corrupt('base_sepolia.impl_pins') },
+  { name: 'impl_asr_null', mutate: (b) => (impl(b).asr = null), expect: 'ok' },
+  { name: 'impl_asr_uppercase_is_unreadable_not_corrupt', mutate: (b) => (impl(b).asr = impl(b).asr.toUpperCase().replace('0X', '0x')), expect: 'ok' },
+  { name: 'impl_asr_object', mutate: (b) => (impl(b).asr = { a: 1 }), expect: corrupt('base_sepolia.impl_pins') },
+  { name: 'proxy_row_asr_bad_type', mutate: (b) => (b.proxy_pins[Object.keys(b.proxy_pins)[0]!].asr = 7), expect: corrupt('base_sepolia.proxy_pins') },
   { name: 'impl_role_empty', mutate: (b) => (impl(b).role = ''), expect: corrupt('base_sepolia.impl_pins') },
   { name: 'impl_row_null', mutate: (b) => (b.impl_pins[GAME_020] = null), expect: corrupt('base_sepolia.impl_pins') },
   { name: 'impl_row_array', mutate: (b) => (b.impl_pins[GAME_020] = [1]), expect: corrupt('base_sepolia.impl_pins') },

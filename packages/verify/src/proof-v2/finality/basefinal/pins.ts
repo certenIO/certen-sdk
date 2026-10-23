@@ -32,6 +32,10 @@ export interface ImplRow {
   intervalPairs: [bigint, bigint][];
   slowDelay: bigint;
   fastDelay: bigint;
+  /** game_impl: the AnchorStateRegistry the pinned build is made for; 20 zero bytes when the row's asr is not a 20-byte lower-case 0x hex */
+  asr: Uint8Array;
+  /** game_impl: the DisputeGameFactory the pinned build is made for when pinned (optional); 20 zero bytes when absent or unreadable */
+  dgf: Uint8Array;
   /** asr_impl: null when the row has none */
   finalityDelaySeconds: bigint | null;
 }
@@ -67,6 +71,12 @@ export interface BaseFinalPins {
 /** The game args the judge indexes: the fixed part up to the parent address at [116,136), and one 32-byte root per intermediate root. */
 export const MIN_ARGS_BASE_LEN = 136n;
 export const MIN_ARGS_PER_ROOT = 32n;
+
+/** Go's math.MaxInt on the platforms the validator runs on (64-bit) */
+const MAX_INT64 = (1n << 63n) - 1n;
+
+/** no deployed code hashes to zero: an absent account would look pinned */
+const isZeroKey = (h: Uint8Array): boolean => h.every((b) => b === 0);
 
 const f = (name: string, json: string, sch: Sch): FieldDef => ({ name, json, sch });
 
@@ -106,6 +116,8 @@ const rowSch: Sch = {
     f('SlowDelay', 'slow_finalization_delay', 'u64'),
     f('FastDelay', 'fast_finalization_delay', 'u64'),
     f('FinalityDelay', 'finality_delay_seconds', 'raw'),
+    f('ASRAddr', 'asr', 'string'),
+    f('DGFAddr', 'dgf', 'string'),
   ],
 };
 
@@ -194,7 +206,8 @@ export function parseBasePins(p: Pins | null | undefined): BaseFinalPins {
   const implPins = r.ImplPins;
   if (implPins instanceof Map) {
     for (const [k, row] of implPins) {
-      if (unhex(k, 32) === undefined) throw bad('impl_pins');
+      const key = unhex(k, 32);
+      if (key === undefined || isZeroKey(key)) throw bad('impl_pins');
       let rr: { [k: string]: GoVal };
       let gameType: bigint | null;
       let finalityDelay: bigint | null;
@@ -210,11 +223,15 @@ export function parseBasePins(p: Pins | null | undefined): BaseFinalPins {
       }
       if (rr.Role === '') throw bad('impl_pins');
       const impl = unhex(rr.ImplAddr as string, 20);
+      const asr = unhex(rr.ASRAddr as string, 20);
+      const dgf = unhex(rr.DGFAddr as string, 20);
       out.impl.set(k, {
         role: rr.Role as string,
         gameType: gameType === null ? 0 : Number(gameType),
         version: rr.Version as string,
         impl: impl === undefined ? new Uint8Array(20) : impl,
+        asr: asr === undefined ? new Uint8Array(20) : asr,
+        dgf: dgf === undefined ? new Uint8Array(20) : dgf,
         cwia: rr.CWIA as string,
         nIntermediate: rr.NIntermediate as bigint,
         argsLen: rr.ArgsLen as bigint,
@@ -228,7 +245,8 @@ export function parseBasePins(p: Pins | null | undefined): BaseFinalPins {
   const proxyPins = r.ProxyPins;
   if (proxyPins instanceof Map) {
     for (const [k, row] of proxyPins) {
-      if (unhex(k, 32) === undefined) throw bad('proxy_pins');
+      const key = unhex(k, 32);
+      if (key === undefined || isZeroKey(key)) throw bad('proxy_pins');
       let rr: { [k: string]: GoVal };
       try {
         rr = decodeRow((row as Raw).v, 'row');
@@ -259,11 +277,10 @@ export function parseBasePins(p: Pins | null | undefined): BaseFinalPins {
   return out;
 }
 
-const I64 = (v: bigint): bigint => BigInt.asIntN(64, v);
-
 /**
  * Whether a game_impl row carries every decoded immutable, the CWIA layout and the interval semantics the predicates of 5.5 need
- * (V2_SPEC_S7 4.2: an incomplete row is treated as absent). The args-length identity is Go int64 arithmetic.
+ * (V2_SPEC_S7 4.2: an incomplete row is treated as absent). The args-length identity is compared without wrapping (Go 25b37af): base +
+ * per_root * n is exact in bigint, and a count whose product overflows int64 is no row of this layout.
  */
 export function rowComplete(r: ImplRow, layouts: Map<string, GameLayout>): boolean {
   if (
@@ -271,6 +288,7 @@ export function rowComplete(r: ImplRow, layouts: Map<string, GameLayout>): boole
     r.gameType === 0 ||
     r.version === '' ||
     r.impl.every((b) => b === 0) ||
+    r.asr.every((b) => b === 0) ||
     r.nIntermediate <= 0n ||
     r.intervalPairs.length === 0 ||
     r.slowDelay === 0n ||
@@ -279,7 +297,9 @@ export function rowComplete(r: ImplRow, layouts: Map<string, GameLayout>): boole
     return false;
   }
   const l = layouts.get(r.cwia);
-  if (l === undefined || r.argsLen !== I64(l.argsBaseLen + I64(l.argsPerRoot * r.nIntermediate))) return false;
+  if (l === undefined || l.argsBaseLen < 0n || l.argsPerRoot < 0n) return false;
+  if (l.argsPerRoot > 0n && r.nIntermediate > (MAX_INT64 - l.argsBaseLen) / l.argsPerRoot) return false;
+  if (r.argsLen !== l.argsBaseLen + l.argsPerRoot * r.nIntermediate) return false;
   for (const [total, interval] of r.intervalPairs) if (total === 0n || interval === 0n || total % interval !== 0n) return false;
   return true;
 }

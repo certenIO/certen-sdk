@@ -71,6 +71,7 @@ describe('rowComplete (the game_impl row the predicates may rely on)', () => {
     ['game_type', (r) => ({ ...r, gameType: 0 })],
     ['version', (r) => ({ ...r, version: '' })],
     ['impl', (r) => ({ ...r, impl: new Uint8Array(20) })],
+    ['asr', (r) => ({ ...r, asr: new Uint8Array(20) })],
     ['n_intermediate', (r) => ({ ...r, nIntermediate: 0n })],
     ['n_intermediate (negative)', (r) => ({ ...r, nIntermediate: -1n })],
     ['interval_pairs', (r) => ({ ...r, intervalPairs: [] })],
@@ -88,8 +89,25 @@ describe('rowComplete (the game_impl row the predicates may rely on)', () => {
     });
   }
 
-  it('the args length identity is int64 arithmetic: n_intermediate = 2^59 + 20 wraps 32*n to 640 and is complete in Go', () => {
-    expect(rowComplete({ ...row, nIntermediate: (1n << 59n) + 20n }, bp.layouts)).toBe(true);
+  it('the args length identity is compared without wrapping (Go 25b37af): n_intermediate = 2^59 + 20 wraps 32*n to 640 in int64 and is NOT a complete row', () => {
+    expect(rowComplete({ ...row, nIntermediate: (1n << 59n) + 20n }, bp.layouts)).toBe(false);
     expect(rowComplete({ ...row, nIntermediate: 1n << 59n }, bp.layouts)).toBe(false);
+    // the same count with an args_len equal to the wrapped value (640) must not read complete either
+    expect(rowComplete({ ...row, nIntermediate: (1n << 59n) + 20n, argsLen: 640n }, bp.layouts)).toBe(false);
+  });
+
+  it('a count whose base + per_root * n is exactly 2^63-1 is complete, one more root is not (no wrap at the boundary)', () => {
+    const lay = bp.layouts.get('aggregate_v1')!;
+    const n = ((1n << 63n) - 1n - lay.argsBaseLen) / lay.argsPerRoot;
+    const fit = lay.argsBaseLen + lay.argsPerRoot * n;
+    expect(fit <= (1n << 63n) - 1n).toBe(true);
+    expect(rowComplete({ ...row, nIntermediate: n, argsLen: fit }, bp.layouts)).toBe(true);
+    expect(rowComplete({ ...row, nIntermediate: n + 1n, argsLen: BigInt.asIntN(64, fit + lay.argsPerRoot) }, bp.layouts)).toBe(false);
+  });
+
+  it('a layout with a negative base or per-root length holds no complete row', () => {
+    const lay = bp.layouts.get('aggregate_v1')!;
+    expect(rowComplete(row, new Map([['aggregate_v1', { ...lay, argsBaseLen: -1n }]]))).toBe(false);
+    expect(rowComplete(row, new Map([['aggregate_v1', { ...lay, argsPerRoot: -1n }]]))).toBe(false);
   });
 });

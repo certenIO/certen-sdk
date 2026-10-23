@@ -333,7 +333,18 @@ export function judge(inp: JudgeInput): Fields {
   const gimpl = Uint8Array.from(code.subarray(implOff, implOff + 20));
   const gia = rd.account(gimpl);
   const row = p.impl.get(pinKey(codeHashOf(gia)));
-  if (!gia.exists || row === undefined || row.role !== RoleGameImpl || !rowComplete(row, p.layouts) || !eq(row.impl, gimpl) || row.cwia !== LayoutAggregateV1) {
+  // the pinned build of the game implementation names the AnchorStateRegistry (and, when pinned, the factory) it is built for: they must be
+  // the ones the contract graph proves (annex step 5)
+  if (
+    !gia.exists ||
+    row === undefined ||
+    row.role !== RoleGameImpl ||
+    !rowComplete(row, p.layouts) ||
+    !eq(row.impl, gimpl) ||
+    row.cwia !== LayoutAggregateV1 ||
+    !eq(row.asr, asr) ||
+    (!isZero(row.dgf) && !eq(row.dgf, dgf))
+  ) {
     throw identity(RoleGameImpl, gimpl, codeHashOf(gia));
   }
   const rest = BigInt(code.length - tmplLen - 2);
@@ -458,15 +469,15 @@ export function judge(inp: JudgeInput): Fields {
   }
   if (body.l2Spine.length === 0) throw st(CodeL2NotCanonical);
   const h0 = readHeader(body.l2Spine[0]!);
-  let computed: Uint8Array = ZERO32;
-  if (h0.withdrawalsRoot !== undefined) {
-    const buf = new Uint8Array(128);
-    buf.set(h0.stateRoot, 32);
-    buf.set(h0.withdrawalsRoot, 64);
-    buf.set(h0.hash, 96);
-    computed = keccak_256(buf);
-  }
-  if (!eq(computed, claimed)) throw st(CodeOutputRootMismatch, { computed, claimed });
+  // The output root needs the withdrawals root of the header: a header without one has no output root, whatever the claim is (a claim of
+  // all zeros must not match a zero that stands for "absent"); and the header must be the block the game implies (spec 5.5 O5).
+  if (h0.withdrawalsRoot === undefined) throw st(CodeOutputRootMismatch, { computed: ZERO32, claimed });
+  const buf = new Uint8Array(128);
+  buf.set(h0.stateRoot, 32);
+  buf.set(h0.withdrawalsRoot, 64);
+  buf.set(h0.hash, 96);
+  const computed = keccak_256(buf);
+  if (!eq(computed, claimed) || h0.number !== outBlock) throw st(CodeOutputRootMismatch, { computed, claimed });
 
   // -- the L2 spine from the output-root block down to the leg's block (5.5 O6) --
   let prev = h0;
