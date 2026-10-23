@@ -120,7 +120,35 @@ export function canonicalOutcome(run: () => { fields: Record<string, any> }): st
   }
 }
 
-export const legRef = (l: LegFile): BlockRef => ({ chain: BigInt(l.chain), number: BigInt(l.number), hash: bytesOfHex(l.hash), headerRlp: bytesOfHex(l.header) });
+/** A world that cannot be loaded (the twin of the Go JudgeLoadError, same text): the field, the value, and what the value is not. */
+export class JudgeLoadError extends Error {
+  constructor(
+    readonly field: string,
+    readonly value: string,
+    readonly want: string,
+  ) {
+    super(`judge case load error: field ${field}: value ${JSON.stringify(value)} is not ${want}`);
+    this.name = 'JudgeLoadError';
+  }
+}
+/** A decimal of at most `bits` bits: digits only (no sign, space, prefix or underscore), within range. */
+export function loadDecimal(field: string, s: string, bits: 32 | 64): bigint {
+  if (!/^[0-9]+$/.test(s) || BigInt(s) >= 1n << BigInt(bits)) throw new JudgeLoadError(field, s, `a decimal uint${bits}`);
+  return BigInt(s);
+}
+/** Lower-case hex with an optional 0x prefix; size >= 0 fixes the byte length. */
+export function loadHex(field: string, s: string, size = -1): Uint8Array {
+  const want = size >= 0 ? `lower-case hex of ${size} bytes` : 'lower-case hex';
+  const h = s.startsWith('0x') ? s.slice(2) : s;
+  if (!/^([0-9a-f]{2})*$/.test(h) || (size >= 0 && h.length !== 2 * size)) throw new JudgeLoadError(field, s, want);
+  return Uint8Array.from(h.match(/../g) ?? [], (x) => parseInt(x, 16));
+}
+
+export const legRef = (l: LegFile): BlockRef => {
+  const chain = loadDecimal('leg.chain', l.chain, 64);
+  const number = loadDecimal('leg.number', l.number, 64);
+  return { chain, number, hash: loadHex('leg.hash', l.hash, 32), headerRlp: loadHex('leg.header', l.header) };
+};
 
 /** Runs one live case through the TypeScript kind and returns the canonical string. */
 export function runCase(c: Case, kind = new BaseFinalKind()): string {
@@ -134,20 +162,21 @@ export function runCase(c: Case, kind = new BaseFinalKind()): string {
 
 /** The judge-level world of a case as the body and L1 block the judge takes (the Go JudgeCase.Run). */
 export function judgeWorld(c: JudgeCase): { a: { hash: Uint8Array; number: bigint; stateRoot: Uint8Array; timestamp: bigint }; body: Body; leg: BlockRef } {
-  const num = BigInt(c.a.number);
+  // the order of the Go JudgeCase.load: a.number, a.timestamp, a.hash, a.state_root, output_root_index, game_proxy, game_code, spine, nodes, leg
+  const num = loadDecimal('a.number', c.a.number, 64);
+  const timestamp = loadDecimal('a.timestamp', c.a.timestamp, 64);
+  const hash = loadHex('a.hash', c.a.hash, 32);
+  const stateRoot = loadHex('a.state_root', c.a.state_root, 32);
+  const outputRootIndex = Number(loadDecimal('output_root_index', c.output_root_index, 32));
+  const gameProxy = loadHex('game_proxy', c.game_proxy, 20);
+  const gameCode = loadHex('game_code', c.game_code);
+  const l2Spine = (c.l2_spine ?? []).map((h, i) => loadHex(`l2_spine[${i}]`, h));
+  const nodes = (c.nodes ?? []).map((h, i) => loadHex(`nodes[${i}]`, h));
+  const leg = legRef(c.leg);
   return {
-    a: { number: num, hash: bytesOfHex(c.a.hash), stateRoot: bytesOfHex(c.a.state_root), timestamp: BigInt(c.a.timestamp) },
-    body: {
-      lc: undefined as never,
-      l1Spine: [],
-      stateBlock: num,
-      gameProxy: bytesOfHex(c.game_proxy),
-      gameCode: bytesOfHex(c.game_code),
-      outputRootIndex: Number(BigInt(c.output_root_index)),
-      l2Spine: (c.l2_spine ?? []).map(bytesOfHex),
-      nodes: (c.nodes ?? []).map(bytesOfHex),
-    },
-    leg: legRef(c.leg),
+    a: { number: num, hash, stateRoot, timestamp },
+    body: { lc: undefined as never, l1Spine: [], stateBlock: num, gameProxy, gameCode, outputRootIndex, l2Spine, nodes },
+    leg,
   };
 }
 
