@@ -25,6 +25,7 @@ import {
   type SignatureReason,
 } from './states.js';
 import { SigBytes } from './cfa1.js';
+import { firstFailureBatched } from './batched.js';
 
 /** The RFC 9380 domain separation tag of these signatures (the "NUL_" scheme of draft-irtf-cfrg-bls-signature, min-sig). */
 export const SignatureDST = 'BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_';
@@ -196,36 +197,6 @@ function batchScalar(rnd: Rand): bigint {
   }
 }
 
-/** One item prepared for the combination: r*sigma, r*H(m) and the aggregate key it is grouped under. */
-interface Term {
-  rs: G1Point;
-  rh: G1Point;
-  agg: G2Point;
-  aggKey: string;
-}
-
-/** The pairing check of the random linear combination of terms[0..n) (all signatures already decoded). */
-function combinationHolds(terms: readonly Term[], n: number): boolean {
-  if (n === 0) return true;
-  let lhs = terms[0]!.rs;
-  const groups = new Map<string, { agg: G2Point; sum: G1Point }>();
-  for (let i = 0; i < n; i++) {
-    const t = terms[i]!;
-    if (i > 0) lhs = lhs.add(t.rs);
-    const g = groups.get(t.aggKey);
-    if (g === undefined) groups.set(t.aggKey, { agg: t.agg, sum: t.rh });
-    else g.sum = g.sum.add(t.rh);
-  }
-  try {
-    const pairs = [{ g1: lhs, g2: bls12_381.G2.Point.BASE.negate() }];
-    for (const g of groups.values()) pairs.push({ g1: g.sum, g2: g.agg });
-    return bls12_381.fields.Fp12.eql(bls12_381.pairingBatch(pairs), bls12_381.fields.Fp12.ONE);
-  } catch {
-    // a zero sum or aggregate (the identity) cannot be paired: the combination does not hold
-    return false;
-  }
-}
-
 /**
  * The lowest failing item and its reason under the mode, or undefined. In batched mode the combination decides acceptance; a failure is
  * only localised (by bisection over prefixes of the SAME combination, then one individual check of the item found), never accepted by
@@ -234,56 +205,5 @@ function combinationHolds(terms: readonly Term[], n: number): boolean {
 export function firstFailure(items: readonly SigItem[], mode: Mode, rnd: Rand = randomBytes): Failure | undefined {
   if (items.length === 0) return undefined;
   if (mode === 'oneByOne') return firstOneByOne(items);
-  // every signature is decoded and checked before it enters the combination
-  const decoded: G1Point[] = [];
-  let decodeFail: Failure | undefined;
-  for (let i = 0; i < items.length; i++) {
-    const d = decodeSignature(items[i]!.sig);
-    if (d.reason !== undefined) {
-      decodeFail = { index: i, reason: d.reason };
-      break;
-    }
-    if (items[i]!.signer.length === 0) {
-      // an empty signer list has no aggregate key: it fails its pairing, as verifyOne judges it
-      decodeFail = { index: i, reason: ReasonPairing };
-      break;
-    }
-    decoded.push(d.point);
-  }
-  // the items before the first undecodable one are judged by the combination; that one fails by its decode reason
-  const n = decodeFail === undefined ? items.length : decodeFail.index;
-  const terms: Term[] = [];
-  const aggs = new Map<string, G2Point>();
-  const termAt = (i: number): Term => {
-    let t = terms[i];
-    if (t === undefined) {
-      const it = items[i]!;
-      const r = batchScalar(rnd);
-      const aggKey = signerGroup(it.signer);
-      let agg = aggs.get(aggKey);
-      if (agg === undefined) {
-        agg = aggregateKey(it.signer);
-        aggs.set(aggKey, agg);
-      }
-      t = { rs: decoded[i]!.multiplyUnsafe(r), rh: hashMsg(it.msg).multiplyUnsafe(r), agg, aggKey };
-      terms[i] = t;
-    }
-    return t;
-  };
-  for (let i = 0; i < n; i++) termAt(i);
-  if (n > 0 && !combinationHolds(terms, n)) {
-    // bisect for the lowest k such that the prefix [0..k] fails: prefix(lo) holds, prefix(hi) fails
-    let lo = 0;
-    let hi = n;
-    while (hi - lo > 1) {
-      const mid = (lo + hi) >> 1;
-      if (combinationHolds(terms, mid)) lo = mid;
-      else hi = mid;
-    }
-    const k = hi - 1;
-    const reason = verifyOne(items[k]!);
-    // the combination rejected what the item itself accepts: a negligible-probability event, never an acceptance
-    return { index: reason === undefined ? 0 : k, reason: reason ?? ReasonPairing };
-  }
-  return decodeFail;
+  return firstFailureBatched(items, rnd, { dst: SignatureDST, batchScalar, aggregateKey, signerGroup, verifyOne });
 }
