@@ -10,7 +10,7 @@ import { Registry } from '../../../src/proof-v2/finality/registry.js';
 import { base64Std, parseSettlementJSON, SettlementJsonError } from '../../../src/proof-v2/finality/settlementjson.js';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
 import { ChainBaseSepolia } from '../../../src/proof-v2/finality/table.js';
-import { fakeBaseRegistry, legSettlement, readSet } from './support.js';
+import { allKindsRegistry, cases, docOf, fakeBaseRegistry, legSettlement, pinsNamed, readSet } from './support.js';
 
 const FORMAT = 'certen-finality-addenda/1';
 const HASH = 'ab'.repeat(32);
@@ -271,10 +271,12 @@ describe('the Settlement reader reads what encoding/json reads into ethproof.Set
       o.tx_inclusion_proof.leaf_hash = bad;
       expect(() => read(o), JSON.stringify(bad)).toThrow(SettlementJsonError);
     }
-    // an element beyond the 32nd is still read, and still refused when it is not a byte
-    const beyond = good();
-    beyond.tx_inclusion_proof.leaf_hash = [...lh, 'x'];
-    expect(() => read(beyond)).toThrow(SettlementJsonError);
+    // an element beyond the 32nd is skipped, not decoded: whatever it is, Go does not refuse it (the differential found this; the first reader refused it)
+    for (const extra of ['x', null, 256, -1, 1.5, [1], {}, true]) {
+      const beyond = good();
+      beyond.tx_inclusion_proof.leaf_hash = [...lh, extra];
+      expect(verifies(beyond), JSON.stringify(extra)).toBe(true);
+    }
     const edge = good();
     edge.tx_inclusion_proof.leaf_hash = [...lh.slice(0, 31), 255];
     expect(read(edge)?.tx?.leafHash[31]).toBe(255);
@@ -351,4 +353,36 @@ describe('the Settlement reader reads what encoding/json reads into ethproof.Set
     expect(zero.class).toBe('failed');
     expect(zero.text).toContain('finality_included_invalid{');
   });
+});
+
+describe('size and time', () => {
+  const file = JSON.parse(readSet('settlements', 'base_sepolia_47368146.json').toString('utf8')) as { settlement: Record<string, any> };
+
+  it('a Settlement with a huge proof_nodes array is read in time proportional to its text and then refused by name', () => {
+    const o = structuredClone(file.settlement);
+    o.tx_inclusion_proof.proof_nodes = Array.from({ length: 200_000 }, () => 'QQ==');
+    const t = Date.now();
+    const s = parseSettlementJSON(JSON.stringify(o));
+    expect(s?.tx?.proofNodes.length).toBe(200_000);
+    expect(() => deriveIncluded(ChainBaseSepolia, s)).toThrow(FinalityStateError);
+    expect(Date.now() - t).toBeLessThan(30_000);
+  });
+
+  it('a 4 MiB leaf_value and a 100,000-element leaf_hash are read without allocating from a declared length (the array is 32 bytes whatever it says)', () => {
+    const o = structuredClone(file.settlement);
+    o.tx_inclusion_proof.leaf_value = Buffer.alloc(4 * 1024 * 1024, 7).toString('base64');
+    expect(parseSettlementJSON(JSON.stringify(o))?.tx?.leafValue.length).toBe(4 * 1024 * 1024);
+    o.tx_inclusion_proof.leaf_hash = Array.from({ length: 100_000 }, () => 1);
+    expect(parseSettlementJSON(JSON.stringify(o))?.tx?.leafHash.length).toBe(32);
+  });
+
+  it('the real valid vector of the largest document (base_final_47604755, 190 KB of evidence) is judged in seconds, not minutes', async () => {
+    const c = cases().find((x) => x.id === 'e2e/base_final_47604755/vector_pins')!;
+    const reg = await allKindsRegistry();
+    const t = Date.now();
+    const r = judgeFinalityText(docOf(c), { registry: reg, pins: pinsNamed(c.pins), subject: 'DOC', settlement: legSettlement(c.settlement, BigInt(c.chain)) });
+    const ms = Date.now() - t;
+    expect(r.exit).toBe(0);
+    expect(ms).toBeLessThan(60_000);
+  }, 120_000);
 });

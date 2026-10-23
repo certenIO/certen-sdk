@@ -14,7 +14,7 @@
  *  - common.Hash and hexutil.Bytes read the RAW token: `0x`, an even count of hex digits of either case, exactly 32 bytes for a hash, and a
  *    string written with an escape is refused; null is refused (their UnmarshalJSON is called with it);
  *  - [32]byte is a JSON array of numbers (a base64 string is refused): numbers are read as uint8 (an integer literal 0..255, null leaves the byte
- *    as it was), extra elements are dropped and a short array is zero-filled;
+ *    as it was), elements past the 32nd are skipped unread (of any type) and a short array is zero-filled;
  *  - []byte is base64 (StdEncoding: padding required, CR and LF ignored) or an array of numbers; null is nil;
  *  - unknown members are ignored; `verified` must still be a bool or null.
  * Anything Go would report as an error (and so a verifier would not read) is a SettlementJsonError.
@@ -76,8 +76,7 @@ function fixedBytes(v: JVal, prev: Uint8Array, what: string): Uint8Array {
     const b = byteOf(v[i]!, `${what}[${i}]`);
     if (b !== undefined) out[i] = b;
   }
-  // elements past the array's end are still decoded (and refused when they are not bytes), as Go skips them only after reading them
-  for (let i = out.length; i < v.length; i++) byteOf(v[i]!, `${what}[${i}]`);
+  // elements past the array's end are SKIPPED, not decoded: encoding/json's array() reads them with d.value(reflect.Value{}), which checks nothing about their type
   return out;
 }
 
