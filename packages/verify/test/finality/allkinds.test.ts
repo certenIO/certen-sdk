@@ -13,6 +13,11 @@ import { Registry } from '../../src/proof-v2/finality/registry.js';
 import { PINS_SHA256, embeddedPins, parsePinsOverride } from '../../src/proof-v2/finality/pins.js';
 import { kindRows } from '../../src/proof-v2/finality/table.js';
 import { FinalityStateError } from '../../src/proof-v2/finality/state.js';
+import { parseBasePins as parseBasePostedPins } from '../../src/proof-v2/finality/baseposted/pins.js';
+import { parseBasePins as parseBaseFinalPins } from '../../src/proof-v2/finality/basefinal/pins.js';
+import { loadArbPins } from '../../src/proof-v2/finality/arbposted/pins.js';
+import { parsePins as parseAdiriPins } from '../../src/proof-v2/finality/adiri/record.js';
+import { sepoliaPins } from '../../src/proof-v2/finality/pins.js';
 import { sha256Hex, readFixture } from './helpers.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -106,5 +111,17 @@ describe('the pins and the state registry are the validator\'s', () => {
   it('finality/states.json is the validator\'s current registry and finality_chain2_registry/states.json the one its manifest pins', () => {
     expect(sha256Hex(readFixture('finality', 'states.json'))).toBe(VALIDATOR_STATES_SHA256);
     expect(sha256Hex(readFixture('finality_chain2_registry', 'states.json'))).toBe(CHAIN2_STATES_SHA256);
+  });
+});
+
+describe("every ported kind's pins section loads from the embedded pins", () => {
+  it.each([
+    ["eth_sepolia", sepoliaPins],
+    ["base_sepolia (l1_posted)", parseBasePostedPins],
+    ["base_sepolia (finalized)", parseBaseFinalPins],
+    ["arb_sepolia (l1_posted)", loadArbPins],
+    ["adiri", parseAdiriPins],
+  ] as const)("%s", (_name, load) => {
+    expect(() => (load as (p: ReturnType<typeof embeddedPins>) => unknown)(embeddedPins())).not.toThrow();
   });
 });
