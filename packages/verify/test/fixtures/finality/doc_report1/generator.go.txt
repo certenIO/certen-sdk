@@ -1,0 +1,527 @@
+package main
+
+// THROWAWAY oracle generator for RB12-TS-SURFACE (never committed): runs reportFinalityFile / printReport of the validator at
+// cbb6373 over the cases of finality_test.go and finality_e2e_pos_test.go and records the exit code and text for the TypeScript twin.
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/certen/independant-validator/pkg/finality"
+	"github.com/certen/independant-validator/pkg/finality/adiri"
+	"github.com/certen/independant-validator/pkg/finality/allkinds"
+	"github.com/certen/independant-validator/pkg/finality/arbfinal/synthworld"
+	"github.com/certen/independant-validator/pkg/finality/arbposted"
+	"github.com/certen/independant-validator/pkg/finality/basefinal"
+	"github.com/certen/independant-validator/pkg/finality/baseposted"
+	"github.com/certen/independant-validator/pkg/finality/finalitytest"
+)
+
+type genCase struct {
+	ID         string `json:"id"`
+	Family     string `json:"family"`
+	Doc        string `json:"doc,omitempty"`
+	DocFile    string `json:"doc_file,omitempty"`
+	Settlement string `json:"settlement"` // name of settlements/<name>.json, "" = none
+	Chain      string `json:"chain"`
+	Registry   string `json:"registry"` // fake_base | empty | all
+	Pins       string `json:"pins"`     // embedded | <leg name> (pins/<name>.json)
+	Kind       string `json:"kind"`     // the leg kind of a real-evidence case ("" otherwise)
+	ExpectAll  genRun `json:"expect_all"`
+	// ExpectWithout is the same run with a registry that lacks arb-sepolia/finalized/v1 and eth-sepolia/finalized/v1 (the kinds the TypeScript verifier does not have at this base)
+	ExpectWithout genRun `json:"expect_without"`
+}
+
+type genRun struct {
+	Exit int    `json:"exit"`
+	Text string `json:"text"`
+}
+
+type genSynth struct {
+	ID     string `json:"id"`
+	Report any    `json:"report"`
+	Expect genRun `json:"expect"`
+	Note   string `json:"note"`
+}
+
+type synthState struct {
+	Code   string         `json:"code"`
+	Fields map[string]any `json:"fields"`
+}
+type synthLevel struct {
+	Status string      `json:"status"`
+	State  *synthState `json:"state,omitempty"`
+}
+type synthFinBlock struct {
+	Number    uint64 `json:"number"`
+	Hash      string `json:"hash"`
+	StateRoot string `json:"stateRoot"`
+}
+type synthReport struct {
+	Chain       uint64                `json:"chain"`
+	Number      uint64                `json:"number"`
+	Hash        string                `json:"hash"`
+	Unsupported *synthState           `json:"unsupported,omitempty"`
+	Levels      map[string]synthLevel `json:"levels"`
+	Headline    string                `json:"headline"`
+	Broken      *synthState           `json:"broken,omitempty"`
+	FinBlockSt  *synthState           `json:"finalizedBlockState,omitempty"`
+	FinBlock    *synthFinBlock        `json:"finalizedBlock,omitempty"`
+	PinsSHA     string                `json:"pinsSha256"`
+	PinsSource  string                `json:"pinsSource"`
+}
+
+func lvl(s string) finality.Level {
+	switch s {
+	case "included":
+		return finality.LevelIncluded
+	case "l1_posted":
+		return finality.LevelL1Posted
+	case "finalized":
+		return finality.LevelFinalized
+	}
+	return finality.LevelNone
+}
+
+func stOf(s *synthState) *finality.StateError {
+	if s == nil {
+		return nil
+	}
+	var kv []any
+	for k, v := range s.Fields {
+		switch x := v.(type) {
+		case int:
+			kv = append(kv, k, uint64(x))
+		default:
+			kv = append(kv, k, v)
+		}
+	}
+	return finality.NewState(s.Code, kv...)
+}
+
+func toReport(s synthReport) finality.Report {
+	h, _ := hex.DecodeString(s.Hash)
+	var hash [32]byte
+	copy(hash[:], h)
+	rep := finality.Report{Block: finality.BlockRef{Chain: s.Chain, Number: s.Number, Hash: hash}, Levels: map[finality.Level]finality.LevelStatus{}, Headline: lvl(s.Headline), PinsSHA256: s.PinsSHA, PinsSource: s.PinsSource}
+	rep.Unsupported = stOf(s.Unsupported)
+	rep.Broken = stOf(s.Broken)
+	rep.FinalizedBlockState = stOf(s.FinBlockSt)
+	for name, l := range s.Levels {
+		rep.Levels[lvl(name)] = finality.LevelStatus{Status: finality.Status(l.Status), State: stOf(l.State)}
+	}
+	if s.FinBlock != nil {
+		var fb finality.FinalizedBlock
+		fb.Number = s.FinBlock.Number
+		a, _ := hex.DecodeString(s.FinBlock.Hash)
+		b, _ := hex.DecodeString(s.FinBlock.StateRoot)
+		copy(fb.Hash[:], a)
+		copy(fb.StateRoot[:], b)
+		rep.FinalizedBlock = &fb
+	}
+	return rep
+}
+
+type surfaceEnv struct {
+	t        *testing.T
+	embedded *finality.Pins
+}
+
+func (e *surfaceEnv) registry(name string, without bool) *finality.Registry {
+	switch name {
+	case "fake_base":
+		return baseRegistry()
+	case "empty":
+		return finality.NewRegistry()
+	case "all":
+		reg := finality.NewRegistry()
+		if without {
+			for _, r := range []func(*finality.Registry) error{adiri.Register, baseposted.Register, basefinal.Register, arbposted.Register} {
+				if err := r(reg); err != nil {
+					e.t.Fatal(err)
+				}
+			}
+			return reg
+		}
+		if err := allkinds.Register(reg); err != nil {
+			e.t.Fatal(err)
+		}
+		return reg
+	}
+	e.t.Fatalf("registry %s", name)
+	return nil
+}
+
+// runDoc judges doc (a file) with reportFinalityFile; the temporary path is replaced by DOC.
+func runDoc(t *testing.T, doc []byte, reg *finality.Registry, pins *finality.Pins, leg *legSettlement) genRun {
+	t.Helper()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "doc.json")
+	if err := os.WriteFile(p, doc, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	code := reportFinalityFile(&out, p, reg, pins, leg)
+	return genRun{Exit: code, Text: strings.ReplaceAll(out.String(), p, "DOC")}
+}
+
+func writeJSON(t *testing.T, path string, v any) {
+	t.Helper()
+	b, err := json.MarshalIndent(v, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func sha(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+
+func legPinsRaw(t *testing.T, name string) []byte {
+	t.Helper()
+	type bc struct {
+		Pins string `json:"pins"`
+	}
+	read := func(parts ...string) []byte { return readFileT(t, filepath.Join(append([]string{"..", ".."}, parts...)...)) }
+	switch {
+	case strings.HasPrefix(name, "base_posted_"):
+		id := map[string]string{"base_posted_a": "valid_a", "base_posted_b": "valid_b"}[name]
+		dir := filepath.Join("pkg", "finality", "baseposted", "testdata", "finality_base_posted1")
+		var c bc
+		if err := json.Unmarshal(read(dir, "cases", id+".json"), &c); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := baseposted.SupplyBaseSepoliaPins(read(dir, c.Pins), baseposted.PublishedSetPinSupply)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	case strings.HasPrefix(name, "base_final_"):
+		id := "valid_leg_" + strings.TrimPrefix(name, "base_final_")
+		dir := filepath.Join("pkg", "finality", "basefinal", "testdata", "finality_base_final1")
+		var c bc
+		if err := json.Unmarshal(read(dir, "cases", id+".json"), &c); err != nil {
+			t.Fatal(err)
+		}
+		return read(dir, c.Pins)
+	case name == "arb_posted":
+		dir := filepath.Join("pkg", "finality", "arbposted", "testdata", "finality_arb_posted1")
+		var c bc
+		if err := json.Unmarshal(read(dir, "cases", "valid_live.json"), &c); err != nil {
+			t.Fatal(err)
+		}
+		return read(dir, c.Pins)
+	case name == "arb_final_real":
+		dir := filepath.Join("pkg", "finality", "arbfinal", "testdata", "finality_arb_final1")
+		var set struct {
+			Vectors []struct {
+				Name string `json:"name"`
+				Pins string `json:"pins"`
+			} `json:"vectors"`
+		}
+		if err := json.Unmarshal(read(dir, "vectors.json"), &set); err != nil {
+			t.Fatal(err)
+		}
+		for _, v := range set.Vectors {
+			if v.Name == "real_valid" {
+				return synthworld.WithWalletPins(read(dir, "pins", v.Pins))
+			}
+		}
+	default:
+		set := "finality_eth_sepolia1"
+		base := name
+		if strings.HasSuffix(name, "_root_anchored") {
+			set = "finality_eth_sepolia2"
+			base = strings.TrimSuffix(name, "_root_anchored")
+		}
+		id := map[string]string{"eth_gloas_latest": "valid_gloas_latest", "eth_gloas_period": "valid_gloas_period", "eth_legacy": "valid_legacy"}[base]
+		dir := filepath.Join("pkg", "finality", "ethsepolia", "testdata", set)
+		var c bc
+		if err := json.Unmarshal(read(dir, "cases", id+".json"), &c); err != nil {
+			t.Fatal(err)
+		}
+		return read(dir, c.Pins)
+	}
+	t.Fatalf("no pins for %s", name)
+	return nil
+}
+
+var settlementByName map[string]*legSettlement
+
+func mustMarshal(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func mustAddendum(t *testing.T, s finality.Settlement, l e2eLeg) finality.Addendum {
+	t.Helper()
+	pid := uuid.MustParse("01020304-0506-4708-8910-111213141516")
+	a, err := finality.NewAddendum(finality.LegBindingOf(s.Block()), pid, nil, l.chain, l.level, l.kind, l.evidence)
+	if err != nil {
+		t.Fatalf("%s: %v", l.name, err)
+	}
+	return a
+}
+
+func TestZZSurfaceGen(t *testing.T) {
+	outDir := os.Getenv("SURFACE_OUT")
+	if outDir == "" {
+		t.Fatal("SURFACE_OUT names the output directory of the generator")
+	}
+	for _, d := range []string{"settlements", "pins"} {
+		if err := os.MkdirAll(filepath.Join(outDir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := &surfaceEnv{t: t}
+	var err error
+	if env.embedded, err = finality.EmbeddedPins(); err != nil {
+		t.Fatal(err)
+	}
+	pinsByName := map[string]*finality.Pins{"embedded": env.embedded}
+	var cases []genCase
+	add := func(c genCase) {
+		reg := env.registry(c.Registry, false)
+		regW := env.registry(c.Registry, true)
+		pins := pinsByName[c.Pins]
+		if pins == nil {
+			t.Fatalf("pins %s", c.Pins)
+		}
+		var leg *legSettlement
+		if c.Settlement != "" {
+			leg = settlementByName[c.Settlement]
+			if leg == nil {
+				t.Fatalf("settlement %s", c.Settlement)
+			}
+			c.Chain = fmt.Sprint(leg.chain)
+		}
+		c.ExpectAll = runDoc(t, []byte(c.Doc), reg, pins, leg)
+		c.ExpectWithout = runDoc(t, []byte(c.Doc), regW, pins, leg)
+		if len(c.Doc) > 100000 {
+			if err := os.MkdirAll(filepath.Join(outDir, "docs"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			c.DocFile = "docs/" + strings.NewReplacer("/", "__").Replace(strings.SplitN(c.ID, "/", 3)[1]) + ".json"
+			if err := os.WriteFile(filepath.Join(outDir, c.DocFile), []byte(c.Doc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c.Doc = ""
+		}
+		cases = append(cases, c)
+	}
+
+	// ---- settlement sources ----
+	settlementByName = map[string]*legSettlement{}
+	type sfile struct {
+		Name       string `json:"name"`
+		Chain      int64  `json:"chain"`
+		Settlement any    `json:"settlement"`
+	}
+	exportSettlement := func(name string, chain uint64, s any, raw []byte) {
+		if raw == nil {
+			b, err := json.MarshalIndent(sfile{Name: name, Chain: int64(chain), Settlement: s}, "", " ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw = append(b, '\n')
+		}
+		if err := os.WriteFile(filepath.Join(outDir, "settlements", name+".json"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	base := finalitytest.Settlement(t, "base_sepolia_47368146")
+	adir := finalitytest.Settlement(t, "telcoin_adiri_498759")
+	settlementByName["base_sepolia_47368146"] = &legSettlement{chain: finality.ChainBaseSepolia, s: base.Included, source: "test"}
+	settlementByName["telcoin_adiri_498759"] = &legSettlement{chain: finality.ChainBaseSepolia, s: adir.Included, source: "test"}
+	exportSettlement("base_sepolia_47368146", base.Chain, base.Included, nil)
+	exportSettlement("telcoin_adiri_498759", adir.Chain, adir.Included, nil)
+	outcomeLeg, err := settlementFromOutcomeFile(fixturePath(84532))
+	if err != nil {
+		t.Fatal(err)
+	}
+	settlementByName["outcome_84532"] = outcomeLeg
+	exportSettlement("outcome_84532", outcomeLeg.chain, outcomeLeg.s, nil)
+
+	// ---- A: the cases of finality_test.go ----
+	pid := uuid.MustParse("01020304-0506-4708-8910-111213141516")
+	section := func(s finality.Settlement, levels ...finality.Level) finality.Section {
+		return finality.NewSection(s.Block(), chainFor(t, s, pid, finality.LegBindingOf(s.Block()), levels...))
+	}
+	docOf := func(member any) string {
+		raw, err := json.Marshal(map[string]any{"format": "certen-proof-v2-accumulate-portable/1", "finality": member})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	good := section(base, finality.LevelL1Posted, finality.LevelFinalized)
+	one := section(base, finality.LevelL1Posted)
+	oneFin := section(base, finality.LevelFinalized)
+	add(genCase{ID: "go/no_settlement_named", Family: "finality_test.go TestFinalityFileNamesWhyItJudgesNothing", Doc: docOf(oneFin), Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/no_section", Family: "finality_test.go", Doc: `{"format":"certen-proof-v2-accumulate-portable/1"}`, Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/section_null", Family: "finality_test.go", Doc: `{"format":"certen-proof-v2-accumulate-portable/1","finality":null}`, Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/top_level_null", Family: "encoding/json", Doc: `null`, Registry: "empty", Pins: "embedded"})
+	oldFlat, _ := json.Marshal(map[string]any{"finality": good.Addenda})
+	add(genCase{ID: "go/old_flat_array", Family: "finality_test.go", Doc: string(oldFlat), Registry: "empty", Pins: "embedded"})
+	badDigest, _ := json.Marshal(map[string]any{"finality": map[string]any{"format": "certen-finality-addenda/1", "originalProofDigest": "00", "addenda": []any{}}})
+	add(genCase{ID: "go/withdrawn_member", Family: "finality_test.go", Doc: string(badDigest), Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/not_a_document_array", Family: "finality_test.go", Doc: `[1,2]`, Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/not_json", Family: "encoding/json", Doc: `{`, Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/empty_input", Family: "encoding/json", Doc: ``, Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/case_folded_member", Family: "encoding/json", Doc: strings.Replace(docOf(oneFin), `"finality"`, `"FINALITY"`, 1), Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/member_last_wins", Family: "encoding/json", Doc: `{"finality":null,"finality":` + mustMarshal(t, oneFin) + `}`, Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/member_null_after", Family: "encoding/json", Doc: `{"finality":` + mustMarshal(t, oneFin) + `,"finality":null}`, Registry: "empty", Pins: "embedded"})
+
+	add(genCase{ID: "go/chain_verifies_to_finalized", Family: "finality_test.go TestFinalityFileIsJudgedAgainstTheNamedSettlement", Doc: docOf(good), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "go/one_level_l1_posted", Family: "finality_test.go", Doc: docOf(one), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "go/one_level_finalized", Family: "finality_test.go", Doc: docOf(oneFin), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	bad := good
+	bad.Leg.BlockNumber++
+	add(genCase{ID: "go/altered_leg_member", Family: "finality_test.go", Doc: docOf(bad), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	other := base.Block()
+	other.Number++
+	forged := finality.NewSection(base.Block(), chainFor(t, base, pid, finality.LegBindingOf(other), finality.LevelFinalized))
+	add(genCase{ID: "go/forged_d0", Family: "finality_test.go", Doc: docOf(forged), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "go/unknown_kinds_summary_only", Family: "finality_test.go", Doc: docOf(good), Settlement: "base_sepolia_47368146", Registry: "empty", Pins: "embedded"})
+	add(genCase{ID: "go/settlement_of_another_block", Family: "finality_test.go", Doc: docOf(good), Settlement: "telcoin_adiri_498759", Registry: "fake_base", Pins: "embedded"})
+	outcomeS := finality.Settlement{Chain: outcomeLeg.chain, Included: outcomeLeg.s}
+	outcomeS.Subject, _ = finality.SubjectOfSettlement(outcomeLeg.s)
+	outBlock, err := finality.DeriveIncluded(outcomeLeg.chain, outcomeLeg.s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	osec := finality.NewSection(outBlock, chainFor(t, outcomeS, pid, finality.LegBindingOf(outBlock), finality.LevelL1Posted))
+	raw, _ := json.Marshal(map[string]any{"finality": osec})
+	add(genCase{ID: "go/outcome_file_settlement", Family: "finality_test.go TestFinalityFileSettlementFromAnExportedOutcomeEvidenceFile", Doc: string(raw), Settlement: "outcome_84532", Registry: "fake_base", Pins: "embedded"})
+
+	// extra rules of the chain/framework judged through the document path
+	tw := func(f func(s *finality.Section)) string {
+		s := section(base, finality.LevelL1Posted, finality.LevelFinalized)
+		f(&s)
+		return docOf(s)
+	}
+	add(genCase{ID: "extra/seq_gap", Family: "report path", Doc: tw(func(s *finality.Section) { s.Addenda[1].Seq = 3 }), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "extra/prev_hash", Family: "report path", Doc: tw(func(s *finality.Section) { s.Addenda[1].PrevHash[0] ^= 1 }), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "extra/level_duplicate", Family: "report path", Doc: tw(func(s *finality.Section) { s.Addenda = append(s.Addenda, s.Addenda[0]) }), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "extra/empty_chain", Family: "report path", Doc: tw(func(s *finality.Section) { s.Addenda = nil }), Settlement: "base_sepolia_47368146", Registry: "fake_base", Pins: "embedded"})
+	settlementByName["base_as_chain_1"] = &legSettlement{chain: 1, s: base.Included, source: "test"}
+	exportSettlement("base_as_chain_1", 1, base.Included, nil)
+	add(genCase{ID: "extra/chain_1_unsupported", Family: "report path", Doc: docOf(good), Settlement: "base_as_chain_1", Registry: "fake_base", Pins: "embedded"})
+	badS := *base.Included
+	badS.TxHash[0] ^= 1
+	settlementByName["base_tx_hash_flipped"] = &legSettlement{chain: finality.ChainBaseSepolia, s: &badS, source: "test"}
+	exportSettlement("base_tx_hash_flipped", base.Chain, &badS, nil)
+	add(genCase{ID: "extra/settlement_does_not_verify", Family: "report path", Doc: docOf(good), Settlement: "base_tx_hash_flipped", Registry: "fake_base", Pins: "embedded"})
+	add(genCase{ID: "extra/pending_not_applicable", Family: "report path", Doc: docOf(one), Settlement: "base_sepolia_47368146", Registry: "all", Pins: "embedded"})
+
+	// ---- B: the e2e legs with their REAL evidence ----
+	for _, l := range e2eLegs(t) {
+		file := l.settle
+		if file == "" {
+			file = l.name
+		}
+		s := settlementOf(t, l)
+		rawFile := readFileT(t, filepath.Join(e2eData, file+".json"))
+		if _, err := os.Stat(filepath.Join(outDir, "settlements", file+".json")); err != nil {
+			exportSettlement(file, s.Chain, nil, rawFile)
+		}
+		settlementByName[file] = &legSettlement{chain: s.Chain, s: s.Included, source: "test"}
+		praw := legPinsRaw(t, l.name)
+		pp, err := finality.ParsePinsOverride(praw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pp.SHA256() != l.pins.SHA256() {
+			t.Fatalf("%s: pins bytes differ from the leg's pins", l.name)
+		}
+		if err := os.WriteFile(filepath.Join(outDir, "pins", l.name+".json"), praw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		pinsByName[l.name] = pp
+		sec := finality.NewSection(s.Block(), []finality.Addendum{mustAddendum(t, s, l)})
+		add(genCase{ID: "e2e/" + l.name + "/vector_pins", Family: "finality_e2e_pos_test.go", Doc: docOf(sec), Settlement: file, Registry: "all", Pins: l.name, Kind: l.kind})
+		add(genCase{ID: "e2e/" + l.name + "/embedded_pins", Family: "finality_e2e_pos_test.go", Doc: docOf(sec), Settlement: file, Registry: "all", Pins: "embedded", Kind: l.kind})
+	}
+	writeJSON(t, filepath.Join(outDir, "cases.json"), map[string]any{"cases": cases})
+
+	// ---- C: printReport over synthetic reports (finality_pins_class_test.go and the rest of printReport's branches) ----
+	h := strings.Repeat("ab", 32)
+	mk := func(levels map[string]synthLevel, headline string) synthReport {
+		return synthReport{Chain: 11155111, Number: 1, Hash: h, Levels: levels, Headline: headline, PinsSHA: "00ff", PinsSource: "embedded"}
+	}
+	ver := synthLevel{Status: "verified"}
+	st := func(code string, kv ...any) *synthState {
+		f := map[string]any{}
+		for i := 0; i < len(kv); i += 2 {
+			f[kv[i].(string)] = kv[i+1]
+		}
+		return &synthState{Code: code, Fields: f}
+	}
+	refused := func(s *synthState) synthLevel { return synthLevel{Status: "refused", State: s} }
+	pending := synthLevel{Status: "pending", State: st("finality_pending", "level", "included", "reason", "no_evidence_in_file", "chain", 84532, "pending", "l1_posted")}
+	na := synthLevel{Status: "level_not_applicable", State: st("finality_level_not_applicable", "chain", 1, "level", "l1_posted")}
+	var synth []genSynth
+	addSynth := func(id, note string, r synthReport) {
+		var out bytes.Buffer
+		code := printReport(&out, toReport(r), "leg")
+		synth = append(synth, genSynth{ID: id, Note: note, Report: r, Expect: genRun{Exit: code, Text: out.String()}})
+	}
+	for _, c := range []struct {
+		name string
+		st   *synthState
+	}{
+		{"ledger_behind", st("finality_ledger_behind", "needed_period", 1391, "ledger_head_period", 1378)},
+		{"pin_unknown", st("finality_pin_unknown", "period", 1300)},
+		{"unrecognised_kind", st("finality_evidence_unrecognised", "kind", "x/y/v9", "version", "v9")},
+		{"wrapped_ledger_behind", st("l1_finality_unproven", "reason", "lc_refused", "inner", "finality_ledger_behind")},
+		{"wrapped_pin_unknown", st("l1_finality_unproven", "reason", "lc_refused", "inner", "finality_pin_unknown")},
+		{"wrapped_signature", st("l1_finality_unproven", "reason", "lc_refused", "inner", "finality_signature_invalid")},
+		{"signature_invalid", st("finality_signature_invalid", "index", 0)},
+		{"pin_mismatch", st("finality_pin_mismatch", "period", 1378)},
+		{"wrapper_without_inner", st("l1_finality_unproven", "reason", "lc_refused")},
+		{"no_state_at_all", nil},
+	} {
+		lv := refused(c.st)
+		addSynth("class/"+c.name, "finality_pins_class_test.go", mk(map[string]synthLevel{"included": ver, "finalized": lv}, "included"))
+	}
+	addSynth("branch/verified_finalized", "printReport", mk(map[string]synthLevel{"included": ver, "l1_posted": ver, "finalized": ver}, "finalized"))
+	{
+		r := mk(map[string]synthLevel{"included": ver, "l1_posted": ver, "finalized": ver}, "finalized")
+		r.FinBlock = &synthFinBlock{Number: 7, Hash: strings.Repeat("cd", 32), StateRoot: strings.Repeat("ef", 32)}
+		addSynth("branch/verified_finalized_with_finalized_block", "printReport", r)
+		r2 := r
+		r2.FinBlockSt = st("finality_finalized_block_unavailable", "chain", 11155111, "reason", "no_header")
+		addSynth("branch/finalized_block_state", "printReport", r2)
+	}
+	addSynth("branch/pending_and_na", "printReport", mk(map[string]synthLevel{"included": ver, "l1_posted": pending, "finalized": na}, "included"))
+	{
+		r := mk(map[string]synthLevel{}, "none")
+		r.Unsupported = st("finality_chain_unsupported", "chain", 1)
+		addSynth("branch/unsupported", "printReport", r)
+	}
+	addSynth("branch/included_refused", "printReport", mk(map[string]synthLevel{"included": refused(st("finality_included_invalid", "chain", 84532, "cause", "x"))}, "none"))
+	{
+		r := mk(map[string]synthLevel{"included": ver, "l1_posted": refused(st("finality_chain_broken", "seq", 1, "check", "own_hash")), "finalized": refused(st("finality_chain_broken", "seq", 1, "check", "own_hash"))}, "included")
+		r.Broken = st("finality_chain_broken", "seq", 1, "check", "own_hash")
+		addSynth("branch/broken", "printReport", r)
+	}
+	addSynth("branch/mixed_failed_and_summary", "worseExit", mk(map[string]synthLevel{"included": ver, "l1_posted": refused(st("finality_pin_unknown", "period", 1)), "finalized": refused(st("finality_signature_invalid", "index", 2))}, "included"))
+	addSynth("branch/mixed_summary_after_failed", "worseExit", mk(map[string]synthLevel{"included": ver, "l1_posted": refused(st("finality_signature_invalid", "index", 2)), "finalized": refused(st("finality_pin_unknown", "period", 1))}, "included"))
+	writeJSON(t, filepath.Join(outDir, "synthetic.json"), map[string]any{"reports": synth})
+
+	fmt.Printf("SURFACE-GEN cases=%d synthetic=%d sha(cases)=%s\n", len(cases), len(synth), sha([]byte(fmt.Sprint(len(cases)))))
+}

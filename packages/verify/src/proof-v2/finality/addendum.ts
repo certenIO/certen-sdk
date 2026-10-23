@@ -389,7 +389,12 @@ const legKeys = ['chain', 'blockNumber', 'blockHash'] as const;
  * are judged in schema order: format, leg, addenda.
  */
 export function parseSection(raw: Uint8Array | string): Section {
-  const m = strictObject(parseDoc(raw, 'finality'), 'finality', sectionKeys);
+  return parseSectionValue(parseDoc(raw, 'finality'));
+}
+
+/** parseSection over a value already read by the strict reader (the member of a document read as Go reads it: see docreport.ts). */
+export function parseSectionValue(value: JVal): Section {
+  const m = strictObject(value, 'finality', sectionKeys);
   const format = strictString(m.get('format'), 'format');
   if (format !== SECTION_FORMAT) throw addendumMalformed('format', AddendumReason.WrongFormat);
   const lm = strictObject(m.get('leg') as JVal, 'leg', legKeys);

@@ -1,0 +1,921 @@
+{
+ "cases": [
+  {
+   "id": "go/no_settlement_named",
+   "family": "finality_test.go TestFinalityFileNamesWhyItJudgesNothing",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"8f4623fa13a297257e4252cd7f234a5aad43bba8b52f2ae6cbc1a1c794921866\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  finality_included_unavailable{chain=\"84532\",reason=\"no_settlement_to_recompute_d0\"}\n  S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: --outcome-file, or --proof-id with --db)\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  finality_included_unavailable{chain=\"84532\",reason=\"no_settlement_to_recompute_d0\"}\n  S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: --outcome-file, or --proof-id with --db)\n"
+   }
+  },
+  {
+   "id": "go/no_section",
+   "family": "finality_test.go",
+   "doc": "{\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   }
+  },
+  {
+   "id": "go/section_null",
+   "family": "finality_test.go",
+   "doc": "{\"format\":\"certen-proof-v2-accumulate-portable/1\",\"finality\":null}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   }
+  },
+  {
+   "id": "go/top_level_null",
+   "family": "encoding/json",
+   "doc": "null",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   }
+  },
+  {
+   "id": "go/old_flat_array",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  finality_addendum_malformed{field=\"finality\",reason=\"not_json\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  finality_addendum_malformed{field=\"finality\",reason=\"not_json\"}\n"
+   }
+  },
+  {
+   "id": "go/withdrawn_member",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"addenda\":[],\"format\":\"certen-finality-addenda/1\",\"originalProofDigest\":\"00\"}}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  finality_addendum_malformed{field=\"finality\",key=\"originalProofDigest\",reason=\"unknown_key\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  finality_addendum_malformed{field=\"finality\",key=\"originalProofDigest\",reason=\"unknown_key\"}\n"
+   }
+  },
+  {
+   "id": "go/not_a_document_array",
+   "family": "finality_test.go",
+   "doc": "[1,2]",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  not a portable document: json: cannot unmarshal array into Go value of type struct { Finality json.RawMessage \"json:\\\"finality\\\"\" }\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  not a portable document: json: cannot unmarshal array into Go value of type struct { Finality json.RawMessage \"json:\\\"finality\\\"\" }\n"
+   }
+  },
+  {
+   "id": "go/not_json",
+   "family": "encoding/json",
+   "doc": "{",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  not a portable document: unexpected end of JSON input\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  not a portable document: unexpected end of JSON input\n"
+   }
+  },
+  {
+   "id": "go/empty_input",
+   "family": "encoding/json",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  not a portable document: unexpected end of JSON input\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  not a portable document: unexpected end of JSON input\n"
+   }
+  },
+  {
+   "id": "go/case_folded_member",
+   "family": "encoding/json",
+   "doc": "{\"FINALITY\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"8f4623fa13a297257e4252cd7f234a5aad43bba8b52f2ae6cbc1a1c794921866\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  finality_included_unavailable{chain=\"84532\",reason=\"no_settlement_to_recompute_d0\"}\n  S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: --outcome-file, or --proof-id with --db)\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  finality_included_unavailable{chain=\"84532\",reason=\"no_settlement_to_recompute_d0\"}\n  S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: --outcome-file, or --proof-id with --db)\n"
+   }
+  },
+  {
+   "id": "go/member_last_wins",
+   "family": "encoding/json",
+   "doc": "{\"finality\":null,\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"8f4623fa13a297257e4252cd7f234a5aad43bba8b52f2ae6cbc1a1c794921866\"}]}}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  finality_included_unavailable{chain=\"84532\",reason=\"no_settlement_to_recompute_d0\"}\n  S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: --outcome-file, or --proof-id with --db)\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  finality_included_unavailable{chain=\"84532\",reason=\"no_settlement_to_recompute_d0\"}\n  S7  carried leg: chain 84532 block 47368146 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942; 1 addenda are not judged (name the Settlement: --outcome-file, or --proof-id with --db)\n"
+   }
+  },
+  {
+   "id": "go/member_null_after",
+   "family": "encoding/json",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"8f4623fa13a297257e4252cd7f234a5aad43bba8b52f2ae6cbc1a1c794921866\"}]},\"finality\":null}",
+   "settlement": "",
+   "chain": "",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  DOC\n  the document carries no finality section: no level beyond the proof itself is evidenced.\n"
+   }
+  },
+  {
+   "id": "go/chain_verifies_to_finalized",
+   "family": "finality_test.go TestFinalityFileIsJudgedAgainstTheNamedSettlement",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47368146 hash 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942 stateRoot c4af6855da2519b19b797169b4923b85dd6ff6af1b419b7ca703b72de0a98351\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47368146 hash 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942 stateRoot c4af6855da2519b19b797169b4923b85dd6ff6af1b419b7ca703b72de0a98351\nVERIFIED (finality)  DOC  level finalized\n"
+   }
+  },
+  {
+   "id": "go/one_level_l1_posted",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   }
+  },
+  {
+   "id": "go/one_level_finalized",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"8f4623fa13a297257e4252cd7f234a5aad43bba8b52f2ae6cbc1a1c794921866\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47368146 hash 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942 stateRoot c4af6855da2519b19b797169b4923b85dd6ff6af1b419b7ca703b72de0a98351\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47368146 hash 3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942 stateRoot c4af6855da2519b19b797169b4923b85dd6ff6af1b419b7ca703b72de0a98351\nVERIFIED (finality)  DOC  level finalized\n"
+   }
+  },
+  {
+   "id": "go/altered_leg_member",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368147,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368147\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"}}\n  S7    finalized  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368147\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"}}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368147\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"}}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368147\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"}}\n  S7    finalized  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368147\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"}}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368147\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"}}\n"
+   }
+  },
+  {
+   "id": "go/forged_d0",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"87485e65095d6233d98d25c9731ac2912e763ebce8ab67c8fa6df90321814300\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n  S7    finalized  refused  finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n  S7    finalized  refused  finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n"
+   }
+  },
+  {
+   "id": "go/unknown_kinds_summary_only",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "empty",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_evidence_unrecognised{kind=\"base-sepolia/l1_posted/v1\",version=\"v1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"base-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_evidence_unrecognised{kind=\"base-sepolia/l1_posted/v1\",version=\"v1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"base-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "go/settlement_of_another_block",
+   "family": "finality_test.go",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "telcoin_adiri_498759",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 498759  fb8aa93e7ff0…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0xfb8aa93e7ff0f897f05c204ee3440cf1fd72879e8e3d75f91c3a59043fc8f653\",\"blockNumber\":\"498759\",\"chain\":\"84532\"}}\n  S7    finalized  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0xfb8aa93e7ff0f897f05c204ee3440cf1fd72879e8e3d75f91c3a59043fc8f653\",\"blockNumber\":\"498759\",\"chain\":\"84532\"}}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0xfb8aa93e7ff0f897f05c204ee3440cf1fd72879e8e3d75f91c3a59043fc8f653\",\"blockNumber\":\"498759\",\"chain\":\"84532\"}}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 498759  fb8aa93e7ff0…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0xfb8aa93e7ff0f897f05c204ee3440cf1fd72879e8e3d75f91c3a59043fc8f653\",\"blockNumber\":\"498759\",\"chain\":\"84532\"}}\n  S7    finalized  refused  finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0xfb8aa93e7ff0f897f05c204ee3440cf1fd72879e8e3d75f91c3a59043fc8f653\",\"blockNumber\":\"498759\",\"chain\":\"84532\"}}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"leg_binding\",got={\"blockHash\":\"0x3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\",\"blockNumber\":\"47368146\",\"chain\":\"84532\"},seq=\"0\",want={\"blockHash\":\"0xfb8aa93e7ff0f897f05c204ee3440cf1fd72879e8e3d75f91c3a59043fc8f653\",\"blockNumber\":\"498759\",\"chain\":\"84532\"}}\n"
+   }
+  },
+  {
+   "id": "go/outcome_file_settlement",
+   "family": "finality_test.go TestFinalityFileSettlementFromAnExportedOutcomeEvidenceFile",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47640334,\"blockHash\":\"5d73371b1b75ccd59520119ef5b48a66ec532222e7c55ec813e70c2535877405\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d6ef0e5d73371b1b75ccd59520119ef5b48a66ec532222e7c55ec813e70c253587740562\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"00c158dc6ea10bc5b9b0bd07a4b317221266eaca1aa4938fae69e074af2128ae\"}]}}",
+   "settlement": "outcome_84532",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: outcome evidence ..\\..\\pkg\\execution\\testdata\\outcome_evidence\\outcome_evidence_84532.json\n  S7  chain 84532  block 47640334  5d73371b1b75…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: outcome evidence ..\\..\\pkg\\execution\\testdata\\outcome_evidence\\outcome_evidence_84532.json\n  S7  chain 84532  block 47640334  5d73371b1b75…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   }
+  },
+  {
+   "id": "extra/seq_gap",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":3,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"seq_gap\",seq=\"3\",want=\"2\"}\n  S7    finalized  refused  finality_chain_broken{check=\"seq_gap\",seq=\"3\",want=\"2\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"seq_gap\",seq=\"3\",want=\"2\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"seq_gap\",seq=\"3\",want=\"2\"}\n  S7    finalized  refused  finality_chain_broken{check=\"seq_gap\",seq=\"3\",want=\"2\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"seq_gap\",seq=\"3\",want=\"2\"}\n"
+   }
+  },
+  {
+   "id": "extra/prev_hash",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cffbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"prev_hash\",seq=\"2\"}\n  S7    finalized  refused  finality_chain_broken{check=\"prev_hash\",seq=\"2\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"prev_hash\",seq=\"2\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"prev_hash\",seq=\"2\"}\n  S7    finalized  refused  finality_chain_broken{check=\"prev_hash\",seq=\"2\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"prev_hash\",seq=\"2\"}\n"
+   }
+  },
+  {
+   "id": "extra/level_duplicate",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"seq_gap\",seq=\"1\",want=\"3\"}\n  S7    finalized  refused  finality_chain_broken{check=\"seq_gap\",seq=\"1\",want=\"3\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"seq_gap\",seq=\"1\",want=\"3\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"seq_gap\",seq=\"1\",want=\"3\"}\n  S7    finalized  refused  finality_chain_broken{check=\"seq_gap\",seq=\"1\",want=\"3\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  the addendum chain does not verify: finality_chain_broken{check=\"seq_gap\",seq=\"1\",want=\"3\"}\n"
+   }
+  },
+  {
+   "id": "extra/empty_chain",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":null},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  finality_addendum_malformed{field=\"addenda\",reason=\"bad_value\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "FAILED (finality)  DOC\n  finality_addendum_malformed{field=\"addenda\",reason=\"bad_value\"}\n"
+   }
+  },
+  {
+   "id": "extra/chain_1_unsupported",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_as_chain_1",
+   "chain": "1",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\nSUMMARY-ONLY (finality)  DOC\n  finality_chain_unsupported{chain=\"1\"}\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\nSUMMARY-ONLY (finality)  DOC\n  finality_chain_unsupported{chain=\"1\"}\n"
+   }
+  },
+  {
+   "id": "extra/settlement_does_not_verify",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"},{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":2,\"level\":\"finalized\",\"chain\":84532,\"kind\":\"base-sepolia/finalized/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f66696e616c697a65642f76310000000000014a34030000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\",\"ownHash\":\"98a14182e9d0c79185cc03c46b405886baf192cb39c0e14f8360f3eb02ada4ff\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_tx_hash_flipped",
+   "chain": "84532",
+   "registry": "fake_base",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\nFAILED (finality)  DOC\n  the leg's Settlement does not verify as the included level: finality_included_invalid{cause=\"inclusion proof does not verify: the proven transaction at index 7 is 0x7a2c8522fb60d37e63fa2b68bf1abc69c6a70dd25da501ab21ec02c1b50204e7, not 0x7b2c8522fb60d37e63fa2b68bf1abc69c6a70dd25da501ab21ec02c1b50204e7\",chain=\"84532\"}\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\nFAILED (finality)  DOC\n  the leg's Settlement does not verify as the included level: finality_included_invalid{cause=\"inclusion proof does not verify: the proven transaction at index 7 is 0x7a2c8522fb60d37e63fa2b68bf1abc69c6a70dd25da501ab21ec02c1b50204e7, not 0x7b2c8522fb60d37e63fa2b68bf1abc69c6a70dd25da501ab21ec02c1b50204e7\",chain=\"84532\"}\n"
+   }
+  },
+  {
+   "id": "extra/pending_not_applicable",
+   "family": "report path",
+   "doc": "{\"finality\":{\"format\":\"certen-finality-addenda/1\",\"leg\":{\"chain\":84532,\"blockNumber\":47368146,\"blockHash\":\"3892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de942\"},\"addenda\":[{\"proofId\":\"01020304-0506-4708-8910-111213141516\",\"seq\":1,\"level\":\"l1_posted\",\"chain\":84532,\"kind\":\"base-sepolia/l1_posted/v1\",\"evidence\":\"4346453100000019626173652d7365706f6c69612f6c315f706f737465642f76310000000000014a34020000000002d2c7d23892cf2ea71bb8bbb66b1ce5df138522ef8ce7b6137ec791a23d19d2c58de94262\",\"prevHash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"ownHash\":\"cefbc7d128133af4706ade542632034dee6adca6e689b7186c435d4935c2d7ea\"}]},\"format\":\"certen-proof-v2-accumulate-portable/1\"}",
+   "settlement": "base_sepolia_47368146",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "",
+   "expect_all": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_evidence_malformed{got_len=\"1\",part=\"lc.profile.len\",reason=\"truncated\",want_len=\"4\"}\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  an addendum's evidence is present and does not check out\n"
+   },
+   "expect_without": {
+    "exit": 1,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47368146  3892cf2ea71b…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_evidence_malformed{got_len=\"1\",part=\"lc.profile.len\",reason=\"truncated\",want_len=\"4\"}\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nFAILED (finality)  DOC\n  an addendum's evidence is present and does not check out\n"
+   }
+  },
+  {
+   "id": "e2e/base_posted_a/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_posted_a.json.gz",
+   "settlement": "base_posted_a",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "base_posted_a",
+   "kind": "base-sepolia/l1_posted/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357661  42265a911a2f…  pins d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1 (override:d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357661  42265a911a2f…  pins d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1 (override:d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   }
+  },
+  {
+   "id": "e2e/base_posted_a/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_posted_a.json.gz",
+   "settlement": "base_posted_a",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "base-sepolia/l1_posted/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357661  42265a911a2f…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357661  42265a911a2f…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/base_posted_b/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_posted_b.json.gz",
+   "settlement": "base_posted_b",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "base_posted_b",
+   "kind": "base-sepolia/l1_posted/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357729  cef2de9d296a…  pins d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1 (override:d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357729  cef2de9d296a…  pins d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1 (override:d0697730e6a47c3bd303dbed9055f0dc116daffe8546a066f299a9ac58ff10d1)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   }
+  },
+  {
+   "id": "e2e/base_posted_b/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_posted_b.json.gz",
+   "settlement": "base_posted_b",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "base-sepolia/l1_posted/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357729  cef2de9d296a…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 48357729  cef2de9d296a…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7    finalized  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/base_final_47604755/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_final_47604755.json.gz",
+   "settlement": "base_final_47604755",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "base_final_47604755",
+   "kind": "base-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47604755  56817ce00b78…  pins cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b (override:cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47604755 hash 56817ce00b7884d6ef67c55cd1072ad163b67a3a84f96d9278224d5fe47a03ba stateRoot 902e0520b6c602134eb9473d6af14b0c7fce407da6556b65f7a31367f4c35dc3\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47604755  56817ce00b78…  pins cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b (override:cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47604755 hash 56817ce00b7884d6ef67c55cd1072ad163b67a3a84f96d9278224d5fe47a03ba stateRoot 902e0520b6c602134eb9473d6af14b0c7fce407da6556b65f7a31367f4c35dc3\nVERIFIED (finality)  DOC  level finalized\n"
+   }
+  },
+  {
+   "id": "e2e/base_final_47604755/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_final_47604755.json.gz",
+   "settlement": "base_final_47604755",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "base-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47604755  56817ce00b78…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47604755  56817ce00b78…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/base_final_47898494/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_final_47898494.json.gz",
+   "settlement": "base_final_47898494",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "base_final_47898494",
+   "kind": "base-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47898494  a317d54fd2fd…  pins cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b (override:cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47898494 hash a317d54fd2fd6b301fa08f3d70bcd6b581813289e032b4419eb7ba5c4da0357a stateRoot b859e6a55f2b303cb7b3cce16d788d3402aa9faad13c396ffe9d9e9bfbb70d9e\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47898494  a317d54fd2fd…  pins cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b (override:cd7fc0c0e9c89a0a278e6cdaeaf1d03487489b5aba0d5f565f4af6a9e9ec0d4b)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 47898494 hash a317d54fd2fd6b301fa08f3d70bcd6b581813289e032b4419eb7ba5c4da0357a stateRoot b859e6a55f2b303cb7b3cce16d788d3402aa9faad13c396ffe9d9e9bfbb70d9e\nVERIFIED (finality)  DOC  level finalized\n"
+   }
+  },
+  {
+   "id": "e2e/base_final_47898494/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/base_final_47898494.json.gz",
+   "settlement": "base_final_47898494",
+   "chain": "84532",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "base-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47898494  a317d54fd2fd…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 84532  block 47898494  a317d54fd2fd…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/arb_posted/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/arb_posted.json.gz",
+   "settlement": "arb_posted",
+   "chain": "421614",
+   "registry": "all",
+   "pins": "arb_posted",
+   "kind": "arb-sepolia/l1_posted/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 320996260  83d81943ea8f…  pins d5ad41bafb8bb401287bf9f2732863ebbb965a1b1a0d588a196fbc882c032c20 (override:d5ad41bafb8bb401287bf9f2732863ebbb965a1b1a0d588a196fbc882c032c20)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"421614\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   },
+   "expect_without": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 320996260  83d81943ea8f…  pins d5ad41bafb8bb401287bf9f2732863ebbb965a1b1a0d588a196fbc882c032c20 (override:d5ad41bafb8bb401287bf9f2732863ebbb965a1b1a0d588a196fbc882c032c20)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  pending  finality_pending{chain=\"421614\",level_reached=\"l1_posted\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: l1_posted\nVERIFIED (finality)  DOC  level l1_posted\n"
+   }
+  },
+  {
+   "id": "e2e/arb_posted/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/arb_posted.json.gz",
+   "settlement": "arb_posted",
+   "chain": "421614",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "arb-sepolia/l1_posted/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 320996260  83d81943ea8f…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7    finalized  pending  finality_pending{chain=\"421614\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 320996260  83d81943ea8f…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7    finalized  pending  finality_pending{chain=\"421614\",level_reached=\"included\",next_level=\"finalized\",reason=\"no_evidence_in_file\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/arb_final_real/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/arb_final_real.json.gz",
+   "settlement": "arb_final_real",
+   "chain": "421614",
+   "registry": "all",
+   "pins": "arb_final_real",
+   "kind": "arb-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 321003593  cc692c498ec4…  pins ad24be03f7ffe692fb0a539376bb378621b30c2894c67422ecf18e2fead0585a (override:ad24be03f7ffe692fb0a539376bb378621b30c2894c67422ecf18e2fead0585a)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"421614\",level_reached=\"finalized\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 321003593 hash cc692c498ec4714e59a7d6bcefe91c4bc4a58ff22cb80a69aee73e9b7d42345c stateRoot d0a232453264d22cdf714b17818b9f60d1a41b97b3ab1f07392983e2c1ca9bd1\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 321003593  cc692c498ec4…  pins ad24be03f7ffe692fb0a539376bb378621b30c2894c67422ecf18e2fead0585a (override:ad24be03f7ffe692fb0a539376bb378621b30c2894c67422ecf18e2fead0585a)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"421614\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"arb-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/arb_final_real/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/arb_final_real.json.gz",
+   "settlement": "arb_final_real",
+   "chain": "421614",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "arb-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 321003593  cc692c498ec4…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"421614\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 421614  block 321003593  cc692c498ec4…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"421614\",level_reached=\"included\",next_level=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"arb-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_latest/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_latest.json.gz",
+   "settlement": "eth_gloas_latest",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "eth_gloas_latest",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins 8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5 (override:8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11950125 hash 861d49e2a2bda54652b36dde771fdf9615b116a553aafd38c95fa5bfd54ddfe9 stateRoot 8d6acd845fe11ba5ed2b86a347463089f0763aea00769452a9e9c418878d6a7e\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins 8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5 (override:8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_latest/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_latest.json.gz",
+   "settlement": "eth_gloas_latest",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_ledger_behind{ledger_head_period=\"1378\",needed_period=\"1391\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_period/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_period.json.gz",
+   "settlement": "eth_gloas_period",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "eth_gloas_period",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins 8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5 (override:8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11862203 hash 38d2ed7bb6ce87c6222d2487815b069dd685cd73327df985467f674a299e3e65 stateRoot d9fda1c0db0a6d3d6b39b45d77b37a87321c89e49a1358e515fabaab8ee0889d\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins 8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5 (override:8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_period/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_period.json.gz",
+   "settlement": "eth_gloas_period",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_ledger_behind{ledger_head_period=\"1378\",needed_period=\"1380\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_legacy/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_legacy.json.gz",
+   "settlement": "eth_legacy",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "eth_legacy",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins 8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5 (override:8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11845679 hash 7290e175358ac8fbc09c6056e51258b376b53f466d307ec0ba8edb8949c2e4bc stateRoot 0d9f872bbf3d8e336eef5d37a39a233a7901b21663e79c9946c37bacdcd548e3\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins 8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5 (override:8d914fe42892062ac24e5da9e8b06814950da3820df14f6b31490e895fcf9fe5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_legacy/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_legacy.json.gz",
+   "settlement": "eth_legacy",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11845679 hash 7290e175358ac8fbc09c6056e51258b376b53f466d307ec0ba8edb8949c2e4bc stateRoot 0d9f872bbf3d8e336eef5d37a39a233a7901b21663e79c9946c37bacdcd548e3\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_latest_root_anchored/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_latest_root_anchored.json.gz",
+   "settlement": "eth_gloas_latest",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "eth_gloas_latest_root_anchored",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins 12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5 (override:12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11950125 hash 861d49e2a2bda54652b36dde771fdf9615b116a553aafd38c95fa5bfd54ddfe9 stateRoot 8d6acd845fe11ba5ed2b86a347463089f0763aea00769452a9e9c418878d6a7e\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins 12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5 (override:12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_latest_root_anchored/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_latest_root_anchored.json.gz",
+   "settlement": "eth_gloas_latest",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11950125 hash 861d49e2a2bda54652b36dde771fdf9615b116a553aafd38c95fa5bfd54ddfe9 stateRoot 8d6acd845fe11ba5ed2b86a347463089f0763aea00769452a9e9c418878d6a7e\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11950125  861d49e2a2bd…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_period_root_anchored/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_period_root_anchored.json.gz",
+   "settlement": "eth_gloas_period",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "eth_gloas_period_root_anchored",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins 12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5 (override:12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11862203 hash 38d2ed7bb6ce87c6222d2487815b069dd685cd73327df985467f674a299e3e65 stateRoot d9fda1c0db0a6d3d6b39b45d77b37a87321c89e49a1358e515fabaab8ee0889d\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins 12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5 (override:12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_gloas_period_root_anchored/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_gloas_period_root_anchored.json.gz",
+   "settlement": "eth_gloas_period",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11862203 hash 38d2ed7bb6ce87c6222d2487815b069dd685cd73327df985467f674a299e3e65 stateRoot d9fda1c0db0a6d3d6b39b45d77b37a87321c89e49a1358e515fabaab8ee0889d\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11862203  38d2ed7bb6ce…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_legacy_root_anchored/vector_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_legacy_root_anchored.json.gz",
+   "settlement": "eth_legacy",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "eth_legacy_root_anchored",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins 12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5 (override:12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11845679 hash 7290e175358ac8fbc09c6056e51258b376b53f466d307ec0ba8edb8949c2e4bc stateRoot 0d9f872bbf3d8e336eef5d37a39a233a7901b21663e79c9946c37bacdcd548e3\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins 12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5 (override:12217758b3a8074a07873cd3d26cc46edab7782d31f393d7f540c3e3077062d5)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  },
+  {
+   "id": "e2e/eth_legacy_root_anchored/embedded_pins",
+   "family": "finality_e2e_pos_test.go",
+   "doc_file": "docs/eth_legacy_root_anchored.json.gz",
+   "settlement": "eth_legacy",
+   "chain": "11155111",
+   "registry": "all",
+   "pins": "embedded",
+   "kind": "eth-sepolia/finalized/v1",
+   "expect_all": {
+    "exit": 0,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 11845679 hash 7290e175358ac8fbc09c6056e51258b376b53f466d307ec0ba8edb8949c2e4bc stateRoot 0d9f872bbf3d8e336eef5d37a39a233a7901b21663e79c9946c37bacdcd548e3\nVERIFIED (finality)  DOC  level finalized\n"
+   },
+   "expect_without": {
+    "exit": 3,
+    "text": "  S7  Settlement source: test\n  S7  chain 11155111  block 11845679  7290e175358a…  pins fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440 (embedded)\n  S7    included   verified\n  S7    l1_posted  level_not_applicable  level_not_applicable{chain=\"11155111\",level=\"l1_posted\",reason=\"this chain is the L1\"}\n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"eth-sepolia/finalized/v1\",version=\"v1\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  DOC\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   }
+  }
+ ]
+}
