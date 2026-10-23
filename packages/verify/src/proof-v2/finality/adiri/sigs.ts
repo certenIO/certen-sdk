@@ -231,7 +231,7 @@ function combinationHolds(terms: readonly Term[], n: number): boolean {
  * only localised (by bisection over prefixes of the SAME combination, then one individual check of the item found), never accepted by
  * the localisation.
  */
-export function firstFailure(items: readonly SigItem[], mode: Mode, rnd: Rand = randomBytes): Failure | undefined {
+export function firstFailure(items: readonly SigItem[], mode: Mode = 'batched', rnd: Rand = randomBytes): Failure | undefined {
   if (items.length === 0) return undefined;
   if (mode === 'oneByOne') return firstOneByOne(items);
   // every signature is decoded and checked before it enters the combination

@@ -263,8 +263,9 @@ describe('the Adiri pins', () => {
     expect(withMut((m) => (m.genesis_committee = Array.from({ length: 256 }, () => k))).fields.key).toBe('adiri.genesis_committee');
   });
 
-  it('the numeric pins: chain_id, min_committee_size and max_headers must be positive; the link hash 64 characters', () => {
-    expect(parsePins(pinsOfSection({ ...embedded(), min_committee_size: 1 })).minCommittee).toBe(1n);
+  it('the numeric pins: chain_id and max_headers must be positive, min_committee_size at least four; the link hash 64 characters', () => {
+    // RB11-F1-FIX b2d2835: the smallest valid min_committee_size is Telcoin shrink floor of four (units_f1fix.test.ts pins 3, 2, 1, 0, -1 as refused)
+    expect(parsePins(pinsOfSection({ ...embedded(), min_committee_size: 4 })).minCommittee).toBe(4n);
     expect(parsePins(pinsOfSection({ ...embedded(), max_headers: 1 })).maxHeaders).toBe(1n);
     expect(parsePins(pinsOfSection({ ...embedded(), chain_id: 1 })).chainId).toBe(1n);
     expect(key(withMut((m) => (m.min_committee_size = -3)))).toBe('adiri.min_committee_size');

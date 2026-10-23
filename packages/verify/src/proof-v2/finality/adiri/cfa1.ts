@@ -38,6 +38,32 @@ export interface CFA1 {
   records: EpochRec[];
 }
 
+/**
+ * The table-index rule of record i: both indices name a table. decodeCFA1 applies it as it reads, and verifyCommitteeChain and recordDigests
+ * (both exported, both judge any CFA1) apply it again before they index the tables. An index that is not a table position at all (negative,
+ * fractional, NaN: possible only in a hand-built record, never in a decoded one) is refused like an index past the tables.
+ */
+export function checkRecordTables(i: number, rec: Pick<EpochRec, 'committeeIdx' | 'nextIdx'>, nTables: number): void {
+  const bad = (x: number): boolean => !Number.isInteger(x) || x < 0 || x >= nTables;
+  if (bad(rec.committeeIdx) || bad(rec.nextIdx)) {
+    const got = Math.max(rec.committeeIdx, rec.nextIdx);
+    throw malformedAt('cfa1.record', i, ReasonCFA1TableIndexOutOfRange, Number.isFinite(got) ? Math.trunc(got) : 0, nTables);
+  }
+}
+
+/**
+ * The signer rule of record i: the indices are strictly increasing and below the committee size, so that no signer is counted twice and none
+ * names a key outside the committee. Same callers as checkRecordTables.
+ */
+export function checkRecordSigners(i: number, signers: ArrayLike<number>, committeeSize: number): void {
+  for (let j = 0; j < signers.length; j++) {
+    const s = signers[j]!;
+    if (s >= committeeSize || (j > 0 && s <= signers[j - 1]!)) {
+      throw chainBroken(i, CheckSignerIndexInvalid, { index: BigInt(j), signer: BigInt(s), committee_size: BigInt(committeeSize) });
+    }
+  }
+}
+
 /** Record i's committee (a table), or undefined when the index is out of range. */
 export function committeeOf(c: CFA1, i: number): Uint8Array[] | undefined {
   if (i < 0 || i >= c.records.length || c.records[i]!.committeeIdx >= c.tables.length) return undefined;
@@ -109,9 +135,7 @@ export function decodeCFA1(b: Uint8Array, lim: Limits): CFA1 {
   for (let i = 0; i < nRec; i++) {
     const committeeIdx = r.u8('cfa1.record.committee_idx');
     const nextIdx = r.u8('cfa1.record.next_idx');
-    if (committeeIdx >= nTables || nextIdx >= nTables) {
-      throw malformedAt('cfa1.record', i, ReasonCFA1TableIndexOutOfRange, Math.max(committeeIdx, nextIdx), nTables);
-    }
+    checkRecordTables(i, { committeeIdx, nextIdx }, nTables);
     const fsNumber = r.u64('cfa1.record.final_state.number');
     const fsHash = r.b32('cfa1.record.final_state.hash');
     const fcNumber = r.u64('cfa1.record.final_consensus.number');
@@ -119,13 +143,7 @@ export function decodeCFA1(b: Uint8Array, lim: Limits): CFA1 {
     const signature = r.fixed('cfa1.record.signature', SigBytes);
     const ns = r.u8('cfa1.record.n_signers');
     const signers = r.fixed('cfa1.record.signers', ns);
-    const size = tables[committeeIdx]!.length;
-    for (let j = 0; j < signers.length; j++) {
-      const s = signers[j]!;
-      if (s >= size || (j > 0 && s <= signers[j - 1]!)) {
-        throw chainBroken(i, CheckSignerIndexInvalid, { index: BigInt(j), signer: BigInt(s), committee_size: BigInt(size) });
-      }
-    }
+    checkRecordSigners(i, signers, tables[committeeIdx]!.length);
     records.push({
       committeeIdx,
       nextIdx,

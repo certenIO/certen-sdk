@@ -14,10 +14,12 @@ function setup(specs: RecSpec[], opts: { min?: number; codec?: string; genesis?:
     genesisCommittee: opts.genesis ?? specs[0]!.committee,
     epoch0Number: opts.e0Number ?? specs[0]!.fsNumber,
     epoch0Hash: opts.e0Hash ?? chain.cfa1.records[0]!.finalState.hash,
-    minCommittee: opts.min ?? 4,
+    // parsePins refuses a min_committee_size below Telcoin's floor of four (units_f1fix.test.ts pins that); the chain judges against ANY Params,
+    // and these tests pin its arithmetic (quorum, the two-thirds shrink) at committee sizes below the floor, so the requested value is set after the parse
+    minCommittee: Math.max(opts.min ?? 4, 4),
     codec: opts.codec,
   });
-  return { chain, par: parsePins(pinsOfSection(section)) };
+  return { chain, par: { ...parsePins(pinsOfSection(section)), minCommittee: BigInt(opts.min ?? 4) } };
 }
 
 function broken(f: () => unknown): string {

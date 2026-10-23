@@ -8,7 +8,7 @@ import { JNum, JObj, type JVal } from '../../../s3/jsonx.js';
 import type { Pins } from '../pins.js';
 import { Code, PinsReason, newState, pinsCorrupt, type FinalityStateError } from '../state.js';
 import { ChainAdiri } from '../table.js';
-import { KeyBytes, type CFA1, type EpochRec } from './cfa1.js';
+import { KeyBytes, checkRecordTables, type CFA1, type EpochRec } from './cfa1.js';
 import type { NumHash } from './states.js';
 
 /** The one record encoding this verifier implements; a pin that names another is epoch_record_codec_unsupported. */
@@ -82,12 +82,20 @@ export function recordDigests(c: CFA1): Uint8Array[] {
   const out: Uint8Array[] = [];
   let parent: Uint8Array = new Uint8Array(32);
   c.records.forEach((r: EpochRec, i: number) => {
+    checkRecordTables(i, r, c.tables.length);
     const d = digestOf(bcsRecord(i, c.tables[r.committeeIdx]!, c.tables[r.nextIdx]!, parent, r.finalState, r.finalConsensus));
     out.push(d);
     parent = d;
   });
   return out;
 }
+
+/**
+ * The least min_committee_size a pin may carry: Telcoin's own rule lets a committee shrink only to at least 4 members (annex A4: "when
+ * smaller: len >= 4"; V2_SPEC_S7 4.2 pins 4). A pin is a user's strictness on top of that rule, never a relaxation of it: a pin of 3 would
+ * accept committee chains Telcoin itself refuses.
+ */
+export const MinCommitteeFloor = 4;
 
 /** The Adiri pins of V2_SPEC_S7 4.2. */
 export interface Params {
@@ -268,7 +276,7 @@ export function parsePins(p: Pins | null | undefined): Params {
   const maxHeaders = big(j, 'max_headers');
   for (const [isBad, key] of [
     [chainId === 0n, 'adiri.chain_id'],
-    [minCommittee < 1n, 'adiri.min_committee_size'],
+    [minCommittee < BigInt(MinCommitteeFloor), 'adiri.min_committee_size'],
     [maxHeaders < 1n, 'adiri.max_headers'],
   ] as const) {
     if (isBad) throw bad(key);
