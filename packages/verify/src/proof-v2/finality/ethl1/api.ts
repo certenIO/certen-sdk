@@ -2,7 +2,7 @@
  * The exported helpers of the L1 head verifier that the vector generators and the kinds use (the twin of pkg/finality/ethl1/api.go),
  * and the conversion of the framework's parsed `eth_sepolia` pins section into this verifier's Pins.
  */
-import type { EthSepoliaPins } from '../pins.js';
+import type { AnchorPin, EthSepoliaPins } from '../pins.js';
 import { pinsCorrupt, PinsReason } from '../state.js';
 import { computeDomain, signingRoot } from './bls.js';
 import { decodeLC } from './lccodec.js';
@@ -90,11 +90,12 @@ const layoutOf = (name: string | null): LayoutByte => (name === 'electra' ? Layo
 
 /**
  * The L1 head verifier's Pins from the framework's parsed `eth_sepolia` section (loadPins output): the fork schedule with its layouts
- * ("electra" and "gloas"; null is Layout.None), the ledger (an empty block_root is no block root) and the bounds.
+ * ("electra" and "gloas"; null is Layout.None), the ledger (an empty block_root is no block root) and the bounds. `ledger` replaces
+ * the section's own anchors (the twin of EthSepoliaPins.L1Pins(anchors): the ledger judges one step with a two-entry list).
  */
-export function ethl1PinsFrom(e: EthSepoliaPins): Pins {
+export function ethl1PinsFrom(e: EthSepoliaPins, ledger: readonly AnchorPin[] = e.anchors): Pins {
   const forks: Fork[] = e.forks.map((f) => ({ name: f.name, epoch: f.epoch, version: hexBytes(f.version, 4, 'version'), layout: layoutOf(f.layout) }));
-  const anchors: Anchor[] = e.anchors.map((a) => ({
+  const anchors: Anchor[] = ledger.map((a) => ({
     period: a.period,
     committeeRoot: hexBytes(a.committeeRoot, 32, 'committee_root'),
     blockRoot: a.blockRoot === '' ? null : hexBytes(a.blockRoot, 32, 'block_root'),

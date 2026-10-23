@@ -71,16 +71,22 @@ const keyString = (b: Uint8Array): string => {
 };
 
 /**
- * The decoded public keys of one verification, by their 48 compressed bytes. Whether a key is valid is a function of its bytes alone,
- * so a key met again (in the committee that is `next` and later `current`, or in a neighbouring period) is decoded and subgroup-checked
- * once; a refusal is cached too. A cache may be shared by several verifications.
+ * The decoded public keys, by their 48 compressed bytes. Whether a key is valid is a function of its bytes alone, so a key met again (in the
+ * committee that is `next` and later `current`, in a neighbouring period, or in a later verification against the same committee) is
+ * decoded and subgroup-checked once; a refusal is cached too. A cache may be shared by several verifications. `max` bounds the number of
+ * distinct keys held (least recently used first out); the default is unbounded, which is what a cache of one verification wants.
  */
 export class KeyCache {
   private readonly m = new Map<string, G1Point | Error>();
-  /** how many distinct keys were decoded (valid or not) */
+  constructor(private readonly max: number = Number.POSITIVE_INFINITY) {
+    if (!(max >= 1)) throw new Error('KeyCache: max must be at least 1');
+  }
+  /** how many distinct keys are held (valid or not) */
   get decoded(): number {
     return this.m.size;
   }
+  /** how many keys were decoded in the life of this cache (an evicted key that returns is decoded again and counted again) */
+  decodes = 0;
   key(raw: Uint8Array): G1Point {
     const k = keyString(raw);
     let v = this.m.get(k);
@@ -90,11 +96,35 @@ export class KeyCache {
       } catch (e) {
         v = e instanceof Error ? e : new Error(String(e));
       }
+      this.decodes++;
+      if (this.m.size >= this.max) this.m.delete(this.m.keys().next().value!);
+      this.m.set(k, v);
+    } else if (this.max !== Number.POSITIVE_INFINITY) {
+      this.m.delete(k);
       this.m.set(k, v);
     }
     if (v instanceof Error) throw v;
     return v;
   }
+}
+
+/** Keys the process-wide cache holds: eight committees of 512 seats (about 4 MB of decoded points). */
+export const DEFAULT_KEY_CACHE_KEYS = 8 * SyncCommitteeSize;
+
+let sharedKeyCache: KeyCache | undefined;
+
+/**
+ * The cache a verification uses when its caller supplies none: process-wide and bounded, so decoding the keys of a sync committee (the
+ * cost of a verification beside the pairing) happens once per committee between calls and never grows without bound. A fresh cache
+ * answers every call identically, so the verdicts do not depend on what an earlier call left here.
+ */
+export function defaultKeyCache(): KeyCache {
+  return (sharedKeyCache ??= new KeyCache(DEFAULT_KEY_CACHE_KEYS));
+}
+
+/** Empties the process-wide cache (tests, and a caller that wants to release the memory). */
+export function resetDefaultKeyCache(): void {
+  sharedKeyCache = undefined;
 }
 
 /** A sync committee with its root; its keys are decoded lazily through the cache. */

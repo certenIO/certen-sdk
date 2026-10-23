@@ -13,6 +13,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { JsonError } from '../../s3/gojson.js';
 import { JNum, JObj, parseGoJson, type JVal } from '../../s3/jsonx.js';
 import { EMBEDDED_PINS_TEXT } from './pins-embedded.js';
+import { EpochsPerPeriod, SyncCommitteeSize } from './ethl1/types.js';
 import { ChainSepolia } from './table.js';
 import { MAX_U64 } from './addendum.js';
 import { Code, PinsReason, cmpUtf8, hexLower, newState, pinsCorrupt } from './state.js';
@@ -31,6 +32,15 @@ export const PINS_SOURCE_EMBEDDED = 'embedded';
 
 /** The smallest valid wsp_epochs of a ledger anchor (V2_SPEC_S7 5.2 step 3, r2:F10). */
 export const MIN_WSP_EPOCHS = 256n;
+
+/**
+ * The consensus specification the light-client objects and the fork layouts of the L1 head verifier follow, and the genesis time of the
+ * Sepolia beacon chain (V2_SPEC_S7 4.2): the eth_sepolia section must carry exactly these (twin of SepoliaSpecPin, SepoliaGenesisTime).
+ */
+export const SEPOLIA_SPEC_PIN = 'consensus-specs v1.7.0-beta.4 aa16bb4c';
+export const SEPOLIA_GENESIS_TIME = 1655733600n;
+/** The V2_SPEC_S7 8.2 bound on max_links (64 links): a pin above it is refused (twin of MaxLinksBound). */
+export const MAX_LINKS_BOUND = 64n;
 
 /** A row of the Sepolia fork table; layout is null for the forks no evidence object can belong to. */
 export interface ForkPin {
@@ -104,6 +114,8 @@ export interface Pins {
   /** the SHA-256 of the raw bytes this Pins was loaded from */
   sha256: Uint8Array;
   source: string;
+  /** the bytes this Pins was parsed from (Extend compares non-ledger content against them); absent on a Pins built by hand */
+  raw?: Uint8Array;
 }
 
 /** (pins_sha256 hex, pins_source) for a report. A null Pins is ("", "none"). */
@@ -286,6 +298,17 @@ function validateSepolia(e: Record<string, unknown>): EthSepoliaPins {
   ] as const) {
     if (!ok) throw pinsCorrupt(PinsReason.BoundMissing, { key });
   }
+  // What the L1 head verifier runs on is not configurable: a pin that says otherwise would describe a network and a spec the verifier does
+  // not judge under, so it is refused by name instead of being parsed and ignored (pins.go validate, V-C2-A1 info).
+  for (const [key, ok] of [
+    ['sync_committee_size', size === BigInt(SyncCommitteeSize)],
+    ['epochs_per_period', epp === EpochsPerPeriod],
+    ['spec', (e.spec as string) === SEPOLIA_SPEC_PIN],
+    ['genesis_time', (e.genesis_time as bigint) === SEPOLIA_GENESIS_TIME],
+    ['max_links', maxLinks <= MAX_LINKS_BOUND],
+  ] as const) {
+    if (!ok) throw pinsCorrupt(PinsReason.BadValue, { key });
+  }
   // Go's int arithmetic wraps at 64 bits
   if (BigInt.asIntN(64, minP * 3n) < BigInt.asIntN(64, size * 2n) || minP > size) throw pinsCorrupt(PinsReason.ParticipationFloor);
   const rawForks = e.forks as Record<string, unknown>[] | null;
@@ -382,6 +405,7 @@ function parsePins(raw: Uint8Array, sum: Uint8Array, source: string): Pins {
     shared: sh === null ? null : { kzgSetupSha256: sh.kzg_setup_sha256 as string },
     sha256: sum,
     source,
+    raw: Uint8Array.from(raw),
   };
 }
 
@@ -401,6 +425,12 @@ export function loadPins(raw: Uint8Array, want: Uint8Array): Pins {
 export function parsePinsOverride(raw: Uint8Array): Pins {
   const sum = sha256(raw);
   return parsePins(raw, sum, `override:${hexLower(sum)}`);
+}
+
+/** Parses an extension file (Pins.Extend): the report states pins_source = extension:<sha256 of raw>. */
+export function parsePinsExtension(raw: Uint8Array): Pins {
+  const sum = sha256(raw);
+  return parsePins(raw, sum, `extension:${hexLower(sum)}`);
 }
 
 /** The embedded pins file's bytes (a copy). */

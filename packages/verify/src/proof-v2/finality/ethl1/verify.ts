@@ -4,7 +4,7 @@
  * every other outcome and never a weaker answer. current_slot is each update's own signature_slot;
  * process_light_client_store_force_update is never called.
  */
-import { Committee, KeyCache, computeDomain, fastAggregateVerify, signingRoot } from './bls.js';
+import { Committee, KeyCache, computeDomain, defaultKeyCache, fastAggregateVerify, signingRoot } from './bls.js';
 import {
   decodeElectraBootstrap,
   decodeElectraFinalityUpdate,
@@ -93,7 +93,7 @@ export interface VerifyOptions {
  */
 export function verifyFinalizedHead(p: Pins, lc: LC, opts: VerifyOptions = {}): FinalizedHead {
   checkNetwork(p, SepoliaChainID);
-  const cache = opts.keyCache ?? new KeyCache();
+  const cache = opts.keyCache ?? defaultKeyCache();
   const w = new Walker(p, cache);
 
   // Step 1: profile, bounds, shapes, forks.
@@ -121,36 +121,7 @@ export function verifyFinalizedHead(p: Pins, lc: LC, opts: VerifyOptions = {}): 
   w.checkForkOfSlot(final.attested.beacon.slot, final.shape);
 
   // Step 2: the anchor.
-  const a = anchorFor(p, lc.anchorPeriod);
-  if (a === undefined) {
-    const head = ledgerHead(p);
-    if (head !== undefined && lc.anchorPeriod > head) throw ledgerBehind(lc.anchorPeriod, head);
-    throw pinUnknown(lc.anchorKind, lc.anchorPeriod, lc.anchorRoot);
-  }
-  w.anchor = a;
-  if (lc.anchorKind === 1) {
-    const c = new Committee(committeeRaw!, cache);
-    if (!eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);
-    if (!eq(lc.anchorRoot, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, lc.anchorRoot);
-    w.finSlot = lc.anchorPeriod * EpochsPerPeriod * SlotsPerEpoch;
-    w.cur = c;
-  } else {
-    const b = boot!;
-    if (a.blockRoot === null) throw pinUnknown(lc.anchorKind, lc.anchorPeriod, lc.anchorRoot);
-    if (!eq(lc.anchorRoot, a.blockRoot)) throw pinMismatch(lc.anchorPeriod, a.blockRoot, lc.anchorRoot);
-    const slot = b.header.beacon.slot;
-    if (periodOf(slot) !== lc.anchorPeriod) throw bootstrapInvalid('anchor_period', slot);
-    if (!w.headerValid(b.header)) throw bootstrapInvalid('header_exec_branch', slot);
-    const root = hashTreeRootBeaconHeader(b.header.beacon);
-    if (!eq(root, a.blockRoot)) throw pinMismatch(lc.anchorPeriod, a.blockRoot, root);
-    const c = new Committee(b.committee, cache);
-    if (!isValidNormalizedMerkleBranch(c.root, b.committeeBranch, gindicesOf(b.shape).current, b.header.beacon.stateRoot)) {
-      throw bootstrapInvalid('committee_branch', slot);
-    }
-    if (!eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);
-    w.finSlot = slot;
-    w.cur = c;
-  }
+  w.anchorStore(lc, boot, committeeRaw);
 
   // Step 3: every link, then the final update.
   for (let i = 0; i < links.length; i++) w.update(i, links[i]!, false);
@@ -167,6 +138,25 @@ export function verifyFinalizedHead(p: Pins, lc: LC, opts: VerifyOptions = {}): 
   };
 }
 
+
+/**
+ * Judges a block_root ledger entry by its bootstrap alone (the twin of ethl1.VerifyBootstrapAnchor): it runs exactly the kind-2 anchor of
+ * spec 5.2 step 2 and stops before any link. It establishes that the bootstrap parses in the stated layout and its header's slot lies in
+ * a fork of that layout, that the header's slot is in sync-committee period `period`, that the header's execution branch holds, that
+ * hash_tree_root(bootstrap.header.beacon) is the block_root the pins carry for `period` and that the current-committee branch holds against
+ * the header's state_root and the committee hashes to the pinned committee_root. The pins must carry an anchor for `period` with a
+ * block_root. It returns normally, or throws what the walk would have thrown (finality_pin_unknown, finality_pin_mismatch,
+ * finality_bootstrap_invalid, finality_fork_unsupported, finality_evidence_malformed).
+ */
+export function verifyBootstrapAnchor(p: Pins, period: bigint, bootstrap: LB, opts: VerifyOptions = {}): void {
+  checkNetwork(p, SepoliaChainID);
+  const a = anchorFor(p, period);
+  if (a === undefined || a.blockRoot === null) throw pinUnknown(2, period, new Uint8Array(32));
+  const w = new Walker(p, opts.keyCache ?? defaultKeyCache());
+  const boot = w.parseBootstrap(bootstrap);
+  w.checkForkOfSlot(boot.header.beacon.slot, boot.shape);
+  w.anchorStore({ anchorKind: 2, anchorPeriod: period, anchorRoot: a.blockRoot }, boot, undefined);
+}
 
 /** Validates the layout byte of a carried object. */
 function layoutByte(part: string, index: number, lb: LB): void {
@@ -220,6 +210,45 @@ class Walker {
   checkForkOfSlot(slot: bigint, layout: LayoutByte): void {
     const f = forkAt(this.p.network, epochOf(slot));
     if (f === undefined || f.layout !== layout) throw forkUnsupported(slot, epochOf(slot), layoutName(layout));
+  }
+
+  /**
+   * Spec 5.2 step 2: finds the ledger entry of the anchor period, checks the committee (kind 1) or the bootstrap (kind 2) against it and
+   * initialises the light-client store (the anchor committee as current, the finalized slot, no next committee).
+   */
+  anchorStore(lc: { anchorKind: number; anchorPeriod: bigint; anchorRoot: Uint8Array }, boot: BootstrapObj | undefined, committeeRaw: Uint8Array | undefined): void {
+    const p = this.p;
+    const cache = this.cache;
+    const a = anchorFor(p, lc.anchorPeriod);
+    if (a === undefined) {
+      const head = ledgerHead(p);
+      if (head !== undefined && lc.anchorPeriod > head) throw ledgerBehind(lc.anchorPeriod, head);
+      throw pinUnknown(lc.anchorKind, lc.anchorPeriod, lc.anchorRoot);
+    }
+    this.anchor = a;
+    if (lc.anchorKind === 1) {
+      const c = new Committee(committeeRaw!, cache);
+      if (!eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);
+      if (!eq(lc.anchorRoot, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, lc.anchorRoot);
+      this.finSlot = lc.anchorPeriod * EpochsPerPeriod * SlotsPerEpoch;
+      this.cur = c;
+    } else {
+      const b = boot!;
+      if (a.blockRoot === null) throw pinUnknown(lc.anchorKind, lc.anchorPeriod, lc.anchorRoot);
+      if (!eq(lc.anchorRoot, a.blockRoot)) throw pinMismatch(lc.anchorPeriod, a.blockRoot, lc.anchorRoot);
+      const slot = b.header.beacon.slot;
+      if (periodOf(slot) !== lc.anchorPeriod) throw bootstrapInvalid('anchor_period', slot);
+      if (!this.headerValid(b.header)) throw bootstrapInvalid('header_exec_branch', slot);
+      const root = hashTreeRootBeaconHeader(b.header.beacon);
+      if (!eq(root, a.blockRoot)) throw pinMismatch(lc.anchorPeriod, a.blockRoot, root);
+      const c = new Committee(b.committee, cache);
+      if (!isValidNormalizedMerkleBranch(c.root, b.committeeBranch, gindicesOf(b.shape).current, b.header.beacon.stateRoot)) {
+        throw bootstrapInvalid('committee_branch', slot);
+      }
+      if (!eq(c.root, a.committeeRoot)) throw pinMismatch(lc.anchorPeriod, a.committeeRoot, c.root);
+      this.finSlot = slot;
+      this.cur = c;
+    }
   }
 
   /**
