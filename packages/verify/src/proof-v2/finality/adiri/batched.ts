@@ -6,14 +6,15 @@
  * The order of judgement is exactly that of the one-record-at-a-time form it replaces: the signatures are decoded in order up to the first
  * refusal (an empty signer list fails its pairing at its own index), one scalar is drawn per record before that index, and the records
  * before it are judged by the combination. What changed is how the two sums are formed: bucket multi-scalar multiplication (msm.ts)
- * instead of one scalar multiplication per record and per sum. Both sums are group elements, so for the same scalars they are the same
- * points and the combination holds exactly when it held before.
+ * instead of one scalar multiplication per record and per sum, and the cofactor clearing of the hash (a fixed homomorphism) applied once
+ * to each group's sum of r_i * Q_i instead of to every H(m_i) = clear(Q_i). Both sums are group elements, so for the same scalars they are
+ * the same points and the combination holds exactly when it held before.
  *
  * sigs.ts hands in the functions this module needs (BatchContext) so that the two files do not import each other.
  */
 import { bls12_381 } from '@noble/curves/bls12-381';
 import { ReasonEncoding, ReasonIdentity, ReasonPairing, ReasonSubgroup, type SignatureReason } from './states.js';
-import { SigEncoding, SigIdentity, SigOk, SigSubgroup, combineBatch, decodeBatch, groupSums, msm, type G1Point } from './msm.js';
+import { SigEncoding, SigIdentity, SigOk, SigSubgroup, clearG1Cofactor, combineBatch, decodeBatch, groupSums, msm, type G1Point } from './msm.js';
 import type { Failure, G2Point, KeyEntry, Rand, SigItem } from './sigs.js';
 
 export interface BatchContext {
@@ -41,9 +42,6 @@ const reasonOf = (code: number): SignatureReason => {
       throw new RangeError(`unknown signature decode code ${code}`);
   }
 };
-
-/** The point a group's sum is paired with: the sum of r_i * H(m_i), as the hash is defined. */
-const hashSum = (s: G1Point): G1Point => s;
 
 /** The lowest failing item and its reason under the batched mode, or undefined. */
 export function firstFailureBatched(items: readonly SigItem[], rnd: Rand, ctx: BatchContext): Failure | undefined {
@@ -92,7 +90,7 @@ export function firstFailureBatched(items: readonly SigItem[], rnd: Rand, ctx: B
   const holds = (sumSig: G1Point, sums: ReadonlyMap<number, G1Point>): boolean => {
     try {
       const pairs = [{ g1: sumSig, g2: negG2 }];
-      for (const [g, s] of sums) pairs.push({ g1: hashSum(s), g2: aggs[g]! });
+      for (const [g, s] of sums) pairs.push({ g1: clearG1Cofactor(s), g2: aggs[g]! });
       return bls12_381.fields.Fp12.eql(bls12_381.pairingBatch(pairs), bls12_381.fields.Fp12.ONE);
     } catch {
       return false;

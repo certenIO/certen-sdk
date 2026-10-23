@@ -13,6 +13,7 @@ import {
   SigNotExamined,
   SigOk,
   SigSubgroup,
+  clearG1Cofactor,
   combineBatch,
   decodeBatch,
   decodeG1Signature,
@@ -238,7 +239,8 @@ describe('combineBatch sums the hash points and the signature points as the base
         want.set(g, want.has(g) ? want.get(g)!.add(h) : h);
       });
       expect([...res.sumHash.keys()]).toEqual([...want.keys()].sort((a, b) => a - b));
-      for (const [g, w] of want) expect(res.sumHash.get(g)!.equals(w), `group ${g}`).toBe(true);
+      // the sums are of the uncleared points Q_i: one clearing per group gives the sum of the H(m_i)
+      for (const [g, w] of want) expect(clearG1Cofactor(res.sumHash.get(g)!).equals(w), `group ${g}`).toBe(true);
       expect(res.hashPts).toHaveLength(13);
     }
   });
