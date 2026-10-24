@@ -1,0 +1,30 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-TWINS-2 hand-mutation gate over the whole of test/finality/baseposted/supply.ts (the lossless pins supplier, new in this package): every curated mutant (escape table, key order, indentation, separators, trailing LF, literal preservation, duplicate-key and presence rules, the unsigned 64-bit check, the returned-as-is paths) plus every operator mutant, run against vitest --bail=1 on units_supply. Control run of the unmutated tree (58 tests green) preceded the gate; an early window in which 6 supply mutants were reported invalid came from a syntax error in a test edit of this package, fixed, and every non-killed mutant was re-run against the final tests. Counted with the other two lists: 214 mutants, 204 killed, 10 equivalent, 0 unexplained.",
+  "equivalents": [
+    {
+      "file": "supply.ts",
+      "line": 45,
+      "mutant": "x[i]! < y[i]! -> x[i]! <= y[i]! (utf8Order, the second comparison on the line)",
+      "reason": "this comparison is reached only when x[i] !== y[i], so `<` and `<=` give the same answer"
+    },
+    {
+      "file": "supply.ts",
+      "line": 46,
+      "mutant": "x.length < y.length -> x.length <= y.length (utf8Order)",
+      "reason": "the equal-length case is answered by the `x.length === y.length ? 0 :` branch before this comparison, so `<` and `<=` give the same answer"
+    },
+    {
+      "file": "supply.ts",
+      "line": 115,
+      "mutant": "let at = -1 -> let at = -2 (supplyPins)",
+      "reason": "`at` is only compared with `at >= 0` and used as an index when it is not negative; -1 and -2 are both 'no base_sepolia member found'"
+    },
+    {
+      "file": "supply.ts",
+      "line": 124,
+      "mutant": "[...sec.pairs, ...added] -> [...added, ...sec.pairs] (supplyPins)",
+      "reason": "the supplied pairs are added only for names the section does not hold, so no key is repeated, and goEncode sorts every object's keys by their UTF-8 bytes before writing: the order of the pair list never reaches the output"
+    }
+  ]
+}

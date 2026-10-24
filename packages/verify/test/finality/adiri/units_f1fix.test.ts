@@ -10,10 +10,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
+import { defaultLimits } from '../../../src/proof-v2/finality/codec.js';
 import type { BlockRef } from '../../../src/proof-v2/finality/evidence.js';
 import {
   AdiriVerifier,
   Codec,
+  decodeCFA1,
+  encodeCFA1,
   MinCommitteeFloor,
   MaxSlotDistance,
   buildContainer,
@@ -146,6 +149,44 @@ describe('F1a: verifyCommitteeChain re-applies the decoder rules to every record
     );
   });
 
+  it('the signer rule is judged against the committee table, never the next table, and names the failing record as the epoch', () => {
+    // two tables of different sizes: table 0 holds 5 keys, table 1 holds 3; record 0 has committee 0 / next 1, record 1 has committee 1 / next 0
+    const mk = (committeeIdx: number, nextIdx: number, signers: number[], epoch: number) => {
+      const chain = buildChain([
+        { committee: [0, 1, 2, 3, 4], next: [0, 1, 2, 3, 4], fsNumber: 10n },
+        { committee: [0, 1, 2, 3, 4], next: [0, 1, 2, 3, 4], fsNumber: 20n },
+      ]);
+      const cf: CFA1 = { tables: [chain.cfa1.tables[0]!, chain.cfa1.tables[0]!.slice(0, 3)], records: chain.cfa1.records.map((r) => ({ ...r })) };
+      cf.records[epoch]!.committeeIdx = committeeIdx;
+      cf.records[epoch]!.nextIdx = nextIdx;
+      cf.records[epoch]!.signers = Uint8Array.from(signers);
+      const par = parsePins(pinsOfSection(pinsSection({ genesisCommittee: [0, 1, 2, 3, 4], epoch0Number: 10n, epoch0Hash: cf.records[0]!.finalState.hash })));
+      return { par, cf };
+    };
+    // committee = the 3-key table, next = the 5-key table: signer 4 is outside the COMMITTEE (size 3) although inside the next table
+    const a = mk(1, 0, [0, 1, 4], 0);
+    expect(canon(() => verifyCommitteeChain(a.par, a.cf, 'batched'))).toBe(
+      '{"code":"committee_chain_broken","fields":{"check":"signer_index_invalid","committee_size":"3","epoch":"0","index":"2","signer":"4"}}',
+    );
+    // committee = the 5-key table, next = the 3-key table: signer 3 is inside the committee, so the rule passes (a later rule judges the chain)
+    const b = mk(0, 1, [0, 1, 2, 3], 0);
+    expect(refusal(() => verifyCommitteeChain(b.par, b.cf, 'batched')).fields.check).not.toBe('signer_index_invalid');
+    // the failing record is record 1: the epoch of the refusal is 1, not 0
+    const c = mk(0, 0, [0, 0, 1, 2], 1);
+    expect(canon(() => verifyCommitteeChain(c.par, c.cf, 'oneByOne'))).toBe(
+      '{"code":"committee_chain_broken","fields":{"check":"signer_index_invalid","committee_size":"5","epoch":"1","index":"1","signer":"0"}}',
+    );
+  });
+  it('the decoder judges a signer list against the COMMITTEE table of its record, not against the next table', () => {
+    const chain = buildChain([{ committee: [0, 1, 2, 3, 4], next: [0, 1, 2, 3, 4], fsNumber: 10n }]);
+    const rec = chain.cfa1.records[0]!;
+    const cf: CFA1 = { tables: [chain.cfa1.tables[0]!, chain.cfa1.tables[0]!.slice(0, 3)], records: [{ ...rec, committeeIdx: 1, nextIdx: 0, signers: Uint8Array.of(0, 1, 4) }] };
+    expect(canon(() => decodeCFA1(encodeCFA1(cf), defaultLimits()))).toBe(
+      '{"code":"committee_chain_broken","fields":{"check":"signer_index_invalid","committee_size":"3","epoch":"0","index":"2","signer":"4"}}',
+    );
+    const ok: CFA1 = { tables: cf.tables, records: [{ ...rec, committeeIdx: 0, nextIdx: 1, signers: Uint8Array.of(0, 1, 4) }] };
+    expect(decodeCFA1(encodeCFA1(ok), defaultLimits()).records[0]!.signers).toEqual(Uint8Array.of(0, 1, 4));
+  });
   it('a hand-built index that is not a table position at all (negative, fractional, NaN) is refused like an out-of-range one', () => {
     // the reported got_len is an integer even for a value that is no index: truncated, NaN as 0, the larger of the two indices (a negative one loses to the other index)
     for (const [bad, got] of [[-1, 0n], [1.5, 1n], [Number.NaN, 0n], [2.9, 2n]] as const) {

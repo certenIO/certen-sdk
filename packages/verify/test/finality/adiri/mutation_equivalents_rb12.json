@@ -1,0 +1,24 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-TWINS-2 hand-mutation gate over the lines changed against d7ca45b in adiri/cfa1.ts, chain.ts, record.ts, kind.ts, sigs.ts: 95 curated mutants (every changed decision, constant, argument and message field) plus every operator mutant on a changed line (=== <-> !==, < <= > >= flips, && <-> ||, true <-> false, + <-> -, removed negations, numeric literals +1), 214 in all with the two supply/loader files of the other two lists, each applied through a vite transform plugin (no file edit) and run against vitest --bail=1 on units_f1fix, units_chain, units_cfa1, units_record, units_kind, units_survivors, vectors_adiri5, vectors_adiri4, vectors_fast (sigs.ts: units_f1fix, units_sigs). Control runs of the unmutated tree (222 and 65 tests green) preceded the gate. Result 204 killed, 10 equivalent (3 here, 4 in baseposted/mutation_equivalents_twins2_rb12.json, 3 in basefinal/mutation_equivalents_twins2_rb12.json), 0 unexplained. Line numbers are those of pv2/rb12-ts-twins2 at the head named in the check-in.",
+  "equivalents": [
+    {
+      "file": "cfa1.ts",
+      "line": 59,
+      "mutant": "j < signers.length -> j <= signers.length (checkRecordSigners)",
+      "reason": "the extra iteration reads signers[signers.length], undefined: `undefined >= committeeSize` is false and `j > 0 && undefined <= signers[j - 1]` is false, so nothing is thrown and the loop ends; every refusal is decided on an index below the length"
+    },
+    {
+      "file": "cfa1.ts",
+      "line": 61,
+      "mutant": "j > 0 -> j >= 0 (checkRecordSigners)",
+      "reason": "for j = 0 the added test reads signers[-1], undefined: `s <= undefined` is false, so the order test still cannot fire on the first signer; the first signer is judged by `s >= committeeSize` alone, exactly as with j > 0"
+    },
+    {
+      "file": "sigs.ts",
+      "line": 234,
+      "mutant": "mode: Mode = 'batched' -> mode: Mode (firstFailure default)",
+      "reason": "firstFailure branches on `mode === 'oneByOne'` only, so an undefined mode takes the batched path with or without the default parameter; the default makes the F1b rule explicit and typed (the tests units_f1fix F1b pin the observable consequence, that an unset mode draws its scalars from rand), it does not change a decision"
+    }
+  ]
+}

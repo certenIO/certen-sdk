@@ -1,0 +1,18 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-TWINS-2 hand-mutation gate over the judge-world loader added to test/finality/basefinal/vectorset.ts (JudgeLoadError, loadDecimal, loadHex, legRef, judgeWorld): curated mutants of every regex, width, size and field name plus every operator mutant on the added lines, run against vitest --bail=1 on units_judgeload. Control run of the unmutated tree (58 tests green) preceded the gate. Counted with the other two lists: 214 mutants, 204 killed, 10 equivalent, 0 unexplained.",
+  "equivalents": [
+    {
+      "file": "vectorset.ts",
+      "line": 135,
+      "mutant": "bits: 32 | 64 -> bits: 33 | 64 and bits: 32 | 65 (the literal types of loadDecimal's parameter)",
+      "reason": "a type annotation: it is erased when the file is transformed, so the executed code is identical; the widths actually passed (32 and 64) are pinned by the units_judgeload boundary tests"
+    },
+    {
+      "file": "vectorset.ts",
+      "line": 140,
+      "mutant": "size = -1 -> size = -2 (loadHex default)",
+      "reason": "the size is only tested with `size >= 0`; -1 and -2 are both 'no fixed length'"
+    }
+  ]
+}

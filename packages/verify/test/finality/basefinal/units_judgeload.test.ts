@@ -4,7 +4,7 @@
  * " 5 " as 5, and Number(BigInt(2^32+1)) kept 4294967297 as an output-root index; none of them is a decimal of its width.
  */
 import { describe, expect, it } from 'vitest';
-import { JudgeLoadError, expectedOf, judgeNames, judgeWorld, loadJudge, runJudge, type JudgeCase } from './vectorset.js';
+import { JudgeLoadError, expectedOf, judgeNames, judgeWorld, loadDecimal, loadHex, loadJudge, runJudge, type JudgeCase } from './vectorset.js';
 
 const U64_MAX = '18446744073709551615';
 const base = (): JudgeCase => structuredClone(loadJudge('synth_19_intermediate_roots'));
@@ -82,6 +82,28 @@ describe('the judge-world loader reads bytes as lower-case hex of the right leng
     const c = base();
     c.a.hash = c.a.hash.replace(/^0x/, '');
     expect(() => judgeWorld(c)).not.toThrow();
+  });
+});
+
+describe('loadHex and loadDecimal at their own boundaries', () => {
+  it('a fixed size of 0 bytes is a size: only the empty string loads', () => {
+    expect(loadHex('x', '0x', 0).length).toBe(0);
+    expect(loadHex('x', '', 0).length).toBe(0);
+    const e = (() => {
+      try {
+        loadHex('x', '0x01', 0);
+      } catch (err) {
+        return err as JudgeLoadError;
+      }
+      throw new Error('loaded');
+    })();
+    expect(e.message).toBe('judge case load error: field x: value "0x01" is not lower-case hex of 0 bytes');
+  });
+  it('loadDecimal: 2^32-1 loads as 32 bits and 2^32 does not; 2^64-1 loads as 64 bits and 2^64 does not', () => {
+    expect(loadDecimal('x', '4294967295', 32)).toBe(4294967295n);
+    expect(() => loadDecimal('x', '4294967296', 32)).toThrow(JudgeLoadError);
+    expect(loadDecimal('x', U64_MAX, 64)).toBe(18446744073709551615n);
+    expect(() => loadDecimal('x', '18446744073709551616', 64)).toThrow(JudgeLoadError);
   });
 });
 

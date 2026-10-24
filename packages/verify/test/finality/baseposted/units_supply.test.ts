@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { PUBLISHED_SET_PIN_SUPPLY, sha256Hex, supplyBaseSepoliaPins } from './vectorset.js';
+import { goQuote, supplyPins, utf8Order } from './supply.js';
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures', 'finality', 'base_supply');
 const MANIFEST_SHA256 = '5af7cd62fd64966db536f4608dd80c2ed0e6f480cf604a24b8746cba5f34df3d';
@@ -82,8 +83,8 @@ describe('the supply is lossless: an integer above 2^53 is written back as writt
   });
   it('the supplied values themselves may be up to 2^64-1 and are written as decimal digits', () => {
     const raw = Buffer.from('{"base_sepolia":{}}');
-    expect(supplyBaseSepoliaPins(raw, { a: 18446744073709551615n, b: 9007199254740993n, c: 0 }).toString('utf8')).toBe(
-      '{\n  "base_sepolia": {\n    "a": 18446744073709551615,\n    "b": 9007199254740993,\n    "c": 0\n  }\n}\n',
+    expect(supplyBaseSepoliaPins(raw, { a: 18446744073709551615n, b: 9007199254740993n, c: 0, d: 0n }).toString('utf8')).toBe(
+      '{\n  "base_sepolia": {\n    "a": 18446744073709551615,\n    "b": 9007199254740993,\n    "c": 0,\n    "d": 0\n  }\n}\n',
     );
   });
   it('a supplied value that is not an unsigned 64-bit integer is refused by name: N passes, N+1 fails', () => {
@@ -97,6 +98,39 @@ describe('the supply is lossless: an integer above 2^53 is written back as writt
   });
   it('the published constants supply Granite 1723478400 and the post-Granite channel timeout 50', () => {
     expect(PUBLISHED_SET_PIN_SUPPLY).toEqual({ granite_time: 1723478400, channel_timeout_granite: 50 });
+  });
+});
+
+describe('the writer helpers', () => {
+  it('utf8Order is the byte order of the UTF-8 forms (code point order), not the UTF-16 order', () => {
+    expect(utf8Order('a', 'a')).toBe(0);
+    expect(utf8Order('', '')).toBe(0);
+    expect(utf8Order('a', 'b')).toBe(-1);
+    expect(utf8Order('b', 'a')).toBe(1);
+    expect(utf8Order('', 'a')).toBe(-1);
+    expect(utf8Order('a', '')).toBe(1);
+    expect(utf8Order('ab', 'a')).toBe(1);
+    expect(utf8Order('a', 'ab')).toBe(-1);
+    // U+FFFF is below U+1F600 in code points (and in UTF-8) although its UTF-16 unit 0xFFFF is above the surrogate 0xD83D
+    expect(utf8Order('￿', '\u{1F600}')).toBe(-1);
+    expect(utf8Order('\u{1F600}', '￿')).toBe(1);
+  });
+  it('goQuote writes the escapes of the Go encoder with HTML escaping off', () => {
+    expect(goQuote('a<b>&c')).toBe('"a<b>&c"');
+    expect(goQuote('"\\')).toBe('"\\"\\\\"');
+    expect(goQuote('\b\f\n\r\t')).toBe('"\\b\\f\\n\\r\\t"');
+    expect(goQuote('\u0000\u001f\u007f   é')).toBe('"\\u0000\\u001f\u007f \\u2028\\u2029é"');
+  });
+  it('a document without a base_sepolia object is returned byte for byte as a plain Uint8Array, invalid UTF-8 included', () => {
+    const raw = Uint8Array.of(0x7b, 0x22, 0x61, 0x22, 0x3a, 0x22, 0xff, 0xc3, 0x28, 0x22, 0x7d);
+    const out = supplyPins(raw, PUBLISHED_SET_PIN_SUPPLY);
+    expect(Array.from(out)).toEqual(Array.from(raw));
+    const nul = Uint8Array.from(Buffer.from('null'));
+    expect(Array.from(supplyPins(nul, {}))).toEqual(Array.from(nul));
+  });
+  it('a section that is a scalar or an array is left alone, the last duplicate of base_sepolia is the one judged', () => {
+    expect(supplyBaseSepoliaPins(Buffer.from('{"base_sepolia":{"a":1},"base_sepolia":5}')).toString('utf8')).toBe('{"base_sepolia":{"a":1},"base_sepolia":5}');
+    expect(supplyBaseSepoliaPins(Buffer.from('{"base_sepolia":5,"base_sepolia":{"a":1}}')).toString('utf8')).toContain('"granite_time": 1723478400');
   });
 });
 
