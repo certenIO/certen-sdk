@@ -66,8 +66,37 @@ const NODE_MAX_LENGTH = BigInt(kMaxLength);
 const capOf = (max: bigint): number => Number(max + 1n > NODE_MAX_LENGTH ? NODE_MAX_LENGTH : max + 1n);
 
 /**
+ * The zlib header as Go's zlib.NewReader reads it, which is how op-node reads a channel (compress/zlib reader.go Reset): after the method and window
+ * checks the header must be a multiple of 31 as sent (FCHECK), and when the FDICT flag is set the next four bytes are the big-endian dictionary id,
+ * which must equal adler32 of the dictionary the reader was given. The reader is given none, so the id must be adler32 of the empty dictionary, which
+ * is 1; any other id is ErrDictionary and a stream cut inside the id is ErrUnexpectedEOF. node:zlib alone answers Z_NEED_DICT to every FDICT stream, so
+ * the flag is decided here and the stream is handed to node as the plain zlib stream it is: the id is dropped, FDICT is cleared and FCHECK is recomputed
+ * (clearing the flag moves the header by 32, which is 1 modulo 31). The header judged is always the one that was sent, never the rewritten one.
+ * The reasons are the texts of Go's errors: ErrHeader "zlib: invalid header", ErrDictionary "zlib: invalid dictionary" and io.ErrUnexpectedEOF "unexpected EOF"
+ * (a channel cut inside the header or inside the dictionary id); a stream cut anywhere after them is the inflater's refusal, reported as "decompress: ...".
+ */
+const ADLER32_OF_EMPTY_DICTIONARY = [0, 0, 0, 1];
+
+function zlibStream(ch: Uint8Array): Uint8Array {
+  if (ch.length < 2) throw new ChannelError('unexpected EOF');
+  const cmf = ch[0]!;
+  const flg = ch[1]!;
+  if (((cmf << 8) | flg) % 31 !== 0) throw new ChannelError('zlib: invalid header');
+  if ((flg & 0x20) === 0) return ch;
+  if (ch.length < 6) throw new ChannelError('unexpected EOF');
+  for (let i = 0; i < 4; i++) if (ch[2 + i] !== ADLER32_OF_EMPTY_DICTIONARY[i]) throw new ChannelError('zlib: invalid dictionary');
+  const level = flg & 0xc0;
+  const out = new Uint8Array(ch.length - 4);
+  out[0] = cmf;
+  out[1] = level | ((31 - ((cmf << 8) | level) % 31) % 31);
+  out.set(ch.subarray(6), 2);
+  return out;
+}
+
+/**
  * The channel decompression of the derivation spec: zlib when b0&0x0f == 8 (and the CINFO nibble is at most 7), Brotli when b0 == 1
- * (version byte, then the Brotli stream, read strictly). The output is capped at max bytes: one more is a bomb.
+ * (version byte, then the Brotli stream, read strictly). The output is capped at max bytes: one more is a bomb. A zlib stream is read as Go reads it,
+ * including FDICT with the empty dictionary (zlibStream).
  */
 export function decompress(ch: Uint8Array, max: bigint): Uint8Array {
   if (ch.length === 0) throw new ChannelError('empty channel');
@@ -75,7 +104,7 @@ export function decompress(ch: Uint8Array, max: bigint): Uint8Array {
   try {
     if ((ch[0]! & 0x0f) === 8) {
       if (ch[0]! >> 4 > 7) throw new ChannelError('zlib window');
-      out = inflateSync(ch, { maxOutputLength: capOf(max) });
+      out = inflateSync(zlibStream(ch), { maxOutputLength: capOf(max) });
     } else if (ch[0] === 1) {
       const r = strictDecompress(ch.subarray(1), max);
       if (r.exceeded) throw new ChannelError('channel exceeds max_rlp_bytes_per_channel');

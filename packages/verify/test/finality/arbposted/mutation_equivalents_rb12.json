@@ -136,9 +136,15 @@
     },
     {
       "file": "baseposted/channel.ts",
-      "line": 80,
+      "line": 109,
       "mutant": "const r = strictDecompress(ch.subarray(1), max); -> const r = strictDecompress(ch.subarray(1), max + 1n);",
       "reason": "decompress repeats the identical cap test on the output length right after (the channel cap), so the strict reader's own cap adds no verdict"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 228,
+      "mutant": "dataLenW > BigInt(MAX_L2_MESSAGE_SIZE) -> dataLenW >= BigInt(MAX_L2_MESSAGE_SIZE) (retryable data length word; audit mutant A32)",
+      "reason": "the boundary is unreachable, so no input separates the two: a data-length word equal to MAX_L2_MESSAGE_SIZE (262144) needs 262144 data bytes behind nine 32-byte words (288 bytes), a message of 262432 bytes that deriveDelayed already refuses at its first line (d.data.length > MAX_L2_MESSAGE_SIZE, derive.ts:207); a shorter message fails the data read (r.take) with the same null. The region is pinned by units_retryable_bound.test.ts (largest passing message 262144 bytes = 288 + 261856 data; words 262143, 262144, 262145 refused for nine body lengths each; the mutant survives that file and units_derive, units_derive2, units_nitro: 65 tests, checked 2026-10-24)"
     }
   ]
 }
