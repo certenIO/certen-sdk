@@ -23,7 +23,7 @@ import { decodeContainer, defaultLimits, encodeContainer, encodeNodes } from '..
 import { ethl1PinsFrom } from '../../../src/proof-v2/finality/ethl1/index.js';
 import { sepoliaPins } from '../../../src/proof-v2/finality/pins.js';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
-import { FINAL1, FINAL3, evidenceOf, legOf, load, pinsOf, vectorByName, type SetInfo } from './vectorset.js';
+import { FINAL1, FINAL2, FINAL3, evidenceOf, legOf, load, pinsOf, vectorByName, type SetInfo } from './vectorset.js';
 
 /** Deterministic distinct junk: element i of a given size (LCG bytes seeded by i, so never an accidental trie node or a duplicate). */
 const junk = (n: number, size: number, salt: number): Uint8Array[] =>
@@ -114,6 +114,19 @@ describe('a verification hashes each NODES element twice at most (decoder order 
     // decoder: added; one proof database: added; the node-bound check hashes the oversize nodes it inspects (at most the added ones): <= addedBig
     expect(dCalls).toBeLessThanOrEqual(2 * added + addedBig + 8);
     expect(dBytes).toBeLessThanOrEqual(2 * (small.length * 300 + addedBig * (max + 1)) + addedBig * (max + 1) + 1024);
+  });
+
+  it('an accepted world whose transaction leaf is itself an oversize NODES element (the node-bound check walks the proofs, then the state proofs are read): still one proof database', async () => {
+    const name = 'synth_valid_tx_proof_leaf_over_max_node_bytes';
+    const base = await measure(FINAL2, name, []);
+    expect(base.verdict).toBe('direct');
+    const n = 300;
+    const size = 400;
+    const withJunk = await measure(FINAL2, name, junk(n, size, 6));
+    expect(withJunk.verdict).toBe('direct');
+    expect(withJunk.calls - base.calls).toBeGreaterThanOrEqual(n);
+    expect(withJunk.calls - base.calls).toBeLessThanOrEqual(2 * n + 8);
+    expect(withJunk.bytes - base.bytes).toBeLessThanOrEqual(2 * n * size + 1024);
   });
 
   it('a hostile world of the size of the audit (8,000 nodes of 256 bytes) costs under 2 hashes per node and under 2 x its bytes', async () => {

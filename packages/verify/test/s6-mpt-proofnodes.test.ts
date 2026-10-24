@@ -210,6 +210,26 @@ describe('ProofNodes', () => {
   });
 });
 
+describe('ProofDb and the per-call verifyProof keep refusing an empty node', () => {
+  it('new ProofDb refuses an empty node (default) and holds every other node when told to skip it', () => {
+    expect(() => new ProofDb([...ALL, new Uint8Array(0)])).toThrow(MptError);
+    expect(() => new ProofDb([...ALL, new Uint8Array(0)])).toThrow('empty proof node');
+    expect(() => new ProofDb([...ALL, new Uint8Array(0)], false)).toThrow('empty proof node');
+    const lenient = new ProofDb([new Uint8Array(0), ...ALL], true);
+    for (const n of ALL) expect(lenient.get(keccak_256(n))).toEqual(n);
+    expect(lenient.get(keccak_256(new Uint8Array(0)))).toBeUndefined();
+  });
+
+  it('verifyProof over a node list holding an empty node is MptError empty proof node, wherever the empty node sits', () => {
+    const key = keccak_256(addr(1));
+    for (const at of [0, 4, ALL.length]) {
+      const nodes = [...ALL.slice(0, at), new Uint8Array(0), ...ALL.slice(at)];
+      expect(() => verifyProof(state.root, key, nodes)).toThrow('empty proof node');
+    }
+    expect(verifyProof(state.root, key, ALL)).toBeDefined();
+  });
+});
+
 describe('verifyProofIn takes any reader of nodes by hash', () => {
   it('a plain { get } object gives the answer of a ProofDb, and records exactly the nodes a walk reads', () => {
     const db = new ProofDb(ALL);
