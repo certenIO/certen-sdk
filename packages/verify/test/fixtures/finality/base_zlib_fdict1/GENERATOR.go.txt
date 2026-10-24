@@ -1,0 +1,128 @@
+package baseposted
+
+import (
+	"bytes"
+	"compress/zlib"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"math/rand"
+	"os"
+	"strconv"
+	"testing"
+)
+
+// Generator of test/fixtures/finality/baseposted_zlib_fdict/vectors.json (certen-sdk): zlib channels judged by this package's decompress, the
+// function the Base l1_posted verifier reads a channel with. Run inside pkg/finality/baseposted of the validator at cbb6373 as
+//   FP_VEC_OUT=<file> go test -run TestFixPostedVectorGen
+// Each case records the channel bytes, the cap, and Go's answer: "err" (decompress returned an error, whichever) or "ok:<len>:<first 8 bytes of sha256, hex>".
+type fpVec struct {
+	ID      string `json:"id"`
+	Class   string `json:"class"`
+	Channel string `json:"channel"`
+	Cap     string `json:"cap"`
+	Go      string `json:"go"`
+}
+
+func fvResult(ch []byte, cp uint64) string {
+	out, err := decompress(ch, cp)
+	if err != nil {
+		return "err"
+	}
+	s := sha256.Sum256(out)
+	return "ok:" + strconv.Itoa(len(out)) + ":" + hex.EncodeToString(s[:8])
+}
+
+func fvFcheck(z []byte) {
+	z[1] &^= 0x1f
+	z[1] |= byte(31-(int(z[0])<<8|int(z[1]))%31) % 31
+}
+
+func fvWithDict(z, id []byte, fix bool) []byte {
+	out := append([]byte{}, z[:2]...)
+	out[1] |= 0x20
+	if fix {
+		fvFcheck(out)
+	}
+	out = append(out, id...)
+	return append(out, z[2:]...)
+}
+
+func TestFixPostedVectorGen(t *testing.T) {
+	outPath := os.Getenv("FP_VEC_OUT")
+	if outPath == "" {
+		t.Fatal("FP_VEC_OUT is required")
+	}
+	r := rand.New(rand.NewSource(1))
+	one := []byte{0, 0, 0, 1}
+	caps := []uint64{0, 1, 3, 50, 1000, 1 << 20, 1<<63 - 1, 1<<64 - 1}
+	var vecs []fpVec
+	counters := map[string]int{}
+	add := func(class string, ch []byte, cp uint64) {
+		counters[class]++
+		vecs = append(vecs, fpVec{ID: fmt.Sprintf("%s_%02d", class, counters[class]), Class: class, Channel: hex.EncodeToString(ch), Cap: strconv.FormatUint(cp, 10), Go: fvResult(ch, cp)})
+	}
+	mk := func() []byte {
+		n := r.Intn(60)
+		d := make([]byte, n)
+		switch r.Intn(3) {
+		case 0:
+			r.Read(d)
+		case 1:
+			for i := range d {
+				d[i] = byte(r.Intn(4))
+			}
+		}
+		var buf bytes.Buffer
+		w, _ := zlib.NewWriterLevel(&buf, r.Intn(10)-1)
+		w.Write(d)
+		w.Close()
+		return buf.Bytes()
+	}
+	pick := func() uint64 { return caps[r.Intn(len(caps))] }
+	// the audit's input, byte for byte
+	abc, _ := hex.DecodeString("7820000000014b4c4a0600024d0127")
+	add("audit_fdict_abc", abc, 1<<20)
+	abc2, _ := hex.DecodeString("7820000000024b4c4a0600024d0127")
+	add("audit_fdict_abc", abc2, 1<<20)
+	for _, cp := range []uint64{0, 2, 3, 4} {
+		add("audit_fdict_abc_cap", abc, cp)
+	}
+	for n := 0; n < 24; n++ {
+		z := mk()
+		add("plain", z, pick())
+		add("fdict1", fvWithDict(z, one, true), pick())
+		add("fdict_other_id", fvWithDict(z, []byte{byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256)), byte(r.Intn(256))}, true), pick())
+		add("fdict_id_off_by_one", fvWithDict(z, []byte{0, 0, 0, byte(r.Intn(4))}, true), pick())
+		add("fdict_bad_fcheck", fvWithDict(z, one, false), pick())
+		c := fvWithDict(z, one, true)
+		add("fdict_trunc_id", c[:2+r.Intn(5)], pick())
+		c = fvWithDict(z, one, true)
+		add("fdict_trunc_any", c[:r.Intn(len(c))], pick())
+		c = fvWithDict(z, one, true)
+		c[0] = (c[0] & 0x0f) | byte(8+r.Intn(8))<<4
+		if r.Intn(2) == 0 {
+			fvFcheck(c)
+		}
+		add("fdict_cmf_window", c, pick())
+		c = fvWithDict(z, one, true)
+		c[1] = c[1]&^0xc0 | byte(r.Intn(4))<<6
+		if r.Intn(3) != 0 {
+			fvFcheck(c)
+		}
+		add("fdict_flevel", c, pick())
+		c = fvWithDict(z, one, true)
+		c[2+r.Intn(len(c)-2)] ^= byte(1 << uint(r.Intn(8)))
+		add("fdict_flip_after", c, pick())
+		c = fvWithDict(z, one, true)
+		add("fdict_trailing", append(c, bytes.Repeat([]byte{byte(r.Intn(256))}, 1+r.Intn(10))...), pick())
+		c = fvWithDict(z, one, true)
+		c[2+r.Intn(4)] ^= byte(1 << uint(r.Intn(8)))
+		add("fdict_id_flip", c, pick())
+	}
+	b, _ := json.MarshalIndent(vecs, "", " ")
+	if err := os.WriteFile(outPath, append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
