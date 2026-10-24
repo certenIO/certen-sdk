@@ -26,7 +26,7 @@ describe('parseBasePins', () => {
       const e = err as FinalityStateError;
       expect(e.code).toBe(v.expect.code);
       if (v.expect.key !== undefined) {
-        expect(e.fields.reason).toBe('bad_value');
+        expect(e.fields.reason).toBe(v.expect.reason ?? 'bad_value');
         expect(e.fields.key).toBe(v.expect.key);
       }
       assertRegistered(e);

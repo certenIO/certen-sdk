@@ -34,7 +34,7 @@ export interface Variant {
   name: string;
   mutate: (b: J) => void;
   /** 'ok' or the canonical code and the key of finality_pins_corrupt */
-  expect: 'ok' | { code: string; key?: string };
+  expect: 'ok' | { code: string; key?: string; reason?: string };
   /** mutate the whole document (a variant of the top level) as well */
   top?: (d: J) => void;
 }
@@ -87,11 +87,22 @@ export const variants: Variant[] = [
     expect: 'ok',
   },
   {
+    // an upper-case spelling INSTEAD of the lower-case key: not a hash key (the digits must be lower case), the section is bad
     name: 'impl_key_uppercase',
     mutate: (b) => {
+      delete b.impl_pins[GAME_020];
       b.impl_pins[GAME_020.toUpperCase().replace('0X', '0x')] = { role: 'x' };
     },
     expect: corrupt('base_sepolia.impl_pins'),
+  },
+  {
+    // BESIDE the lower-case key: two spellings of one name in an object that is not a struct, refused by the framework walk before the
+    // section is read (RB12-OPS-A1: Go answers duplicate_key naming the second spelling in document order, which is the lower-case one here)
+    name: 'impl_key_uppercase_beside_the_lowercase',
+    mutate: (b) => {
+      b.impl_pins[GAME_020.toUpperCase().replace('0X', '0x')] = { role: 'x' };
+    },
+    expect: { code: 'finality_pins_corrupt', reason: 'duplicate_key', key: GAME_020 },
   },
   {
     name: 'impl_key_short',
