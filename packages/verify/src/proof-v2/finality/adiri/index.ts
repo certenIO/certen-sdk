@@ -10,3 +10,4 @@ export * from './sigs.js';
 export * from './chain.js';
 export * from './kind.js';
 export * from './genesislink.js';
+export * from './pool.js';

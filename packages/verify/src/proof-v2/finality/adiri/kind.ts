@@ -22,6 +22,7 @@ import { checkEmbeddedGenesisLink } from './genesislink.js';
 import { verifyCommitteeChain, type ChainResult } from './chain.js';
 import { Name, parsePins, type Params } from './record.js';
 import type { Mode, Rand } from './sigs.js';
+import type { Parallelism } from './pool.js';
 import {
   LinkBlockAfterSeal,
   LinkCodeHashMismatch,
@@ -247,6 +248,8 @@ export interface VerifierOptions {
   mode?: Mode;
   /** the source of the batch scalars (the default is the platform CSPRNG) */
   rand?: Rand;
+  /** where the batched check runs: 'auto' (the default: worker threads for a long chain where they can run), 'off', or a WorkerPool */
+  parallel?: Parallelism;
   limits?: Limits;
 }
 
@@ -254,10 +257,12 @@ export interface VerifierOptions {
 export class AdiriVerifier implements Kind {
   readonly mode: Mode;
   readonly rand: Rand | undefined;
+  readonly parallel: Parallelism;
   private readonly lim: Limits;
   constructor(opts: VerifierOptions = {}) {
     this.mode = opts.mode ?? 'batched';
     this.rand = opts.rand;
+    this.parallel = opts.parallel ?? 'auto';
     this.lim = opts.limits ?? defaultLimits();
   }
   name(): string {
@@ -285,7 +290,7 @@ export class AdiriVerifier implements Kind {
     const maxHeaders = par.maxHeaders > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(par.maxHeaders);
     const body = decodeBody(c.body, lim, maxHeaders);
     const chain = decodeCFA1(body.cfa1, lim);
-    const res = verifyCommitteeChain(par, chain, this.mode, this.rand);
+    const res = verifyCommitteeChain(par, chain, this.mode, this.rand, this.parallel);
     const link = verifyLink(par, res, body, leg);
     const fields: Fields = {
       epoch: BigInt(res.epoch),
