@@ -431,7 +431,8 @@ function parsePins(raw: Uint8Array, sum: Uint8Array, source: string): Pins {
     throw e;
   }
   const bad = walkKeys(doc, fileSch);
-  if (bad) throw pinsCorrupt(bad.reason, bad.key !== undefined ? { key: bad.key } : {});
+  // Go adds the key to the state only when it is not the empty string (parsePins: `if key != ""`)
+  if (bad) throw pinsCorrupt(bad.reason, bad.key !== undefined && bad.key !== '' ? { key: bad.key } : {});
   let f: Record<string, unknown>;
   try {
     f = decode(doc, fileSch) as Record<string, unknown>;

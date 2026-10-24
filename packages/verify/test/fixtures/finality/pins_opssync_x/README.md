@@ -19,7 +19,7 @@ same rules, and the corners the TS audit found, under verdicts RECORDED FROM GO.
 Rule classes: `fold`/`fold_no` (two spellings of one name in an object that is not a struct, and spellings simple folding does NOT join),
 `order` and `struct` (the order rule and the struct names, which the case rule must not change), `number_bad`/`number_ok`/`number_order`/
 `number_ext` (a number token outside float64 is not_json where the walk reads it), `depth` (Go's 10,000 containers open at once), `logic_pins`/
-`logic_pins_one` (arb_sepolia case variants, refused as duplicate_key by the walk), `sorted` and `rows` (the several-defects order of the arbfinal,
+`logic_pins_one` (arb_sepolia case variants, refused as duplicate_key by the walk), `empty_key` (a violation of the key "" is named without a key field), `sorted` and `rows` (the several-defects order of the arbfinal,
 baseposted and basefinal loaders), `adiri_index`/`adiri_ok` (the table-index refusal of RecordDigests), `control` (the embedded file).
 
 Published sets are never edited: a rule that changes gets a new set. This one is regenerated, never edited by hand, if the oracle moves.

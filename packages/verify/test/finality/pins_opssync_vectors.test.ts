@@ -43,7 +43,7 @@ describe('pins_opssync_x: the manifest', () => {
     expect(new Set(doc.vectors.map((v) => v.name)).size).toBe(doc.vectors.length);
     expect(doc.vectors.length).toBeGreaterThanOrEqual(200);
     const rules = new Set(doc.vectors.map((v) => v.rule));
-    for (const r of ['fold', 'fold_no', 'order', 'struct', 'number_bad', 'number_ok', 'number_order', 'number_ext', 'depth', 'logic_pins', 'logic_pins_one', 'sorted', 'rows', 'adiri_index', 'adiri_ok', 'control']) {
+    for (const r of ['fold', 'fold_no', 'order', 'struct', 'number_bad', 'number_ok', 'number_order', 'number_ext', 'depth', 'logic_pins', 'logic_pins_one', 'sorted', 'rows', 'adiri_index', 'adiri_ok', 'empty_key', 'control']) {
       expect(rules.has(r), r).toBe(true);
     }
     const kinds = new Set(doc.vectors.map((v) => v.kind));

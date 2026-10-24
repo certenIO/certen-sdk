@@ -744,6 +744,68 @@
    "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329b580cfc0c0c39ee6700515e0bC51652AFB614640DB9E34A5D784933E8\",\"reason\":\"duplicate_key\"}}"
   },
   {
+   "name": "walk empty key first, then a",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\": 1, \"a\": 2}"
+    }
+   },
+   "bytes_sha256": "5928d28ca9aae11335d49ac03fc6aaff6d4d91dd93d947d167d9165abad5f1b5",
+   "expect": "ok|5928d28ca9aae11335d49ac03fc6aaff6d4d91dd93d947d167d9165abad5f1b5|override:5928d28ca9aae11335d49ac03fc6aaff6d4d91dd93d947d167d9165abad5f1b5"
+  },
+  {
+   "name": "walk empty key twice",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\": 1, \"\": 2}"
+    }
+   },
+   "bytes_sha256": "d7aad5ffeebe9d0bd70840705b03bc71fe79944b023cb77c3e61c61d23684904",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk empty key after a",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"a\": 1, \"\": 2}"
+    }
+   },
+   "bytes_sha256": "b6a9e24cd76725440f9a21bcef8cdf7e8f48cd6cc1dd9597a377c85e0344ec1a",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"keys_unsorted\"}}"
+  },
+  {
+   "name": "walk empty key as an object and a case variant inside",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\": {\"\": 1, \"A\": 2, \"a\": 3}}"
+    }
+   },
+   "bytes_sha256": "80c1d610b358354bf4c025e73b74badcafd53ccb11ae2c79f01f0f76d2e230db",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"a\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk empty key at the top level of the file",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "doc": "{\n  \"\": 1,\n  \"format\": \"certen-finality-pins/1\",\n  \"published_utc\": \"x\"\n}\n"
+   },
+   "bytes_sha256": "e4add0f7bb6cbc4eeffe08b520fdf9433b986b05dcdb878f013c664d892f26a4",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"unknown_key\"}}"
+  },
+  {
    "name": "number 1e309 in a raw section",
    "rule": "number_bad",
    "kind": "pins",

@@ -183,6 +183,17 @@ describe('item 1: two spellings of one name in an object that is not a struct ar
   });
 });
 
+describe('the empty key (found by the hand-mutation of the walk: Go names a violation of the key "" WITHOUT a key field)', () => {
+  // verdicts recorded from Go (validator origin/pv2/rb12-ops-a1 @4c6b8d26): parsePins adds "key" to the state only when key != ""
+  it('"" is a key like any other for the rules, first in an object it is judged by no earlier key, and a state about it carries no key field', () => {
+    expect(loadAnswer(enc(mini('{"": 1, "a": 2}')))).toMatch(/^ok /);
+    expect(loadAnswer(enc(mini('{"": 1, "": 2}')))).toBe(corrupt(PinsReason.DuplicateKey));
+    expect(loadAnswer(enc(mini('{"a": 1, "": 2}')))).toBe(corrupt(PinsReason.KeysUnsorted));
+    expect(loadAnswer(enc(mini('{"": {"": 1, "A": 2, "a": 3}}')))).toBe(corrupt(PinsReason.DuplicateKey, 'a'));
+    expect(loadAnswer(enc('{\n  "": 1,\n  "format": "certen-finality-pins/1",\n  "published_utc": "x"\n}\n'))).toBe(corrupt(PinsReason.UnknownKey));
+  });
+});
+
 describe('item 7 (audit N-1): a number the walk reads and cannot convert to float64 is not_json, at the point it is read', () => {
   const huge = ['1e309', '1e1000', '-1e309', '1E+309', '2e308', '1e99999999999999999999', '1.797693134862315808e308', '0.1e310', '9'.repeat(400)];
   const fine = ['1e308', '1.7976931348623157e308', '1.7976931348623158e308', '-1e308', '1e-400', '1e-99999999999999999999', '0e999999', '-0', '0.000e5', '5e-324', '1e-324'];

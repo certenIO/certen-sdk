@@ -10,6 +10,7 @@
 - A number token that does not convert to a finite float64 (`1e309`, `1e1000`) is `finality_pins_corrupt{not_json}` at the point of the walk where Go's `json.Decoder.Token` reads it (audit N-1); an extension file with one is `not_json`, as in Go,
   not `non_ledger_content_differs`. `1e308` and underflow to zero still load.
 - The walk, the extension comparison (`goValue`, `deepEqual`) keep their own stacks: a file nested to Go's limit (10,000 containers open at once) loads or is refused exactly as Go does and no depth ends in `RangeError` (audit N-2).
+- A violation of the key "" (an empty member name) is named without a key field, as Go does (`parsePins`: `if key != ""`); TS carried `"key":""` (found by a surviving hand mutant of the walk, not by the corpus).
 - `verifySpine` states `finality_evidence_malformed{spine, spine_empty}` itself on an empty spine (Go does since OPS-A1) instead of failing on the missing last header.
 
 ### Corrected statements (claims = code)
@@ -19,7 +20,7 @@
 
 ### Verified
 - Ports of Go's `pins_det_rb12_test.go` (finality, arbfinal, baseposted, basefinal), `record_digests_index_rb12_test.go` and `spine_empty_rb12_internal_test.go`; TS already matched Go for baseposted, basefinal and the Adiri table index (shown by the ports, not assumed).
-- A Go-judged supplement `test/fixtures/finality/pins_opssync_x` (242 vectors, verdict text recorded from Go at 4c6b8d26, MANIFEST recomputed in a test).
+- A Go-judged supplement `test/fixtures/finality/pins_opssync_x` (247 vectors, verdict text recorded from Go at 4c6b8d26, MANIFEST recomputed in a test).
 - Two-seed differential against Go (8,562 mutated pins files and CFA1 chains (4,281 per seed), 0 verdict differences; 1,072 and 1,048 differences at the base commit).
 
 ## Unreleased — RB12 TS arbfinal: `arb-sepolia/finalized/v1`, with the proven wallet route (2026-10-24)
