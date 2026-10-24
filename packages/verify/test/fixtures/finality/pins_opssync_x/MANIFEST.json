@@ -1,0 +1,7 @@
+{
+ "format": "certen-pins-opssync-x-manifest/1",
+ "set": "pins_opssync_x",
+ "count": 247,
+ "oracle_commit": "4c6b8d263d9b37adaf9b346b36eca6bb2cd8ef03",
+ "vectors_sha256": "e73f97e8f4108e7aa08389d6d367911e105b8da64e4d15df917d7e067da903c7"
+}

@@ -1,0 +1,6705 @@
+{
+ "format": "certen-pins-opssync-x/1",
+ "oracle": {
+  "repository": "independant_validator (certenIO/certen-validator)",
+  "commit": "4c6b8d263d9b37adaf9b346b36eca6bb2cd8ef03",
+  "branch": "pv2/rb12-ops-a1",
+  "toolchain": "go1.25.1",
+  "judge": "a throwaway Go test (never committed) over finality.ParsePinsOverride, Pins.Extend, arbfinal.LoadPins, baseposted.ParsePins, basefinal.ParsePins, adiri.ParsePins, CFA1.RecordDigests and adiri.VerifyCommitteeChain"
+ },
+ "vectors": [
+  {
+   "name": "walk fold ascii sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ab\": 1, \"AB\": 2}"
+    }
+   },
+   "bytes_sha256": "920f432e85ef0b58cd14b89d9a3a637820d4d85c2f2ad5b27327043f995b15d0",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"AB\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold ascii reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"AB\": 1, \"ab\": 2}"
+    }
+   },
+   "bytes_sha256": "bb6f8a2c85cad5f40f1f0f60ddb15f27a842306b9286be335b60b2e682988bd8",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ab\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold kelvin sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"k\": 1, \"\\u212a\": 2}"
+    }
+   },
+   "bytes_sha256": "d9fe893c33558dd136503709705cdf87720ca8e8ae2ad617df4c0ec5cfcbcde2",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"K\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold kelvin reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\u212a\": 1, \"k\": 2}"
+    }
+   },
+   "bytes_sha256": "f631b79255fde34334c98e0e1c2d374f23606994365ec70dfce92a09275124d7",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"k\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold kelvin_literal sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"k\": 1, \"K\": 2}"
+    }
+   },
+   "bytes_sha256": "24813d2f2805ba55c981fe2d5553a54079cbd42a76b122ea2259a4b5d9ea19f1",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"K\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold kelvin_literal reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"K\": 1, \"k\": 2}"
+    }
+   },
+   "bytes_sha256": "ef0b2efa34a915ab486f12af99bfaf7b291956affe46b968b2a8903659175a33",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"k\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold long_s sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"s\": 1, \"\\u017f\": 2}"
+    }
+   },
+   "bytes_sha256": "3229e7466fbcd85b6bd31d1f68634225788505ca00976755e539480ca4cbe1db",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ſ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold long_s reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\u017f\": 1, \"s\": 2}"
+    }
+   },
+   "bytes_sha256": "60555c5a591e9b2a7aca92c92811cbf7fbcc8fb19e3d80801b793094143d8e33",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"s\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold sharp_s sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ß\": 1, \"ẞ\": 2}"
+    }
+   },
+   "bytes_sha256": "950664c2004d0540c6f2738b633b9506aa030f0e1ba51237fe26097503be0242",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ẞ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold sharp_s reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ẞ\": 1, \"ß\": 2}"
+    }
+   },
+   "bytes_sha256": "7ff1f710b2c83aa698ef44e3846e5468fdc6aa2df1218a00f1123e34081adcc0",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ß\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold sigma_final sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"σ\": 1, \"ς\": 2}"
+    }
+   },
+   "bytes_sha256": "c283d8a43cecd453ffe7f459708711bc33ae8c640a55d8fcfddaf6d85b8fc938",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ς\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold sigma_final reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ς\": 1, \"σ\": 2}"
+    }
+   },
+   "bytes_sha256": "a767dce12a5e40659798710cb741b9b8c965581589f573674338e491ce3f76da",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"σ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold sigma_capital_final sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"Σ\": 1, \"ς\": 2}"
+    }
+   },
+   "bytes_sha256": "c07db50cae8f7399146c7325e728a3691395c8edbf7c14ce87baaec65babd834",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ς\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold sigma_capital_final reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ς\": 1, \"Σ\": 2}"
+    }
+   },
+   "bytes_sha256": "40fd6ea32111c8c6464ce0567e73c379f68dfa843a19cc480ea2e8b32a51c8c9",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"Σ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold astral_deseret sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\ud801\\udc00\": 1, \"\\ud801\\udc28\": 2}"
+    }
+   },
+   "bytes_sha256": "2610e85e5be031857b99bf3528a36fc368f5c800e6c44ef5f5b977b10d44d866",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"𐐨\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold astral_deseret reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\ud801\\udc28\": 1, \"\\ud801\\udc00\": 2}"
+    }
+   },
+   "bytes_sha256": "40fa05733fa685098dc450ae012b763548acad60c1f540a90168171bbb4a9b33",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"𐐀\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold micro sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"µ\": 1, \"μ\": 2}"
+    }
+   },
+   "bytes_sha256": "83e2ca2a467571b953d0cc0814752290ae2a319883cc97933edfa8d3ba848025",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"μ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold micro reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"μ\": 1, \"µ\": 2}"
+    }
+   },
+   "bytes_sha256": "e37659c8c66c9ad482662bf5f62c25197f63ac103bce324570a87cbf37e688c6",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"µ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold ohm sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"Ω\": 1, \"ω\": 2}"
+    }
+   },
+   "bytes_sha256": "5924f22c641d3a9bb78e4e2d96e9f02042b609804f8590bd9c807d485bd6bbaa",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ω\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold ohm reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ω\": 1, \"Ω\": 2}"
+    }
+   },
+   "bytes_sha256": "91f1a2293254f10f197024be2db84b09431e9ff7fbe6ba3dfdf3996b58703a70",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"Ω\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold dz_titlecase sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"Ǆ\": 1, \"ǅ\": 2}"
+    }
+   },
+   "bytes_sha256": "8cb860506535b63a9b260de49a21785bea2e5faf0d8deee4402e0b35a8f1d674",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ǅ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold dz_titlecase reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ǅ\": 1, \"Ǆ\": 2}"
+    }
+   },
+   "bytes_sha256": "026eff321d385fff53f9e2e59a8d8cb32b46b090f630729ef110cfa1769362f3",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"Ǆ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold ss_dot sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ṡ\": 1, \"ẛ\": 2}"
+    }
+   },
+   "bytes_sha256": "422e5d1ac7dcb8d92ec9c1af6181de6e49af2c59bc5072a493c5e162bd854f12",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ẛ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold ss_dot reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ẛ\": 1, \"ṡ\": 2}"
+    }
+   },
+   "bytes_sha256": "67aad50b085058cb96fc215a39443edfb681c4b15c7cddfa549b68228826b639",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"ṡ\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold escape_ascii sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"A\": 1, \"\\u0061\": 2}"
+    }
+   },
+   "bytes_sha256": "18c26ae92a33d15969d5bb8a8a8afac6b3b44f46e2021570f50fb1e48914698e",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"a\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold escape_ascii reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\u0061\": 1, \"A\": 2}"
+    }
+   },
+   "bytes_sha256": "45f7a9e625472e8e975b621d6e74708e8d480b0a4b1c186e69561ce74c7f0df4",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"A\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold escape_both sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\u004b\": 1, \"\\u212A\": 2}"
+    }
+   },
+   "bytes_sha256": "b0e070177d53d82ed42bd5007e039a15d2bb2d16b541723a13324ce4c097e2b9",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"K\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold escape_both reversed",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\u212A\": 1, \"\\u004b\": 2}"
+    }
+   },
+   "bytes_sha256": "d4b712308d4b6c6bdfd5c7bcde1ea222a7b7ecd8ed77293928195f7437d1cc6f",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"K\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold escaped lone surrogate vs U+FFFD",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\ud800\": 1, \"\\ufffd\": 2}"
+    }
+   },
+   "bytes_sha256": "89f592499246406420fb0036a8c9c1d499be8e8250d2ae22257f15b0ecac77e3",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"�\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold two lone surrogates",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\\ud800\": 1, \"\\udc00\": 2}"
+    }
+   },
+   "bytes_sha256": "889f514b6287cef08c01e412d12af9df8a125788ba982a8b0169f154e8b53ff8",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"�\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk fold lone surrogate inside a key",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"a\\ud800b\": 1, \"A\\ufffdB\": 2}"
+    }
+   },
+   "bytes_sha256": "77f3a9333d693c85046dcb4f4d31db735455230b92960fb968a9289015dc64de",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"A�B\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk not folded together dotted_I",
+   "rule": "fold_no",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"i\": 1, \"İ\": 2}"
+    }
+   },
+   "bytes_sha256": "b5b713f1fcf42dcf9dd39f2b85c08bb3b59710217f7ab36bb406b881b41b5baf",
+   "expect": "ok|b5b713f1fcf42dcf9dd39f2b85c08bb3b59710217f7ab36bb406b881b41b5baf|override:b5b713f1fcf42dcf9dd39f2b85c08bb3b59710217f7ab36bb406b881b41b5baf"
+  },
+  {
+   "name": "walk not folded together dotless_i",
+   "rule": "fold_no",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"I\": 1, \"ı\": 2}"
+    }
+   },
+   "bytes_sha256": "bd573007e71b973ef64837efaeaccf6aac29b4a96c866b596478cf6105be2bc0",
+   "expect": "ok|bd573007e71b973ef64837efaeaccf6aac29b4a96c866b596478cf6105be2bc0|override:bd573007e71b973ef64837efaeaccf6aac29b4a96c866b596478cf6105be2bc0"
+  },
+  {
+   "name": "walk not folded together ss",
+   "rule": "fold_no",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"SS\": 1, \"ß\": 2}"
+    }
+   },
+   "bytes_sha256": "8f9fb83e4acedb6aacac95e3da645ff1817554497d6931635b55ffebe09a71d0",
+   "expect": "ok|8f9fb83e4acedb6aacac95e3da645ff1817554497d6931635b55ffebe09a71d0|override:8f9fb83e4acedb6aacac95e3da645ff1817554497d6931635b55ffebe09a71d0"
+  },
+  {
+   "name": "walk not folded together ss_capital",
+   "rule": "fold_no",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ss\": 1, \"ẞ\": 2}"
+    }
+   },
+   "bytes_sha256": "670e1ab8b95da7409183eb94cfb304cab6fb73a0b059ef726a7942379184b677",
+   "expect": "ok|670e1ab8b95da7409183eb94cfb304cab6fb73a0b059ef726a7942379184b677|override:670e1ab8b95da7409183eb94cfb304cab6fb73a0b059ef726a7942379184b677"
+  },
+  {
+   "name": "walk not folded together plain",
+   "rule": "fold_no",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"a\": 1, \"b\": 2}"
+    }
+   },
+   "bytes_sha256": "bfd39fde1e732fb6212d5bae9b6eb02489bc3d58c4ede61a58fbad8a31016720",
+   "expect": "ok|bfd39fde1e732fb6212d5bae9b6eb02489bc3d58c4ede61a58fbad8a31016720|override:bfd39fde1e732fb6212d5bae9b6eb02489bc3d58c4ede61a58fbad8a31016720"
+  },
+  {
+   "name": "walk three spellings, first repeats",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"ab\": 1, \"AB\": 2, \"ab\": 3}"
+    }
+   },
+   "bytes_sha256": "f95062f27559cfca5942897edf736e77ff1eb0fd7a142e14bfe87f365a38f516",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"AB\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk three spellings sorted",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"AB\": 1, \"Ab\": 2, \"aB\": 3}"
+    }
+   },
+   "bytes_sha256": "22dd360d5bd97343d6969e8bce43be0d0d2375619f4a5606e785ae3555c1c068",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"Ab\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk exact repeat adjacent",
+   "rule": "order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"b\": 1, \"b\": 2}"
+    }
+   },
+   "bytes_sha256": "1b276a8a2c7ff8905851ef20b32d9402d621833a007dd6aa03856cc8e4f90d57",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"b\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk exact repeat apart",
+   "rule": "order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"b\": 1, \"c\": 2, \"b\": 3}"
+    }
+   },
+   "bytes_sha256": "decc28d12b35c549e8440735df3af325b070a7bb05cb7a17c281d1e67bb78202",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"b\",\"reason\":\"keys_unsorted\"}}"
+  },
+  {
+   "name": "walk unsorted then variant",
+   "rule": "order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"b\": 1, \"a\": 2, \"A\": 3}"
+    }
+   },
+   "bytes_sha256": "03f1bb5287daff8d56acb4a10c39ef3bb46507f9d1180c49fdb64d285e123e11",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"a\",\"reason\":\"keys_unsorted\"}}"
+  },
+  {
+   "name": "walk variant then unsorted",
+   "rule": "order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"a\": 1, \"A\": 2, \"0\": 3}"
+    }
+   },
+   "bytes_sha256": "396c7ffc6af512d694d9711de466f8cb0411c549a453dc42ff0483da0720f79c",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"A\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk variant breaks the order too",
+   "rule": "order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"b\": 1, \"B\": 0}"
+    }
+   },
+   "bytes_sha256": "15ef4f8c821d3d6f953009418a88c8628856b87bd756915da5d271fe2c7c7646",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"B\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk section object itself",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"Aa\": 1, \"aa\": 2}"
+    }
+   },
+   "bytes_sha256": "cf7c427ec0ee665126024af2d68d0b32ddab845a9afe8d02de062cc0c5aef4de",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"aa\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk nested three deep",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"x\": {\"y\": {\"z\": {\"Kk\": 1, \"kK\": 2}}}}"
+    }
+   },
+   "bytes_sha256": "8618c462bae066adb5754edce199f17cdd369bdfc8f1bfa55ed1960459576071",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"kK\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk object in array of a raw section",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"list\": [{\"a\": 1}, {\"x\": 1, \"X\": 2}]}"
+    }
+   },
+   "bytes_sha256": "40ec8e58073c72865311de32be28647011f4e77a8b0d9735a3bf8f4fe8f1ce34",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"X\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk array in array",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"list\": [[{\"X\": 1, \"x\": 2}]]}"
+    }
+   },
+   "bytes_sha256": "1377863a9a63530c46158f7917b9fad6de9ffb01b64857c659d7fd8580d2d6d0",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"x\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk object where a struct field is a scalar",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"chain_id\": {\"a\": 1, \"A\": 2}}"
+    }
+   },
+   "bytes_sha256": "90e0565bd9d73f6a3f8df5d35ffbd168f7d3f978ed7e10a6d40d74d362cec0a7",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"A\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk object in a list of a struct section",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"forks\": [[{\"a\": 1, \"A\": 2}]]}"
+    }
+   },
+   "bytes_sha256": "1e1e65d68d7bc2c7984162cfa1ae8216846b8a028b4c6742760f5f5b17e15d5a",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"A\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk struct keeps exact names (fork row)",
+   "rule": "struct",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"forks\": [{\"Name\": \"x\"}]}"
+    }
+   },
+   "bytes_sha256": "1dbd309693fef688e9b3d2d07102354ea730d374f2e0acc0c4335db1cde1ddf6",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"Name\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "walk struct wrong-case top-level key",
+   "rule": "struct",
+   "kind": "pins",
+   "recipe": {
+    "doc": "{\n  \"Format\": \"certen-finality-pins/1\",\n  \"format\": \"certen-finality-pins/1\",\n  \"published_utc\": \"2026-10-23T00:00:00Z\"\n}\n"
+   },
+   "bytes_sha256": "c8cb977c02abe865ebe017488c3aef0a523c932aeafe3a75f2d708b24b6ca6d8",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"Format\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "walk variant in an earlier member beats a later unknown key",
+   "rule": "order",
+   "kind": "pins",
+   "recipe": {
+    "doc": "{\n  \"arb_sepolia\": {\"a\": 1, \"A\": 2},\n  \"format\": \"certen-finality-pins/1\",\n  \"published_utc\": \"x\",\n  \"zz\": 1\n}\n"
+   },
+   "bytes_sha256": "8bc1993f056c0d6a9ed2444be5058c3739d06fae464241d1bb4f9daaf7ff0b4c",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"A\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk same spellings in two objects",
+   "rule": "fold_no",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"logic_pins\": {\"0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8\": \"a\"}, \"other_pins\": {\"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\": \"b\"}}"
+    }
+   },
+   "bytes_sha256": "e87f55c511941866609f3da226d51b1ccee6c8243db933c96c23e43aa6278566",
+   "expect": "ok|e87f55c511941866609f3da226d51b1ccee6c8243db933c96c23e43aa6278566|override:e87f55c511941866609f3da226d51b1ccee6c8243db933c96c23e43aa6278566"
+  },
+  {
+   "name": "walk four spellings order 0123",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"logic_pins\": {\"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\", \"0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\", \"0x8736329B580CFC0C0C39EE6700515E0Bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\", \"0x8736329b580cfc0c0c39ee6700515e0bC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\"}}"
+    }
+   },
+   "bytes_sha256": "544e6d208cf7acb387cd1f2c4012a895a23c4125c9bac5b52c96472a4f1b20f2",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk four spellings order 3210",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"logic_pins\": {\"0x8736329b580cfc0c0c39ee6700515e0bC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\", \"0x8736329B580CFC0C0C39EE6700515E0Bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\", \"0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\", \"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\"}}"
+    }
+   },
+   "bytes_sha256": "9027c1e166c4a87d7c8a118976b6a0e27a837556b194322d8a95b47f59177e15",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329B580CFC0C0C39EE6700515E0Bc51652afb614640db9e34a5d784933e8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk four spellings order 2031",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"logic_pins\": {\"0x8736329B580CFC0C0C39EE6700515E0Bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\", \"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\", \"0x8736329b580cfc0c0c39ee6700515e0bC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\", \"0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\"}}"
+    }
+   },
+   "bytes_sha256": "b85e446abd93c25d68212dd1d08991286732f2c87ff2ada9b07d7a568648826c",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk four spellings order 1302",
+   "rule": "fold",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"logic_pins\": {\"0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\", \"0x8736329b580cfc0c0c39ee6700515e0bC51652AFB614640DB9E34A5D784933E8\": \"validator_wallet_proxy\", \"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\", \"0x8736329B580CFC0C0C39EE6700515E0Bc51652afb614640db9e34a5d784933e8\": \"validator_wallet_proxy\"}}"
+    }
+   },
+   "bytes_sha256": "6aa76bea223cc9e531e07ee04943eb774b5b3cab3175a3e4430b4bb62e8e17ce",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329b580cfc0c0c39ee6700515e0bC51652AFB614640DB9E34A5D784933E8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk empty key first, then a",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\": 1, \"a\": 2}"
+    }
+   },
+   "bytes_sha256": "5928d28ca9aae11335d49ac03fc6aaff6d4d91dd93d947d167d9165abad5f1b5",
+   "expect": "ok|5928d28ca9aae11335d49ac03fc6aaff6d4d91dd93d947d167d9165abad5f1b5|override:5928d28ca9aae11335d49ac03fc6aaff6d4d91dd93d947d167d9165abad5f1b5"
+  },
+  {
+   "name": "walk empty key twice",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\": 1, \"\": 2}"
+    }
+   },
+   "bytes_sha256": "d7aad5ffeebe9d0bd70840705b03bc71fe79944b023cb77c3e61c61d23684904",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk empty key after a",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"a\": 1, \"\": 2}"
+    }
+   },
+   "bytes_sha256": "b6a9e24cd76725440f9a21bcef8cdf7e8f48cd6cc1dd9597a377c85e0344ec1a",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"keys_unsorted\"}}"
+  },
+  {
+   "name": "walk empty key as an object and a case variant inside",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"\": {\"\": 1, \"A\": 2, \"a\": 3}}"
+    }
+   },
+   "bytes_sha256": "80c1d610b358354bf4c025e73b74badcafd53ccb11ae2c79f01f0f76d2e230db",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"a\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "walk empty key at the top level of the file",
+   "rule": "empty_key",
+   "kind": "pins",
+   "recipe": {
+    "doc": "{\n  \"\": 1,\n  \"format\": \"certen-finality-pins/1\",\n  \"published_utc\": \"x\"\n}\n"
+   },
+   "bytes_sha256": "e4add0f7bb6cbc4eeffe08b520fdf9433b986b05dcdb878f013c664d892f26a4",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "number 1e309 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e309}"
+    }
+   },
+   "bytes_sha256": "2089b31b9cd4af6d86172379b359de412ff96aa3493645af2209d39e3a5be23a",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e1000 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e1000}"
+    }
+   },
+   "bytes_sha256": "351bf84fd1731f281ac2b60281d83e461f7d14835457a9d23278aa46060ece1e",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number -1e309 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": -1e309}"
+    }
+   },
+   "bytes_sha256": "caa902672ec934c53b402ba57b6fe126f83585d5d14b6336c23b0e5cd59ac315",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1E+309 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1E+309}"
+    }
+   },
+   "bytes_sha256": "e864fc975c7f310a384eb81cb087da7de3d5a26f36f3a7b8c7288e0b698627ea",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 2e308 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 2e308}"
+    }
+   },
+   "bytes_sha256": "d401f82210f40dc9bcc0597264bff621a366819527b0bfcb4136ba9cbe78bd4f",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1.797693134862315808e308 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1.797693134862315808e308}"
+    }
+   },
+   "bytes_sha256": "4c353e5372f2827a3043d6de7af08b6305414de95c2fbe21dd381b196c213d6b",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1.7976931348623159e308 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1.7976931348623159e308}"
+    }
+   },
+   "bytes_sha256": "7932fa4d75e38d349222363ff42663af6d9e4e3c088fc7c524ae4fdc352b8015",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e99999999999999999999 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e99999999999999999999}"
+    }
+   },
+   "bytes_sha256": "c69322b0cd4487d78cf6ff0f2274037926d05c59072826e6d8ea82358f4879dd",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 0.1e310 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 0.1e310}"
+    }
+   },
+   "bytes_sha256": "d5c2fa1a1e84337357ea0d3028b659fdc61d8cf1dcb57b3bf67ba1465766fcea",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 999999999999...(400 chars) in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 9999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999}"
+    }
+   },
+   "bytes_sha256": "fa0203371624edb74b475b2633a556be8adffc1c55a1528ca9784bc8db9bf204",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e+400 in a raw section",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e+400}"
+    }
+   },
+   "bytes_sha256": "b8ade8ca6b0171254227aee788912bb288ec06fb858139909ad0d0a33c2eac67",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e308 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e308}"
+    }
+   },
+   "bytes_sha256": "a3b5086ceb26091882cbe95c527b9a62fd4cce0e0678d983ca36f5e98a946930",
+   "expect": "ok|a3b5086ceb26091882cbe95c527b9a62fd4cce0e0678d983ca36f5e98a946930|override:a3b5086ceb26091882cbe95c527b9a62fd4cce0e0678d983ca36f5e98a946930"
+  },
+  {
+   "name": "number 1.7976931348623157e308 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1.7976931348623157e308}"
+    }
+   },
+   "bytes_sha256": "d9f3f3f59f49b8b69823d33228f57a5bfab173c5ab0b7fbc6f0332e67aa9a8a1",
+   "expect": "ok|d9f3f3f59f49b8b69823d33228f57a5bfab173c5ab0b7fbc6f0332e67aa9a8a1|override:d9f3f3f59f49b8b69823d33228f57a5bfab173c5ab0b7fbc6f0332e67aa9a8a1"
+  },
+  {
+   "name": "number 1.7976931348623158e308 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1.7976931348623158e308}"
+    }
+   },
+   "bytes_sha256": "3daf3f39abebfdf35f879e384e192aa305b938368ce275de031e961c3cacef7a",
+   "expect": "ok|3daf3f39abebfdf35f879e384e192aa305b938368ce275de031e961c3cacef7a|override:3daf3f39abebfdf35f879e384e192aa305b938368ce275de031e961c3cacef7a"
+  },
+  {
+   "name": "number -1e308 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": -1e308}"
+    }
+   },
+   "bytes_sha256": "dda9d1ec52dec306237f21ad5a93a5ef999f3706d12e93881d6b8b1e56916b05",
+   "expect": "ok|dda9d1ec52dec306237f21ad5a93a5ef999f3706d12e93881d6b8b1e56916b05|override:dda9d1ec52dec306237f21ad5a93a5ef999f3706d12e93881d6b8b1e56916b05"
+  },
+  {
+   "name": "number 1e-400 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e-400}"
+    }
+   },
+   "bytes_sha256": "49bab4fa94096988678d083a62a6167c38837ff0360d7a2cab393fed0a1c4cac",
+   "expect": "ok|49bab4fa94096988678d083a62a6167c38837ff0360d7a2cab393fed0a1c4cac|override:49bab4fa94096988678d083a62a6167c38837ff0360d7a2cab393fed0a1c4cac"
+  },
+  {
+   "name": "number 1e-99999999999999999999 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e-99999999999999999999}"
+    }
+   },
+   "bytes_sha256": "d6ab5a6dd309606434ebb62a005d678ed5d5e1df00fb4c00fb3e101bc2d55a1c",
+   "expect": "ok|d6ab5a6dd309606434ebb62a005d678ed5d5e1df00fb4c00fb3e101bc2d55a1c|override:d6ab5a6dd309606434ebb62a005d678ed5d5e1df00fb4c00fb3e101bc2d55a1c"
+  },
+  {
+   "name": "number 5e-324 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 5e-324}"
+    }
+   },
+   "bytes_sha256": "e00de9fdcdd8853a5184fa3fabe3f0b2dbd1f106bcb5c4be8a8b78b2aa1fbf6b",
+   "expect": "ok|e00de9fdcdd8853a5184fa3fabe3f0b2dbd1f106bcb5c4be8a8b78b2aa1fbf6b|override:e00de9fdcdd8853a5184fa3fabe3f0b2dbd1f106bcb5c4be8a8b78b2aa1fbf6b"
+  },
+  {
+   "name": "number 1e-324 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 1e-324}"
+    }
+   },
+   "bytes_sha256": "dbc78ce4e2ceed3260bf48b0910d83f5db721e668a646ae9f9da0f45523432ec",
+   "expect": "ok|dbc78ce4e2ceed3260bf48b0910d83f5db721e668a646ae9f9da0f45523432ec|override:dbc78ce4e2ceed3260bf48b0910d83f5db721e668a646ae9f9da0f45523432ec"
+  },
+  {
+   "name": "number -0 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": -0}"
+    }
+   },
+   "bytes_sha256": "55c8141394f41a6b8946679860953e29f62e8849ec941ffc5f4928b860f83ee7",
+   "expect": "ok|55c8141394f41a6b8946679860953e29f62e8849ec941ffc5f4928b860f83ee7|override:55c8141394f41a6b8946679860953e29f62e8849ec941ffc5f4928b860f83ee7"
+  },
+  {
+   "name": "number 0e0 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 0e0}"
+    }
+   },
+   "bytes_sha256": "4e0d1fa2aa660051e90f1013c45b824ad50f630a1d8ad86060e34fa7f24d1277",
+   "expect": "ok|4e0d1fa2aa660051e90f1013c45b824ad50f630a1d8ad86060e34fa7f24d1277|override:4e0d1fa2aa660051e90f1013c45b824ad50f630a1d8ad86060e34fa7f24d1277"
+  },
+  {
+   "name": "number 0.000e5 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 0.000e5}"
+    }
+   },
+   "bytes_sha256": "98a5c4692c72ce5e6b5baa860e7ba28b866426ff7273211e9aa26b4b723aae3e",
+   "expect": "ok|98a5c4692c72ce5e6b5baa860e7ba28b866426ff7273211e9aa26b4b723aae3e|override:98a5c4692c72ce5e6b5baa860e7ba28b866426ff7273211e9aa26b4b723aae3e"
+  },
+  {
+   "name": "number 123456789012345678901234567890 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 123456789012345678901234567890}"
+    }
+   },
+   "bytes_sha256": "c55751b8cf9b1f163fb931220eb8ec4060a52faaace9315c046e6b3fd3845a0c",
+   "expect": "ok|c55751b8cf9b1f163fb931220eb8ec4060a52faaace9315c046e6b3fd3845a0c|override:c55751b8cf9b1f163fb931220eb8ec4060a52faaace9315c046e6b3fd3845a0c"
+  },
+  {
+   "name": "number 18446744073709551615 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 18446744073709551615}"
+    }
+   },
+   "bytes_sha256": "1a80f9d8700ef248f624425735a974901e6bd46f8299a0801a02a22a79c3c8d2",
+   "expect": "ok|1a80f9d8700ef248f624425735a974901e6bd46f8299a0801a02a22a79c3c8d2|override:1a80f9d8700ef248f624425735a974901e6bd46f8299a0801a02a22a79c3c8d2"
+  },
+  {
+   "name": "number 18446744073709551616 in a raw section",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"chain_id\": 18446744073709551616}"
+    }
+   },
+   "bytes_sha256": "ed4644559936c4da42c496ca35df07324afab60be9facb2bc6e4fb53d6220510",
+   "expect": "ok|ed4644559936c4da42c496ca35df07324afab60be9facb2bc6e4fb53d6220510|override:ed4644559936c4da42c496ca35df07324afab60be9facb2bc6e4fb53d6220510"
+  },
+  {
+   "name": "number 1e309 in a struct field",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"max_links\": 1e309}"
+    }
+   },
+   "bytes_sha256": "676558b4c9f8f6d05fdc30f1752d56af3be4e591f386b675c8ba61bae0ca98cc",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e309 in an array",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"v\": [1, 1e309, 3]}"
+    }
+   },
+   "bytes_sha256": "36148b47f11fc5e008766f805afa1675bf722e828bb85219070cf1b0ac68b7c0",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e1000 in a struct field",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"max_links\": 1e1000}"
+    }
+   },
+   "bytes_sha256": "d6b3f5afe8181c0a94b99a9a79c230e0e773cf7ca797cb6039e009c653042daf",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e1000 in an array",
+   "rule": "number_bad",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"v\": [1, 1e1000, 3]}"
+    }
+   },
+   "bytes_sha256": "19b84d09d70966297c5ed20c00a226c739adb2eaf01b50162a28c967e6767c75",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number 1e308 in a struct field",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"max_links\": 1e308}"
+    }
+   },
+   "bytes_sha256": "9be9e68cf1689fd468b1580e5107ae939c94a9b9b9c8d396ff46ee692aeda7af",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "number 1e308 in an array",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"v\": [1, 1e308, 3]}"
+    }
+   },
+   "bytes_sha256": "7ea0d97196cc9b437c08567e04019dbc4aba70945c6420a5de9e79c4775bde6c",
+   "expect": "ok|7ea0d97196cc9b437c08567e04019dbc4aba70945c6420a5de9e79c4775bde6c|override:7ea0d97196cc9b437c08567e04019dbc4aba70945c6420a5de9e79c4775bde6c"
+  },
+  {
+   "name": "number 1e-400 in a struct field",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"max_links\": 1e-400}"
+    }
+   },
+   "bytes_sha256": "0d1d3fc05d4e7a50d368f633bf4086b4b0aaade09b5e0db1fec785b96da77581",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "number 1e-400 in an array",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"v\": [1, 1e-400, 3]}"
+    }
+   },
+   "bytes_sha256": "61d0c7345b6fcdd9390bc163c6d588bb9711398821c120f9df76354a9daf8602",
+   "expect": "ok|61d0c7345b6fcdd9390bc163c6d588bb9711398821c120f9df76354a9daf8602|override:61d0c7345b6fcdd9390bc163c6d588bb9711398821c120f9df76354a9daf8602"
+  },
+  {
+   "name": "number 18446744073709551616 in a struct field",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "eth_sepolia",
+     "body": "{\"max_links\": 18446744073709551616}"
+    }
+   },
+   "bytes_sha256": "8a98a0838a98cd87872a0635dc888231492494ff272431a35c94dceddc2b7646",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "number 18446744073709551616 in an array",
+   "rule": "number_ok",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "adiri",
+     "body": "{\"v\": [1, 18446744073709551616, 3]}"
+    }
+   },
+   "bytes_sha256": "2424bb0b982fad65c836c33b08d89f74d3cf0317e26e3884cc6284fb7ba34d31",
+   "expect": "ok|2424bb0b982fad65c836c33b08d89f74d3cf0317e26e3884cc6284fb7ba34d31|override:2424bb0b982fad65c836c33b08d89f74d3cf0317e26e3884cc6284fb7ba34d31"
+  },
+  {
+   "name": "number document order: variant first",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"A\": 1, \"a\": 1e1000}"
+    }
+   },
+   "bytes_sha256": "be04a8ce9099086ede1e590462b35526a905ec0a2fe60a05d479043735e69cc2",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"a\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "number document order: number first",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"a\": 1e1000, \"A\": 1}"
+    }
+   },
+   "bytes_sha256": "1fb783cadedde422f4d63369475b90b2fb5653e9ce5589f7ff75c834f1ee4d03",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number document order: unknown key first",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "doc": "{\n  \"format\": \"certen-finality-pins/1\",\n  \"published_utc\": \"x\",\n  \"zzz\": 1e999\n}\n"
+   },
+   "bytes_sha256": "d24775a9cefc9c1ef0f22d4daf4caff745b5cc71468afdf490c2bfaa5df74867",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"zzz\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "number document order: number in format",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "doc": "{\n  \"format\": 1e999,\n  \"published_utc\": \"x\"\n}\n"
+   },
+   "bytes_sha256": "83138a0d7869ad84f25d363432ddf3f2c0375e405187d37aa91c6a2d2fd5d287",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number document order: unsorted first",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"b\": 1, \"a\": 1e999}"
+    }
+   },
+   "bytes_sha256": "1282181fee011c10f664d0ac46c119efed050ca6f2b930a6099531ffc19faf4b",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"a\",\"reason\":\"keys_unsorted\"}}"
+  },
+  {
+   "name": "number document order: number then unsorted",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "mini": {
+     "section": "arb_sepolia",
+     "body": "{\"b\": 1e999, \"a\": 1}"
+    }
+   },
+   "bytes_sha256": "f3cd83dab020a733cd058348f2094082d23ee398cc365a5c3667d1ceb95f11fb",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number as the whole document",
+   "rule": "number_order",
+   "kind": "pins",
+   "recipe": {
+    "doc": "1e999"
+   },
+   "bytes_sha256": "d211ced314c89ef3a96c490266d9e1f5ece32bc90991512a067ff2e1b2e16bbc",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "number in the embedded file adiri.aaa (extension)",
+   "rule": "number_ext",
+   "kind": "ext",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "aaa"
+      ],
+      "set": 1
+     }
+    ]
+   },
+   "bytes_sha256": "7b76191bf1f9430a8e9168eac3bf235b63d5c6b351406aff941254af3c49e9c9",
+   "expect": "E|{\"code\":\"finality_ledger_extension_invalid\",\"fields\":{\"period\":\"0\",\"reason\":\"non_ledger_content_differs\"}}"
+  },
+  {
+   "name": "depth 9997 arrays in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 9997
+    }
+   },
+   "bytes_sha256": "7b8c9bab0fc6891ed4a6170dcf7f2ba82d57db3aeac5cf4637e14e6be1b11d01",
+   "expect": "ok|7b8c9bab0fc6891ed4a6170dcf7f2ba82d57db3aeac5cf4637e14e6be1b11d01|override:7b8c9bab0fc6891ed4a6170dcf7f2ba82d57db3aeac5cf4637e14e6be1b11d01"
+  },
+  {
+   "name": "depth 9997 arrays in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "a",
+     "total": 9997
+    }
+   },
+   "bytes_sha256": "e15242dcb96eadf4d72ae4620c6e8c7506d2c2590a9d7df68b8dbe83ffffe305",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 9997 objects in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "o",
+     "total": 9997
+    }
+   },
+   "bytes_sha256": "56b53fd592dd4c26c351b1741b43c71acde1f2f41cfc895f3a192b26384411cd",
+   "expect": "ok|56b53fd592dd4c26c351b1741b43c71acde1f2f41cfc895f3a192b26384411cd|override:56b53fd592dd4c26c351b1741b43c71acde1f2f41cfc895f3a192b26384411cd"
+  },
+  {
+   "name": "depth 9997 objects in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "o",
+     "total": 9997
+    }
+   },
+   "bytes_sha256": "17912433d45a5937d2298f10d4dcc09a5b216ceafa42e06abb91c82002e0a1dc",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 9997 arrays as the root",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "root": 9997
+   },
+   "bytes_sha256": "c712b260232e98e95954e081c3bf2dc7cf893d1971fb972c9c2bb273c28300e5",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "depth 9998 arrays in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 9998
+    }
+   },
+   "bytes_sha256": "abeb1d94004230b28552cbe716127cc5b20fe366f5ce93aaadf3c1afd8c5b7a8",
+   "expect": "ok|abeb1d94004230b28552cbe716127cc5b20fe366f5ce93aaadf3c1afd8c5b7a8|override:abeb1d94004230b28552cbe716127cc5b20fe366f5ce93aaadf3c1afd8c5b7a8"
+  },
+  {
+   "name": "depth 9998 arrays in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "a",
+     "total": 9998
+    }
+   },
+   "bytes_sha256": "5df05b8d224de1e7dd87e9c244a8b6d8981abe4ee792bf6c6a310972a95a48c5",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 9998 objects in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "o",
+     "total": 9998
+    }
+   },
+   "bytes_sha256": "ae5cd921cf5ff394610dfcfeca5573aefcb37135081b8cb1671f4bd99470e1ea",
+   "expect": "ok|ae5cd921cf5ff394610dfcfeca5573aefcb37135081b8cb1671f4bd99470e1ea|override:ae5cd921cf5ff394610dfcfeca5573aefcb37135081b8cb1671f4bd99470e1ea"
+  },
+  {
+   "name": "depth 9998 objects in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "o",
+     "total": 9998
+    }
+   },
+   "bytes_sha256": "a32202efd5597ea3258db48d1fb20086a2ea61bebbfdabade0881630db7de547",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 9998 arrays as the root",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "root": 9998
+   },
+   "bytes_sha256": "cdb58e9d30a9d04217fdba96159996170a0a8e670102db215622a2e36ceedf78",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "depth 9999 arrays in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 9999
+    }
+   },
+   "bytes_sha256": "becbe0bd8eec9f00d627c00d396aa6bb1ff9e1ac5c4fb720b61dd37d4f210ce3",
+   "expect": "ok|becbe0bd8eec9f00d627c00d396aa6bb1ff9e1ac5c4fb720b61dd37d4f210ce3|override:becbe0bd8eec9f00d627c00d396aa6bb1ff9e1ac5c4fb720b61dd37d4f210ce3"
+  },
+  {
+   "name": "depth 9999 arrays in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "a",
+     "total": 9999
+    }
+   },
+   "bytes_sha256": "1e0450c942e93f49070281fe3ae39e430a3b4dd915837c526fd4196fae137115",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 9999 objects in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "o",
+     "total": 9999
+    }
+   },
+   "bytes_sha256": "fe08fe457e6b55b61b9bb59d8a2f973919afa0f2f5f8dee5a4e44dd274f30aec",
+   "expect": "ok|fe08fe457e6b55b61b9bb59d8a2f973919afa0f2f5f8dee5a4e44dd274f30aec|override:fe08fe457e6b55b61b9bb59d8a2f973919afa0f2f5f8dee5a4e44dd274f30aec"
+  },
+  {
+   "name": "depth 9999 objects in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "o",
+     "total": 9999
+    }
+   },
+   "bytes_sha256": "a901663b4269e2e46466e4e9be0fa76fb34b5b470113a195ebf30c86f7f9e1a9",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 9999 arrays as the root",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "root": 9999
+   },
+   "bytes_sha256": "d7e030e35845f48ad1a8656a3935aece72eb3f0117fee3f6e06e8e00eff4ee84",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "depth 10000 arrays in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "6a2df0cac320b7543c056429fe3be3c272147ea94cd423f7ad6dc0ad773cf910",
+   "expect": "ok|6a2df0cac320b7543c056429fe3be3c272147ea94cd423f7ad6dc0ad773cf910|override:6a2df0cac320b7543c056429fe3be3c272147ea94cd423f7ad6dc0ad773cf910"
+  },
+  {
+   "name": "depth 10000 arrays in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "a",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "2e0fe87a9267af0af407e3ea690b8ee8519d5067be2037d4b2abf5a82966232b",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 10000 objects in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "o",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "4c4dfa795c31c24a6ca08f6fce74b8c40fa04a897ae3b7652be1fcd36d36da59",
+   "expect": "ok|4c4dfa795c31c24a6ca08f6fce74b8c40fa04a897ae3b7652be1fcd36d36da59|override:4c4dfa795c31c24a6ca08f6fce74b8c40fa04a897ae3b7652be1fcd36d36da59"
+  },
+  {
+   "name": "depth 10000 objects in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "o",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "61cca4010a319033f26167001dcf81b4b0eaa63ca880f9c1c6922cbf84bd3149",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 10000 arrays as the root",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "root": 10000
+   },
+   "bytes_sha256": "88b516df742a232dad9132d8e5173704287f890c30624fd29fb22abfe7b58e37",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "depth 10001 arrays in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 10001
+    }
+   },
+   "bytes_sha256": "6c2d59919079ea2610ebb24032444629f32b99823851a3a4d900064c2e3532df",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10001 arrays in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "a",
+     "total": 10001
+    }
+   },
+   "bytes_sha256": "2518ff15c21a6f1c04c2df6326ee8d67d61d30e3653dfbac474519ca707b9ba6",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10001 objects in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "o",
+     "total": 10001
+    }
+   },
+   "bytes_sha256": "c23bf8b20c03d5e044cbe6f2f803b2b2183b19bca6ef806753507ef7aa8622b1",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10001 objects in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "o",
+     "total": 10001
+    }
+   },
+   "bytes_sha256": "f7d26f05f516d2f5c326a86b53ab8a3a3b91c936d49442e3886fc4e9fe6ccd31",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10001 arrays as the root",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "root": 10001
+   },
+   "bytes_sha256": "435880ce431297d79345bf598a01589c14a2a5223539a271cca074a0bc4e8bd6",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10002 arrays in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 10002
+    }
+   },
+   "bytes_sha256": "b8ecfdc404a2b768b69bf2f0a9f68d8e1980c09361667a839ffaeba95d2a0351",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10002 arrays in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "a",
+     "total": 10002
+    }
+   },
+   "bytes_sha256": "8db79881ee0e615b71c569bf1db2b5ec3791cd962efdee58743f482cf277cd2b",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10002 objects in adiri (raw)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "o",
+     "total": 10002
+    }
+   },
+   "bytes_sha256": "d2331c646061bf81afa012a431b82af5e187112cfba8ba0579bae79ba685c514",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10002 objects in eth_sepolia (struct)",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "nest": {
+     "section": "eth_sepolia",
+     "kind": "o",
+     "total": 10002
+    }
+   },
+   "bytes_sha256": "bceed0212ca781089dac63dc8c2122d72a31c809e134e739a41160fab77ccac2",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10002 arrays as the root",
+   "rule": "depth",
+   "kind": "pins",
+   "recipe": {
+    "root": 10002
+   },
+   "bytes_sha256": "2e3a2d6938b117594562ae797395dc386b20e10533bf07ee2af5b5d01f9c490f",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "depth 10000 arrays in adiri through the adiri loader",
+   "rule": "depth",
+   "kind": "ad",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "6a2df0cac320b7543c056429fe3be3c272147ea94cd423f7ad6dc0ad773cf910",
+   "expect": "AD|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"adiri.0aaa\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "depth 10000 arrays in arb_sepolia through the arbfinal loader",
+   "rule": "depth",
+   "kind": "arb",
+   "recipe": {
+    "nest": {
+     "section": "arb_sepolia",
+     "kind": "a",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "dc486130ec142e3348f9e5d9beb76825fa4622bf6a24a548d8a0d6c4023d8ef5",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"section\"}}"
+  },
+  {
+   "name": "depth 10000 objects in base_sepolia through the baseposted loader",
+   "rule": "depth",
+   "kind": "bp",
+   "recipe": {
+    "nest": {
+     "section": "base_sepolia",
+     "kind": "o",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "fd13812b3b19d1e8ccfc605adec66e5563728de801578f439b3d3c144830becb",
+   "expect": "ok|chain=84532|sys=f272670eb55e895584501d564afeb048bed26194|inbox=ff00000000000000000000000000000000084532|seq=3600|ct=300|blobs=32|hashes=1|kzg=f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f|shared.kzg_setup_sha256"
+  },
+  {
+   "name": "depth 10000 objects in base_sepolia through the basefinal loader",
+   "rule": "depth",
+   "kind": "bf",
+   "recipe": {
+    "nest": {
+     "section": "base_sepolia",
+     "kind": "o",
+     "total": 10000
+    }
+   },
+   "bytes_sha256": "fd13812b3b19d1e8ccfc605adec66e5563728de801578f439b3d3c144830becb",
+   "expect": "ok|chain=84532|portal=49f53e41452c74589e85ca1677426ba426459e85|sys=f272670eb55e895584501d564afeb048bed26194|maxl2=1024|impl=7|proxy=2|layouts=1"
+  },
+  {
+   "name": "depth 9999 arrays in adiri as an extension file",
+   "rule": "depth",
+   "kind": "ext",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 9999
+    }
+   },
+   "bytes_sha256": "becbe0bd8eec9f00d627c00d396aa6bb1ff9e1ac5c4fb720b61dd37d4f210ce3",
+   "expect": "E|{\"code\":\"finality_ledger_extension_invalid\",\"fields\":{\"period\":\"0\",\"reason\":\"non_ledger_content_differs\"}}"
+  },
+  {
+   "name": "depth 10001 arrays in adiri as an extension file",
+   "rule": "depth",
+   "kind": "ext",
+   "recipe": {
+    "nest": {
+     "section": "adiri",
+     "kind": "a",
+     "total": 10001
+    }
+   },
+   "bytes_sha256": "6c2d59919079ea2610ebb24032444629f32b99823851a3a4d900064c2e3532df",
+   "expect": "E|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"reason\":\"not_json\"}}"
+  },
+  {
+   "name": "arb control: the embedded file",
+   "rule": "control",
+   "kind": "arb",
+   "recipe": {
+    "edits": []
+   },
+   "bytes_sha256": "fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440",
+   "expect": "ok|rollup=042b2e6c5e99d4c521bd49beed5e99651d9b0cf4|bold=105880604|mhc=32768|lp=3bd9637547d75e5b4539449e14c759b86b9d37a7c1f2b47a1524f857e4ff1a0c=bridge_impl,41aae8a0f910daa7a04450a94f864df487c0226c75e1809298c297d7f9e2f33a=validator_wallet_logic,8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8=validator_wallet_proxy,dd93a7606e6067aaae8ad5afa28b943a8272809eb72face4e2bb3bf4d0609445=rollup_admin_logic,eadf786edd4819d0262d9679d43b878d7005408a822aa0c43cf79bd0043c09a3=rollup_user_logic|sel=10b98a35,5bf03833,6096686d,6420fb9f,ce1d571f,72f45866,097da1f8,c179f1d9|top=fc42829b29c259a7370ab56c8f69fce23b5f351a9ce151da453281993ec0090c,0ef6ac64bd6b0fa95ed37aa19a1b16613fb89e2269c92639a9d516a64fea4938"
+  },
+  {
+   "name": "arb logic_pins upper-case proxy hash as logic",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8"
+      ],
+      "set": "validator_wallet_logic"
+     }
+    ]
+   },
+   "bytes_sha256": "ac188af99c328f0e0caceba5cdc320fe4b60b6c6bf030fbec7a361d5aa88ba42",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case proxy hash as proxy",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8"
+      ],
+      "set": "validator_wallet_proxy"
+     }
+    ]
+   },
+   "bytes_sha256": "dd1e139935911c2ab190bab0aee25c00a29bd83062f91b09515f3a75462cccab",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case proxy hash as other",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8"
+      ],
+      "set": "other"
+     }
+    ]
+   },
+   "bytes_sha256": "15efdfc88452d245aebf6504f2e4486cd5055c5f8e48c21ea0377a671d002439",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case logic hash as proxy",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x41AAE8A0F910DAA7A04450A94F864DF487C0226C75E1809298C297D7F9E2F33A"
+      ],
+      "set": "validator_wallet_proxy"
+     }
+    ]
+   },
+   "bytes_sha256": "25a493880509b634f1a33c66e18ef74e3cf81d1bac3229cdb7300d5249812be9",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x41aae8a0f910daa7a04450a94f864df487c0226c75e1809298c297d7f9e2f33a\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case variant of the bridge hash as foo",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x3BD9637547D75E5B4539449E14C759B86B9D37A7C1F2B47A1524F857E4FF1A0C"
+      ],
+      "set": "foo"
+     }
+    ]
+   },
+   "bytes_sha256": "fedc9aeef651f246457c5ce2f407cf453f4225701e7a8732e8c9d7f8b80ecf34",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x3bd9637547d75e5b4539449e14c759b86b9d37a7c1f2b47a1524f857e4ff1a0c\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case variant of the bridge hash as bar",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x3BD9637547D75E5B4539449E14C759B86B9D37A7C1F2B47A1524F857E4FF1A0C"
+      ],
+      "set": "bar"
+     }
+    ]
+   },
+   "bytes_sha256": "72e7354f7a7ad459b0efc9f23f565cfc60c8cc969293ee9d72a096ef5e522e01",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x3bd9637547d75e5b4539449e14c759b86b9d37a7c1f2b47a1524f857e4ff1a0c\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case variant of the bridge hash as bridge_impl",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x3BD9637547D75E5B4539449E14C759B86B9D37A7C1F2B47A1524F857E4FF1A0C"
+      ],
+      "set": "bridge_impl"
+     }
+    ]
+   },
+   "bytes_sha256": "927cdfd5d04aafd1f3efbca4cfadd08ebc864b241bd44dba80f2d598169c939f",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x3bd9637547d75e5b4539449e14c759b86b9d37a7c1f2b47a1524f857e4ff1a0c\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins upper-case variant of the bridge hash as rollup_unused",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x3BD9637547D75E5B4539449E14C759B86B9D37A7C1F2B47A1524F857E4FF1A0C"
+      ],
+      "set": "rollup_unused"
+     }
+    ]
+   },
+   "bytes_sha256": "554ae012b78ba5d044b9d625b41bf876cb83a32d386eb0821409782e888f73ee",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"0x3bd9637547d75e5b4539449e14c759b86b9d37a7c1f2b47a1524f857e4ff1a0c\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb logic_pins only an upper-case key (lower removed)",
+   "rule": "logic_pins_one",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8"
+      ],
+      "delete": true
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "logic_pins",
+       "0x8736329B580CFC0C0C39EE6700515E0BC51652AFB614640DB9E34A5D784933E8"
+      ],
+      "set": "validator_wallet_proxy"
+     }
+    ]
+   },
+   "bytes_sha256": "6bc89e452f77150becbb69baf1ab20fbf9bd59414bd7be71fc3e197cd9409258",
+   "expect": "ok|rollup=042b2e6c5e99d4c521bd49beed5e99651d9b0cf4|bold=105880604|mhc=32768|lp=3bd9637547d75e5b4539449e14c759b86b9d37a7c1f2b47a1524f857e4ff1a0c=bridge_impl,41aae8a0f910daa7a04450a94f864df487c0226c75e1809298c297d7f9e2f33a=validator_wallet_logic,8736329b580cfc0c0c39ee6700515e0bc51652afb614640db9e34a5d784933e8=validator_wallet_proxy,dd93a7606e6067aaae8ad5afa28b943a8272809eb72face4e2bb3bf4d0609445=rollup_admin_logic,eadf786edd4819d0262d9679d43b878d7005408a822aa0c43cf79bd0043c09a3=rollup_user_logic|sel=10b98a35,5bf03833,6096686d,6420fb9f,ce1d571f,72f45866,097da1f8,c179f1d9|top=fc42829b29c259a7370ab56c8f69fce23b5f351a9ce151da453281993ec0090c,0ef6ac64bd6b0fa95ed37aa19a1b16613fb89e2269c92639a9d516a64fea4938"
+  },
+  {
+   "name": "arb case-variant top-level section key",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "Rollup"
+      ],
+      "set": "0x042b2e6c5e99d4c521bd49beed5e99651d9b0cf4"
+     }
+    ]
+   },
+   "bytes_sha256": "fc13dafc36c075471d154bd001ed4cfd8c670a6774aa4c78c3481d667e5c8380",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"rollup\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb case-variant key in layout",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "layout",
+       "Name"
+      ],
+      "set": "nitro-contracts-v3.1.0"
+     }
+    ]
+   },
+   "bytes_sha256": "98255096f86ffe1cf263e29787ccdfeb4437b802542a0b092198624c1b50244f",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"name\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb case-variant key in selectors",
+   "rule": "logic_pins",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "CONFIRM_ASSERTION"
+      ],
+      "set": "0x10b98a35"
+     }
+    ]
+   },
+   "bytes_sha256": "5d7532c3055a3a52570b79507f899cbcef31add9268485d036774a684694a17f",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"confirm_assertion\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "arb selector confirm_assertion zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "confirm_assertion"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "39d4a811ff0dee538952e3d83bfff3a2b8edf2c4145fd2761b5cf536e3445a13",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.confirm_assertion\"}}"
+  },
+  {
+   "name": "arb selector fast_confirm_assertion zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "fast_confirm_assertion"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "3daca89ab6ee0417245e26d739bad777ec2fb04a1f3a57e7f67a8e56105c7b12",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.fast_confirm_assertion\"}}"
+  },
+  {
+   "name": "arb selector fast_confirm_new_assertion zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "fast_confirm_new_assertion"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "92bbe50409137e348214ebee0a7d7b7271a4fc5a5ca979c97a6f824c6a77988a",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.fast_confirm_new_assertion\"}}"
+  },
+  {
+   "name": "arb selector force_confirm_assertion zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "force_confirm_assertion"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "8fb3e7f3f2373b9887a3fcef8a806a467a21afc87cc3ed416962430965a75893",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.force_confirm_assertion\"}}"
+  },
+  {
+   "name": "arb selector wallet_execute_transaction zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transaction"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "a0b15c1331a0b4134ca4dd44b75cb9354af401d1dd5a56d2ec6189d922ac880d",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.wallet_execute_transaction\"}}"
+  },
+  {
+   "name": "arb selector wallet_execute_transaction_with_gas_refunder zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transaction_with_gas_refunder"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "8417f8d91551a2e1de01dc82a68d89e1d515cda70d42f9d985d094ec92763ea5",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.wallet_execute_transaction_with_gas_refunder\"}}"
+  },
+  {
+   "name": "arb selector wallet_execute_transactions zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transactions"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "b04a8ff8140d1f3180173c99c40bb68e13997dacca74c9615f70d6e70128af65",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.wallet_execute_transactions\"}}"
+  },
+  {
+   "name": "arb selector wallet_execute_transactions_with_gas_refunder zero",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transactions_with_gas_refunder"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "1aeebaadcce8d0b47893a13e2493621d894c5faf877cfaaa3e77d3351ebefccd",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.wallet_execute_transactions_with_gas_refunder\"}}"
+  },
+  {
+   "name": "arb selectors: three bad, first by name",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transactions"
+      ],
+      "set": "0x"
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "fast_confirm_assertion"
+      ],
+      "set": "0x"
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transaction"
+      ],
+      "set": "0x"
+     }
+    ]
+   },
+   "bytes_sha256": "4b0a76abe58b95c530d43982792bdf8c8ee0374099fca4354d5733ad8676b5bb",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.fast_confirm_assertion\"}}"
+  },
+  {
+   "name": "arb selectors: bad three ways",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "confirm_assertion"
+      ],
+      "set": "0x1234"
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "fast_confirm_new_assertion"
+      ],
+      "set": "0x00000000"
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "force_confirm_assertion"
+      ],
+      "delete": true
+     }
+    ]
+   },
+   "bytes_sha256": "4dad363d15cdcc6d0c0836d24dedf307016048a7a134e7653bb338ae08aee660",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.confirm_assertion\"}}"
+  },
+  {
+   "name": "arb topics: both bad, first by name",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "topics",
+       "assertion_force_confirmed"
+      ],
+      "set": "0x12"
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "topics",
+       "assertion_confirmed"
+      ],
+      "delete": true
+     }
+    ]
+   },
+   "bytes_sha256": "115dcacc17ea3957f9daf72f79f97d8386ab45b51f30fa43c38e13f688a573d3",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.topics.assertion_confirmed\"}}"
+  },
+  {
+   "name": "arb selector and topics bad: the selector first",
+   "rule": "sorted",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "topics",
+       "assertion_force_confirmed"
+      ],
+      "set": "0x12"
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "topics",
+       "assertion_confirmed"
+      ],
+      "delete": true
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "wallet_execute_transaction"
+      ],
+      "set": "0x00000000"
+     }
+    ]
+   },
+   "bytes_sha256": "450bf3216780324232540aed57caf7925baec998e90265ef62408c51ce9de97b",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"confirm_path.selectors.wallet_execute_transaction\"}}"
+  },
+  {
+   "name": "arb two defects: chain_id and a bad selector",
+   "rule": "order",
+   "kind": "arb",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "arb_sepolia",
+       "chain_id"
+      ],
+      "set": 1
+     },
+     {
+      "path": [
+       "arb_sepolia",
+       "confirm_path",
+       "selectors",
+       "confirm_assertion"
+      ],
+      "set": "0x"
+     }
+    ]
+   },
+   "bytes_sha256": "bff922d3410bddc14be073365589e86ff58127970d31858ce7c457268b4ab590",
+   "expect": "ARB|{\"code\":\"pin_mismatch\",\"fields\":{\"field\":\"chain_id\"}}"
+  },
+  {
+   "name": "bp control: the embedded file",
+   "rule": "control",
+   "kind": "bp",
+   "recipe": {
+    "edits": []
+   },
+   "bytes_sha256": "fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440",
+   "expect": "ok|chain=84532|sys=f272670eb55e895584501d564afeb048bed26194|inbox=ff00000000000000000000000000000000084532|seq=3600|ct=300|blobs=32|hashes=1|kzg=f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f|shared.kzg_setup_sha256"
+  },
+  {
+   "name": "bp channel_timeout zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "channel_timeout"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "00f3f7aa83a36c6d3d2fa5debf3b76f2cf3d8801e17b2cf941dc371fce8bd8a0",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.channel_timeout\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from channel_timeout on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "channel_timeout"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "channel_timeout_granite"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "denim_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "granite_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "isthmus_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "37eccd08bf183235780babae47762bf9ab22049058848eacb46d12d16c5f87d6",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.channel_timeout\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp channel_timeout_granite zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "channel_timeout_granite"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "69352936114e20a83300250886bd051747921877869d58c25cb7f8672a680130",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.channel_timeout_granite\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from channel_timeout_granite on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "channel_timeout_granite"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "denim_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "granite_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "isthmus_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "49a076df02559ebbcb13adebc68cbd0370e7bd6abd3a3e0946c422241e993bc9",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.channel_timeout_granite\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp denim_time zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "denim_time"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "4f703de215e7301820d03cd879d2d28f531f38e82ab4c9fea012913122df3bdb",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.denim_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from denim_time on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "denim_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "granite_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "isthmus_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "7ea4446ed282d8114912bc1711386dde056adfc48a167a7e5f5ba6f00ebe7729",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.denim_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp granite_time zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "granite_time"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "471e60b728e6c7a7abe911c792a75e4ba05dd9ff2c9ecdd9a6050cd38c9907b9",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.granite_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from granite_time on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "granite_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "isthmus_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "bdc4b8a4b5f8dc6304a38e8fec15f4fac117f374e8468332d47efaea4d747d3d",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.granite_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp isthmus_time zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "isthmus_time"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "5962e385d2fe7b472bd09a39d5f7e4e6330a82fabb235725594bbe4e3fb25bec",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.isthmus_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from isthmus_time on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "isthmus_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "64c7aa4d880c680dd9f29a63d85edd5de0255d9a4d31fc02f51bf773457e8dee",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.isthmus_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp l2_block_time zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "bf1af5606bfd45aad77b95f40ce5bba63bbce762f0010cf4358d36426a838fd9",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.l2_block_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from l2_block_time on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "l2_block_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "150e256db4fe0a06114327772672c1fbf9af470eff5a8ce4f6756ce9b8f78fd6",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.l2_block_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp l2_genesis_time zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "8d3ed43795e7a1de45a795e8c032fbeab91242b16602c2e84486a139a2613382",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.l2_genesis_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from l2_genesis_time on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "l2_genesis_time"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "bbf5bcae77415766632c0ff862a4c74a12e245614c2382254f148eec0c60f086",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.l2_genesis_time\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp max_rlp_bytes_per_channel zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "71241c10724c3605f0f3b2a8eb85f47399fe0938c60e99f1cd0f0b9e872d9e8e",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.max_rlp_bytes_per_channel\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from max_rlp_bytes_per_channel on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "max_rlp_bytes_per_channel"
+      ],
+      "set": 0
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "e82256e7bf8044d0c3ec15fcccea35878705f1049351abff4cda69a2e5bcf727",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.max_rlp_bytes_per_channel\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp seq_window_size zero alone",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "5048e719fedc87541b82a7d6497ac6685b7a36b8b594806f5a8f5be715594a93",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.seq_window_size\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bp zero from seq_window_size on",
+   "rule": "sorted",
+   "kind": "bp",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "seq_window_size"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "5048e719fedc87541b82a7d6497ac6685b7a36b8b594806f5a8f5be715594a93",
+   "expect": "BP|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.seq_window_size\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf control: the embedded file",
+   "rule": "control",
+   "kind": "bf",
+   "recipe": {
+    "edits": []
+   },
+   "bytes_sha256": "fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440",
+   "expect": "ok|chain=84532|portal=49f53e41452c74589e85ca1677426ba426459e85|sys=f272670eb55e895584501d564afeb048bed26194|maxl2=1024|impl=7|proxy=2|layouts=1"
+  },
+  {
+   "name": "bf impl_pins row not a hash",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xZZ"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "718a691817e96a62ab0d4b2299c263b2739055d0d188402d170b732b065b2331",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row zero hash",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "bb72bc0d096e0ef4664736e0552892ad92f07a6d6e92094d580f1f8778ab1b50",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row no role",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "set": {}
+     }
+    ]
+   },
+   "bytes_sha256": "0083936cb65664cd116bfd403d4f467f980a87f4a058ff359c6cbc6c0e4cc1ee",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row upper-case prefix",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0Xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "f714d2cf0be6b090c8cbfb1476b7e18d0c127afd16fb1c85f16b65f6b4c46737",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row upper-case digits",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "a5ba52edb25ee2965afb3464f98df4c4241b8cbce28e9a6570e1550a2082a62f",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row 33 bytes",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd00"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "a56aaeb86a8f59a473f0f2ac102b35dde7c1f1276aa6caeec478e767c6a7aa76",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row 31 bytes",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "659ba315b93778deae81ec96d0b8fd68875f8400fb3a38915ec3e4466c73e550",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins row not an object",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      ],
+      "set": "not an object"
+     }
+    ]
+   },
+   "bytes_sha256": "7c3d584eac4c03347c0528b68d778f90600d99d7908ebaa8eff5b3da67861bd7",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf impl_pins all eight bad rows",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xZZ"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "set": {}
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0Xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd00"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      ],
+      "set": "not an object"
+     }
+    ]
+   },
+   "bytes_sha256": "34075c6621d8df3286509dc893daac70d70a38c588d7fa0c5e1c991ef115226a",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row not a hash",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xZZ"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "e628b2049bad7c43032308610c8ad3039d03ff942b5d27998cb6b32654b0f36a",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row zero hash",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "dc625d51051508cabe450ccec8ede92afc7fe1f5174c7f3b8d9c63c88008d17c",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row no role",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "set": {}
+     }
+    ]
+   },
+   "bytes_sha256": "d26ad7d39003895f1b4dbef6fe81c0fbdf230a905db63da6305b6630b0cc365c",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row upper-case prefix",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0Xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "4f1c6ad65e8570c12c9a10d9406e080f417978b7982f651db27bb97bde3b170b",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row upper-case digits",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "98bd27e1f5d51be0b7a093ce849f0fbff4960915f3434f5e2ecc7b186f76b32e",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row 33 bytes",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd00"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "9a4d99a15b7e8d441e20e0ab41d790f0445918cf5f47c1bfb63fb6c1c0e78407",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row 31 bytes",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "set": {
+       "role": "x"
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "06c6e81a748a527e5f7b4caa9416bddd21ff512e1cd35404f3ec07ad722022ee",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins row not an object",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      ],
+      "set": "not an object"
+     }
+    ]
+   },
+   "bytes_sha256": "b041e1979e6ccbd4047f4d96629e1b23ccb79dc130356c656e326ebfac14620a",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf proxy_pins all eight bad rows",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xZZ"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "set": {}
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0Xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd00"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      ],
+      "set": "not an object"
+     }
+    ]
+   },
+   "bytes_sha256": "f3d44a6b2e0de776c77eeb2b496d94175483d6af7a3212ba3019f37634466c0b",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.proxy_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf bad rows in both sections",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xZZ"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "set": {}
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0Xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd00"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "impl_pins",
+       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      ],
+      "set": "not an object"
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xZZ"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0x0000000000000000000000000000000000000000000000000000000000000000"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "set": {}
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0Xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd00"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "set": {
+       "role": "x"
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "proxy_pins",
+       "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      ],
+      "set": "not an object"
+     }
+    ]
+   },
+   "bytes_sha256": "a5f62f34ed499d958f4bbba30d1be505de72b947e931946c278cb6df4634885b",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.impl_pins\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "bf several bad layouts",
+   "rule": "rows",
+   "kind": "bf",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "base_sepolia",
+       "game_layout",
+       "zz_not_hex"
+      ],
+      "set": {
+       "clone_head": "nothex",
+       "clone_mid": "0x",
+       "clone_tail": "0x",
+       "args_base_len": 136,
+       "args_per_root": 32
+      }
+     },
+     {
+      "path": [
+       "base_sepolia",
+       "game_layout",
+       "aa_short_base"
+      ],
+      "set": {
+       "clone_head": "0x",
+       "clone_mid": "0x",
+       "clone_tail": "0x",
+       "args_base_len": 1,
+       "args_per_root": 32
+      }
+     }
+    ]
+   },
+   "bytes_sha256": "a6172e5f8aa96b27fd460482ff3c0c4870b7e9b26ca1f184aefb08b57b84e7e3",
+   "expect": "BF|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"base_sepolia.game_layout\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "ad control: the embedded file",
+   "rule": "control",
+   "kind": "ad",
+   "recipe": {
+    "edits": []
+   },
+   "bytes_sha256": "fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440",
+   "expect": "ok|chain=2017|codec=telcoin-epoch-record/bcs-blake3/1|gc=5|min=4|max=16384|gh=3577ee7223cf0d9a1da1293fd12a47e0e45bb97afcd0427bccd4954cb704baef|e0=290,725705f6ff227979f8812d8c395e9a048c5e97877462e8c12513dcda66cc01d5|link=6ccf8d955bbb92278e5cecfc9b580d2e4946dfee234a64eb582e33bd3452cbbd|eip=0000f90827f1c53a10cb7a02335b175320002935,6e49e66782037c0555897870e29fa5e552daf4719552131a0abce779daec0a5d"
+  },
+  {
+   "name": "ad chain_id zero",
+   "rule": "sorted",
+   "kind": "ad",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "chain_id"
+      ],
+      "set": 0
+     }
+    ]
+   },
+   "bytes_sha256": "47ad99d2bb7bfb91450b14d57320ae942fd034007d60110d386ce1574be7a68e",
+   "expect": "AD|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"adiri.chain_id\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "ad min_committee_size below the floor",
+   "rule": "sorted",
+   "kind": "ad",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "min_committee_size"
+      ],
+      "set": 3
+     }
+    ]
+   },
+   "bytes_sha256": "f8d4df0ca3c19b2fe750d52f9e1101a0b446bced127d217f207a0eaa0fa4f900",
+   "expect": "AD|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"adiri.min_committee_size\",\"reason\":\"bad_value\"}}"
+  },
+  {
+   "name": "ad unknown member",
+   "rule": "sorted",
+   "kind": "ad",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "zzz"
+      ],
+      "set": 1
+     }
+    ]
+   },
+   "bytes_sha256": "e349e735d74722553c4bb262d1d90df6cb51306d0064ce4f84418dfc83c29350",
+   "expect": "AD|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"adiri.zzz\",\"reason\":\"unknown_key\"}}"
+  },
+  {
+   "name": "ad upper-case member",
+   "rule": "logic_pins",
+   "kind": "ad",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "Chain_ID"
+      ],
+      "set": 2017
+     }
+    ]
+   },
+   "bytes_sha256": "c59fcb91ca3a750c469e38eeb5d74d891418db7f0159e01a754180001a1eef43",
+   "expect": "PIN|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"chain_id\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "ext the embedded file itself",
+   "rule": "control",
+   "kind": "ext",
+   "recipe": {
+    "edits": []
+   },
+   "bytes_sha256": "fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440",
+   "expect": "ok|extension:fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440"
+  },
+  {
+   "name": "ext a member added outside the ledger",
+   "rule": "number_ext",
+   "kind": "ext",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "aaa"
+      ],
+      "set": "x"
+     }
+    ]
+   },
+   "bytes_sha256": "e8afc09dd25c044b1ae65380eba834a2bcc71db91ae4fae3cb28d30004df2145",
+   "expect": "E|{\"code\":\"finality_ledger_extension_invalid\",\"fields\":{\"period\":\"0\",\"reason\":\"non_ledger_content_differs\"}}"
+  },
+  {
+   "name": "ext a case variant in the adiri section",
+   "rule": "number_ext",
+   "kind": "ext",
+   "recipe": {
+    "edits": [
+     {
+      "path": [
+       "adiri",
+       "Chain_ID"
+      ],
+      "set": 2017
+     }
+    ]
+   },
+   "bytes_sha256": "c59fcb91ca3a750c469e38eeb5d74d891418db7f0159e01a754180001a1eef43",
+   "expect": "E|{\"code\":\"finality_pins_corrupt\",\"fields\":{\"key\":\"chain_id\",\"reason\":\"duplicate_key\"}}"
+  },
+  {
+   "name": "adig a valid chain of 3 tables and 5 records",
+   "rule": "adiri_ok",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ]
+     ]
+    }
+   },
+   "expect": "ok|12a488ff1098c0625f7c78b5745586d4c3a150ace1a51b28003d562ac331126e,a3dc175f24d5465195bb85e65256db664d5caf4332bd3952f038477b7eed2b44,59479dad8f552187256d5c957305e42d74694a319af51f685ac3c5b413818e27,e2d50dd31c0b20cccc115a5b1e0809cdde471c4c70ce4c95d4278d65519ac232,cea75b55043f681539a4f92c9a7f095571a9cdf7e516f8442f4c7440f3b1f1a7"
+  },
+  {
+   "name": "advcc a valid chain of 3 tables and 5 records",
+   "rule": "adiri_ok",
+   "kind": "advcc",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"committee_chain_broken\",\"fields\":{\"check\":\"public_key_invalid\",\"epoch\":\"0\",\"index\":\"0\"}}"
+  },
+  {
+   "name": "adig 1 tables, next index 1 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"1\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"1\"}}"
+  },
+  {
+   "name": "adig 1 tables, both index 1 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": [
+      [
+       0,
+       0
+      ],
+      [
+       1,
+       1
+      ],
+      [
+       0,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"1\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"1\"}}"
+  },
+  {
+   "name": "adig 1 tables, committee index 1 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ],
+      [
+       1,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"1\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"1\"}}"
+  },
+  {
+   "name": "adig 1 tables, next index 255 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": [
+      [
+       0,
+       255
+      ],
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"255\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"1\"}}"
+  },
+  {
+   "name": "adig 1 tables, both index 255 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": [
+      [
+       0,
+       0
+      ],
+      [
+       255,
+       255
+      ],
+      [
+       0,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"255\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"1\"}}"
+  },
+  {
+   "name": "adig 1 tables, committee index 255 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": [
+      [
+       0,
+       0
+      ],
+      [
+       0,
+       0
+      ],
+      [
+       255,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"255\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"1\"}}"
+  },
+  {
+   "name": "adig 2 tables, both index 2 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5
+     ],
+     "records": [
+      [
+       2,
+       2
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       0,
+       1
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"2\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"2\"}}"
+  },
+  {
+   "name": "adig 2 tables, committee index 2 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       2,
+       0
+      ],
+      [
+       0,
+       1
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"2\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"2\"}}"
+  },
+  {
+   "name": "adig 2 tables, next index 2 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       0,
+       2
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"2\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"2\"}}"
+  },
+  {
+   "name": "adig 2 tables, both index 127 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5
+     ],
+     "records": [
+      [
+       127,
+       127
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       0,
+       1
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"127\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"2\"}}"
+  },
+  {
+   "name": "adig 2 tables, committee index 127 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       127,
+       0
+      ],
+      [
+       0,
+       1
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"127\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"2\"}}"
+  },
+  {
+   "name": "adig 2 tables, next index 127 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       0
+      ],
+      [
+       0,
+       127
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"127\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"2\"}}"
+  },
+  {
+   "name": "adig 3 tables, committee index 3 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       3,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"3\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig 3 tables, next index 3 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       3
+      ],
+      [
+       2,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"3\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig 3 tables, both index 3 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       3,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"3\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig 3 tables, committee index 128 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       128,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"128\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig 3 tables, next index 128 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       128
+      ],
+      [
+       2,
+       0
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"128\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig 3 tables, both index 128 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       128,
+       128
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"128\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig 200 tables, both index 200 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5
+     ],
+     "records": [
+      [
+       200,
+       200
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"200\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"200\"}}"
+  },
+  {
+   "name": "adig 200 tables, committee index 200 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       200,
+       2
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"200\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"200\"}}"
+  },
+  {
+   "name": "adig 200 tables, next index 200 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       200
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"200\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"200\"}}"
+  },
+  {
+   "name": "adig 200 tables, both index 254 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5
+     ],
+     "records": [
+      [
+       254,
+       254
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"254\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"200\"}}"
+  },
+  {
+   "name": "adig 200 tables, committee index 254 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       254,
+       2
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"254\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"200\"}}"
+  },
+  {
+   "name": "adig 200 tables, next index 254 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       254
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"254\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"200\"}}"
+  },
+  {
+   "name": "adig 255 tables, committee index 255 at record 0",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       255,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"255\",\"index\":\"0\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"255\"}}"
+  },
+  {
+   "name": "adig 255 tables, next index 255 at record 1",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       255
+      ],
+      [
+       2,
+       3
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"255\",\"index\":\"1\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"255\"}}"
+  },
+  {
+   "name": "adig 255 tables, both index 255 at record 2",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6,
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       255,
+       255
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"255\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"255\"}}"
+  },
+  {
+   "name": "advcc index past the tables at record 2",
+   "rule": "adiri_index",
+   "kind": "advcc",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       9
+      ],
+      [
+       0,
+       1
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"9\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig two failing records name the first",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4,
+      5,
+      6
+     ],
+     "records": [
+      [
+       0,
+       1
+      ],
+      [
+       1,
+       2
+      ],
+      [
+       2,
+       9
+      ],
+      [
+       0,
+       200
+      ]
+     ]
+    }
+   },
+   "expect": "E|{\"code\":\"finality_evidence_malformed\",\"fields\":{\"got_len\":\"9\",\"index\":\"2\",\"part\":\"cfa1.record\",\"reason\":\"cfa1_table_index_out_of_range\",\"want_len\":\"3\"}}"
+  },
+  {
+   "name": "adig no records",
+   "rule": "adiri_index",
+   "kind": "adig",
+   "recipe": {
+    "chain": {
+     "tables": [
+      4
+     ],
+     "records": []
+    }
+   },
+   "expect": "ok|"
+  }
+ ]
+}

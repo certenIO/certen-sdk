@@ -294,10 +294,19 @@ describe('T1: LoadPins in the order of pins.go:105-203, nothing defaulted', () =
     expect(await outcome(mutated((a) => ((a.chain_id = 1), (a.zz = 1))))).toBe(mismatch('section'));
   });
 
-  it('N1: a hash given twice in different letter cases under the SAME role loads, under DIFFERENT roles is pin_mismatch{logic_pins} (Go keeps whichever its map visits last)', async () => {
-    expect(await outcome(mutated((a) => (a.logic_pins[`0x${WALLET_PROXY_CODE_HASH.slice(2).toUpperCase()}`] = 'validator_wallet_proxy')))).toBe('ok');
-    expect(await outcome(mutated((a) => (a.logic_pins[`0x${WALLET_PROXY_CODE_HASH.slice(2).toUpperCase()}`] = 'validator_wallet_logic')))).toBe(mismatch('logic_pins'));
-    expect(await outcome(mutated((a) => (a.logic_pins[`0x${WALLET_PROXY_CODE_HASH.slice(2).toUpperCase()}`] = 'other')))).toBe(mismatch('logic_pins'));
+  it('N1 (RB12-OPS-A1, F4/N1): a hash given twice in different letter cases never reaches the loader from a file: the framework walk refuses the file as duplicate_key, whatever the roles (the guard behind it is tested in units_pins_opssync_rb12.test.ts)', () => {
+    for (const role of ['validator_wallet_proxy', 'validator_wallet_logic', 'other']) {
+      let got: unknown;
+      try {
+        mutated((a) => (a.logic_pins[`0x${WALLET_PROXY_CODE_HASH.slice(2).toUpperCase()}`] = role));
+      } catch (e) {
+        got = e;
+      }
+      expect(got, role).toBeInstanceOf(FinalityStateError);
+      expect((got as FinalityStateError).canonical(), role).toBe(
+        `{"code":"finality_pins_corrupt","fields":{"key":"${WALLET_PROXY_CODE_HASH}","reason":"duplicate_key"}}`,
+      );
+    }
   });
 
   it('with several bad selectors the one first in sorted name order is named (Go names a random one)', async () => {

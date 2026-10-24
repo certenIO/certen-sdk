@@ -154,6 +154,8 @@ const numberBelow = (n: bigint): bigint => (n === 0n ? 0n : n - 1n);
  * wrap-free: a header after number 0 has no number below it, and h.number + 1 never wraps to prev.number. Exported for the tests of its arithmetic.
  */
 export function verifySpine(res: ChainResult, spine: readonly Uint8Array[], leg: BlockRef): LinkResult {
+  // decodeBody refuses an empty spine; this function reads the last header, so it states the same refusal itself (Go verifySpine, RB12-OPS-A1)
+  if (spine.length === 0) throw malformed('spine', ReasonSpineEmpty, 0, 1);
   const F = res.final;
   const out: LinkResult = { consensusRootMatches: false };
   let prev: HeaderFields | undefined;

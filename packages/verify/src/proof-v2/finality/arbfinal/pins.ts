@@ -5,10 +5,13 @@
  * match case-insensitively once exact equality fails; null is a no-op; a wrongly typed value is an error), then the checks of loadArbFinalPins
  * in Go's order. Nothing is defaulted: a pin the file does not carry is a named pin_mismatch{field}.
  *
- * Two places where Go's order depends on its random map iteration are made deterministic here and are the only places this port is
- * stricter than a lucky Go run: duplicate logic_pins keys that differ only in letter case and name different roles (Go keeps whichever
- * the map visits last) are pin_mismatch{logic_pins}; and the confirm_path selectors and topics are checked in sorted-name order (Go
- * names a random one of several bad ones). A file with one bad value answers identically in Go and here.
+ * The order in which several defects are judged is a function of the file, in Go since RB12-OPS-A1 (pkg/finality at 4c6b8d26) and here:
+ *  - a pins FILE with two keys of one non-struct object that differ only in letter case (two spellings of one logic_pins hash, whatever roles
+ *    they carry) is refused by the framework walk as finality_pins_corrupt{duplicate_key} before this loader sees it (pins.ts walkKeys);
+ *  - this loader judges a Pins that did not come through the walk (one built in memory), and for it two spellings of one hash that name
+ *    different roles are pin_mismatch{logic_pins} and the same role under both is one entry (Go LoadPins: the keys are read in sorted order);
+ *  - the confirm_path selectors and topics are checked in sorted-name order, the first bad one by name is the one named.
+ * The two guards overlap on purpose: the second is unreachable from a file and is tested as such (units_pins_opssync_rb12.test.ts).
  */
 import { JsonError } from '../../../s3/gojson.js';
 import { foldEqual } from '../../../s3/fold.js';

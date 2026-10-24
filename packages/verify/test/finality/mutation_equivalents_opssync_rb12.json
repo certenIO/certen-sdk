@@ -1,0 +1,30 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-OPSSYNC partial hand-mutation run over the new walk (src/proof-v2/finality/pins.ts walkKeys), foldkey.ts and (begun) ledger.ts goValue/deepEqual. The harness (author scratchpad, not committed) enumerated 206 mutants: operator flips (=== <-> !==, < <= > >=, && <-> ||, removed negations, if (c) -> if (true)/(false), continue <-> break, 0 <-> 1, ++ <-> --, removed statements) plus 35 specified ones (fold rule never applied or applied to structs, toLowerCase/toUpperCase in place of foldKey, order rule by UTF-16 units, number rule as bad_value or via isNaN, table pair swaps and removals in foldkey-data.ts, goValue member order and well-formedness, deepEqual clauses). Control run of the UNMUTATED tree first (8 files, 381 tests green). Owner instruction (BETA, 2026-10-24): mutation moves to the end-of-programme backlog, so the run STOPPED after 86 of the 206 mutants (all 78 of the walk in pins.ts and the 8 of foldkey.ts, in file order; the 79 of ledger.ts, 6 of adiri/kind.ts and the 35 specified ones were NOT run). Of the 86: 82 killed (9 of them by hanging: an infinite loop in the walk or the table build), 4 survived. The survivor 57 (if (f.prev !== undefined) -> if (true)) was a real gap: it showed that the first key of an object was compared with an empty predecessor, which only changes the answer for the key of the empty string, and so led to the Go/TS disagreement on that key (Go names a violation of \"\" without a key field, TS added \"key\":\"\"). Fixed in pins.ts parsePins, killed by pins_opssync_rb12.test.ts 'the empty key' (re-applied: killed). The other three survivors are equivalent (below). 83 killed, 3 equivalent, 0 unexplained of the 86 run; 120 not run.",
+  "equivalents": [
+    {
+      "id": 14,
+      "file": "pins.ts",
+      "function": "walkKeys",
+      "original": "const struct = t !== undefined && typeof t === 'object' && 'struct' in t ? t.struct : undefined;",
+      "mutated": "const struct = t !== undefined || typeof t === 'object' && 'struct' in t ? t.struct : undefined;",
+      "reason": "with || the condition is true whenever t is defined, and t.struct is undefined for every schema type that is not a struct (a string type name, a { list }, a { ptr } already dereferenced): the same undefined as the false branch; for a struct type both conditions hold"
+    },
+    {
+      "id": 22,
+      "file": "pins.ts",
+      "function": "walkKeys",
+      "original": "elem: t !== undefined && typeof t === 'object' && 'list' in t ? t.list : undefined",
+      "mutated": "elem: t !== undefined || typeof t === 'object' && 'list' in t ? t.list : undefined",
+      "reason": "same as 14: t.list is undefined for every schema type that is not a list (strings, structs), so the widened condition yields the same undefined"
+    },
+    {
+      "id": 32,
+      "file": "pins.ts",
+      "function": "walkKeys",
+      "original": "if (f.i >= f.items.length) {",
+      "mutated": "if (f.i > f.items.length) {",
+      "reason": "at f.i === items.length the mutant reads items[length], which is undefined; the walk treats an undefined value as a scalar (not a number, object or array: nothing is entered), advances f.i past the end and pops the frame on the next pass: one extra no-op iteration, no observable difference"
+    }
+  ]
+}
