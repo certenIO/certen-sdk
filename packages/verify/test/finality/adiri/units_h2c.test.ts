@@ -5,9 +5,12 @@
  * the point at infinity, points of every small order of the cofactor group, and points outside the prime-order subgroup.
  */
 import { bls12_381 } from '@noble/curves/bls12-381';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SignatureDST } from '../../../src/proof-v2/finality/adiri/index.js';
 import { clearG1Cofactor, hashToG1Unclamped, mapToG1Unclamped, msm, type G1Point } from '../../../src/proof-v2/finality/adiri/msm.js';
+
+// The pure-JS BLS12-381 arithmetic is slow on a loaded machine: the 20 s default timeout failed these tests under the parallel full suite (RB12-TS-OPSSYNC FINDING 2).
+vi.setConfig({ testTimeout: 300_000 });
 
 const G1 = bls12_381.G1.Point;
 const Fp = bls12_381.fields.Fp;

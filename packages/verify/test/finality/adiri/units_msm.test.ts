@@ -5,7 +5,7 @@
  * reference in reference_sigs.ts) on valid, failing and hostile batches.
  */
 import { bls12_381 } from '@noble/curves/bls12-381';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { KeyCache, SignatureDST, firstFailure, firstOneByOne, type SigItem } from '../../../src/proof-v2/finality/adiri/index.js';
 import {
   SigEncoding,
@@ -26,6 +26,9 @@ import {
 } from '../../../src/proof-v2/finality/adiri/msm.js';
 import { referenceDecodeSignature, referenceFirstFailureBatched } from './reference_sigs.js';
 import { aggregateSign, concat, filled, pubKey } from './synth.js';
+
+// The pure-JS BLS12-381 arithmetic is slow on a loaded machine: the 20 s default timeout failed these tests under the parallel full suite (RB12-TS-OPSSYNC FINDING 2).
+vi.setConfig({ testTimeout: 300_000 });
 
 const G1 = bls12_381.G1.Point;
 const P = bls12_381.fields.Fp.ORDER;
