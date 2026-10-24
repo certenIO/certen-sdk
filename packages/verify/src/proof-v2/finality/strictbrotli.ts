@@ -124,9 +124,14 @@ const MAX_PROBE_BUFFER = 512 * 1024 * 1024;
  * decode error, so it is read from the call that does NOT fail: the output buffer is given exactly max bytes (chunkSize = max) and the
  * decoder returns "needs more output" with a full buffer the moment it has more than max bytes to flush, which node counts against
  * maxOutputLength = max - 1; a decoder that flushed at most max bytes either leaves the buffer short or fills it exactly, and fails
- * without asking for room. The smallest buffer node allows is 64 bytes, so for a cap below 64 the probe judges 64 bytes or more (a
- * stream that fails after flushing between max+1 and 63 bytes is judged a decode error here, an excess by the Go reader: caps that
- * small are outside every pinned value).
+ * without asking for room. The smallest buffer node allows is 64 bytes, so for a cap below 64 the probe judges 64 bytes or more.
+ *
+ * Known limit (FINDING in checkins/RB12-TS-TWINS-1.md; the Go sets say "double faults are not parity-tested"): a stream that FAILS to decode
+ * after the Go reader had flushed more than the cap is an excess there and a decode error here when the cap is below 512 bytes (the first
+ * buffer io.ReadAll hands the Go reader is 512 bytes, and for quality-0 window-10 streams it flushes into it before the failure; the
+ * C decoder behind node does not) and for caps below 64 in general. Measured against the Go package: 0 differences in about 30,000
+ * Go-judged cases with caps of 512 and more (cuts, flips, flipped cuts, 32 KiB boundary streams, crafted metablock streams); every
+ * pinned cap (message 262,144, batch 16,777,216, channel 100,000,000) is far above it. Both answers refuse the stream.
  */
 function flushedBeyond(input: Uint8Array, max: bigint): boolean {
   if (max > BigInt(MAX_PROBE_BUFFER)) return false;

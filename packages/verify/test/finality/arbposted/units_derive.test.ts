@@ -292,7 +292,8 @@ describe('nested size limit and the first byte of a signed transaction (parseL2)
     const cases: [string, Uint8Array, boolean][] = [['0xc0', B(0xc0), true], ['0xc1', B(0xc1, 0x00), true], ['0xbf', B(0xbf, 0x00), false], ['0xbe', B(0xbe), false]];
     for (const [name, t, ok] of cases) {
       const got = parseL2(signedTxMsg(t), 0);
-      expect([name, got !== null && got.length === 1]).toEqual([name, ok]);
+      if (ok) expect([name, got?.length]).toEqual([name, 1]);
+      else expect([name, got]).toEqual([name, null]);
     }
     expect(parseL2(concat(msgBatch([signedTxMsg(t1)]), B(255, 255, 255, 255, 255, 255, 255, 255, 0)), 0)?.length).toBe(1);
   });

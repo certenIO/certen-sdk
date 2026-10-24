@@ -1,7 +1,7 @@
 /**
  * The shared strict Brotli reader (src/proof-v2/finality/strictbrotli.ts, the twin of the validator's pkg/finality/strictbrotli): every truncation
  * point of streams of every quality and window is refused, every complete stream accepted, a byte after a stream refused, the empty stream
- * refused, the cap exact; and 170 Go-judged known answers (verdicts the Go package wrote for cuts, flips, flipped cuts and 32 KiB-boundary
+ * refused, the cap exact; and 178 Go-judged known answers (verdicts the Go package wrote for cuts, flips, flipped cuts and 32 KiB-boundary
  * streams under caps from 0 to 120,000) are reproduced.
  */
 import { readFileSync } from 'node:fs';
@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliCompressSync, brotliDecompressSync, constants as zc } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { decompress as channelDecompress, ChannelError } from '../../src/proof-v2/finality/baseposted/channel.js';
 import { ERR_EMPTY, ERR_INCOMPLETE, ERR_TRAILING, StrictBrotliError, decompress } from '../../src/proof-v2/finality/strictbrotli.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -129,6 +130,42 @@ describe('the empty stream and the reference behaviour the module exists for', (
   });
 });
 
+describe('the reasons carry what the caller names', () => {
+  it('a corrupt stream is the reason decode and its message names the decoder own error code; the other three keep the Go texts', () => {
+    let msg = '';
+    let reason = '';
+    try {
+      decompress(Uint8Array.of(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff), 1000);
+    } catch (e) {
+      msg = (e as Error).message;
+      reason = (e as StrictBrotliError).reason;
+    }
+    expect(reason).toBe('decode');
+    expect(msg).toMatch(/^brotli: corrupt stream: ERR_/);
+  });
+  it('the OP channel decoder (baseposted/channel.ts) uses the shared reader: the empty, cut and trailing texts are the Go reasons, a corrupt stream is a decompress failure, an excess is the channel cap', () => {
+    const data = Buffer.from('the channel carries this many bytes; '.repeat(40));
+    const c = compress(data, 5, 22);
+    const ch = (b: Uint8Array): Uint8Array => Buffer.concat([Buffer.of(1), b]);
+    const msgOf = (f: () => unknown): string => {
+      try {
+        f();
+      } catch (e) {
+        if (e instanceof ChannelError) return e.message;
+        throw e;
+      }
+      return 'accepted';
+    };
+    expect(Buffer.from(channelDecompress(ch(c), BigInt(data.length))).equals(data)).toBe(true);
+    expect(msgOf(() => channelDecompress(Buffer.of(1), 1000n))).toBe(ERR_EMPTY);
+    expect(msgOf(() => channelDecompress(ch(c.subarray(0, c.length - 1)), 100000n))).toBe(ERR_INCOMPLETE);
+    expect(msgOf(() => channelDecompress(ch(Buffer.concat([c, Buffer.of(0)])), 100000n))).toBe(ERR_TRAILING);
+    expect(msgOf(() => channelDecompress(ch(Uint8Array.of(0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff)), 1000n))).toMatch(/^decompress: brotli: corrupt stream: ERR_/);
+    expect(msgOf(() => channelDecompress(ch(c), BigInt(data.length - 1)))).toBe('channel exceeds max_rlp_bytes_per_channel');
+    expect(msgOf(() => channelDecompress(ch(c), BigInt(data.length)))).toBe('accepted');
+  });
+});
+
 describe('the cap', () => {
   it('is exact, the largest caps do not wrap, and an excess is reported without being read to its end', () => {
     const data = Buffer.alloc(5000, 7);
@@ -184,8 +221,8 @@ describe('Go-judged known answers', () => {
   const fx = JSON.parse(readFileSync(join(here, '..', 'fixtures', 'finality', 'strictbrotli_go_judged.json'), 'utf8')) as {
     cases: { name: string; in: string; max: number; want: string }[];
   };
-  it('170 verdicts the Go package wrote (exceeded, ok:<length>, empty, incomplete, trailing, error) are reproduced', () => {
-    expect(fx.cases.length).toBe(170);
+  it('178 verdicts the Go package wrote (exceeded, ok:<length>, empty, incomplete, trailing, error) are reproduced', () => {
+    expect(fx.cases.length).toBe(178);
     const seen = new Set<string>();
     for (const c of fx.cases) {
       const input = Buffer.from(c.in, 'base64');
