@@ -361,6 +361,21 @@ describe('hostile inputs to the walk', () => {
   });
 });
 
+describe('the real valid file', () => {
+  it('loads in a small fraction of a second: the walk is one pass (a generous bound, a regression of the order of magnitude is what it catches)', () => {
+    embeddedPins(); // warm
+    const t0 = performance.now();
+    for (let i = 0; i < 100; i++) embeddedPins();
+    const perLoad = (performance.now() - t0) / 100;
+    expect(perLoad).toBeLessThan(250);
+    // and the same file with one member of the adiri section repeated in another letter case is refused (duplicate_key) in the same single pass
+    const text = embeddedText().replace('"adiri": {', '"adiri": {\n    "Chain_ID": 1,');
+    const t1 = performance.now();
+    for (let i = 0; i < 100; i++) overrideAnswer(enc(text));
+    expect((performance.now() - t1) / 100).toBeLessThan(250);
+  });
+});
+
 describe('what the number rule does not touch', () => {
   it('the typed decode still reads integers from their literals (a u64 above 2^63 loads in a raw section, an overflowing one in a struct field is bad_value)', () => {
     expect(loadAnswer(enc(mini('{"chain_id": 18446744073709551615}', 'adiri')))).toMatch(/^ok /);
