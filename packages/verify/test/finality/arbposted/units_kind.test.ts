@@ -29,6 +29,7 @@ import {
   userTx,
   utf8,
   w32,
+  zhPayload,
   type SynthOpts,
 } from './synth.js';
 import { assertRegistered } from './regcheck.js';
@@ -89,12 +90,16 @@ describe('the synthetic Bridge accepts a well formed batch', () => {
     expect(makeSynth({ blockTxs: [internalTx(), retry, userTx(2), userTx(3)] }).run().fields.message_ordinal).toBe(1n);
   });
 
-  it('transactions of types 0 (legacy list), 1, 2, 3 and 4 are all standard and must be inside the message', () => {
+  it('transactions of types 0 (legacy list), 1, 2 and 4 are standard and must be inside the message; the blob type 3 fails the whole message (Nitro refuses it)', () => {
     const legacy = Uint8Array.of(0xc2, 0x01, 0x02);
     const mk = (t: number): Uint8Array => concat(Uint8Array.of(t), utf8('x'));
-    const txs = [legacy, mk(1), mk(2), mk(3), mk(4)];
+    const txs = [legacy, mk(1), mk(2), mk(4)];
     const v = makeSynth({ segments: [seg(0, msgBatch(txs.map(msgTx)))], blockTxs: [internalTx(), ...txs] }).run();
     expect(v.fields.message_ordinal).toBe(0n);
+    const withBlob = [...txs, mk(3)];
+    expect(canon({ segments: [seg(0, msgBatch(withBlob.map(msgTx)))], blockTxs: [internalTx(), ...withBlob] })).toBe(
+      state('l1_posted_content_not_found', { batch: '77', messages_scanned: '1', reason: 'no_matching_message', segments: '1' }),
+    );
   });
 });
 
@@ -167,10 +172,20 @@ describe('payload statuses (annex A6.3 steps 4-6)', () => {
     expect(canon(withCalldata(Uint8Array.of(0x80, 1, 2)))).toBe(state('l1_batch_data_off_l1', { batch: '77', header_byte: '128' }));
     expect(canon(withCalldata(Uint8Array.of(0x88, 1, 2)))).toBe(state('l1_batch_data_off_l1', { batch: '77', header_byte: '136' }));
   });
-  it('the zero-heavy header and an unknown header are l1_batch_header_unknown with the byte (the DACert byte only reaches the payload through a blob)', () => {
-    expect(canon(withCalldata(Uint8Array.of(0x20, 1)))).toBe(state('l1_batch_header_unknown', { batch: '77', byte: '32' }));
+  it('an unknown header is l1_batch_header_unknown with the byte (the DACert byte only reaches the payload through a blob)', () => {
     expect(canon(withCalldata(Uint8Array.of(0x05, 1)))).toBe(state('l1_batch_header_unknown', { batch: '77', byte: '5' }));
     expect(canon(withCalldata(Uint8Array.of(0x01, 1)))).toBe(state('l1_batch_header_unknown', { batch: '77', byte: '1' }));
+  });
+  it('the zero-heavy flag 0x20 is decoded once and the result is read as an ordinary payload: it must begin with the Brotli header byte', () => {
+    const inner = payloadOf(concat(seg(0, msgTx(userTx(1)))));
+    expect(canon({ calldata: zhPayload(inner), blockTxs: [internalTx(), userTx(1)] })).toMatch(/"message_ordinal":"0"/);
+    // the layer's result begins with another byte: that byte is named, never the flag
+    expect(canon(withCalldata(zhPayload(Uint8Array.of(0x05, 1))))).toBe(state('l1_batch_header_unknown', { batch: '77', byte: '5' }));
+    expect(canon(withCalldata(zhPayload(Uint8Array.of(0x80, 1))))).toBe(state('l1_batch_header_unknown', { batch: '77', byte: '128' }));
+    // a second layer is not decoded
+    expect(canon(withCalldata(zhPayload(zhPayload(inner))))).toBe(state('l1_batch_header_unknown', { batch: '77', byte: '32' }));
+    // the flag alone decodes to nothing
+    expect(canon(withCalldata(Uint8Array.of(0x20)))).toBe(state('l1_posted_content_not_found', { batch: '77', reason: 'payload_undecodable' }));
   });
   it('a brotli payload that is not one complete stream is payload_undecodable', () => {
     const good = payloadOf(concat(seg(0, msgTx(userTx(1)))));
@@ -179,8 +194,8 @@ describe('payload statuses (annex A6.3 steps 4-6)', () => {
     expect(canon(withCalldata(concat(good, Uint8Array.of(0))))).toBe(undecodable); // a byte after the end of the stream
     expect(canon(withCalldata(concat(Uint8Array.of(0), Uint8Array.of(0xff, 0xff, 0xff, 0xff))))).toBe(undecodable);
   });
-  it('a payload of only the header byte is an empty stream: zero segments, so no message matches (the reference reads an empty input as an empty stream)', () => {
-    expect(canon(withCalldata(Uint8Array.of(0)))).toBe(state('l1_posted_content_not_found', { batch: '77', messages_scanned: '0', reason: 'no_matching_message', segments: '0' }));
+  it('a payload of only the header byte is an EMPTY brotli stream and is payload_undecodable (strictbrotli: ErrEmpty)', () => {
+    expect(canon(withCalldata(Uint8Array.of(0)))).toBe(state('l1_posted_content_not_found', { batch: '77', reason: 'payload_undecodable' }));
   });
   it('an uncompressed batch over the pin is evidence_too_large{uncompressed_batch} naming pin+1 and the pin', () => {
     const s = makeSynth();
@@ -293,11 +308,13 @@ describe('delayed-origin transactions (annex A6.5)', () => {
     }).run();
     expect(v.fields.delayed_message_index).toBe(0n);
   });
-  it('a deposit transaction beside standard ones: both the delayed proof and the message match are required', () => {
-    const v = makeSynth(delayedOpts({ segments: [seg(2, new Uint8Array(0)), seg(0, msgTx(userTx(1)))], blockTxs: [internalTx(), deposit(), userTx(1)] })).run();
+  it('a block that is delayed-origin is judged by the delayed message ONLY: a standard transaction beside the deposit is a transaction the message does not derive', () => {
+    const v = makeSynth(delayedOpts()).run();
     expect(v.fields.delayed_message_index).toBe(41n);
-    expect(v.fields.message_ordinal).toBe(0n);
-    expect(canon(delayedOpts({ segments: [seg(2, new Uint8Array(0)), seg(0, msgTx(userTx(1)))], blockTxs: [internalTx(), deposit(), userTx(2)] }))).toMatch(/no_matching_message/);
+    expect(v.fields.message_ordinal).toBeUndefined();
+    for (const user of [userTx(1), userTx(2)]) {
+      expect(canon(delayedOpts({ segments: [seg(2, new Uint8Array(0)), seg(0, msgTx(userTx(1)))], blockTxs: [internalTx(), deposit(), user] }))).toBe(unproven(['106', '100', '2']));
+    }
   });
   it('without a Delayed section a delayed-origin type is unproven with the types and the header nonce, and no k', () => {
     expect(canon(delayedOpts({ delayed: undefined }))).toBe(unproven(['106', '100'], {}));
@@ -352,17 +369,27 @@ describe('delayed-origin transactions (annex A6.5)', () => {
     ];
     for (const tx of bad) expect(canon(delayedOpts({ blockTxs: [internalTx(), tx] }))).toBe(unproven(['106', '100']));
   });
-  it('only the ETH-deposit kind (12) with 52 data bytes has a derivation; every other delayed type or kind is unproven, never weaker', () => {
+  it('a delayed-origin transaction the message does not derive is unproven; a kind with no derivation is unproven, never weaker', () => {
     for (const t of [0x65, 0x66, 0x69]) {
       const tx = concat(Uint8Array.of(t), utf8('delayed'));
       expect(canon(delayedOpts({ blockTxs: [internalTx(), tx] }))).toBe(unproven(['106', String(t)]));
     }
     const m = depositMessage(k);
-    m.msgKind = 9;
+    m.msgKind = 9; // a submit-retryable reading of 52 bytes is short
     expect(canon(delayedOpts({ delayed: { msg: m } }))).toBe(unproven(['106', '100'], { k: '41', message_kind: '9' }));
+    for (const kind of [6, 8, 10, 11, 13, 255]) {
+      const n = depositMessage(k);
+      n.msgKind = kind;
+      expect(canon(delayedOpts({ delayed: { msg: n } })), `kind ${kind}`).toBe(unproven(['106', '100'], { k: '41', message_kind: String(kind) }));
+    }
+  });
+  it('bytes after the 52 of an ETH deposit are not read (the derivation takes the first 52): the same deposit is derived; fewer than 52 is unproven', () => {
     const m2 = depositMessage(k);
     m2.data = concat(m2.data, Uint8Array.of(0));
-    expect(canon(delayedOpts({ delayed: { msg: m2 } }))).toBe(unproven(['106', '100']));
+    expect(makeSynth(delayedOpts({ delayed: { msg: m2 } })).run().fields.delayed_message_index).toBe(41n);
+    const m3 = depositMessage(k);
+    m3.data = m3.data.subarray(0, 51);
+    expect(canon(delayedOpts({ delayed: { msg: m3 } }))).toBe(unproven(['106', '100']));
   });
   it('a state proof that does not hold the delayed accumulator slots is l1_state_proof_invalid{slot}', () => {
     expect(canon(delayedOpts({ delayed: { msg: depositMessage(k), anchor: false } }))).toBe(unproven(['106', '100']));

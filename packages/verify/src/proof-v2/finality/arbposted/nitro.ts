@@ -7,9 +7,11 @@
  * allocates more than the cap), the segment count is capped, a nested message larger than nitro's MaxL2MessageSize is dropped, nesting
  * stops at nitro's depth limit, and no length is trusted against the bytes that remain.
  */
-import { kMaxLength } from 'node:buffer';
-import { brotliDecompressSync } from 'node:zlib';
 import { RlpError, split, splitString } from '../../../s6/rlp.js';
+import { StrictBrotliError, decompress } from '../strictbrotli.js';
+import { parseL2Msg } from './derive.js';
+import { txType } from './delayed.js';
+import { zeroheavyDecode } from './zeroheavy.js';
 import { BLOB_BYTES } from './wire.js';
 
 // Payload header bytes (the first byte of a decoded batch payload or of calldata batch data).
@@ -30,7 +32,7 @@ export const SEG_ADVANCE_L1_BLOCK = 4;
 export const L2_BATCH = 3;
 export const L2_SIGNED_TX = 4;
 
-/** nitro's MaxL2MessageSize (256 KiB): a nested message or a brotli-compressed segment larger than this is dropped. */
+/** nitro's MaxL2MessageSize (256 KiB): a top-level message, a nested message or a brotli-compressed segment larger than this is dropped. */
 export const MAX_L2_MESSAGE_SIZE = 256 * 1024;
 
 /** nitro's nesting limit for batch messages inside batch messages. */
@@ -89,31 +91,22 @@ export interface Uncompressed {
   out: Uint8Array;
   /** the stream would produce more than max bytes */
   exceeded: boolean;
-  /** the stream is not one complete brotli stream (truncated, corrupt, or followed by a byte) */
+  /** the stream is not one complete brotli stream (empty, truncated, corrupt, or followed by a byte) */
   failed: boolean;
 }
 
-/** node:zlib refuses a maxOutputLength above the largest Buffer */
-const NODE_MAX_LENGTH = kMaxLength;
-
 /**
- * Brotli decompression capped at max bytes. exceeded when the stream would produce more than max (the cap is enforced while streaming:
- * a decompression bomb never allocates more than max + 1 bytes). The reference reader (andybalholm/brotli through io.ReadAll) treats an
- * EMPTY input as an empty stream, a stream that ends early as an error, and ANY byte after the end of the stream as an error
- * ("excessive input"); node:zlib silently ignores trailing bytes and rejects the empty input, so both are decided here.
+ * Brotli decompression capped at max bytes (the twin of Go's uncompress over package strictbrotli, which both Arbitrum batches and OP
+ * channels use through ../strictbrotli.ts): exceeded when the stream would produce more than max; a stream that is incomplete, empty or
+ * followed by extra bytes has failed.
  */
 export function uncompress(input: Uint8Array, max: number): Uncompressed {
-  if (input.length === 0) return { out: new Uint8Array(0), exceeded: false, failed: false };
-  const cap = Math.min(max + 1, NODE_MAX_LENGTH);
   try {
-    const r = brotliDecompressSync(input, { maxOutputLength: cap, info: true }) as unknown as { buffer: Buffer; engine: { bytesWritten: number } };
-    if (r.buffer.length > max) return { out: new Uint8Array(0), exceeded: true, failed: false };
-    if (r.engine.bytesWritten < input.length) return { out: new Uint8Array(0), exceeded: false, failed: true };
-    return { out: new Uint8Array(r.buffer.buffer, r.buffer.byteOffset, r.buffer.length), exceeded: false, failed: false };
+    const r = decompress(input, max);
+    return { out: r.out, exceeded: r.exceeded, failed: false };
   } catch (e) {
-    const code = (e as { code?: string }).code;
-    if (code === 'ERR_BUFFER_TOO_LARGE') return { out: new Uint8Array(0), exceeded: true, failed: false };
-    return { out: new Uint8Array(0), exceeded: false, failed: true };
+    if (e instanceof StrictBrotliError) return { out: new Uint8Array(0), exceeded: false, failed: true };
+    throw e;
   }
 }
 
@@ -155,31 +148,20 @@ export interface L2Message {
 }
 
 /**
- * The signed transactions of an L2 message, mirroring nitro's ParseL2Transactions for the kinds that carry user-signed transactions: kind 4
- * (one transaction) and kind 3 (a batch of nested messages, depth <= 16). Every other kind contributes none (kinds 0/1 build poster-derived
- * transactions that cannot equal a user-signed one).
+ * The signed transactions of one sequencer-batch L2 message, as Nitro's parseL2Message (arbos/parse_l2.go) builds it with no L1 request id:
+ * kind 4 is one transaction, kind 3 a batch of nested messages (depth < 16; a length prefix that is cut, oversize or past the data ends the
+ * batch quietly), kind 0 is an unsigned transaction whose fields must parse (it is built from the poster and is not a signed transaction,
+ * so it contributes none). Everything else fails the message: kind 1 (a contract transaction needs a request id), 2, 6 (heartbeats are
+ * disabled), 7, unknown kinds, a short field, and ANY nested failure fails the WHOLE message. A failed message has no transactions: a
+ * malformed message is not a message (null).
  */
-export function parseL2(msg: Uint8Array, depth: number): Uint8Array[] {
-  if (msg.length === 0) return [];
-  if (msg[0] === L2_SIGNED_TX) {
-    if (msg.length === 1) return [];
-    return [Uint8Array.from(msg.subarray(1))];
-  }
-  if (msg[0] === L2_BATCH) {
-    if (depth >= MAX_L2_DEPTH) return [];
-    const out: Uint8Array[] = [];
-    let rest = msg.subarray(1);
-    while (rest.length >= 8) {
-      const n = new DataView(rest.buffer, rest.byteOffset, 8).getBigUint64(0, false);
-      rest = rest.subarray(8);
-      if (n > BigInt(MAX_L2_MESSAGE_SIZE) || n > BigInt(rest.length)) break;
-      const len = Number(n);
-      for (const t of parseL2(rest.subarray(0, len), depth + 1)) out.push(t);
-      rest = rest.subarray(len);
-    }
-    return out;
-  }
-  return [];
+export function parseL2(msg: Uint8Array, depth: number): Uint8Array[] | null {
+  // ParseL2Transactions (arbos/parse_l2.go) drops a message whose L2msg is larger than MaxL2MessageSize before it reads a byte of it: the
+  // limit holds for the top-level message of a sequencer batch exactly as for a nested one.
+  if (msg.length > MAX_L2_MESSAGE_SIZE) return null;
+  const txs = parseL2Msg(msg, new Uint8Array(20), null, 0n, depth, false);
+  if (txs === null) return null;
+  return txs.filter((tx) => txType(tx) <= 4);
 }
 
 export const PayloadOK = 0;
@@ -220,6 +202,27 @@ export function decodePayload(payload: Uint8Array, maxUncompressed: number, maxS
   switch (payload[0]) {
     case HEADER_BROTLI:
       break;
+    case HEADER_ZEROHEAVY: {
+      // Nitro decodes the zero-heavy layer once (limit 101% of the batch bound + 64) and then reads the result as an ordinary payload: it
+      // must begin with the Brotli header byte, nothing else is decoded after it.
+      const zh = zeroheavyDecode(payload.subarray(1), maxUncompressed + Math.floor(maxUncompressed / 100) + 64);
+      if (zh.exceeded) {
+        res.status = PayloadTooLarge;
+        res.exceededUncompressed = true;
+        return res;
+      }
+      if (zh.out.length === 0) {
+        res.status = PayloadUndecodable;
+        return res;
+      }
+      res.headerByte = zh.out[0]!;
+      if (zh.out[0] !== HEADER_BROTLI) {
+        res.status = PayloadUnknownHeader;
+        return res;
+      }
+      payload = zh.out;
+      break;
+    }
     case HEADER_DAS:
     case HEADER_DAS_TREE:
     case HEADER_DACERT:
@@ -265,7 +268,7 @@ export function decodePayload(payload: Uint8Array, maxUncompressed: number, maxS
       default:
         continue;
     }
-    res.messages.push({ ordinal: ord, txs: parseL2(msg, 0) });
+    res.messages.push({ ordinal: ord, txs: parseL2(msg, 0) ?? [] });
     ord++;
   }
   return res;

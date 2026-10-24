@@ -19,7 +19,7 @@ import type { Pins } from '../pins.js';
 import { sepoliaPins } from '../pins.js';
 import type { Kind, Registry, Verdict } from '../registry.js';
 import { readHeader } from '../rlpheader.js';
-import { FinalityStateError, evidenceTooLarge, evidenceUnrecognised, newState } from '../state.js';
+import { FinalityStateError, blockMismatch, evidenceTooLarge, evidenceUnrecognised, newState } from '../state.js';
 import { loadKzgSetup, type KzgBlob } from '../baseposted/kzg.js';
 import { trieRoot } from '../baseposted/trie.js';
 import {
@@ -114,6 +114,9 @@ export class ArbPostedKind implements Kind {
     if (c.header.kind !== KIND_NAME || c.header.chain !== CHAIN || c.header.level !== Level.L1Posted) {
       throw evidenceUnrecognised(c.header.kind, '');
     }
+    // The container is about the block the caller asks about (the order and the states of arbfinal and baseposted).
+    if (c.header.blockNumber !== b.number) throw blockMismatch('blockNumber', b.number, c.header.blockNumber);
+    if (!sameBytes(c.header.blockHash, b.hash)) throw blockMismatch('blockHash', b.hash, c.header.blockHash);
     const arb = loadArbPins(p);
     const eth = sepoliaPins(p);
     const ep = ethl1PinsFrom(eth);
@@ -121,6 +124,9 @@ export class ArbPostedKind implements Kind {
     if (kzgPin !== USED_KZG_SETUP_SHA256) throw pinMismatch(PIN_KZG);
     const e = decodeEvidence(c.body, boundsFor(ep.maxLinks, ep.maxSpineHeaders, arb));
     const hdr = readHeader(b.headerRlp ?? new Uint8Array(0));
+    // The header the transactions root is read from is the block's own: its hash is the BlockRef's hash and its number the BlockRef's number.
+    if (!sameBytes(hdr.hash, b.hash)) throw blockMismatch('blockHash', b.hash, hdr.hash);
+    if (hdr.number !== b.number) throw blockMismatch('blockNumber', b.number, hdr.number);
     if (hdr.number <= arb.boldGenesisL2Block) {
       throw newState(CodePreBold, { n: hdr.number, bold_genesis_l2_block: arb.boldGenesisL2Block });
     }
@@ -220,13 +226,13 @@ export class ArbPostedKind implements Kind {
       else throw contentNotFound(ContentReason.UnsupportedTxType, { batch: e.batchSeq, tx_type: BigInt(t) });
     }
     let delayedK: bigint | undefined;
-    if (delayedOrigin) {
+    let ordinal = -1;
+    if (e.delayed !== null || delayedOrigin) {
+      // the block comes from a delayed-inbox message: the whole of its non-internal transactions must be what that message derives
       const nonce = b.headerRlp === undefined ? undefined : headerNonce(b.headerRlp);
       delayedK = verifyDelayed(arb, bridge.storageRoot, e, res, types, nonce ?? 0n);
-    }
-    if (std.length === 0 && !delayedOrigin) throw contentNotFound(ContentReason.NoStandardTransactions, { batch: e.batchSeq });
-    let ordinal = -1;
-    if (std.length > 0) {
+    } else {
+      if (std.length === 0) throw contentNotFound(ContentReason.NoStandardTransactions, { batch: e.batchSeq });
       const m: L2Message | undefined = res.messages.find((x) => sameTxs(std, x.txs));
       if (m === undefined) {
         throw contentNotFound(ContentReason.NoMatchingMessage, {

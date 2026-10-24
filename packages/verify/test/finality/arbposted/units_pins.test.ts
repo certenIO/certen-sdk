@@ -104,9 +104,10 @@ describe('arb_sepolia section', () => {
     // case-insensitive names are accepted once exact equality fails
     expect(() => loadArbPins(pinsOf((d) => { d.arb_sepolia.Bridge = d.arb_sepolia.bridge; delete d.arb_sepolia.bridge; }))).not.toThrow();
     expect(() => loadArbPins(pinsOf((d) => { d.arb_sepolia.LAYOUT = d.arb_sepolia.layout; delete d.arb_sepolia.layout; }))).not.toThrow();
-    // null is a no-op: a null optional field keeps its zero value; a null required-positive field is refused as its own pin
+    // null is a no-op: a null optional field keeps its zero value; a null required-positive field is refused as its own pin; the three numeric
+    // pins whose value 0 is possible are refused by name when null or absent (the presence rule, below)
     expect(() => loadArbPins(pinsOf((d) => (d.arb_sepolia.rollup = null)))).not.toThrow();
-    expect(() => loadArbPins(pinsOf((d) => (d.arb_sepolia.bold_genesis_l2_block = null)))).not.toThrow();
+    expect(t((a) => (a.bold_genesis_l2_block = null))).toBe(section('bold_genesis_l2_block'));
     expect(t((a) => (a.max_segments = null))).toBe(section('max_segments'));
     expect(t((a) => (a.layout = null))).toBe(section('layout'));
   });
@@ -133,6 +134,80 @@ describe('arb_sepolia section', () => {
     expect(canon(() => loadArbPins(pinsOf((d) => (d.arb_sepolia.max_blobs = 1e19))))).toBe(section('section'));
     expect(loadArbPins(pinsOf((d) => (d.arb_sepolia.max_blobs = 2 ** 53 - 1))).maxBlobs).toBe(Number.MAX_SAFE_INTEGER);
     expect(loadArbPins(pinsOf((d) => (d.arb_sepolia.max_blobs = 2 ** 52))).maxBlobs).toBe(2 ** 52);
+  });
+  it('the three numeric pins whose value 0 is possible are judged by presence: an absent or null key is refused by name, a present 0 is accepted (Go TestAbsentOrNullNumericPinsAreRefusedByName)', () => {
+    const cases: { field: string; layout: boolean; key: string }[] = [
+      { field: 'bold_genesis_l2_block', layout: false, key: 'bold_genesis_l2_block' },
+      { field: 'layout.acc_array_slot', layout: true, key: 'acc_array_slot' },
+      { field: 'layout.delayed_acc_array_slot', layout: true, key: 'delayed_acc_array_slot' },
+    ];
+    for (const c of cases) {
+      for (const how of ['absent', 'null'] as const) {
+        const got = canon(() =>
+          loadArbPins(
+            pinsOf((d) => {
+              const target = c.layout ? d.arb_sepolia.layout : d.arb_sepolia;
+              if (how === 'absent') delete target[c.key];
+              else target[c.key] = null;
+            }),
+          ),
+        );
+        expect(got, `${c.field} ${how}`).toBe(section(c.field));
+      }
+      const zero = loadArbPins(
+        pinsOf((d) => {
+          (c.layout ? d.arb_sepolia.layout : d.arb_sepolia)[c.key] = 0;
+        }),
+      );
+      expect(c.layout ? (c.key === 'acc_array_slot' ? zero.layout.accArraySlot : zero.layout.delayedAccArraySlot) : zero.boldGenesisL2Block, `${c.field} 0`).toBe(0n);
+    }
+  });
+  it('the presence rule follows the key matching of the decoder (case folding) and runs AFTER the other pins, in the order bold, acc, delayed acc', () => {
+    // keys fold case: a differently cased key is the same key, so it is present
+    const folded = loadArbPins(
+      pinsOf((d) => {
+        d.arb_sepolia.Bold_Genesis_L2_Block = d.arb_sepolia.bold_genesis_l2_block;
+        delete d.arb_sepolia.bold_genesis_l2_block;
+        d.arb_sepolia.layout.ACC_ARRAY_SLOT = d.arb_sepolia.layout.acc_array_slot;
+        delete d.arb_sepolia.layout.acc_array_slot;
+        d.arb_sepolia.layout.Delayed_Acc_Array_Slot = d.arb_sepolia.layout.delayed_acc_array_slot;
+        delete d.arb_sepolia.layout.delayed_acc_array_slot;
+      }),
+    );
+    expect([folded.boldGenesisL2Block, folded.layout.accArraySlot, folded.layout.delayedAccArraySlot]).toEqual([105880604n, 7n, 6n]);
+    // a failing earlier pin is named before an absent numeric pin
+    expect(
+      canon(() =>
+        loadArbPins(
+          pinsOf((d) => {
+            delete d.arb_sepolia.bold_genesis_l2_block;
+            d.arb_sepolia.max_uncompressed_batch = 0;
+          }),
+        ),
+      ),
+    ).toBe(section('max_uncompressed_batch'));
+    // all three absent: the first of the three is named
+    expect(
+      canon(() =>
+        loadArbPins(
+          pinsOf((d) => {
+            delete d.arb_sepolia.bold_genesis_l2_block;
+            delete d.arb_sepolia.layout.acc_array_slot;
+            delete d.arb_sepolia.layout.delayed_acc_array_slot;
+          }),
+        ),
+      ),
+    ).toBe(section('bold_genesis_l2_block'));
+    expect(
+      canon(() =>
+        loadArbPins(
+          pinsOf((d) => {
+            delete d.arb_sepolia.layout.acc_array_slot;
+            delete d.arb_sepolia.layout.delayed_acc_array_slot;
+          }),
+        ),
+      ),
+    ).toBe(section('layout.acc_array_slot'));
   });
 });
 
