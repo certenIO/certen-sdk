@@ -148,3 +148,56 @@ describe('a zlib channel with FDICT and the empty dictionary is read as Go and o
     expect((e as FinalityStateError).code).toBe('channel_malformed');
   });
 });
+
+/** the reason of the refusal (the ChannelError's text), or null when the channel is accepted */
+function reasonOf(ch: Uint8Array, max = 1n << 20n): string | null {
+  try {
+    decompress(ch, max);
+  } catch (e) {
+    if (e instanceof ChannelError) return e.message;
+    throw e;
+  }
+  return null;
+}
+const HDR = 'zlib: invalid header'; // Go compress/zlib ErrHeader
+const DICT = 'zlib: invalid dictionary'; // Go compress/zlib ErrDictionary
+const EOF = 'unexpected EOF'; // Go io.ErrUnexpectedEOF, what zlib.NewReader answers to a channel cut inside the header or the dictionary id
+
+describe('the header-level refusals carry the texts of Go zlib.NewReader errors (ErrHeader, ErrDictionary, io.ErrUnexpectedEOF)', () => {
+  it('a channel cut inside the 2-byte header is unexpected EOF, whatever the first byte; a channel cut after a valid plain header is the inflater\'s refusal', () => {
+    for (const b of [0x78, 0x08, 0x18, 0x28, 0x38, 0x48, 0x58, 0x68]) expect(reasonOf(Uint8Array.of(b)), `first byte ${b}`).toBe(EOF);
+    for (const h of [[0x78, 0x01], [0x78, 0x5e], [0x78, 0x9c], [0x78, 0xda]]) expect(reasonOf(Uint8Array.from(h))?.startsWith('decompress: '), `header ${h}`).toBe(true);
+  });
+
+  it('a header that is not a multiple of 31 is invalid, with FDICT set or not, and before any cut in the dictionary id is noticed', () => {
+    expect(reasonOf(Uint8Array.of(0x78, 0x00))).toBe(HDR);
+    expect(reasonOf(Uint8Array.of(0x78, 0x20))).toBe(EOF); // a valid FDICT header, id missing
+    expect(reasonOf(Uint8Array.of(0x78, 0x21))).toBe(HDR); // FCHECK wrong with FDICT: judged before the id is read
+    expect(reasonOf(Uint8Array.of(0x78, 0x21, 0, 0))).toBe(HDR);
+    expect(reasonOf(unhexBytes('7821000000014b4c4a0600024d0127'))).toBe(HDR);
+    expect(reasonOf(Uint8Array.of(0x78, 0x9d, 1, 2, 3))).toBe(HDR);
+  });
+
+  it('FDICT with a valid header: a cut inside the id (2..5 bytes) is unexpected EOF, the whole id with no stream behind it is the inflater\'s refusal, another id is invalid dictionary', () => {
+    const full = unhexBytes(FDICT_ABC);
+    for (const n of [2, 3, 4, 5]) expect(reasonOf(full.subarray(0, n)), `${n} bytes`).toBe(EOF);
+    expect(reasonOf(full.subarray(0, 6))?.startsWith('decompress: ')).toBe(true);
+    for (const id of [[0, 0, 0, 2], [0, 0, 0, 0], [1, 0, 0, 0], [0xff, 0xff, 0xff, 0xff]]) {
+      expect(reasonOf(concat(full.subarray(0, 2), Uint8Array.from(id), full.subarray(6))), `id ${id}`).toBe(DICT);
+      expect(reasonOf(concat(full.subarray(0, 2), Uint8Array.from(id))), `id ${id}, no stream`).toBe(DICT);
+    }
+    // the id is judged as a whole after the cut test: a short prefix of a wrong id is a cut, not a wrong id
+    expect(reasonOf(Uint8Array.of(0x78, 0x20, 0, 0, 0))).toBe(EOF);
+  });
+
+  it('a truncated FDICT stream is refused even when the byte that is missing is a zero: the stream is never padded (adler-32 of [0xff] ends in 0x00)', () => {
+    const plain = Uint8Array.from(deflateSync(Uint8Array.of(0xff)));
+    expect(plain[plain.length - 1]).toBe(0);
+    const ch = withDict(plain, ONE);
+    expect(accepted(ch)).toBe('\xff');
+    expect(refused(ch.subarray(0, ch.length - 1))).toBe(true);
+    expect(refused(concat(ch.subarray(0, ch.length - 1), Uint8Array.of(1)))).toBe(true);
+    // and the plain stream behaves the same
+    expect(refused(plain.subarray(0, plain.length - 1))).toBe(true);
+  });
+});

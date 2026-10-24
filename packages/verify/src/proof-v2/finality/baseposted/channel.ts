@@ -72,16 +72,18 @@ const capOf = (max: bigint): number => Number(max + 1n > NODE_MAX_LENGTH ? NODE_
  * is 1; any other id is ErrDictionary and a stream cut inside the id is ErrUnexpectedEOF. node:zlib alone answers Z_NEED_DICT to every FDICT stream, so
  * the flag is decided here and the stream is handed to node as the plain zlib stream it is: the id is dropped, FDICT is cleared and FCHECK is recomputed
  * (clearing the flag moves the header by 32, which is 1 modulo 31). The header judged is always the one that was sent, never the rewritten one.
+ * The reasons are the texts of Go's errors: ErrHeader "zlib: invalid header", ErrDictionary "zlib: invalid dictionary" and io.ErrUnexpectedEOF "unexpected EOF"
+ * (a channel cut inside the header or inside the dictionary id); a stream cut anywhere after them is the inflater's refusal, reported as "decompress: ...".
  */
 const ADLER32_OF_EMPTY_DICTIONARY = [0, 0, 0, 1];
 
 function zlibStream(ch: Uint8Array): Uint8Array {
-  if (ch.length < 2) throw new ChannelError('zlib: unexpected EOF');
+  if (ch.length < 2) throw new ChannelError('unexpected EOF');
   const cmf = ch[0]!;
   const flg = ch[1]!;
   if (((cmf << 8) | flg) % 31 !== 0) throw new ChannelError('zlib: invalid header');
   if ((flg & 0x20) === 0) return ch;
-  if (ch.length < 6) throw new ChannelError('zlib: unexpected EOF');
+  if (ch.length < 6) throw new ChannelError('unexpected EOF');
   for (let i = 0; i < 4; i++) if (ch[2 + i] !== ADLER32_OF_EMPTY_DICTIONARY[i]) throw new ChannelError('zlib: invalid dictionary');
   const level = flg & 0xc0;
   const out = new Uint8Array(ch.length - 4);

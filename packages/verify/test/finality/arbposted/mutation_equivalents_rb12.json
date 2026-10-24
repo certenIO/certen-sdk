@@ -136,7 +136,7 @@
     },
     {
       "file": "baseposted/channel.ts",
-      "line": 107,
+      "line": 109,
       "mutant": "const r = strictDecompress(ch.subarray(1), max); -> const r = strictDecompress(ch.subarray(1), max + 1n);",
       "reason": "decompress repeats the identical cap test on the output length right after (the channel cap), so the strict reader's own cap adds no verdict"
     },
