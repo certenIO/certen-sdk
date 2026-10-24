@@ -9,7 +9,7 @@
  * identity under S and under K, the assertion under S, the L2 spine, the confirmation path under K.
  */
 import { keccak_256 } from '@noble/hashes/sha3';
-import { MptError, verifyAccount, verifySlot, type AccountState } from '../../../s6/mpt.js';
+import { MptError, ProofNodes, verifyAccountIn, verifySlotIn, type AccountState } from '../../../s6/mpt.js';
 import { RlpError } from '../../../s6/rlp.js';
 import { decodeContainer, defaultLimits } from '../codec.js';
 import { blockAt, blockNotCovered, covers, ethl1PinsFrom, verifyFinalizedHead, type L1Block } from '../ethl1/index.js';
@@ -20,7 +20,7 @@ import { sepoliaPins } from '../pins.js';
 import type { Kind, Registry, Verdict } from '../registry.js';
 import { readHeader, type HeaderFields } from '../rlpheader.js';
 import { EvidenceReason, FinalityStateError, blockMismatch, evidenceUnrecognised, malformed, newState } from '../state.js';
-import { classifyConfirmation } from './confirm.js';
+import { classifyConfirmation, proofNodesOf, type ProofSource } from './confirm.js';
 import { checkNodeBounds } from './nodebounds.js';
 import { CHAIN, KIND_NAME, loadArbFinalPins, roleOf, type ArbFinalPins } from './pins.js';
 import {
@@ -150,17 +150,18 @@ function headerNumbered(spine: readonly Uint8Array[], number: bigint): HeaderFie
  * user logic) are read from its storage and both logic accounts are proven under stateRoot_X; each code hash must be pinned with its role,
  * else contract_identity_unproven{role, address, code_hash, judged_at = X}.
  */
-export function identityAt(arb: ArbFinalPins, x: Pick<L1Block, 'number' | 'stateRoot'>, nodes: readonly Uint8Array[]): AccountState {
+export function identityAt(arb: ArbFinalPins, x: Pick<L1Block, 'number' | 'stateRoot'>, nodes: ProofSource): AccountState {
   const root = x.stateRoot;
-  const acct = proven('account', () => verifyAccount(root, arb.rollup, nodes));
+  const set = proofNodesOf(nodes);
+  const acct = proven('account', () => verifyAccountIn(set, root, arb.rollup));
   if (!acct.exists) throw contractIdentity(RoleRollup, arb.rollup, new Uint8Array(32), x.number);
   for (const r of [
     { slot: arb.adminSlot, role: RoleAdminLogic },
     { slot: arb.userSlot, role: RoleUserLogic },
   ]) {
-    const word = proven('slot', () => verifySlot(acct.storageRoot, r.slot, nodes));
+    const word = proven('slot', () => verifySlotIn(set, acct.storageRoot, r.slot));
     const impl = word.slice(12);
-    const logic = proven('account', () => verifyAccount(root, impl, nodes));
+    const logic = proven('account', () => verifyAccountIn(set, root, impl));
     const codeHash = logic.exists ? logic.codeHash : new Uint8Array(32);
     if (!sameBytes(word.subarray(0, 12), ZERO12) || !logic.exists || roleOf(arb, codeHash) !== r.role) {
       throw contractIdentity(r.role, impl, codeHash, x.number);
@@ -247,33 +248,35 @@ export class ArbFinalKind implements Kind {
     if (kHeader === undefined) throw blockNotCovered(kb.number, covered[0]!.number);
     // [r2:E1FIX L3] spec 8.2: a NODES element off the transaction and receipt proof paths is a state or storage node, at most max_node_bytes;
     // judged here, where K's roots are known, before any proof consumes a node.
-    checkNodeBounds(kHeader, e, defaultLimits().maxNodeBytes);
-    return this.verifyState(arb, s, kb, kHeader, b, e);
+    // One proof database for the whole verification: every NODES element is hashed once, however many proofs are read (audit N-5).
+    const set = new ProofNodes(e.nodes);
+    checkNodeBounds(kHeader, e, defaultLimits().maxNodeBytes, set);
+    return this.verifyState(arb, s, kb, kHeader, b, e, set);
   }
 
   /**
    * The part of the judgement that runs under the state roots of the covered L1 blocks S and K; it is separate so that tests can hand it
-   * a state built in memory.
+   * a state built in memory. set is the ProofNodes of e.nodes shared with the node-bound check (a new one when omitted).
    */
-  verifyState(arb: ArbFinalPins, s: L1Block, kb: L1Block, kHeader: HeaderFields, b: BlockRef, e: Evidence): Verdict {
+  verifyState(arb: ArbFinalPins, s: L1Block, kb: L1Block, kHeader: HeaderFields, b: BlockRef, e: Evidence, set: ProofNodes = new ProofNodes(e.nodes)): Verdict {
     // 5.7 O2: logic identity under stateRoot_S and also under stateRoot_K (r2 C1).
-    const acctS = identityAt(arb, s, e.nodes);
-    const acctK = kb.number === s.number ? acctS : identityAt(arb, kb, e.nodes);
+    const acctS = identityAt(arb, s, set);
+    const acctK = kb.number === s.number ? acctS : identityAt(arb, kb, set);
     // 5.7 O3: the assertion under S.
     if (e.after.machineStatus !== 1) throw newState(CodeMachineNotFinished, { machine_status: e.after.machineStatus });
     const assertion = assertionHash(e.parentAssertionHash, e.after, e.sequencerBatchAcc);
-    const word = proven('slot', () => verifySlot(acctS.storageRoot, nodeSlot(assertion, arb.layout.assertionsSlot), e.nodes));
+    const word = proven('slot', () => verifySlotIn(set, acctS.storageRoot, nodeSlot(assertion, arb.layout.assertionsSlot)));
     const status = statusOf(word, arb.layout.statusShiftBits);
     if (status === 0) throw newState(CodeAssertionUnknown, {});
     if (status !== 2) throw newState(CodeNotConfirmed, { status });
     const cfgWord = proven('slot', () =>
-      verifySlot(acctS.storageRoot, configSlot(e.parentAssertionHash, arb.layout.assertionsSlot, arb.layout.configSlotOffset), e.nodes),
+      verifySlotIn(set, acctS.storageRoot, configSlot(e.parentAssertionHash, arb.layout.assertionsSlot, arb.layout.configSlotOffset)),
     );
     if (!sameBytes(configHash(e.parent), cfgWord)) throw preimageMismatch(PreimagePart.ParentConfig);
     // 5.7 O3 / O3b: the L2 spine from the assertion's block down to the leg, ending byte-identical at Settlement.Header.
     const m = verifyL2Spine(e, b);
     // 5.7 O4: the confirmation path under K.
-    const conf = classifyConfirmation(arb, kb, kHeader, acctK, assertion, e);
+    const conf = classifyConfirmation(arb, kb, kHeader, acctK, assertion, e, set);
     const fields: Verdict['fields'] = {
       assertion,
       m,

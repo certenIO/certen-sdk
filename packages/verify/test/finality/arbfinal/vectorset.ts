@@ -74,6 +74,15 @@ export const FINALX: SetInfo = {
   vectors: 8,
   walletPins: false,
 };
+/** The TS-held supplement of the Rollup storage at S differing from the storage at K (RB12-TS-FIX-ARBSEP, audit B-1): worlds judged by the Go verifier at cbb6373 with a throwaway synthworld hook, see arb_final_sk/README.md. */
+export const FINALSK: SetInfo = {
+  name: 'arb_final_sk',
+  dir: 'arb_final_sk',
+  manifestSha256: 'ef6c03b13db4ac09e0511553d271d1e261aa39b0a0141a951e4cc151227c2d43',
+  format: 'arb_final_sk/1',
+  vectors: 16,
+  walletPins: false,
+};
 export const FORCE1_MANIFEST_SHA256 = '7761e96e5b3219890f63c89ba383858d1286781c1adb39123003b19ab13d6192';
 
 export const sha256Hex = (b: Uint8Array): string => hexLower(sha256(b));
