@@ -126,12 +126,18 @@ const MAX_PROBE_BUFFER = 512 * 1024 * 1024;
  * maxOutputLength = max - 1; a decoder that flushed at most max bytes either leaves the buffer short or fills it exactly, and fails
  * without asking for room. The smallest buffer node allows is 64 bytes, so for a cap below 64 the probe judges 64 bytes or more.
  *
- * Known limit (FINDING in checkins/RB12-TS-TWINS-1.md; the Go sets say "double faults are not parity-tested"): a stream that FAILS to decode
- * after the Go reader had flushed more than the cap is an excess there and a decode error here when the cap is below 512 bytes (the first
- * buffer io.ReadAll hands the Go reader is 512 bytes, and for quality-0 window-10 streams it flushes into it before the failure; the
- * C decoder behind node does not) and for caps below 64 in general. Measured against the Go package: 0 differences in about 30,000
- * Go-judged cases with caps of 512 and more (cuts, flips, flipped cuts, 32 KiB boundary streams, crafted metablock streams); every
- * pinned cap (message 262,144, batch 16,777,216, channel 100,000,000) is far above it. Both answers refuse the stream.
+ * Known limit, MEASURED (owner decision OQ-R12-BETA-1 open; corrects the TWINS-1 FINDING of checkins/RB12-TS-TWINS-1.md, which said the limit ended at
+ * caps below 512; the Go sets say "double faults are not parity-tested"). A stream that FAILS to decode after the Go reader had flushed more than
+ * the cap is an excess there (Decompress: exceeded) and a decode error here when the cap lies in the gap between what this probe sees flushed and what
+ * the Go reader had flushed. The Go reader flushes the decoder's output at the decoder's own points into io.ReadAll's growing buffer (512 bytes
+ * first); node discards the output of the call that fails, so the emulation under-counts.
+ * The gap exists at caps of 512 and more, not only below: the 39,053-byte stream answers exceeded in Go and decode here at caps 120000 and 131071 (it
+ * agrees at 100000 and at 131072, so Go had flushed 131,072 bytes); the 611-byte stream differs at every cap tried below 512 and agrees from 512; the
+ * audit counted 29 of 1,080 and 15 of 400 streams with a gap. Both answers refuse the stream, so no acceptance is affected; the state code differs only
+ * on the Arbitrum batch decode (evidence_too_large{uncompressed_batch} in Go, payload_undecodable here; Base answers channel_malformed either way and
+ * Arbitrum message segments drop the message either way). It is reachable only through a pins override whose cap lies in a stream's gap: on every
+ * measured stream the embedded caps (message 262,144, batch 16,777,216, channel 100,000,000) agree; a hand-laid metablock layout that widens the gap
+ * was not tried, so that no pinned cap can straddle is NOT proven. The inputs and the Go answers are data in test/finality/strictbrotli_double_fault.test.ts.
  */
 function flushedBeyond(input: Uint8Array, max: bigint): boolean {
   if (max > BigInt(MAX_PROBE_BUFFER)) return false;

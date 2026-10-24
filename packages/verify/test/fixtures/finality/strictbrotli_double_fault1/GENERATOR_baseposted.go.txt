@@ -1,0 +1,55 @@
+package baseposted
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
+	"testing"
+)
+
+// Oracle of test/fixtures/finality/strictbrotli_double_fault1 (certen-sdk), the Base side: this package's decompress of the channel 0x01 || stream under
+// the case's cap (the cap is a uint64 here). Run inside pkg/finality/baseposted of the validator at cbb6373:
+//   FP_DF_DIR=<dir with *.br and cases_in.json> go test ./pkg/finality/baseposted -run TestFixPostedDoubleFaultBase -count=1
+// It writes cases_go_base.json: [{id, channel}] with channel "err" or "ok:<length>:<first 8 bytes of sha256, hex>".
+func TestFixPostedDoubleFaultBase(t *testing.T) {
+	dir := os.Getenv("FP_DF_DIR")
+	if dir == "" {
+		t.Fatal("FP_DF_DIR is required")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "cases_in.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in []struct {
+		ID     string `json:"id"`
+		Stream string `json:"stream"`
+		Cap    uint64 `json:"cap"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		t.Fatal(err)
+	}
+	type outCase struct {
+		ID      string `json:"id"`
+		Channel string `json:"channel"`
+	}
+	var out []outCase
+	for _, c := range in {
+		s, err := os.ReadFile(filepath.Join(dir, c.Stream+".br"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res := "err"
+		if b, err := decompress(append([]byte{1}, s...), c.Cap); err == nil {
+			h := sha256.Sum256(b)
+			res = "ok:" + strconv.Itoa(len(b)) + ":" + hex.EncodeToString(h[:8])
+		}
+		out = append(out, outCase{ID: c.ID, Channel: res})
+	}
+	b, _ := json.MarshalIndent(out, "", " ")
+	if err := os.WriteFile(filepath.Join(dir, "cases_go_base.json"), append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
