@@ -105,7 +105,8 @@ describe('msm equals the sum of scalar multiplications', () => {
     expect(() => msm([p], [-1n])).toThrow(RangeError);
     expect(() => msm([p, p], [1n])).toThrow(RangeError);
     expect(() => msm([p], [1n, 2n])).toThrow(RangeError);
-    expect(() => msm([p], [1n << 128n])).toThrow(RangeError);
+    expect(() => msm([p], [1n << 128n])).toThrow('msm: scalar outside [0, 2^128)');
+    expect(() => msm([p], [-1n], 5)).toThrow('msm: scalar outside [0, 2^5)');
     expect(msm([p], [(1n << 128n) - 1n]).equals(p.multiplyUnsafe((1n << 128n) - 1n))).toBe(true);
   });
 
@@ -465,5 +466,27 @@ describe('hostile inputs to the decoder and the window choice', () => {
     expect(() => msm([p], [1n], 0)).toThrow(RangeError);
     expect(msm([p], [1n], 1).equals(p)).toBe(true);
     expect(() => msm([p], [2n], 1)).toThrow(RangeError);
+  });
+});
+
+describe('the boundary of the sign flag is never decided at it', () => {
+  it('no point of E has y = (p-1)/2 (nor its negative (p+1)/2): y^2 - 4 is not a cube there, so "y > (p-1)/2" and "y >= (p-1)/2" cannot differ', () => {
+    // x^3 = y^2 - 4 has a solution in Fp only when y^2 - 4 is a cube, i.e. (y^2 - 4)^((p-1)/3) = 1 (p = 1 mod 3)
+    const cube = (c: bigint): boolean => {
+      let r = 1n;
+      let b = ((c % P) + P) % P;
+      for (let e = (P - 1n) / 3n; e > 0n; e >>= 1n) {
+        if (e & 1n) r = (r * b) % P;
+        b = (b * b) % P;
+      }
+      return r === 1n;
+    };
+    const half = (P - 1n) / 2n;
+    expect(cube(half * half - 4n)).toBe(false);
+    expect(cube((half + 1n) * (half + 1n) - 4n)).toBe(false);
+    // and the neighbours on either side are curve-compatible in general, so the test is not vacuous
+    let some = false;
+    for (let y = half - 5n; y <= half + 6n; y++) if (cube(y * y - 4n)) some = true;
+    expect(some).toBe(true);
   });
 });

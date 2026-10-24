@@ -172,11 +172,11 @@ export class WorkerPool {
   dispose(): void {
     if (this.dead === undefined) this.dead = 'terminated';
     for (const w of this.workers.splice(0)) {
+      // terminate() is asynchronous; a worker that is already gone may reject, which nobody is waiting for
       try {
-        const r = w.terminate() as Promise<unknown> | undefined;
-        if (r !== undefined && typeof r.catch === 'function') r.catch(() => undefined);
+        void Promise.resolve(w.terminate()).catch(() => undefined);
       } catch {
-        // already gone
+        // terminate() threw synchronously: the worker is already gone
       }
     }
     if (shared === this) shared = undefined;
@@ -184,6 +184,11 @@ export class WorkerPool {
 
   get alive(): boolean {
     return this.dead === undefined;
+  }
+
+  /** How many worker threads this pool is holding (size while it is alive, 0 once it is disposed). */
+  get workerCount(): number {
+    return this.workers.length;
   }
 
   /** Runs one wire job per element of `jobs` (job i on worker i mod size) and returns the results in order; blocks until all are done. */

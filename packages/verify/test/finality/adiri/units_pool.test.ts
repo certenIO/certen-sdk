@@ -3,10 +3,13 @@
  * proof that the workers did the work, the bound on the pool size, and every failure of a worker as a NAMED state that is never a pass.
  * The fixtures in fixtures_pool/ are workers that fail in each way (they speak the protocol of pool-worker.ts).
  */
+import os from 'node:os';
 import { afterAll, describe, expect, it } from 'vitest';
 import { FinalityStateError } from '../../../src/proof-v2/finality/state.js';
 import {
+  AdiriVerifier,
   KeyCache,
+  SignatureDST,
   PARALLEL_MIN_ITEMS,
   WorkerPool,
   WorkerPoolError,
@@ -24,6 +27,7 @@ import {
   verifyCommitteeChain,
   type SigItem,
 } from '../../../src/proof-v2/finality/adiri/index.js';
+import { firstFailureBatched } from '../../../src/proof-v2/finality/adiri/batched.js';
 import { SigNotExamined, SigOk, pack, unpack } from '../../../src/proof-v2/finality/adiri/msm.js';
 import { aggregateSign, buildChain, concat, filled, pinsOfSection, pinsSection, pubKey } from './synth.js';
 
@@ -350,5 +354,181 @@ describe('a failing worker is a named failure, never a pass', () => {
     expect(firstFailure(batch(3), 'oneByOne', counter(), pool)).toBeUndefined();
     expect(pool.alive).toBe(true);
     expect(pool.jobsRun).toBe(0);
+  });
+});
+
+/** Runs f with process.getBuiltinModule answering for the named modules from `fake` (undefined = the module is absent) and for the rest as Node does. */
+function withBuiltins<T>(fake: Record<string, unknown>, f: () => T): T {
+  const proc = process as unknown as { getBuiltinModule: (id: string) => unknown };
+  const real = proc.getBuiltinModule;
+  proc.getBuiltinModule = (id: string) => (id in fake ? fake[id] : real.call(process, id));
+  try {
+    return f();
+  } finally {
+    proc.getBuiltinModule = real;
+  }
+}
+
+describe('the pool size rule min(4, cores - 2) is exact, from the cores Node reports', () => {
+  it('equals the formula on this machine', () => {
+    expect(maxPoolSize()).toBe(Math.max(1, Math.min(4, os.availableParallelism() - 2)));
+  });
+
+  it('for every core count: 1, 2, 3 -> 1; 4 -> 2; 5 -> 3; 6, 7, 20 -> 4 (availableParallelism), and the same from cpus() when it is absent', () => {
+    const want: [number, number][] = [[1, 1], [2, 1], [3, 1], [4, 2], [5, 3], [6, 4], [7, 4], [20, 4]];
+    for (const [cores, size] of want) {
+      expect(withBuiltins({ 'node:os': { availableParallelism: () => cores } }, maxPoolSize), `availableParallelism ${cores}`).toBe(size);
+      expect(withBuiltins({ 'node:os': { cpus: () => new Array(cores).fill({}) } }, maxPoolSize), `cpus ${cores}`).toBe(size);
+    }
+    expect(withBuiltins({ 'node:os': {} }, maxPoolSize)).toBe(1);
+    expect(withBuiltins({ 'node:os': undefined }, maxPoolSize)).toBe(1);
+  });
+
+  it("'auto' keeps a long batch in this thread on a machine whose pool would be a single worker, and uses workers from 4 cores", () => {
+    expect(withBuiltins({ 'node:os': { availableParallelism: () => 3 } }, () => engineFor('auto', 100000))).toBe(localEngine);
+    expect(withBuiltins({ 'node:os': { availableParallelism: () => 4 } }, () => engineFor('auto', 100000))).not.toBe(localEngine);
+    disposeSharedPool();
+  });
+
+  it('the size error names the exact bound and the formula', () => {
+    expect(() => new WorkerPool({ size: 0 })).toThrow(`worker pool size 0 is outside 1..${cap} (min(4, cores - 2))`);
+    expect(() => new WorkerPool({ size: cap + 1 })).toThrow(`worker pool size ${cap + 1} is outside 1..${cap} (min(4, cores - 2))`);
+  });
+});
+
+describe('the capability check names what is missing, exactly', () => {
+  it('without process.getBuiltinModule the reason is the Node version it needs', () => {
+    const proc = process as unknown as { getBuiltinModule?: unknown };
+    const saved = proc.getBuiltinModule;
+    try {
+      proc.getBuiltinModule = undefined;
+      expect(parallelUnavailable()).toBe('node:worker_threads is not available (not Node >= 22.3)');
+    } finally {
+      proc.getBuiltinModule = saved;
+    }
+  });
+
+  it('a runtime that has workers but no fs or url module cannot check the worker file and does not claim it is missing', () => {
+    expect(withBuiltins({ 'node:fs': undefined }, () => parallelUnavailable(defaultWorkerUrl()))).toBeUndefined();
+    expect(withBuiltins({ 'node:url': undefined }, () => parallelUnavailable(defaultWorkerUrl()))).toBeUndefined();
+    expect(withBuiltins({ 'node:fs': undefined, 'node:url': undefined }, () => parallelUnavailable(fixture('absent-worker.js')))).toBeUndefined();
+    // only a file: URL is checked
+    expect(parallelUnavailable('https://example.invalid/pool-worker.js', true)).toBeUndefined();
+  });
+
+  it('an empty worker URL is a worker that cannot start, named, not replaced by the default', () => {
+    try {
+      new WorkerPool({ workerUrl: '' });
+    } catch (e) {
+      expect(e).toBeInstanceOf(WorkerPoolError);
+      expect((e as WorkerPoolError).reason).toBe('unavailable');
+      return;
+    }
+    throw new Error('an empty worker URL started a pool');
+  });
+});
+
+describe('the pool holds exactly its workers and releases them', () => {
+  it('workerCount is the size while alive and 0 after dispose, which also ends the pool', () => {
+    for (const size of new Set([1, cap])) {
+      const p = make({ size });
+      expect(p.workerCount).toBe(size);
+      expect(p.alive).toBe(true);
+      p.dispose();
+      expect(p.workerCount).toBe(0);
+      expect(p.alive).toBe(false);
+      expect(() => p.runWire('decode', [{}])).toThrow(/no longer usable \(it was disposed\)/);
+    }
+  });
+
+  it('the first failure stays the reason of the pool: a later use names it and its detail', () => {
+    const p = make({ size: 1, workerUrl: fixture('worker_throws.mjs') });
+    expect(() => p.runWire('decode', [{}])).toThrow(/worker_error: Error: injected failure/);
+    try {
+      p.runWire('decode', [{}]);
+    } catch (e) {
+      expect((e as WorkerPoolError).reason).toBe('worker_error');
+      expect((e as WorkerPoolError).message).toContain('no longer usable (Error: injected failure)');
+      return;
+    }
+    throw new Error('a dead pool ran a job');
+  });
+
+  it('every job of a run is exactly one job: an engine run of 8 records on 2 workers is 2 decode jobs and 2 combine jobs', () => {
+    const p = make({ size: Math.min(2, cap) });
+    const items = batch(8);
+    const sigs = items.map((it) => it.sig);
+    const eng = poolEngine(p);
+    const dec = eng.decode(sigs);
+    expect(p.jobsRun).toBe(Math.min(2, cap));
+    eng.combine({ points: dec.points as NonNullable<(typeof dec.points)[number]>[], msgs: items.map((it) => it.msg), scalars: items.map((_, i) => BigInt(i + 1)), groups: items.map(() => 0), dst: SignatureDST });
+    expect(p.jobsRun).toBe(2 * Math.min(2, cap));
+  });
+});
+
+describe('failure replies are reported as they are', () => {
+  const failure = (name: string): WorkerPoolError => {
+    const p = make({ size: 1, workerUrl: fixture(name) });
+    try {
+      p.runWire('decode', [{}]);
+    } catch (e) {
+      return e as WorkerPoolError;
+    }
+    throw new Error('expected a failure');
+  };
+  it('a reply without error text says so, one with empty text keeps it empty', () => {
+    expect(failure('worker_noerror.mjs').message).toBe('adiri signature workers worker_error: unknown error');
+    expect(failure('worker_emptyerror.mjs').message).toBe('adiri signature workers worker_error: ');
+  });
+
+  it('the real worker answers an unknown job kind with a failure reply (never ok), which the pool names', () => {
+    const p = make({ size: 1 });
+    try {
+      p.runWire('bogus' as never, [{}]);
+    } catch (e) {
+      expect((e as WorkerPoolError).reason).toBe('worker_error');
+      expect((e as WorkerPoolError).message).toContain('unknown job kind bogus');
+      return;
+    }
+    throw new Error('an unknown job kind was answered');
+  });
+
+  it('a real job longer than stallMs completes because every record reports progress', () => {
+    const p = make({ size: 1, stallMs: 1000 });
+    const it0 = item(0);
+    const dec = localEngine.decode([it0.sig]);
+    const n = 700;
+    const t0 = Date.now();
+    const res = poolEngine(p).combine({ points: new Array(n).fill(dec.points[0]!), msgs: new Array(n).fill(it0.msg), scalars: new Array(n).fill(3n), groups: new Array(n).fill(0), dst: SignatureDST });
+    expect(res.hashPts).toHaveLength(n);
+    // longer than the stall window: only the progress ticks of the worker keep the run alive
+    expect(Date.now() - t0).toBeGreaterThan(1000);
+    expect(p.alive).toBe(true);
+  });
+});
+
+describe('the verifier defaults to the pool and carries its setting', () => {
+  it("AdiriVerifier is 'auto' unless told otherwise", () => {
+    expect(new AdiriVerifier().parallel).toBe('auto');
+    expect(new AdiriVerifier({ parallel: 'off' }).parallel).toBe('off');
+    const p = make({ size: 1 });
+    expect(new AdiriVerifier({ parallel: p }).parallel).toBe(p);
+  });
+});
+
+describe('the individual re-check of the record the combination named', () => {
+  it('a combination that rejects a record the individual check accepts is reported as a pairing failure of record 0, never an acceptance', () => {
+    const items = batch(5);
+    items[3] = { ...items[3]!, msg: msgOf(900) };
+    const ctx = {
+      dst: SignatureDST,
+      batchScalar: (rnd: (n: number) => Uint8Array): bigint => BigInt(`0x${Array.from(rnd(16), (b) => b.toString(16).padStart(2, '0')).join('')}`) | 1n,
+      aggregateKey: (signer: SigItem['signer']) => signer.slice(1).reduce((a, k) => a.add(k.g2), signer[0]!.g2),
+      signerGroup: (signer: SigItem['signer']): string => signer.map((k) => k.id).join(','),
+      verifyOne: () => undefined,
+    };
+    expect(firstFailureBatched(items, counter(), ctx, 'off')).toEqual({ index: 0, reason: 'pairing' });
+    // with a real individual verdict the same batch names record 3
+    expect(firstFailureBatched(items, counter(), { ...ctx, verifyOne: () => 'pairing' as const }, 'off')).toEqual({ index: 3, reason: 'pairing' });
   });
 });
