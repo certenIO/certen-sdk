@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// Generator of test/fixtures/finality/baseposted_zlib_fdict/vectors.json (certen-sdk): zlib channels judged by this package's decompress, the
+// Generator of test/fixtures/finality/base_zlib_fdict1/vectors.json (certen-sdk): zlib channels judged by this package's decompress, the
 // function the Base l1_posted verifier reads a channel with. Run inside pkg/finality/baseposted of the validator at cbb6373 as
 //   FP_VEC_OUT=<file> go test -run TestFixPostedVectorGen
 // Each case records the channel bytes, the cap, and Go's answer: "err" (decompress returned an error, whichever) or "ok:<len>:<first 8 bytes of sha256, hex>".
