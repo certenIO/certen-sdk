@@ -5,9 +5,10 @@
  * and a verifier refuses to start (`finality_pins_corrupt`) if its embedded bytes hash otherwise than PINS_SHA256.
  *
  * Go reads the file with encoding/json into typed structs after a structural walk. Both steps are reproduced rather than approximated:
- * the walk (keys sorted, none repeated, none outside the struct's exact names, in document order, over the whole document) comes
- * first, then the typed decode with Go's rules (null is a no-op, a wrongly typed value an error, an integer is a JSON integer literal
- * that fits its Go type), then the invariants of `validate`, each with its own reason.
+ * the walk (keys sorted, none repeated, none repeated in another letter case where the object is not a struct, none outside the
+ * struct's exact names, no number outside the float64 range, in document order, over the whole document, iteratively) comes first, then the
+ * typed decode with Go's rules (null is a no-op, a wrongly typed value an error, an integer is a JSON integer literal that fits its Go
+ * type), then the invariants of `validate`, each with its own reason.
  */
 import { sha256 } from '@noble/hashes/sha2';
 import { JsonError } from '../../s3/gojson.js';
@@ -16,6 +17,7 @@ import { EMBEDDED_PINS_TEXT } from './pins-embedded.js';
 import { EpochsPerPeriod, SyncCommitteeSize } from './ethl1/types.js';
 import { ChainSepolia } from './table.js';
 import { MAX_U64 } from './addendum.js';
+import { foldKey } from './foldkey.js';
 import { Code, PinsReason, cmpUtf8, hexLower, newState, pinsCorrupt } from './state.js';
 
 /** The format string of the pins file (V2_SPEC_S7 section 4.1). */
@@ -176,39 +178,92 @@ interface Violation {
   key?: string;
 }
 
-/**
- * The FIRST structural violation in document order: inside every object a key smaller than its predecessor is keys_unsorted{key}, a key
- * equal to it duplicate_key{key} (sorted keys make a duplicate adjacent), and, where t is a struct, a key that is not EXACTLY
- * (case-sensitively) one of its names is unknown_key{key}. Where t is not a struct (or the section is raw), only the order and duplicate
- * rules apply.
- */
-function walkKeys(v: JVal, t: Sch | undefined): Violation | undefined {
+/** An open container of the walk: its members, the next one to read, and what its schema type says about them. */
+type WalkFrame =
+  | {
+      obj: true;
+      pairs: readonly [string, JVal][];
+      i: number;
+      /** the exact member names of the struct this object is read into; undefined where the schema has no struct (raw sections, wrongly typed fields) */
+      struct: Record<string, Sch> | undefined;
+      prev: string | undefined;
+      /** case-folded key -> the spelling seen first; only for objects that are not structs (the case-variant rule of RB12-OPS-A1) */
+      spelled: Map<string, string> | undefined;
+    }
+  | { obj: false; items: readonly JVal[]; i: number; elem: Sch | undefined };
+
+const derefPtr = (t: Sch | undefined): Sch | undefined => {
   while (t !== undefined && typeof t === 'object' && 'ptr' in t) t = t.ptr;
-  if (v instanceof JObj) {
-    let prev: string | undefined;
-    for (const [k, val] of v.pairs) {
-      if (prev !== undefined) {
-        const c = cmpUtf8(k, prev);
+  return t;
+};
+
+/**
+ * The FIRST structural violation in document order (the twin of pkg/finality/pins.go walkKeys, RB12-OPS-A1 @4c6b8d26). Inside every object a key
+ * smaller than its predecessor (byte order of the UTF-8) is keys_unsorted{key}, a key equal to it duplicate_key{key} (sorted keys make a
+ * duplicate adjacent), and, where t is a struct, a key that is not EXACTLY (case-sensitively) one of its names is unknown_key{key}. Where t is
+ * not a struct (or the section is raw), the order and duplicate rules apply plus one more (F4/N1): a key that differs from an earlier key of the
+ * same object only in letter case (foldKey: Unicode simple folding, the equivalence encoding/json and the decoders of the chain sections match
+ * names and hex digits with) is duplicate_key{key} wherever it stands, judged BEFORE the order rule, and the first such key in document order is
+ * the one named, so the answer is a function of the bytes of the file. A number token that does not convert to a finite float64 is not_json,
+ * at the point of the document where Go's json.Decoder.Token reads it (audit N-1): whatever the walk reaches earlier is named first.
+ *
+ * The walk keeps its own stack: the document has already passed parseGoJson (at most Go's 10,000 containers open at once), and no depth of it
+ * can end in a RangeError (audit N-2).
+ */
+function walkKeys(root: JVal, rootT: Sch | undefined): Violation | undefined {
+  const stack: WalkFrame[] = [];
+  let v: JVal = root;
+  let t = derefPtr(rootT);
+  for (;;) {
+    // enter the value v, of schema type t
+    if (v instanceof JNum) {
+      if (!Number.isFinite(Number(v.lit))) return { reason: PinsReason.NotJSON };
+    } else if (v instanceof JObj) {
+      const struct = t !== undefined && typeof t === 'object' && 'struct' in t ? t.struct : undefined;
+      stack.push({ obj: true, pairs: v.pairs, i: 0, struct, prev: undefined, spelled: struct === undefined ? new Map() : undefined });
+    } else if (Array.isArray(v)) {
+      stack.push({ obj: false, items: v, i: 0, elem: t !== undefined && typeof t === 'object' && 'list' in t ? t.list : undefined });
+    }
+    // the next member to enter, closing every container that has none left
+    for (;;) {
+      const f = stack[stack.length - 1];
+      if (f === undefined) return undefined;
+      if (!f.obj) {
+        if (f.i >= f.items.length) {
+          stack.pop();
+          continue;
+        }
+        v = f.items[f.i++]!;
+        t = derefPtr(f.elem);
+        break;
+      }
+      if (f.i >= f.pairs.length) {
+        stack.pop();
+        continue;
+      }
+      const [k, val] = f.pairs[f.i++]!;
+      if (f.spelled !== undefined) {
+        const folded = foldKey(k);
+        const was = f.spelled.get(folded);
+        if (was === undefined) f.spelled.set(folded, k);
+        else if (was !== k) return { reason: PinsReason.DuplicateKey, key: k };
+      }
+      if (f.prev !== undefined) {
+        const c = cmpUtf8(k, f.prev);
         if (c < 0) return { reason: PinsReason.KeysUnsorted, key: k };
         if (c === 0) return { reason: PinsReason.DuplicateKey, key: k };
       }
-      prev = k;
+      f.prev = k;
       let ft: Sch | undefined;
-      if (t !== undefined && typeof t === 'object' && 'struct' in t) {
-        if (!Object.prototype.hasOwnProperty.call(t.struct, k)) return { reason: PinsReason.UnknownKey, key: k };
-        ft = t.struct[k];
+      if (f.struct !== undefined) {
+        if (!Object.prototype.hasOwnProperty.call(f.struct, k)) return { reason: PinsReason.UnknownKey, key: k };
+        ft = f.struct[k];
       }
-      const r = walkKeys(val, ft);
-      if (r) return r;
-    }
-  } else if (Array.isArray(v)) {
-    const et = t !== undefined && typeof t === 'object' && 'list' in t ? t.list : undefined;
-    for (const el of v) {
-      const r = walkKeys(el, et);
-      if (r) return r;
+      v = val;
+      t = derefPtr(ft);
+      break;
     }
   }
-  return undefined;
 }
 
 // ---- step 2: the typed decode (json.Decoder with DisallowUnknownFields into the structs) ----

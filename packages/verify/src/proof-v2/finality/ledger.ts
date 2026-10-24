@@ -179,37 +179,75 @@ type GoValue = null | boolean | string | number | GoValue[] | Map<string, GoValu
 
 class NotDecodable extends Error {}
 
-const wellFormed = (s: string): string => s.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '�');
+const wellFormed = (s: string): string => s.replace(/[�-�](?![�-�])|(?<![�-�])[�-�]/g, '�');
 
-function goValue(v: JVal): GoValue {
-  if (v === null || typeof v === 'boolean') return v;
-  if (typeof v === 'string') return wellFormed(v);
-  if (v instanceof JNum) {
-    const n = Number(v.lit);
-    if (!Number.isFinite(n)) throw new NotDecodable();
-    return n;
+/**
+ * json.Unmarshal into interface{}, with an explicit stack: a document nested to Go's limit (10,000 containers, which parseGoJson enforces) is
+ * converted, never a RangeError (audit N-2). Go's decoder reads a repeated key of an object into the same map entry: the later value wins.
+ */
+function goValue(root: JVal): GoValue {
+  type Slot = { dst: GoValue[] | Map<string, GoValue>; key: string | number };
+  const put = (slot: Slot | undefined, v: GoValue): GoValue => {
+    if (slot === undefined) return v;
+    if (slot.dst instanceof Map) slot.dst.set(slot.key as string, v);
+    else slot.dst[slot.key as number] = v;
+    return v;
+  };
+  let result: GoValue = null;
+  type Work = { src: JVal; slot: Slot | undefined };
+  const work: Work[] = [{ src: root, slot: undefined }];
+  while (work.length > 0) {
+    const { src, slot } = work.pop()!;
+    if (src === null || typeof src === 'boolean') {
+      const r = put(slot, src);
+      if (slot === undefined) result = r;
+    } else if (typeof src === 'string') {
+      const r = put(slot, wellFormed(src));
+      if (slot === undefined) result = r;
+    } else if (src instanceof JNum) {
+      const n = Number(src.lit);
+      if (!Number.isFinite(n)) throw new NotDecodable();
+      const r = put(slot, n);
+      if (slot === undefined) result = r;
+    } else if (Array.isArray(src)) {
+      const out: GoValue[] = new Array<GoValue>(src.length).fill(null);
+      const r = put(slot, out);
+      if (slot === undefined) result = r;
+      // pushed in reverse so that the members are converted in document order
+      for (let i = src.length - 1; i >= 0; i--) work.push({ src: src[i]!, slot: { dst: out, key: i } });
+    } else if (src instanceof JObj) {
+      const m = new Map<string, GoValue>();
+      const r = put(slot, m);
+      if (slot === undefined) result = r;
+      for (let i = src.pairs.length - 1; i >= 0; i--) work.push({ src: src.pairs[i]![1], slot: { dst: m, key: wellFormed(src.pairs[i]![0]) } });
+    } else {
+      throw new NotDecodable();
+    }
   }
-  if (Array.isArray(v)) return v.map(goValue);
-  if (v instanceof JObj) {
-    const m = new Map<string, GoValue>();
-    for (const [k, x] of v.pairs) m.set(wellFormed(k), goValue(x));
-    return m;
-  }
-  throw new NotDecodable();
+  return result;
 }
 
-function deepEqual(a: GoValue, b: GoValue): boolean {
-  if (a === b) return true;
-  if (a instanceof Map) {
-    if (!(b instanceof Map) || a.size !== b.size) return false;
-    for (const [k, x] of a) {
-      const y = b.get(k);
-      if (y === undefined || !deepEqual(x, y)) return false;
+/** reflect.DeepEqual of two decoded documents, with an explicit stack (no recursion). */
+function deepEqual(x: GoValue, y: GoValue): boolean {
+  const work: [GoValue, GoValue][] = [[x, y]];
+  while (work.length > 0) {
+    const [a, b] = work.pop()!;
+    if (a === b) continue;
+    if (a instanceof Map) {
+      if (!(b instanceof Map) || a.size !== b.size) return false;
+      for (const [k, p] of a) {
+        const q = b.get(k);
+        if (q === undefined) return false;
+        work.push([p, q]);
+      }
+    } else if (Array.isArray(a)) {
+      if (!Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) work.push([a[i]!, b[i]!]);
+    } else {
+      return false;
     }
-    return true;
   }
-  if (Array.isArray(a)) return Array.isArray(b) && a.length === b.length && a.every((x, i) => deepEqual(x, b[i]!));
-  return false;
+  return true;
 }
 
 /** Whether two pins files are identical outside eth_sepolia.anchors (a file that is not decodable as Go reads it is never equal). */
