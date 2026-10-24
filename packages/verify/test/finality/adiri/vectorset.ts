@@ -17,6 +17,7 @@ import { FinalityStateError, asNamed, hexLower, newState } from '../../../src/pr
 const here = dirname(fileURLToPath(import.meta.url));
 export const SET_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri3');
 export const SET4_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri4');
+export const SET5_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri5');
 export const REGISTRY_DIR = join(here, '..', '..', 'fixtures', 'finality', 'adiri3_registry');
 
 /** The sha256 of the Go-written MANIFEST.json (= MANIFEST.json.sha256) of finality_adiri3 at pv2/rb11-int@ee6d106. */
@@ -28,9 +29,12 @@ export const STATES_SHA256 = '0521d55f101e6815872ccd11884d710594b79329f073226d7d
 
 export const readSet = (name: string): Buffer => readFileSync(join(SET_DIR, ...name.split('/')));
 export const readSet4 = (name: string): Buffer => readFileSync(join(SET4_DIR, ...name.split('/')));
+export const readSet5 = (name: string): Buffer => readFileSync(join(SET5_DIR, ...name.split('/')));
 
 /** The sha256 of the Go-written MANIFEST.json (= MANIFEST.json.sha256) of finality_adiri4 at pv2/rb11-gate-a@a74f662. */
 export const MANIFEST4_SHA256 = 'f4516883372992ca6fe5d65181dc25852b2c3414e9e3b82b758ac42576776250';
+/** The sha256 of the Go-written MANIFEST.json (= MANIFEST.json.sha256) of finality_adiri5 at pv2/rb11-f1-fix@690ceb6 (the same bytes at pv2/rb11-e1-raise@cbb6373). */
+export const MANIFEST5_SHA256 = '03d404a86420d20a652bc3057a045e55d63082b8948df4e0d35f104bdff00b9a';
 export const sha256Hex = (b: Uint8Array): string => hexLower(sha256(b));
 export const bytesOfHex = (s: string): Uint8Array => {
   const h = s.startsWith('0x') ? s.slice(2) : s;
@@ -61,6 +65,9 @@ export interface VecFile {
 
 export const loadVectors = (): VecFile => JSON.parse(readSet('vectors.json').toString('utf8'));
 export const loadVectors4 = (): VecFile => JSON.parse(readSet4('vectors.json').toString('utf8'));
+export const loadVectors5 = (): VecFile => JSON.parse(readSet5('vectors.json').toString('utf8'));
+let cached5: VecFile | undefined;
+export const vectors5 = (): Vec[] => (cached5 ??= loadVectors5()).vectors;
 let cached4: VecFile | undefined;
 export const vectors4 = (): Vec[] => (cached4 ??= loadVectors4()).vectors;
 let cached: VecFile | undefined;
@@ -133,11 +140,11 @@ export function outcome(run: () => { fields: Record<string, any> }): string {
   }
 }
 
-export function judge(v: Vec, opts: VerifierOptions = {}, set: 3 | 4 = 3): string {
+export function judge(v: Vec, opts: VerifierOptions = {}, set: 3 | 4 | 5 = 3): string {
   const kind = new AdiriVerifier(opts);
   const pins = pinsOf(v);
   const leg = legOf(v);
-  const ev = set === 4 ? evidenceOf(v, vectors4(), readSet4) : evidenceOf(v);
+  const ev = set === 5 ? evidenceOf(v, vectors5(), readSet5) : set === 4 ? evidenceOf(v, vectors4(), readSet4) : evidenceOf(v);
   return outcome(() => kind.verify(pins, leg, ev));
 }
 

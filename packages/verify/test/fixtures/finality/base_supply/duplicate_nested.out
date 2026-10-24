@@ -1,0 +1,9 @@
+{
+  "base_sepolia": {
+    "a": {
+      "y": 2
+    },
+    "channel_timeout_granite": 50,
+    "granite_time": 1723478400
+  }
+}

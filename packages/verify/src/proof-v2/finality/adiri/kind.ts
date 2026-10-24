@@ -39,8 +39,14 @@ import {
 /** Link kinds of the body (V2_SPEC_S7 3.3). */
 export const LinkSpine = 1;
 export const LinkSlot = 2;
-/** the ring size of the EIP-2935 history contract */
+/** the ring size of the EIP-2935 history contract: under stateRoot_F the account holds the hashes of blocks F-1 down to F-8191, in slot (block number mod 8191) */
 export const EIP2935Window = 8191n;
+/**
+ * The greatest F.number - N a linkKind 2 proof binds: 8190, one block inside the ring, the bound at which the spec's prover emits the form
+ * (V2_SPEC_S7 3.3 and annex A9: F.number - N <= 8190). A slot proves the hash of block N only for distances inside the ring; further back the same
+ * slot holds the hash of a later block with the same residue (block 9000 and block 809 share slot 809), so the distance is part of the claim.
+ */
+export const MaxSlotDistance = EIP2935Window - 1n;
 
 export const ReasonLevelNotFinalized = 'level_not_finalized';
 export const ReasonSpineEmpty = 'spine_empty';
@@ -182,12 +188,29 @@ export function verifySpine(res: ChainResult, spine: readonly Uint8Array[], leg:
 const hex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
 /**
- * linkKind 2, only when N < F.number. keccak256(finalHeader) = F.hash; the EIP-2935 account (codeHash = pin) and storage slot N mod 8191
- * hold the leg block's hash under stateRoot_F.
+ * linkKind 2, only when N < F.number. The leg is bound first (F.number - N <= MaxSlotDistance; a non-zero hash, since a proven-absent slot
+ * reads as zero; and, when the caller holds the leg's header, keccak256(header) = the leg hash and the header carries the leg number), then
+ * keccak256(finalHeader) = F.hash and the EIP-2935 account (codeHash = pin) and storage slot N mod 8191 hold the leg block's hash under
+ * stateRoot_F. A zero proven slot value cannot equal the (non-zero) leg hash, so it is refused as slot_value_mismatch.
  */
 function verifySlot(par: Params, res: ChainResult, body: Body, leg: BlockRef): LinkResult {
   const F = res.final;
   if (leg.number === F.number) throw malformed('linkKind', ReasonLinkKind2AtSeal, body.linkKind, 1);
+  // verifyLink has refused N > F and the line above N = F, so this difference does not wrap
+  const d = F.number - leg.number;
+  if (d > MaxSlotDistance) throw blockMismatch('slotDistance', MaxSlotDistance, d);
+  if (leg.hash.every((b) => b === 0)) throw blockMismatch('legHash', 'nonzero', leg.hash);
+  if (leg.headerRlp !== undefined) {
+    let lh: HeaderFields;
+    try {
+      lh = readHeader(leg.headerRlp);
+    } catch (e) {
+      if (e instanceof FinalityStateError) throw linkBroken(LinkHeaderDecode, F.number, leg.number, leg.number);
+      throw e;
+    }
+    if (!sameBytes(lh.hash, leg.hash)) throw blockMismatch('legHeaderHash', leg.hash, lh.hash);
+    if (lh.number !== leg.number) throw blockMismatch('legHeaderNumber', leg.number, lh.number);
+  }
   let h: HeaderFields;
   try {
     h = readHeader(body.finalHeader);

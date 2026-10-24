@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { sha256 } from '@noble/hashes/sha2';
 import { parsePinsOverride } from '../../../src/proof-v2/finality/pins.js';
 import { BasePostedKind } from '../../../src/proof-v2/finality/baseposted/index.js';
+import { supplyPins } from './supply.js';
 import { FinalityStateError, canonValue, hexLower } from '../../../src/proof-v2/finality/state.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -28,33 +29,13 @@ export const read = (name: string): Buffer => readFileSync(join(SET_DIR, ...name
  */
 export const PUBLISHED_SET_PIN_SUPPLY: Readonly<Record<string, number>> = { granite_time: 1723478400, channel_timeout_granite: 50 };
 
-const sortedKeys = (v: unknown): unknown =>
-  Array.isArray(v)
-    ? v.map(sortedKeys)
-    : v !== null && typeof v === 'object'
-      ? Object.fromEntries(
-          Object.keys(v)
-            .sort()
-            .map((k) => [k, sortedKeys((v as Record<string, unknown>)[k])]),
-        )
-      : v;
-
 /**
  * The Go SupplyBaseSepoliaPins: the pins file with the given base_sepolia keys added where the file lacks them (a key the file has is
- * never overwritten), in the loader's canonical form (keys sorted at every depth, two-space indent, one LF). A file without a base_sepolia
- * object is returned as is. It refuses a file holding an integer beyond 2^53, which JSON.parse would round.
+ * never overwritten), in the loader's canonical form (keys sorted at every depth, two-space indent, one LF), number literals kept exactly as
+ * written (an integer above 2^53 such as 2^64-1 is supplied losslessly). See supply.ts; the bytes are the Go bytes (test/fixtures/finality/base_supply).
  */
-export function supplyBaseSepoliaPins(raw: Uint8Array, supply: Readonly<Record<string, number>> = PUBLISHED_SET_PIN_SUPPLY): Buffer {
-  const doc = JSON.parse(Buffer.from(raw).toString('utf8')) as Record<string, unknown>;
-  const sec = doc.base_sepolia;
-  if (sec === null || typeof sec !== 'object' || Array.isArray(sec)) return Buffer.from(raw);
-  const unsafe = (v: unknown): boolean =>
-    typeof v === 'number' ? !Number.isSafeInteger(v) : Array.isArray(v) ? v.some(unsafe) : v !== null && typeof v === 'object' ? Object.values(v).some(unsafe) : false;
-  if (unsafe(doc)) throw new Error('a pins file number beyond 2^53 cannot be supplied through JSON.parse');
-  const s = sec as Record<string, unknown>;
-  for (const [k, v] of Object.entries(supply)) if (!(k in s)) s[k] = v;
-  return Buffer.from(`${JSON.stringify(sortedKeys(doc), null, 2)}
-`);
+export function supplyBaseSepoliaPins(raw: Uint8Array, supply: Readonly<Record<string, number | bigint>> = PUBLISHED_SET_PIN_SUPPLY): Buffer {
+  return supplyPins(raw, supply);
 }
 
 /** A pins file of the published set as the harness gives it to the verifier: with the supplied Granite pins. */

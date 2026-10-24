@@ -1,0 +1,1 @@
+{"base_sepolia":{"u64_max":18446744073709551615,"above_2p53":9007199254740993,"neg_above_2p53":-9007199254740993,"two_p53":9007199254740992,"float_big":1.5e300,"exp":1E+2,"trailing_zero":0.10,"huge_exp":1e400,"neg_zero":-0,"small":7},"other":[18446744073709551615,{"x":9007199254740993}],"format":"certen-finality-pins/1"}

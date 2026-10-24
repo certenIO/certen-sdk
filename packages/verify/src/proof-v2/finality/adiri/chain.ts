@@ -4,7 +4,7 @@
  * size and quorum (O2); only then every signature (O3), so the structural verdict never depends on the signature mode.
  */
 import { Code, FinalityStateError, newState, malformed } from '../state.js';
-import { ReasonCFA1NoRecords, committeeOf, nextOf, type CFA1 } from './cfa1.js';
+import { ReasonCFA1NoRecords, checkRecordSigners, checkRecordTables, committeeOf, nextOf, type CFA1 } from './cfa1.js';
 import { Codec, Name, recordDigests, signedMessage, type Params } from './record.js';
 import { KeyCache, firstFailure, type KeyEntry, type Mode, type Rand, type SigItem } from './sigs.js';
 import {
@@ -90,6 +90,12 @@ const sameNumHash = (a: NumHash, b: NumHash): boolean => a.number === b.number &
 export function verifyCommitteeChain(par: Params, c: CFA1, mode: Mode, rnd?: Rand): ChainResult {
   if (par.codec !== Codec) throw codecUnsupported(0, par.codec, Codec);
   if (c.records.length === 0) throw malformed('cfa1.n_records', ReasonCFA1NoRecords, 0, 1);
+  // exported, and judges any CFA1 (not only one decodeCFA1 returned): the decoder's table and signer rules are applied again, for every
+  // record, before recordDigests indexes the tables and before a signer list indexes a committee
+  c.records.forEach((rec, i) => {
+    checkRecordTables(i, rec, c.tables.length);
+    checkRecordSigners(i, rec.signers, c.tables[rec.committeeIdx]!.length);
+  });
   const keys = new KeyCache();
   const digests = recordDigests(c);
   const shrunkList: FinalityStateError[] = [];
