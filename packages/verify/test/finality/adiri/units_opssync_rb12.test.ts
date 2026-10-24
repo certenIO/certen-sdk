@@ -168,9 +168,7 @@ describe('recordDigests refuses a table index outside the tables with the named 
         minCommittee: 4n,
         maxHeaders: 16n,
         eip2935Address: new Uint8Array(20),
-        finalConsensus: { number: 0n, hash: new Uint8Array(32) },
-        signature: new Uint8Array(48),
-        signers: new Uint8Array(0),
+        eip2935CodeHash: new Uint8Array(32),
       };
       try {
         verifyCommitteeChain(par, cf, 'oneByOne');
