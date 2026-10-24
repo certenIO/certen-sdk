@@ -28,6 +28,7 @@
 ### Two places where Go depends on its random map order, made deterministic here
 - Case-variant duplicate `logic_pins` keys naming different roles are `pin_mismatch{logic_pins}` (Go keeps whichever its map visits last); with several bad selectors or topics the first in sorted name
   order is named (Go names a random one). A file with one defect answers identically in Go and here.
+- Documented residuals of the wallet route, restated from the Go review (V-RB12-E1RAISE W17, W18, W19 and N5; the byte-identical `arb_final3/README.md` carries the same sentence; no check exists in either verifier): [W17] the inner confirmAssertion arguments are not bound to the assertion hash; [W18] the other calls of the batch and the gas-refunder callback are not constrained; [W19] a same-block swap and restore at K is invisible (the wallet identity is judged at the end of block K, as the Rollup logic code is). [N5] For the wallet route "not fast/force" therefore rests on anyTrustFastConfirmer == 0 at the end of K and on the Rollup owner not being able to set and unset it inside block K. Only a Rollup-privileged party can exploit it (it also could force-confirm, which is logged). The same paragraph heads `arbfinal/confirm.ts`; `test/finality/arbfinal/units_residuals.test.ts` pins both texts and shows each residual in an accepted world.
 
 ## Unreleased — RB12 TS surface: the finality section in the public verifier (2026-10-23)
 

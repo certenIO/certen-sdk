@@ -5,9 +5,21 @@
  * confirmAssertion (route direct) or a callee PROVEN to be a ValidatorWallet (proveWallet, at K) was called through an entry point that
  * carries a call to the Rollup with confirmAssertion, with no AssertionForceConfirmed log and anyTrustFastConfirmer zero at K (route wallet).
  * Everything else is a named state, never a weaker level.
+ *
+ * Documented residuals (the Go review V-RB12-E1RAISE W17, W18, W19 and N5 and pkg/finality/arbfinal/testdata/finality_arb_final3/README.md; no check
+ * exists in either verifier, so this is the same residual in both): [W17] the inner confirmAssertion arguments are not bound to the assertion
+ * hash; [W18] the other calls of the batch and the gas-refunder callback are not constrained; [W19] the wallet identity is judged at the end of
+ * block K, so a same-block swap and restore at K is invisible (as it is for the Rollup logic code). [N5] For the wallet route "not fast/force"
+ * therefore rests on anyTrustFastConfirmer == 0 at the end of K and on the Rollup owner not being able to set and unset it inside block K. Only a
+ * Rollup-privileged party can exploit it (it also could force-confirm, which is logged). The wallet route does NOT prove: which
+ * validator/owner/executor sent the tx (the wallet's onlyExecutorOrOwner guard and the Rollup's own validator check ran, success is the
+ * evidence), that the wallet is staked/whitelisted beyond Rollup acceptance, that the batch had no other calls, or that the log came from the
+ * decoded call (W17/W18). Tightening options, a design item and not this port: require every call of the batch to target the Rollup, and bind
+ * the first confirmAssertion argument to the assertion hash. Tests: units_residuals.test.ts pins this paragraph and shows each residual in an
+ * accepted world.
  */
 import { keccak_256 } from '@noble/hashes/sha3';
-import { MptError, ProofDb, verifyAccount, verifyProofIn, verifySlot, type AccountState } from '../../../s6/mpt.js';
+import { MptError, ProofNodes, verifyAccountIn, verifyProofIn, verifySlotIn, type AccountState } from '../../../s6/mpt.js';
 import { RlpError, split, splitList } from '../../../s6/rlp.js';
 import { EthTxError, decodeTx } from '../baseposted/ethtx.js';
 import { rlpIndexKey } from '../baseposted/trie.js';
@@ -44,17 +56,24 @@ export interface Confirmed {
 /** The part of the evidence the classifier reads. */
 export type ConfirmEvidence = Pick<Evidence, 'confTxIndex' | 'confTxRaw' | 'confReceiptRaw' | 'nodes'>;
 
-/** The proof database keeps no empty node (see nodebounds.ts). */
-const nonEmpty = (nodes: readonly Uint8Array[]): Uint8Array[] => nodes.filter((n) => n.length > 0);
+/**
+ * The node set of a proof read: a plain list (a proof database is then built for this read alone, as before) or the ProofNodes of the
+ * verification, whose proof database is built once and shared by every read (RB12-TS-FIX-ARBSEP, audit N-5).
+ */
+export type ProofSource = readonly Uint8Array[] | ProofNodes;
+
+/** The ProofNodes of a proof source: the shared set itself, or a new one over the list. */
+export const proofNodesOf = (src: ProofSource): ProofNodes => (src instanceof ProofNodes ? src : new ProofNodes(src));
 
 /**
  * proveLeaf: root commits to a leaf at key rlp(index), proven from the shared node set, and the leaf equals the carried raw bytes. A missing
  * or inconsistent node, an absent key, or a leaf that differs from the carried bytes is a failure (false), never a throw.
  */
-export function proveLeaf(root: Uint8Array, index: number, nodes: readonly Uint8Array[], carried: Uint8Array): boolean {
+export function proveLeaf(root: Uint8Array, index: number, nodes: ProofSource, carried: Uint8Array): boolean {
   let v: Uint8Array | undefined;
   try {
-    v = verifyProofIn(new ProofDb(nonEmpty(nodes)), root, rlpIndexKey(index));
+    // an empty node can never be a trie node: the leaf proofs read a database without it (the reader of a ProofNodes skips it)
+    v = verifyProofIn(proofNodesOf(nodes).reader(), root, rlpIndexKey(index));
   } catch (e) {
     if (e instanceof MptError || e instanceof RlpError) return false;
     throw e;
@@ -164,13 +183,14 @@ const padAddr = (a: Uint8Array): Uint8Array => {
  * proxy of the same code over another implementation, an implementation of other code. Only stateRoot (K's) is read: a proof under S does
  * not count.
  */
-export function proveWallet(arb: ArbFinalPins, stateRoot: Uint8Array, wallet: Uint8Array, nodes: readonly Uint8Array[]): boolean {
+export function proveWallet(arb: ArbFinalPins, stateRoot: Uint8Array, wallet: Uint8Array, nodes: ProofSource): boolean {
+  const set = proofNodesOf(nodes);
   try {
-    const acct = verifyAccount(stateRoot, wallet, nodes);
+    const acct = verifyAccountIn(set, stateRoot, wallet);
     if (!acct.exists || roleOf(arb, acct.codeHash) !== RoleWalletProxy) return false;
-    const word = verifySlot(acct.storageRoot, arb.walletImplSlot, nodes);
+    const word = verifySlotIn(set, acct.storageRoot, arb.walletImplSlot);
     if (!sameBytes(word, padAddr(arb.walletImpl))) return false;
-    const impl = verifyAccount(stateRoot, arb.walletImpl, nodes);
+    const impl = verifyAccountIn(set, stateRoot, arb.walletImpl);
     return impl.exists && roleOf(arb, impl.codeHash) === RoleWalletLogic;
   } catch (e) {
     if (e instanceof MptError || e instanceof RlpError) return false;
@@ -190,7 +210,10 @@ export function walletCallee(arb: ArbFinalPins, tx: { to: Uint8Array | null; dat
   return tx.to;
 }
 
-/** 5.7 O4: the confirmation path under K (see the module comment). Throws a named state for every outcome that is not an honest confirmation. */
+/**
+ * 5.7 O4: the confirmation path under K (see the module comment). Throws a named state for every outcome that is not an honest confirmation.
+ * set is the ProofNodes of e.nodes shared with the rest of the verification (a new one when omitted).
+ */
 export function classifyConfirmation(
   arb: ArbFinalPins,
   kb: Pick<L1Block, 'number' | 'stateRoot'>,
@@ -198,9 +221,10 @@ export function classifyConfirmation(
   acctK: Pick<AccountState, 'storageRoot'> | null,
   assertion: Uint8Array,
   e: ConfirmEvidence,
+  set: ProofNodes = new ProofNodes(e.nodes),
 ): Confirmed {
-  if (!proveLeaf(kHeader.transactionRoot, e.confTxIndex, e.nodes, e.confTxRaw)) throw txProofInvalid('tx');
-  if (!proveLeaf(kHeader.receiptsRoot, e.confTxIndex, e.nodes, e.confReceiptRaw)) throw txProofInvalid('receipt');
+  if (!proveLeaf(kHeader.transactionRoot, e.confTxIndex, set, e.confTxRaw)) throw txProofInvalid('tx');
+  if (!proveLeaf(kHeader.receiptsRoot, e.confTxIndex, set, e.confReceiptRaw)) throw txProofInvalid('receipt');
   let tx: ReturnType<typeof decodeTx>;
   try {
     tx = decodeTx(e.confTxRaw);
@@ -247,7 +271,7 @@ export function classifyConfirmation(
     if (isWalletSelector(arb, sel)) throw unproven(ConfirmReason.WalletUndecodable);
     throw unproven(ConfirmReason.Indirect);
   }
-  if (!proveWallet(arb, kb.stateRoot, tx.to, e.nodes)) throw unproven(ConfirmReason.Indirect);
+  if (!proveWallet(arb, kb.stateRoot, tx.to, set)) throw unproven(ConfirmReason.Indirect);
   let found = false;
   for (const c of calls) {
     const cs = selectorOf(c.data);
@@ -261,7 +285,7 @@ export function classifyConfirmation(
   if (acctK === null) throw new Error('classifyConfirmation: the Rollup account at K is required for a wallet confirmation');
   let fw: Uint8Array;
   try {
-    fw = verifySlot(acctK.storageRoot, wordOf(arb.layout.fastConfirmerSlot), e.nodes);
+    fw = verifySlotIn(set, acctK.storageRoot, wordOf(arb.layout.fastConfirmerSlot));
   } catch (err) {
     if (err instanceof MptError || err instanceof RlpError) throw stateProofInvalid('slot');
     throw err;
