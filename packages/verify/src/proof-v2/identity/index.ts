@@ -25,3 +25,4 @@ export * as abiattest from './abiattest.js';
 export * from './extension.js';
 export * from './reportmap.js';
 export * from './surface.js';
+export * from './cliflag.js';
