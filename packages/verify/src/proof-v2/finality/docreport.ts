@@ -23,7 +23,7 @@ import type { Settlement } from './evidence.js';
 import { LEVELS, Level, levelName } from './level.js';
 import { embeddedPins, type Pins } from './pins.js';
 import { Registry } from './registry.js';
-import { verifyWith, type Report } from './report.js';
+import { verifyCarried, verifyWith, type Report } from './report.js';
 import { Code, IncludedReason, asNamed, hexLower, includedUnavailable, type FinalityStateError } from './state.js';
 import { CodeL1FinalityUnproven, CodeLedgerBehind } from './ethl1/fault.js';
 
@@ -185,7 +185,7 @@ export function judgeFinalityText(input: string | Uint8Array, opts: FinalityOpti
     return failed(subject, st.toString(), st);
   }
   const leg = opts.settlement;
-  if (leg === undefined) {
+  if (leg === undefined && section.leg.headerRlp === undefined) {
     const st = includedUnavailable(IncludedReason.SettlementNotJudged, { chain: section.leg.chain });
     return hide(
       {
@@ -216,6 +216,19 @@ export function judgeFinalityText(input: string | Uint8Array, opts: FinalityOpti
     return hide(failed(subject, `the verifier cannot be wired: its pins do not load: ${w.message}`, st), { wiring: w });
   }
   const reg = opts.registry ?? new Registry();
+  if (leg === undefined) {
+    // no Settlement source, but the leg carries its header (bound by carriedLegRef to blockHash and blockNumber): D0 is recomputed from that block and
+    // the addenda are judged against it; the header proves the block, not the settlement transaction, so level 1 is not claimed
+    const rep = verifyCarried(reg, carried, section.addenda, pins);
+    const r = renderReport(rep, subject);
+    const note = opts.registry === undefined ? '  S7  no verifier Kind is registered in this call: every addendum is unrecognised (pass FinalityOptions.registry, see finality.registerKinds)\n' : '';
+    const src =
+      `  S7  Settlement source: none; the leg carries its block header (leg.headerRlp, bound to blockHash and blockNumber): it proves block ${carried.number}, ` +
+      'not the settlement transaction, so level 1 (included) is not judged\n';
+    const out = hide({ class: r.class, exit: r.exit, text: `${src}${note}${r.text}`, headline: rep.headline } as DocumentFinality, { report: rep });
+    if (opts.registry === undefined) out.noKinds = true;
+    return out;
+  }
   const rep = verifyWith(reg, leg.chain, leg.settlement, carried, section.addenda, pins);
   const r = renderReport(rep, subject);
   const note = opts.registry === undefined ? '  S7  no verifier Kind is registered in this call: every addendum is unrecognised (pass FinalityOptions.registry, see finality.registerKinds)\n' : '';

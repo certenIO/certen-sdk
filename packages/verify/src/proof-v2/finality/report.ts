@@ -17,9 +17,11 @@ import {
   Code,
   FinalityStateError,
   FinalizedBlockReason,
+  IncludedReason,
   asNamed,
   chainUnsupported,
   finalizedBlockUnavailable,
+  includedUnavailable,
   newState,
   noEvidenceInFile,
 } from './state.js';
@@ -131,6 +133,26 @@ export function verifyLeg(reg: Registry, b: BlockRef, carried: BlockRef, adds: r
       }
     }
   }
+  return rep;
+}
+
+/**
+ * Judges a section against the block its own leg member carries, for a holder of the exported file alone (no Settlement source): carried must come
+ * from carriedLegRef with a header, which bound keccak256(header) to blockHash and the positional block number to blockNumber (the twin of Go
+ * Registry.VerifyCarried). D0 is recomputed from that block and the addenda are judged as verifyLeg judges them. The header proves the BLOCK, not
+ * the settlement transaction, so level 1 is not claimed: included is pending with finality_included_unavailable{reason: no_settlement}, and the
+ * headline is the highest verified addendum level (none if none). A carried leg without a header judges nothing (no_settlement_to_recompute_d0).
+ */
+export function verifyCarried(reg: Registry, carried: BlockRef, adds: readonly Addendum[], p: Pins | null): Report {
+  if (carried.headerRlp === undefined || carried.headerRlp.length === 0) {
+    const [pinsSha256, pinsSource] = pinsIdentity(p);
+    const st = includedUnavailable(IncludedReason.SettlementNotJudged, { chain: carried.chain });
+    return { block: carried, levels: new Map([[Level.Included, { status: 'pending', state: st }]]), headline: Level.None, pinsSha256, pinsSource };
+  }
+  const rep = verifyLeg(reg, carried, carried, adds, p);
+  if (rep.unsupported !== undefined) return rep;
+  rep.levels.set(Level.Included, { status: 'pending', state: includedUnavailable(IncludedReason.NoSettlement, { chain: carried.chain }) });
+  if (rep.headline === Level.Included) rep.headline = Level.None;
   return rep;
 }
 

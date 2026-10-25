@@ -21,6 +21,7 @@ import { JNum, JObj, parseGoJson, type JVal } from '../../s3/jsonx.js';
 import { isStoredLevel, levelName, parseLevel, type Level, LevelSet } from './level.js';
 import { sameBytes, triple, type BlockRef } from './evidence.js';
 import { decodeContainer, defaultLimits } from './codec.js';
+import { readHeader } from './rlpheader.js';
 import { isRow, chainSupported } from './table.js';
 import {
   AddendumReason,
@@ -269,9 +270,9 @@ function parseDoc(raw: Uint8Array | string, field: string): JVal {
   }
 }
 
-function strictObject(v: JVal, field: string, keys: readonly string[]): Map<string, JVal> {
+function strictObject(v: JVal, field: string, keys: readonly string[], optional: readonly string[] = []): Map<string, JVal> {
   if (!(v instanceof JObj)) throw addendumMalformed(field, AddendumReason.NotJSON);
-  const allowed = new Set(keys);
+  const allowed = new Set([...keys, ...optional]);
   const out = new Map<string, JVal>();
   for (const [k, val] of v.pairs) {
     if (!allowed.has(k)) throw addendumMalformed(field, AddendumReason.UnknownKey, { key: k });
@@ -343,21 +344,46 @@ export function addendumToJSON(a: Addendum): string {
 /** The format string of the portable document's `finality` member. */
 export const SECTION_FORMAT = 'certen-finality-addenda/1';
 
-/** The `leg` member of the finality section: the block the addenda claim to be about. */
+/** Bounds the carried settlement header (a few hundred bytes today) before it is hashed (Go MaxLegHeaderBytes). */
+export const MAX_LEG_HEADER_BYTES = 16 << 10;
+
+/**
+ * The `leg` member of the finality section: the block the addenda claim to be about. headerRlp is OPTIONAL (R12-OUTCOME-TX): the lower-case hex of
+ * the settlement block's header RLP, bound by keccak256(header) == blockHash and by the block number read positionally from the header ==
+ * blockNumber, so a holder of the section alone can recompute D0 and judge the addenda against that block. It proves the block, not the
+ * settlement transaction.
+ */
 export interface CarriedLeg {
   chain: bigint;
   blockNumber: bigint;
   /** hex32, lower case */
   blockHash: string;
+  /** hex, lower case, optional */
+  headerRlp?: string;
 }
 
-/** The carried leg as a BlockRef (no header). blockHash is 32 bytes of lower-case hex. */
+/**
+ * The carried leg as a BlockRef. blockHash is 32 bytes of lower-case hex. When the leg carries its header it is bound here: a hash or a number
+ * that differs is finality_chain_broken{seq 0, check leg_binding, want, got} naming the differing member in both maps (the twin of Go
+ * CarriedLeg.Ref), and the BlockRef then holds the header; a header that is not a readable block header is readHeader's named state.
+ */
 export function carriedLegRef(c: CarriedLeg): BlockRef {
-  return { chain: c.chain, number: c.blockNumber, hash: strictHex(c.blockHash, 'leg.blockHash', 32) };
+  const ref: BlockRef = { chain: c.chain, number: c.blockNumber, hash: strictHex(c.blockHash, 'leg.blockHash', 32) };
+  if (c.headerRlp === undefined) return ref;
+  const hdr = strictHex(c.headerRlp, 'leg.headerRlp', -1);
+  if (hdr.length === 0 || hdr.length > MAX_LEG_HEADER_BYTES) throw addendumMalformed('leg.headerRlp', AddendumReason.BadValue);
+  const f = readHeader(hdr);
+  if (!sameBytes(f.hash, ref.hash)) throw chainBroken(0, Check.LegBinding, { want: { blockHash: f.hash }, got: { blockHash: ref.hash } });
+  if (f.number !== c.blockNumber) throw chainBroken(0, Check.LegBinding, { want: { blockNumber: f.number }, got: { blockNumber: c.blockNumber } });
+  return { ...ref, headerRlp: hdr };
 }
 
-/** A BlockRef as the carried form. */
+/** A BlockRef as the carried form, without its header (the member a composer without the header emits). */
 export const carriedLegOf = (b: BlockRef): CarriedLeg => ({ chain: b.chain, blockNumber: b.number, blockHash: hex(b.hash) });
+
+/** A BlockRef as the carried form WITH its header when it holds one. */
+export const carriedLegWithHeaderOf = (b: BlockRef): CarriedLeg =>
+  b.headerRlp !== undefined && b.headerRlp.length > 0 ? { ...carriedLegOf(b), headerRlp: hex(b.headerRlp) } : carriedLegOf(b);
 
 /** The value of a portable document's `finality` member (V2_SPEC_S7 2.5). */
 export interface Section {
@@ -373,9 +399,17 @@ export const newSection = (leg: BlockRef, chain: readonly Addendum[]): Section =
   addenda: [...chain],
 });
 
+/** newSection with the leg carrying its header when leg holds one. */
+export const newSectionWithHeader = (leg: BlockRef, chain: readonly Addendum[]): Section => ({
+  format: SECTION_FORMAT,
+  leg: carriedLegWithHeaderOf(leg),
+  addenda: [...chain],
+});
+
 export function sectionToJSON(s: Section): string {
+  const header = s.leg.headerRlp === undefined ? '' : `,"headerRlp":"${s.leg.headerRlp}"`;
   return (
-    `{"format":${goQuote(s.format)},"leg":{"chain":${s.leg.chain},"blockNumber":${s.leg.blockNumber},"blockHash":"${s.leg.blockHash}"},` +
+    `{"format":${goQuote(s.format)},"leg":{"chain":${s.leg.chain},"blockNumber":${s.leg.blockNumber},"blockHash":"${s.leg.blockHash}"${header}},` +
     `"addenda":[${s.addenda.map(addendumToJSON).join(',')}]}`
   );
 }
@@ -397,10 +431,16 @@ export function parseSectionValue(value: JVal): Section {
   const m = strictObject(value, 'finality', sectionKeys);
   const format = strictString(m.get('format'), 'format');
   if (format !== SECTION_FORMAT) throw addendumMalformed('format', AddendumReason.WrongFormat);
-  const lm = strictObject(m.get('leg') as JVal, 'leg', legKeys);
+  const lm = strictObject(m.get('leg') as JVal, 'leg', legKeys, ['headerRlp']); // headerRlp is the one optional member
   const chain = strictUint(lm.get('chain'), 'leg.chain');
   const blockNumber = strictUint(lm.get('blockNumber'), 'leg.blockNumber');
   const hash = strictHex32(lm.get('blockHash'), 'leg.blockHash');
+  let headerRlp: string | undefined;
+  if (lm.has('headerRlp')) {
+    headerRlp = strictString(lm.get('headerRlp'), 'leg.headerRlp');
+    const hb = strictHex(headerRlp, 'leg.headerRlp', -1);
+    if (hb.length === 0 || hb.length > MAX_LEG_HEADER_BYTES) throw addendumMalformed('leg.headerRlp', AddendumReason.BadValue);
+  }
   const list = m.get('addenda');
   if (!Array.isArray(list)) throw addendumMalformed('addenda', AddendumReason.BadValue);
   const addenda: Addendum[] = [];
@@ -413,5 +453,5 @@ export function parseSectionValue(value: JVal): Section {
       throw e;
     }
   });
-  return { format, leg: { chain, blockNumber, blockHash: hex(hash) }, addenda };
+  return { format, leg: { chain, blockNumber, blockHash: hex(hash), ...(headerRlp === undefined ? {} : { headerRlp }) }, addenda };
 }
