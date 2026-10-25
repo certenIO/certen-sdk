@@ -125,7 +125,7 @@ describe('the channel timeout is 50 after Granite, 300 before it, selected by th
 describe('isthmus_time is an informational pin of l1_posted: no value of it changes a verdict (V-D2-A1 defect 3)', () => {
   const outcomes = (isthmus: bigint): string[] => {
     const out: string[] = [];
-    for (const o of [{}, { nFrames: 2, frameBlocks: [1000n, 1100n] }, { epochNum: 1001n, frameBlocks: [1000n] }] as SynthOpts[]) {
+    for (const o of [{}, { nFrames: 2, frameBlocks: [1000n, 1100n] }, { epochNum: 990n, frameBlocks: [4591n] }] as SynthOpts[]) {
       const s = makeSynth({ compression: 'zlib', ...o });
       s.bp.isthmusTime = isthmus;
       try {
