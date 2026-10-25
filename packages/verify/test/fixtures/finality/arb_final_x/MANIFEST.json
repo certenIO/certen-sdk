@@ -9,7 +9,7 @@
   "evidence/l1_headers_other_than_k_have_a_33_byte_receipts_root.bin": "a6874db1166452e541b5c6b5dea4900307505c39822dce3a30358f3f776daafe",
   "evidence/l1_headers_other_than_k_have_a_list_in_the_withdrawals_slot.bin": "55cbd31e00f358d74d6711b84fadd86bd4d36c7648bbdc2e53228769f81c2e51",
   "pins/synth.json": "86d097e1355512a782a392bbc5e02ccfe146e736016af7d33593f89f198a0b51",
-  "vectors.json": "678dbbc88e0586ffc8ab4737095ec1f6100188beec4f55e8f0921a87d83c82c9"
+  "vectors.json": "fb325628b472e6a6fb62a99d5d5d1c8deaa30099f13a21bf2045bf9b7676e796"
  },
  "format": "arb_final_x/manifest/1"
 }

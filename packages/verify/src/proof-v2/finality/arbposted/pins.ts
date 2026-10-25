@@ -10,9 +10,9 @@
  */
 import { JsonError } from '../../../s3/gojson.js';
 import { foldEqual } from '../../../s3/fold.js';
-import { JObj, decodeVal, type FieldDef, type GoVal, type JVal, type Sch, type StructDef } from '../../../s3/jsonx.js';
+import { JNum, JObj, decodeVal, type FieldDef, type GoVal, type JVal, type Sch, type StructDef } from '../../../s3/jsonx.js';
 import { kzgSetupPin, sepoliaPins, type Pins } from '../pins.js';
-import { Code, newState } from '../state.js';
+import { Code, PinsReason, newState, pinsCorrupt } from '../state.js';
 import { ChainArbitrumSepolia, ChainSepolia } from '../table.js';
 import { pinMismatch } from './states.js';
 
@@ -26,6 +26,13 @@ export const CHAIN = ChainArbitrumSepolia;
  * pin_mismatch{field:"kzg_setup_sha256"}.
  */
 export const USED_KZG_SETUP_SHA256 = 'f8e44a31ebf0a6d0734dcb301b0716e2c77f3ae18ed0cab0870fbcc2ca55616f';
+
+/**
+ * MaxUncompressedBatchLimit is the largest max_uncompressed_batch a pins file may carry: 16 MiB, Nitro's MaxDecompressedLen (V2_SPEC_S7 section
+ * 4.2 pins 16777216). A larger pin would make the verifier accept a batch Nitro itself refuses, and a pin near the largest int would be a cap
+ * that is no cap; the shipped value is the limit. A value above it is finality_pins_corrupt{bad_value, key arb_sepolia.max_uncompressed_batch}.
+ */
+export const MAX_UNCOMPRESSED_BATCH_LIMIT = 16 * 1024 * 1024;
 
 /** Pin field names used in pin_mismatch / finality_pin_unknown. */
 export const PIN_SECTION = 'arb_sepolia';
@@ -132,6 +139,21 @@ function hexAddr(s: string): Uint8Array | undefined {
   return Uint8Array.from(h.match(/../g)!, (x) => parseInt(x, 16));
 }
 
+const maxBatchCorrupt = () => pinsCorrupt(PinsReason.BadValue, { key: `${PIN_SECTION}.max_uncompressed_batch` });
+
+/**
+ * Whether the section's max_uncompressed_batch is an integer literal above MAX_UNCOMPRESSED_BATCH_LIMIT, whatever its size (the twin of Go
+ * maxBatchBeyondLimit: the key is matched as encoding/json matches it, the last of a repeated key wins, and the literal is read as an
+ * arbitrary-precision integer, so one that does not fit an int64 is beyond the limit too and is named so, not "the section does not parse").
+ */
+function maxBatchBeyondLimit(raw: JVal): boolean {
+  if (!(raw instanceof JObj)) return false;
+  let max: JVal | undefined;
+  for (const [k, val] of raw.pairs) if (fieldFor(['max_uncompressed_batch'], k) !== undefined) max = val;
+  if (!(max instanceof JNum) || !/^-?[0-9]+$/.test(max.lit)) return false;
+  return BigInt(max.lit) > BigInt(MAX_UNCOMPRESSED_BATCH_LIMIT);
+}
+
 const clampInt = (v: bigint): number => (v > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(v));
 
 /**
@@ -147,7 +169,10 @@ export function loadArbPins(p: Pins | null | undefined): ArbPins {
     refuseUnknown(raw, arbDef);
     a = decodeVal({ struct: arbDef }, raw, PIN_SECTION) as { [k: string]: GoVal };
   } catch (e) {
-    if (e instanceof JsonError) throw pinMismatch('section');
+    if (e instanceof JsonError) {
+      if (maxBatchBeyondLimit(raw)) throw maxBatchCorrupt();
+      throw pinMismatch('section');
+    }
     throw e;
   }
   const big = (k: string): bigint => a[k] as bigint;
@@ -160,6 +185,7 @@ export function loadArbPins(p: Pins | null | undefined): ArbPins {
   if (big('MaxBlobs') <= 0n) throw pinMismatch('max_blobs');
   if (big('MaxSegments') <= 0n) throw pinMismatch('max_segments');
   if (big('MaxUncompressedBatch') <= 0n) throw pinMismatch('max_uncompressed_batch');
+  if (big('MaxUncompressedBatch') > BigInt(MAX_UNCOMPRESSED_BATCH_LIMIT)) throw maxBatchCorrupt();
   const present = presentNumericPins(raw);
   if (!present.bold) throw pinMismatch('bold_genesis_l2_block');
   if (!present.acc) throw pinMismatch('layout.acc_array_slot');
@@ -180,7 +206,7 @@ export function loadArbPins(p: Pins | null | undefined): ArbPins {
     logicPins: logic,
     maxBlobs: clampInt(big('MaxBlobs')),
     maxSegments: clampInt(big('MaxSegments')),
-    maxUncompressedBatch: clampInt(big('MaxUncompressedBatch')),
+    maxUncompressedBatch: Number(big('MaxUncompressedBatch')), // at most MAX_UNCOMPRESSED_BATCH_LIMIT here
   };
 }
 

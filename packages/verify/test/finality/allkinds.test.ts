@@ -23,8 +23,8 @@ import { sha256Hex, readFixture } from './helpers.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const finalityDir = join(here, '..', '..', 'src', 'proof-v2', 'finality');
 
-/** pv2/rb11-e1-raise@cbb6373 pkg/finality/testdata/finality/states.json and PinsSHA256 of pkg/finality/pins/finality-pins.json. */
-const VALIDATOR_STATES_SHA256 = '4d3182ffcfbf5ec06d3a79bf08dd0a96c8c986299485f3a4db6d0e0b6325f52a';
+/** Validator origin/main (e9aefbf5, with Train 3 and PR 167) pkg/finality/testdata/finality/states.json, and PinsSHA256 of pkg/finality/pins/finality-pins.json (unchanged since cbb6373). */
+const VALIDATOR_STATES_SHA256 = 'aec95426bbfaae838fcf395f2645f4140ff70a2359f30ae91983d9422e29695e';
 const VALIDATOR_PINS_SHA256 = 'fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440';
 /** The registry finality_chain2's manifest pins; it moved to finality_chain2_registry/ when the current registry replaced it. */
 const CHAIN2_STATES_SHA256 = 'd0e2d25048ba1dfe40e910538e6870675b2fbe3a4b0b47cdb9b1e0ffb084b73a';

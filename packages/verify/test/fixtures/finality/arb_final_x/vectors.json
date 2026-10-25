@@ -83,7 +83,7 @@
    },
    "pins": "synth.json",
    "evidence": "l1_header_at_k_has_a_31_byte_transactions_root.bin",
-   "expect": "{\"code\":\"finality_block_not_covered\",\"fields\":{\"block_number\":\"11999995\",\"finalized_exec_number\":\"12000000\"}}"
+   "expect": "{\"code\":\"finality_block_header_unreadable\",\"fields\":{\"block_number\":\"11999995\",\"finalized_exec_number\":\"12000000\",\"index\":\"4\",\"reason\":\"header_item_not_32_bytes\"}}"
   },
   {
    "name": "l1_header_at_k_has_a_33_byte_receipts_root",
@@ -97,7 +97,7 @@
    },
    "pins": "synth.json",
    "evidence": "l1_header_at_k_has_a_33_byte_receipts_root.bin",
-   "expect": "{\"code\":\"finality_block_not_covered\",\"fields\":{\"block_number\":\"11999995\",\"finalized_exec_number\":\"12000000\"}}"
+   "expect": "{\"code\":\"finality_block_header_unreadable\",\"fields\":{\"block_number\":\"11999995\",\"finalized_exec_number\":\"12000000\",\"index\":\"5\",\"reason\":\"header_item_not_32_bytes\"}}"
   },
   {
    "name": "l1_header_at_k_has_a_list_in_the_withdrawals_slot",
@@ -111,7 +111,7 @@
    },
    "pins": "synth.json",
    "evidence": "l1_header_at_k_has_a_list_in_the_withdrawals_slot.bin",
-   "expect": "{\"code\":\"finality_block_not_covered\",\"fields\":{\"block_number\":\"11999995\",\"finalized_exec_number\":\"12000000\"}}"
+   "expect": "{\"code\":\"finality_block_header_unreadable\",\"fields\":{\"block_number\":\"11999995\",\"finalized_exec_number\":\"12000000\",\"index\":\"16\",\"reason\":\"header_item_is_list\"}}"
   }
  ]
 }

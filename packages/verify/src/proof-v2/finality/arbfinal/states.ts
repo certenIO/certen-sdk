@@ -4,7 +4,7 @@
  * registry is test/fixtures/finality/finality/states.json (byte-identical to the validator's), and the conformance test asserts that every
  * code and every closed set below is the registry's.
  */
-import { FinalityStateError, newState } from '../state.js';
+import { Code, FinalityStateError, newState } from '../state.js';
 
 export const CodePreBold = 'pre_bold_block';
 export const CodePinMismatch = 'pin_mismatch';
@@ -110,3 +110,22 @@ export const confirmationUnproven = (reason: string, tx: Uint8Array, l1Block: bi
 
 /** assertion_preimage_mismatch{part}. */
 export const preimageMismatch = (part: string): FinalityStateError => newState(CodePreimageMismatch, { part });
+
+/**
+ * finality_block_header_unreadable{block_number, finalized_exec_number, reason[, index]}: the L1 block K is on the covered spine and below the
+ * finalized head, and its header cannot be read by the framework header reader (Go BlockHeaderUnreadable, RB12-ARBFINAL-FIX).
+ * finality_block_not_covered is NOT this state: it names a block that is not on the spine.
+ */
+export const CodeBlockHeaderUnreadable = 'finality_block_header_unreadable';
+
+/**
+ * blockHeaderUnreadable: block_number is the L1 block K, finalized_exec_number the number of the finalized head, reason (and index, the position
+ * of the item) the framework header reader's own refusal of that header (cause: finality_evidence_malformed{part header, reason, index}).
+ * A cause that is not that refusal is returned as it is: it is already a named state and must not be relabelled.
+ */
+export function blockHeaderUnreadable(number: bigint, top: bigint, cause: unknown): unknown {
+  if (!(cause instanceof FinalityStateError) || cause.code !== Code.EvidenceMalformed) return cause;
+  const out = newState(CodeBlockHeaderUnreadable, { block_number: number, finalized_exec_number: top, reason: cause.fields.reason });
+  if ('index' in cause.fields) out.fields.index = cause.fields.index;
+  return out;
+}

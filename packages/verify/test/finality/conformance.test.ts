@@ -42,6 +42,7 @@ import {
 } from '../../src/proof-v2/finality/state.js';
 import { ChainBaseSepolia, ChainSepolia, kindFor } from '../../src/proof-v2/finality/table.js';
 import { triple } from '../../src/proof-v2/finality/evidence.js';
+import { blockHeaderUnreadable } from '../../src/proof-v2/finality/arbfinal/states.js';
 import { Reader, defaultLimits } from '../../src/proof-v2/finality/codec.js';
 import { fill, fixtureJSON } from './helpers.js';
 
@@ -133,6 +134,9 @@ const section7PendingReasons = [
   'l1_proof_window_unavailable', 'l1_state_unavailable', 'finality_lc_unavailable', 'finality_ledger_incomplete', 'history_proof_unavailable',
 ];
 
+/** The pending reasons the registry adds beyond section 7 (Go operational: the Sepolia spine, Train 3). */
+const goOperationalPendingReasons = ['awaiting_spine'];
+
 describe('the shared registry', () => {
   it('holds every code of section 7 under scope spec and nothing else under spec', () => {
     expect(reg.format).toBe('certen-finality-states/2');
@@ -144,8 +148,8 @@ describe('the shared registry', () => {
       expect([...s.required], c).toEqual([...s.required].sort());
       expect([...s.optional], c).toEqual([...s.optional].sort());
     }
-    for (const r of section7PendingReasons) expect(reg.pending_reasons[r], r).toBeDefined();
-    expect(Object.keys(reg.pending_reasons).length).toBe(section7PendingReasons.length);
+    for (const r of [...section7PendingReasons, ...goOperationalPendingReasons]) expect(reg.pending_reasons[r], r).toBeDefined();
+    expect(Object.keys(reg.pending_reasons).length).toBe(section7PendingReasons.length + goOperationalPendingReasons.length);
   });
 });
 
@@ -190,6 +194,8 @@ describe('every state the framework builds conforms to its registry entry', () =
     'pins unknown': newState(Code.PinUnknown, { chain: ChainSepolia, kind: 'eth_sepolia', period: 1n }),
     'verifier failed': newState(Code.VerifierFailed, { chain: 1n, kind: 'k', cause: 'c' }),
     'included invalid': newState(Code.IncludedInvalid, { chain: 1n, cause: 'c' }),
+    'header unreadable': blockHeaderUnreadable(11999995n, 12000000n, malformedAt('header', 4, EvidenceReason.HeaderItemNot32Bytes, 31, 32)) as FinalityStateError,
+    'header unreadable no index': blockHeaderUnreadable(7n, 9n, malformed('header', EvidenceReason.HeaderNotRLPList, 0, 0)) as FinalityStateError,
   };
   it.each(Object.entries(cases))('%s', (_n, s) => expect(conforms(s)).toBe(''));
 
@@ -262,12 +268,13 @@ describe('the codes whose registry entry grew since the per-port registries', ()
     const e = evidenceTooLargeAtElement();
     expect(e.code).toBe(Code.EvidenceTooLarge);
     expect(e.fields.index).toBe(1n);
-    expect(reg.states[Code.EvidenceTooLarge]!.optional).toEqual(['index']);
+    expect(reg.states[Code.EvidenceTooLarge]!.optional).toEqual(['attempt', 'index', 'next_attempt_at']);
     expect(conforms(e)).toBe('');
   });
-  it('finality_included_unavailable carries the four registered reasons, no_block_header among them', () => {
-    expect(values(IncludedReason)).toEqual(['no_block_header', 'no_execution_proof_component', 'no_settlement', 'no_settlement_to_recompute_d0']);
+  it('finality_included_unavailable carries the five registered reasons, no_block_header and legacy_header_unserved among them', () => {
+    expect(values(IncludedReason)).toEqual(['legacy_header_unserved', 'no_block_header', 'no_execution_proof_component', 'no_settlement', 'no_settlement_to_recompute_d0']);
     expect(IncludedReason.NoBlockHeader).toBe('no_block_header');
+    expect(IncludedReason.LegacyHeaderUnserved).toBe('legacy_header_unserved');
   });
   it('every pin_mismatch the TypeScript sources raise with a literal field names a member of the registered closed set', () => {
     const dir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'proof-v2', 'finality', 'arbposted');

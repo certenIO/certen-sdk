@@ -12,3 +12,8 @@ S and at K when they differ); every `expect` literal is the canonical verdict of
 the wallet pins). MANIFEST.json lists the sha256 of every file; it is computed here, not by Go. The Go owner should publish these worlds (and add the
 S != K capability to synthworld) as a new set, and this directory then becomes a byte-identical copy of it. The hand-built TS twins of the same
 scenarios are test/finality/arbfinal/units_sk.test.ts.
+
+## Re-judged at validator origin/main e9aefbf5 (RB12-TS-OPSSYNC-2)
+
+All 16 worlds were judged again by the Go verifier at origin/main (a throwaway Go test over these bytes): every verdict equals its recorded literal. Nothing in this set has an odd
+header at K, so finality_block_header_unreadable does not reach it. The set is unchanged.

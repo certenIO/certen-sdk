@@ -118,7 +118,10 @@ describe('a zero-heavy payload is decoded once and then read as a Brotli payload
 describe('delayed messages derive what Nitro builds (known answers from the field order of arb_types.go)', () => {
   const sender = addr(0x11);
   const to = addr(0x22);
-  const refund = addr(0x33);
+  // two DIFFERENT refund addresses: the wire order is feeRefund (the excess-fee refund address) then callvalueRefund (the beneficiary), and the
+  // transaction carries Beneficiary before FeeRefundAddr; one address for both let a swap of the two pass every test (RB12-ARBFINAL-FIX, G3).
+  const feeRefund = addr(0x33);
+  const beneficiary = addr(0x44);
   const k = 77n;
   const baseMsg = (kind: number, data: Uint8Array): Delayed => ({ msgKind: kind, sender, msgBlockNumber: 5n, msgTimestamp: 6n, baseFeeL1: w32(9n), data, k });
   const optTo = (a: Uint8Array | null): Uint8Array => rlpBytes(a ?? new Uint8Array(0));
@@ -127,7 +130,7 @@ describe('delayed messages derive what Nitro builds (known answers from the fiel
   const contractTx = (r: Uint8Array, fee: bigint, gas: bigint, t: Uint8Array | null, value: bigint, data: Uint8Array): Uint8Array =>
     typed(0x66, [rlpUint(CID), rlpBytes(r), rlpBytes(sender), rlpUint(fee), rlpUint(gas), optTo(t), rlpUint(value), rlpBytes(data)]);
   const retryableTx = (callvalue: bigint, deposit: bigint, retryTo: Uint8Array | null, data: Uint8Array): Uint8Array =>
-    typed(0x69, [rlpUint(CID), rlpBytes(req(k)), rlpBytes(sender), rlpUint(9n), rlpUint(deposit), rlpUint(3n), rlpUint(21000n), optTo(retryTo), rlpUint(callvalue), rlpBytes(refund), rlpUint(7n), rlpBytes(refund), rlpBytes(data)]);
+    typed(0x69, [rlpUint(CID), rlpBytes(req(k)), rlpBytes(sender), rlpUint(9n), rlpUint(deposit), rlpUint(3n), rlpUint(21000n), optTo(retryTo), rlpUint(callvalue), rlpBytes(beneficiary), rlpUint(7n), rlpBytes(feeRefund), rlpBytes(data)]);
   const depositTx = (r: Uint8Array, from: Uint8Array, t: Uint8Array, value: bigint): Uint8Array =>
     typed(0x64, [rlpUint(CID), rlpBytes(r), rlpBytes(from), rlpBytes(t), rlpUint(value)]);
   const unsignedBody = concat(wordU(50000), wordU(8), wordU(4), wordA(to), wordU(11), B(9, 9));
@@ -135,12 +138,12 @@ describe('delayed messages derive what Nitro builds (known answers from the fiel
 
   it('submit retryable (kind 9): the 13 fields in order; the zero address as the retry target is the empty string; a short body and a gas limit over 2^64 are refused', () => {
     const retryData = B(1, 2, 3, 4);
-    const rd = concat(wordA(to), wordU(5), wordU(100), wordU(7), wordA(refund), wordA(refund), wordU(21000), wordU(3), wordU(retryData.length), retryData);
+    const rd = concat(wordA(to), wordU(5), wordU(100), wordU(7), wordA(feeRefund), wordA(beneficiary), wordU(21000), wordU(3), wordU(retryData.length), retryData);
     expect(same(deriveDelayed(CID, baseMsg(9, rd)), [retryableTx(5n, 100n, to, retryData)])).toBe(true);
-    const zero = concat(wordA(new Uint8Array(20)), wordU(5), wordU(100), wordU(7), wordA(refund), wordA(refund), wordU(21000), wordU(3), wordU(0));
+    const zero = concat(wordA(new Uint8Array(20)), wordU(5), wordU(100), wordU(7), wordA(feeRefund), wordA(beneficiary), wordU(21000), wordU(3), wordU(0));
     expect(same(deriveDelayed(CID, baseMsg(9, zero)), [retryableTx(5n, 100n, null, new Uint8Array(0))])).toBe(true);
     expect(deriveDelayed(CID, baseMsg(9, rd.subarray(0, rd.length - 2)))).toBeNull();
-    expect(deriveDelayed(CID, baseMsg(9, concat(wordA(to), wordU(5), wordU(100), wordU(7), wordA(refund), wordA(refund), word(1n << 70n), wordU(3), wordU(0))))).toBeNull();
+    expect(deriveDelayed(CID, baseMsg(9, concat(wordA(to), wordU(5), wordU(100), wordU(7), wordA(feeRefund), wordA(beneficiary), word(1n << 70n), wordU(3), wordU(0))))).toBeNull();
   });
   it('L2 message (kind 3): unsigned (0x65), contract (0x66, request id = the delayed index), a batch (the contract tx gets keccak(requestId || index)), a signed tx kept as is', () => {
     const wantU = unsignedTx(4n, 8n, 50000n, to, 11n, B(9, 9));
@@ -170,6 +173,10 @@ describe('delayed messages derive what Nitro builds (known answers from the fiel
     const data = concat(to, wordU(77));
     expect(same(deriveDelayed(CID, baseMsg(MSG_KIND_ETH_DEPOSIT, data)), [depositTx(req(k), sender, to, 77n)])).toBe(true);
     expect(TX_DEPOSIT).toBe(0x64);
+    // the request id is the delayed message index, not the block number or the timestamp of the message
+    expect(same(deriveDelayed(CID, baseMsg(MSG_KIND_ETH_DEPOSIT, data)), [depositTx(req(5n), sender, to, 77n)])).toBe(false);
+    // From is the poster and To the address in the first 20 bytes: a swap of the two, or of either with the value, changes the bytes
+    expect(same(deriveDelayed(CID, baseMsg(MSG_KIND_ETH_DEPOSIT, data)), [depositTx(req(k), to, sender, 77n)])).toBe(false);
     for (const kind of [0, 1, 2, 4, 5, 6, 8, 10, 11, 13, 255]) expect(deriveDelayed(CID, baseMsg(kind, B(1))), `message kind ${kind}`).toBeNull();
     expect(deriveDelayed(CID, baseMsg(MSG_KIND_ETH_DEPOSIT, new Uint8Array(MAX_L2_MESSAGE_SIZE + 1)))).toBeNull();
   });

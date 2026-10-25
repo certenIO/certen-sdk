@@ -183,6 +183,19 @@ export interface PayloadResult {
   exceededSegments: boolean;
 }
 
+const INT64_MAX = (1n << 63n) - 1n;
+const INT64_MIN = -(1n << 63n);
+
+/**
+ * zeroheavyLimit is Nitro's cap of the zero-heavy layer, 101% of the batch bound plus 64 (max + max/100 + 64), computed in int64 without
+ * wrapping: where the sum does not fit it is the largest (or, for a negative bound, the smallest) int64, never a number of the other sign
+ * (the twin of Go zeroheavyLimit; the division truncates toward zero as Go's does).
+ */
+export function zeroheavyLimit(max: bigint): bigint {
+  const s = max + max / 100n + 64n;
+  return s > INT64_MAX ? INT64_MAX : s < INT64_MIN ? INT64_MIN : s;
+}
+
 /** Turns a batch payload (header byte then brotli) into messages; status names why a payload cannot be read as signed-transaction messages. */
 export function decodePayload(payload: Uint8Array, maxUncompressed: number, maxSegments: number): PayloadResult {
   const res: PayloadResult = {
@@ -205,7 +218,10 @@ export function decodePayload(payload: Uint8Array, maxUncompressed: number, maxS
     case HEADER_ZEROHEAVY: {
       // Nitro decodes the zero-heavy layer once (limit 101% of the batch bound + 64) and then reads the result as an ordinary payload: it
       // must begin with the Brotli header byte, nothing else is decoded after it.
-      const zh = zeroheavyDecode(payload.subarray(1), maxUncompressed + Math.floor(maxUncompressed / 100) + 64);
+      // The layer's output can never reach 2^53, so a cap beyond the safe integers is the same cap as the largest safe integer.
+      const cap = zeroheavyLimit(BigInt(Math.trunc(maxUncompressed)));
+      const safe = BigInt(Number.MAX_SAFE_INTEGER);
+      const zh = zeroheavyDecode(payload.subarray(1), Number(cap > safe ? safe : cap < -safe ? -safe : cap));
       if (zh.exceeded) {
         res.status = PayloadTooLarge;
         res.exceededUncompressed = true;

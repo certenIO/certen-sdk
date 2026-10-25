@@ -29,8 +29,8 @@ describe('registry conformance', () => {
     const codes = Object.entries(states)
       .filter(([k, v]) => k.startsWith('Code') && typeof v === 'string')
       .map(([, v]) => v as string);
-    expect(codes.length).toBe(14);
-    expect(new Set(codes).size).toBe(14);
+    expect(codes.length).toBe(15); // 14 and finality_block_header_unreadable (RB12-ARBFINAL-FIX)
+    expect(new Set(codes).size).toBe(15);
     for (const c of codes) expect(registry.states[c], c).toBeDefined();
   });
 

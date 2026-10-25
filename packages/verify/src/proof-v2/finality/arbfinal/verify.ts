@@ -34,6 +34,7 @@ import {
   RoleAdminLogic,
   RoleRollup,
   RoleUserLogic,
+  blockHeaderUnreadable,
   contractIdentity,
   headerChainBroken,
   l1FinalityUnproven,
@@ -130,19 +131,24 @@ function proven<T>(which: 'account' | 'slot', f: () => T): T {
   }
 }
 
-/** headerNumbered: the fields of the spine header with this number (a header the framework cannot read is skipped, as Go does). */
-function headerNumbered(spine: readonly Uint8Array[], number: bigint): HeaderFields | undefined {
-  for (const raw of spine) {
-    let h: HeaderFields;
-    try {
-      h = readHeader(raw);
-    } catch (e) {
-      if (e instanceof FinalityStateError) continue;
-      throw e;
-    }
-    if (h.number === number) return h;
+/**
+ * headerNumbered: the fields of the spine header with this number, read by the framework header reader. top is the number of spine[0], the
+ * finalized head. covers has walked the spine (the numbers step down by one) and blockAt found the number on it, so the header is
+ * spine[top-number]. The light-client reader that walked the spine reads four items of a header and the framework reader seven: a header the
+ * first accepts and the second refuses is finality_block_header_unreadable{block_number, finalized_exec_number, reason}, a statement about a
+ * block that IS on the spine. A number that is not on the spine, or whose position holds another number, is finality_block_not_covered, the
+ * state of a block above the head or below the spine.
+ */
+function headerNumbered(spine: readonly Uint8Array[], top: bigint, number: bigint): HeaderFields {
+  if (number > top || top - number >= BigInt(spine.length)) throw blockNotCovered(number, top);
+  let h: HeaderFields;
+  try {
+    h = readHeader(spine[Number(top - number)]!);
+  } catch (e) {
+    throw blockHeaderUnreadable(number, top, e);
   }
-  return undefined;
+  if (h.number !== number) throw blockNotCovered(number, top);
+  return h;
 }
 
 /**
@@ -244,8 +250,7 @@ export class ArbFinalKind implements Kind {
     const s = blockAt(covered, e.stateBlock);
     const kb = blockAt(covered, e.confBlock);
     if (kb.number > s.number) throw blockMismatch('confBlockAboveStateBlock', e.stateBlock, e.confBlock);
-    const kHeader = headerNumbered(e.l1Spine, kb.number);
-    if (kHeader === undefined) throw blockNotCovered(kb.number, covered[0]!.number);
+    const kHeader = headerNumbered(e.l1Spine, covered[0]!.number, kb.number);
     // [r2:E1FIX L3] spec 8.2: a NODES element off the transaction and receipt proof paths is a state or storage node, at most max_node_bytes;
     // judged here, where K's roots are known, before any proof consumes a node.
     // One proof database for the whole verification: every NODES element is hashed once, however many proofs are read (audit N-5).

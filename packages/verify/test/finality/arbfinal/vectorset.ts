@@ -65,22 +65,31 @@ export const FINAL3: SetInfo = {
   vectors: 86,
   walletPins: false,
 };
-/** The TS-held supplement (not a Go-published set): worlds judged by the Go verifier at cbb6373, see arb_final_x/README.md. Its manifest is computed in this repository. */
+/** The TS-held supplement (not a Go-published set): worlds judged by the Go verifier (at cbb6373, the three odd-K worlds re-judged at origin/main e9aefbf5; arb_final4 carries their published twins), see arb_final_x/README.md. Its manifest is computed in this repository. */
 export const FINALX: SetInfo = {
   name: 'arb_final_x',
   dir: 'arb_final_x',
-  manifestSha256: 'd718211fb28c4f8ba82e9c2a04034568b80492e5d9318929d9a51b82130e900f',
+  manifestSha256: '75afa5d7b04e5a81cc0aadb38660183d9542f3d3aa5cec6447c188bf31869c55',
   format: 'arb_final_x/1',
   vectors: 8,
   walletPins: false,
 };
-/** The TS-held supplement of the Rollup storage at S differing from the storage at K (RB12-TS-FIX-ARBSEP, audit B-1): worlds judged by the Go verifier at cbb6373 with a throwaway synthworld hook, see arb_final_sk/README.md. */
+/** The TS-held supplement of the Rollup storage at S differing from the storage at K (RB12-TS-FIX-ARBSEP, audit B-1): worlds judged by the Go verifier at cbb6373 with a throwaway synthworld hook and re-judged unchanged at origin/main e9aefbf5, see arb_final_sk/README.md. */
 export const FINALSK: SetInfo = {
   name: 'arb_final_sk',
   dir: 'arb_final_sk',
   manifestSha256: 'ef6c03b13db4ac09e0511553d271d1e261aa39b0a0141a951e4cc151227c2d43',
   format: 'arb_final_sk/1',
   vectors: 16,
+  walletPins: false,
+};
+/** finality_arb_final4 (RB12-ARBFINAL-FIX; validator origin/main): the published twins of arb_final_x and arb_final_sk, the odd-K worlds judged finality_block_header_unreadable. */
+export const FINAL4: SetInfo = {
+  name: 'finality_arb_final4',
+  dir: 'arb_final4',
+  manifestSha256: 'c07f620be5cfca97f1d23bc55881da5c46ffbc040bc7994f6a80830519c8a9fb',
+  format: 'finality_arb_final4/1',
+  vectors: 12,
   walletPins: false,
 };
 export const FORCE1_MANIFEST_SHA256 = '7761e96e5b3219890f63c89ba383858d1286781c1adb39123003b19ab13d6192';

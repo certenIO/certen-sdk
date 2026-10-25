@@ -166,6 +166,11 @@ export const IncludedReason = {
    * (Go IncludedNoBlockHeader, raised by the validator's bundle reader, which has no TypeScript twin).
    */
   NoBlockHeader: 'no_block_header',
+  /**
+   * The header of a legacy leg (see NoBlockHeader) was asked of every provider the validator is configured with for the leg's chain and none
+   * served the block (Go IncludedLegacyHeaderUnserved, pkg/finality/legacyhdr; raised by the validator's reconstruction, which has no TypeScript twin).
+   */
+  LegacyHeaderUnserved: 'legacy_header_unserved',
   NoSettlement: 'no_settlement',
   NoExecutionProof: 'no_execution_proof_component',
   SettlementNotJudged: 'no_settlement_to_recompute_d0',

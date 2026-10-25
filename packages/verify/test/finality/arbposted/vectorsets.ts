@@ -108,6 +108,16 @@ export const SET3 = new VectorSet({
   ],
 });
 
+/** finality_arb_posted5 (RB12-ARBFINAL-FIX audit G2; validator origin/main): the container binding of the kind, with its control. */
+export const SET5 = new VectorSet({
+  dir: 'arb_posted5',
+  set: 'finality_arb_posted5',
+  manifestSha256: 'c7aea127a73dacde4ce49bcc5b6917281d9bea6ecffd2a40567a4154eda781d2',
+  cases: 3,
+  files: 5,
+  accepting: ['valid_control_leg_and_container_agree'],
+});
+
 /** finality_arb_posted4 (RB11-E2-FIX): the completeness fixes of review V-E2-A1, with the seven re-bound twins of set 1. */
 export const SET4 = new VectorSet({
   dir: 'arb_posted4',

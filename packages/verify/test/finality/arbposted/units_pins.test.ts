@@ -128,9 +128,10 @@ describe('arb_sepolia section', () => {
     const none = loadArbPins(pinsOf((d) => delete d.arb_sepolia.logic_pins));
     expect(none.logicPins.size).toBe(0);
   });
-  it('a bound above 2^53-1 is clamped to a safe integer (never NaN or Infinity); one beyond int64 is a section error', () => {
-    const a = loadArbPins(pinsOf((d) => Object.assign(d.arb_sepolia, { max_blobs: 2 ** 53, max_segments: 2 ** 60, max_uncompressed_batch: 2 ** 62 })));
-    expect([a.maxBlobs, a.maxSegments, a.maxUncompressedBatch]).toEqual([Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]);
+  it('a count above 2^53-1 is clamped to a safe integer (never NaN or Infinity); one beyond int64 is a section error; max_uncompressed_batch is bounded at 16 MiB instead (units_pins_maxbatch_rb12)', () => {
+    const a = loadArbPins(pinsOf((d) => Object.assign(d.arb_sepolia, { max_blobs: 2 ** 53, max_segments: 2 ** 60, max_uncompressed_batch: 16777216 })));
+    expect([a.maxBlobs, a.maxSegments, a.maxUncompressedBatch]).toEqual([Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, 16777216]);
+    expect(canon(() => loadArbPins(pinsOf((d) => (d.arb_sepolia.max_uncompressed_batch = 2 ** 62))))).toMatch(/^{"code":"finality_pins_corrupt"/);
     expect(canon(() => loadArbPins(pinsOf((d) => (d.arb_sepolia.max_blobs = 1e19))))).toBe(section('section'));
     expect(loadArbPins(pinsOf((d) => (d.arb_sepolia.max_blobs = 2 ** 53 - 1))).maxBlobs).toBe(Number.MAX_SAFE_INTEGER);
     expect(loadArbPins(pinsOf((d) => (d.arb_sepolia.max_blobs = 2 ** 52))).maxBlobs).toBe(2 ** 52);
