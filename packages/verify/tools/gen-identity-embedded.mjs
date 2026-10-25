@@ -5,7 +5,7 @@
 // The embedded texts are read from test/fixtures/identity (byte-identical copies of the validator's testdata); test/identity/embedded.test.ts
 // fails if a constant ever differs from them.
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,5 +35,9 @@ for (const [k, v] of Object.entries(texts)) {
   body += `export const ${k} = ${JSON.stringify(v)};\n`;
   body += `export const ${k.replace('_JSON', '_SHA256')} = '${sha(readFileSync(join(fx, k === 'MANIFEST_JSON' ? 'manifest/identity-manifest.json' : k === 'STATES_JSON' ? 'states.json' : 'vocab.json')))}';\n`;
 }
+const bin = join(fx, 'manifest', 'identity-bytecode');
+body += 'export const CREATION_ARTIFACTS: Record<string, string> = {' + String.fromCharCode(10);
+for (const f of readdirSync(bin).sort()) body += `  ${JSON.stringify('identity-bytecode/' + f)}: '${readFileSync(join(bin, f)).toString('base64')}',` + String.fromCharCode(10);
+body += '};' + String.fromCharCode(10);
 writeFileSync(join(out, 'embedded.ts'), body);
 console.log(`names: ${lines.length} constants; embedded: ${Object.keys(texts).join(', ')}`);
