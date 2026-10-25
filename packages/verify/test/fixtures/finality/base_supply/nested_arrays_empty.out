@@ -1,0 +1,21 @@
+{
+  "base_sepolia": {
+    "a": [],
+    "b": {},
+    "c": [
+      [],
+      [
+        {}
+      ]
+    ],
+    "channel_timeout_granite": 50,
+    "d": [
+      null,
+      true,
+      false,
+      "x",
+      1
+    ],
+    "granite_time": 1723478400
+  }
+}

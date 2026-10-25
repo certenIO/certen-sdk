@@ -1,0 +1,19 @@
+{
+  "format": "certen-arbposted-ts-mutation-equivalents/1",
+  "note": "Hand-run operator mutation gate: node tools/mutation-arbposted/gen.mjs writes 190 mutants (tools/mutation-arbposted/mutants.json) over arbposted/{nitro,delayed,wire,pins,verify}.ts and the kzg/shared lines of the shared framework pins.ts; node tools/mutation-arbposted/run.mjs applies each in memory (vitest plugin, no file on disk changes) against the arbposted unit tests and, for wire.ts and verify.ts, the 63 published vectors. Pass 1: 181 killed, 9 survived. Pass 2 (the 9 survivors, after the tests added for them: the poisoned predecessor slot, the delayed-window n > after case and the verifyDelayed proof-failure tests in units_kind/units_delayed, and units_blobs.test.ts for the first-blob KZG failure and the authentic-but-undecodable blob): 5 killed, 4 survive. Each survivor below is an equivalent mutant: the mutated program returns the same value or throws the same state for every input, for the reason given. ids refer to mutants.json (order of generation).",
+  "pass1": { "mutants": 190, "killed": 181, "survived": 9 },
+  "pass2": { "rerun": 9, "killed": 5, "survived": 4 },
+  "killed_by_new_tests": {
+    "55": "units_kind: k = 0 with a non-zero word in the slot before element 0 (the predecessor of element 0 is the zero word, never that slot)",
+    "64": "units_delayed: verifyDelayed with a node set that cannot prove the slots is l1_state_proof_invalid{slot}",
+    "72": "units_delayed: same",
+    "144": "units_blobs: a flipped proof in the FIRST blob (verifyBlobs returns index 0)",
+    "167": "units_blobs: an authentic blob that holds only the head of a longer RLP string is payload_undecodable"
+  },
+  "equivalents": [
+    { "id": 15, "site": "nitro.ts:172 parseL2 batch loop: rest.length >= 8 -> > 8", "reason": "with exactly 8 bytes left the length word n must be <= 0 to be read (n > rest.length breaks), so n = 0 and the nested message is empty: parseL2 of an empty message returns no transaction, the same as stopping" },
+    { "id": 17, "site": "nitro.ts:64 decodeBlobs bit-stream loop: fe < 4096 -> <=", "reason": "the 4097th iteration reads blob[131072] (undefined, masked to 0) and adds 6 bits to an accumulator that holds 0 bits after 4096 groups (4096*6 = 3072 bytes exactly), so it never reaches 8 bits and emits no byte" },
+    { "id": 20, "site": "nitro.ts:134 splitSegments: rest.length > 0 -> >= 0", "reason": "with nothing left, split(rest) throws RlpError('unexpected EOF'), which the loop answers with the same return value (the segments read so far, not exceeded) as the loop condition would" },
+    { "id": 104, "site": "pins.ts:108 clampInt: v > MAX_SAFE_INTEGER -> >=", "reason": "at v == MAX_SAFE_INTEGER both branches return Number.MAX_SAFE_INTEGER" }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-TWINS-1 hand-mutation gate (scratchpad vite-free harness: each mutant is one exact text substitution applied to the file, the narrow tests run with --bail, the file is restored; never committed). 207 mutants over strictbrotli.ts, arbposted/{zeroheavy,derive,nitro,delayed,verify,pins}.ts and baseposted/channel.ts: 184 killed, 23 equivalent, 0 unexplained. Control runs of the unmutated tree (all eight test groups and the 403-test union) were green before the gate. Pass 1 (tier A: the unit files of each package): 155 killed, 52 survived; the survivors were triaged: 29 were killed by tests added for them (units_derive2.test.ts: field order with distinct addresses, an address holding a zero byte, uint64 boundaries, a decoded blob transaction, the nested length boundary, a block holding a prefix of the derivation, the container binding judged before pins and body; 8 more Go-judged answers in strictbrotli_go_judged.json (crafted metablock streams with the failure after the 1st/2nd/3rd 32 KiB read boundary, flips and cuts); the reason and channel-message tests of strictbrotli.test.ts), the rest are listed below. Mutants whose effect is an endless loop are killed by a timeout of the test process.",
+  "equivalents": [
+    {
+      "file": "strictbrotli.ts",
+      "line": 63,
+      "mutant": "Number(max + 1n > NODE_MAX_LENGTH ? NODE_MAX_LENGTH : max + 1n) -> Number(max + 1n > NODE_MAX_LENGTH ? NODE_MAX_LENGTH : max + 2n)",
+      "reason": "node's output cap is only a bound on what node allocates: the verdict is taken from the length of the output against max, so a cap of max + 2 yields the same exceeded / not exceeded for every stream (an output of max + 1 passes node's cap and is then exceeded by the length test)"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 63,
+      "mutant": "max + 1n > NODE_MAX_LENGTH ? -> max + 1n >= NODE_MAX_LENGTH ?",
+      "reason": "at max + 1 == the largest Buffer both branches yield the same cap"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 138,
+      "mutant": "const size = max < 64n ? 64 : Number(max); -> const size = max <= 64n ? 64 : Number(max);",
+      "reason": "at max == 64 both forms give an output buffer of 64 bytes"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 138,
+      "mutant": "const size = max < 64n ? 64 : Number(max); -> const size = max < 63n ? 64 : Number(max);",
+      "reason": "differs only at max == 63, where the original probe already lies inside the documented limit of the double-fault emulation (caps below 512, FINDING in checkins/RB12-TS-TWINS-1.md): no Go-judged case at that cap reproduces Go's verdict with either form, so no test can tell them apart in the claimed range"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 139,
+      "mutant": "const limit = max < 64n ? 1 : size - 1; -> const limit = max < 64n ? 2 : size - 1;",
+      "reason": "any maxOutputLength below the 64-byte output buffer is exceeded exactly when one full buffer was produced: 1 and 2 behave alike"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 139,
+      "mutant": "const limit = max < 64n ? 1 : size - 1; -> const limit = max < 64n ? 1 : size - 2;",
+      "reason": "any maxOutputLength below the output buffer size is exceeded exactly when one full buffer was produced: size - 1 and size - 2 behave alike"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 141,
+      "mutant": "brotliDecompressSync(input, { chunkSize: size, maxOutputLength: limit, info: true }); retu -> brotliDecompressSync(input, { chunkSize: size, maxOutputLength: limit, info: true }); retu",
+      "reason": "unreachable: the probe runs only after FINISH and FLUSH both failed on the probed input with a decode error, so the same decode of the same bytes cannot succeed"
+    },
+    {
+      "file": "strictbrotli.ts",
+      "line": 161,
+      "mutant": "for (let b = READ_BUF_SIZE; b < input.length; b += READ_BUF_SIZE) bounds.push(b); -> for (let b = READ_BUF_SIZE; b <= input.length; b += READ_BUF_SIZE) bounds.push(b);",
+      "reason": "when the input length is a multiple of the read buffer size the boundary list gets the length twice: a duplicate boundary changes neither the bisection nor the decoded prefix it reads"
+    },
+    {
+      "file": "arbposted/zeroheavy.ts",
+      "line": 33,
+      "mutant": "if (last >= this.head && this.runBit[last] === bit) { -> if (last > this.head && this.runBit[last] === bit) {",
+      "reason": "run representation only: not merging a run with the previous run of the same bit yields the same sequence of bits"
+    },
+    {
+      "file": "arbposted/zeroheavy.ts",
+      "line": 84,
+      "mutant": "this.push7Bits(b & 0x7f); -> this.push7Bits(b & 0xff);",
+      "reason": "push7Bits reads bits 6..0 only: masking with 0xff instead of 0x7f changes no bit it reads"
+    },
+    {
+      "file": "arbposted/zeroheavy.ts",
+      "line": 132,
+      "mutant": "if (n === out.length) { -> if (n > out.length) {",
+      "reason": "n never exceeds out.length (n grows by one and the buffer is regrown when n equals its length): > and === coincide"
+    },
+    {
+      "file": "arbposted/zeroheavy.ts",
+      "line": 133,
+      "mutant": "new Uint8Array(Math.min(out.length * 2, max + 1)) -> new Uint8Array(Math.min(out.length + 1, max + 1))",
+      "reason": "growth policy only: growing by one byte instead of doubling gives the same bytes (slower)"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 61,
+      "mutant": "if (this.bad || n < 0 || this.off + n > this.b.length) { -> if (n < 0 || this.off + n > this.b.length) {",
+      "reason": "every caller checks the sticky bad flag (or a null result) before it uses a value, and bad is never reset: a take after a failed take cannot change a verdict"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 83,
+      "mutant": "if (this.bad) return new Uint8Array(0); -> (removed)",
+      "reason": "rest() is called only on a reader that is not bad (after taking a kind byte) or its result is discarded by the caller's bad check"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 187,
+      "mutant": "if (type >= 0x64 || type === TX_BLOB) return null; -> if (type > 0x64 || type === TX_BLOB) return null;",
+      "reason": "redundant with decodeTx, which refuses every type above 4 (the same redundancy as Go: UnmarshalBinary refuses types it does not know): type > 0x64 and type >= 0x64 are never true for a decoded transaction"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 187,
+      "mutant": "if (type >= 0x64 || type === TX_BLOB) return null; -> if (type === TX_BLOB) return null;",
+      "reason": "decodeTx refuses every transaction type above 4, so the >= 0x64 test never fires on a decoded transaction (Go has the same redundancy)"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 228,
+      "mutant": "if (r.bad || gasW > MAX_UINT64 || dataLenW > MAX_UINT64 || dataLenW > BigInt(MAX_L2_MESSAG -> if (r.bad || gasW > MAX_UINT64 || dataLenW > BigInt(MAX_L2_MESSAGE_SIZE)) return null;",
+      "reason": "dataLenW > MAX_UINT64 is implied by dataLenW > MAX_L2_MESSAGE_SIZE (the message-size bound is far below 2^64)"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 228,
+      "mutant": "if (r.bad || gasW > MAX_UINT64 || dataLenW > MAX_UINT64 || dataLenW > BigInt(MAX_L2_MESSAG -> if (r.bad || gasW > MAX_UINT64 || dataLenW > MAX_UINT64 || dataLenW >= BigInt(MAX_L2_MESSA",
+      "reason": "a data length of exactly the message size limit needs a message longer than the limit (nine 32-byte words precede it), which deriveDelayed refuses first: dataLenW == MAX_L2_MESSAGE_SIZE is unreachable"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 230,
+      "mutant": "if (r.bad || data === null) return null; -> if (data === null) return null;",
+      "reason": "bad is already false here (the preceding test returns on bad), so r.bad || data === null and data === null coincide"
+    },
+    {
+      "file": "arbposted/nitro.ts",
+      "line": 164,
+      "mutant": "return txs.filter((tx) => txType(tx) <= 4); -> return txs.filter((tx) => txType(tx) <= 5);",
+      "reason": "the filter of the sequencer path never meets a transaction of type 5: a kind-4 transaction whose first byte is 5 fails the message, and the transactions built from poster fields have type 0x65, which both <= 4 and <= 5 drop"
+    },
+    {
+      "file": "arbposted/pins.ts",
+      "line": 116,
+      "mutant": "else if (top === 'layout' && val instanceof JObj) { -> else if (top === 'layout') {",
+      "reason": "presentNumericPins is reached only after the layout name check, which refuses a layout that is not an object: val is a JObj whenever it is read"
+    },
+    {
+      "file": "arbposted/pins.ts",
+      "line": 112,
+      "mutant": "if (!(raw instanceof JObj)) return out; -> (removed)",
+      "reason": "raw is the section decodeVal accepted as a struct, so it is always an object here"
+    },
+    {
+      "file": "baseposted/channel.ts",
+      "line": 109,
+      "mutant": "const r = strictDecompress(ch.subarray(1), max); -> const r = strictDecompress(ch.subarray(1), max + 1n);",
+      "reason": "decompress repeats the identical cap test on the output length right after (the channel cap), so the strict reader's own cap adds no verdict"
+    },
+    {
+      "file": "arbposted/derive.ts",
+      "line": 228,
+      "mutant": "dataLenW > BigInt(MAX_L2_MESSAGE_SIZE) -> dataLenW >= BigInt(MAX_L2_MESSAGE_SIZE) (retryable data length word; audit mutant A32)",
+      "reason": "the boundary is unreachable, so no input separates the two: a data-length word equal to MAX_L2_MESSAGE_SIZE (262144) needs 262144 data bytes behind nine 32-byte words (288 bytes), a message of 262432 bytes that deriveDelayed already refuses at its first line (d.data.length > MAX_L2_MESSAGE_SIZE, derive.ts:207); a shorter message fails the data read (r.take) with the same null. The region is pinned by units_retryable_bound.test.ts (largest passing message 262144 bytes = 288 + 261856 data; words 262143, 262144, 262145 refused for nine body lengths each; the mutant survives that file and units_derive, units_derive2, units_nitro: 65 tests, checked 2026-10-24)"
+    }
+  ]
+}

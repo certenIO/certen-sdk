@@ -1,0 +1,1664 @@
+{
+ "format": "certen-basefinal-ts-mutants/1",
+ "mutants": [
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 2640,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/wire.ts:70 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 3007,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/wire.ts:77 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 2008,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/wire.ts:56 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 2657,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/wire.ts:70 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 3021,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/wire.ts:77 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 2645,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/wire.ts:70 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/wire.ts",
+   "offset": 3012,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/wire.ts:77 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5276,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:138 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5295,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:138 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5584,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:145 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5603,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:145 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5914,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:148 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6094,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:150 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6119,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:150 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6201,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:151 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6226,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:151 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6424,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:157 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6994,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:167 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7015,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:167 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7699,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:180 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7814,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:182 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 8279,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:197 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 8859,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:211 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 9028,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:215 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 9119,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:217 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 9596,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:231 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10031,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:242 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10522,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10543,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10565,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11249,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:271 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11272,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:272 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11308,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:273 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11374,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:275 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11399,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:276 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11425,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:277 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11501,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:282 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11666,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:283 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11685,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/pins.ts:283 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4111,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:114 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4189,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:116 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4476,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:122 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4558,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:124 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7535,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:177 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7592,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:178 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11214,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:270 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11528,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:282 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11712,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/pins.ts:283 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7883,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/pins.ts:183 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11338,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/pins.ts:274 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4956,
+   "find": ">=",
+   "replace": ">",
+   "note": "proof-v2/finality/basefinal/pins.ts:131 >= -> >"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4946,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/pins.ts:131 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10586,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10613,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4951,
+   "find": "&&",
+   "replace": "||",
+   "note": "proof-v2/finality/basefinal/pins.ts:131 && -> ||"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4106,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:114 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4199,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:116 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4471,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:122 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4564,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:124 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5290,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:138 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5598,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:145 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6108,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:150 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6215,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:151 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7008,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:167 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10536,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10557,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10579,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10606,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11231,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:270 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11255,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:271 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11279,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:272 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11315,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:273 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11344,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:274 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11380,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:275 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11406,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:276 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11515,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:282 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11673,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:283 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 11692,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/pins.ts:283 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4941,
+   "find": "bits < 64 && n >= 1n << BigInt(bits)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:131 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5630,
+   "find": "!Array.isArray(v)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:146 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 5949,
+   "find": "!Array.isArray(pair)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:149 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 6990,
+   "find": "raw === undefined || raw === null",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:167 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7355,
+   "find": "e instanceof JsonError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:173 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7520,
+   "find": "big('ChainID') !== CHAIN",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:177 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7575,
+   "find": "big('L1ChainID') !== SepoliaChainID",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:178 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7692,
+   "find": "portal === undefined",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:180 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7801,
+   "find": "systemConfig === undefined",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:182 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 7863,
+   "find": "big('MaxL2Headers') <= 0n",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:183 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 8266,
+   "find": "unhex(k, 32) === undefined",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:197 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 8768,
+   "find": "e instanceof JsonError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:208 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 8851,
+   "find": "rr.Role === ''",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:211 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 9583,
+   "find": "unhex(k, 32) === undefined",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:231 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 9939,
+   "find": "e instanceof JsonError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:239 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10023,
+   "find": "rr.Role === ''",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:242 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 10517,
+   "find": "head === undefined || mid === undefined || tail === undefined || abl < MIN_ARGS_BASE_LEN || apr < MIN_ARGS_PER_ROOT",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/pins.ts:255 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/pins.ts",
+   "offset": 4193,
+   "find": "2",
+   "replace": "3",
+   "note": "proof-v2/finality/basefinal/pins.ts:116 two-thirds constant swapped"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 3735,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:89 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7908,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:201 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7936,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:201 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8277,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:211 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 9252,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:247 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 9331,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:249 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11348,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:294 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 12413,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:313 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13115,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:329 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13623,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18069,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:417 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18884,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18942,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19715,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:440 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20370,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:459 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21344,
+   "find": "===",
+   "replace": "!==",
+   "note": "proof-v2/finality/basefinal/verify.ts:483 eq -> neq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 6801,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:175 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7032,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:179 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7060,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:179 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8044,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:205 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 10932,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:285 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11374,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:294 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13649,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13734,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13946,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:340 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14047,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:341 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14740,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:352 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 15604,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:367 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 16979,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:400 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18011,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:416 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18089,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:417 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18126,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:417 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18495,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:422 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19789,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:442 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20512,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:462 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21365,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:483 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21582,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:488 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21643,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:488 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23037,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:532 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23122,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:533 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23150,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:533 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23269,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:534 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23335,
+   "find": "!==",
+   "replace": "===",
+   "note": "proof-v2/finality/basefinal/verify.ts:534 neq -> eq"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 17537,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/verify.ts:412 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18330,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/verify.ts:419 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18376,
+   "find": "<=",
+   "replace": "<",
+   "note": "proof-v2/finality/basefinal/verify.ts:419 <= -> <"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 5135,
+   "find": ">=",
+   "replace": ">",
+   "note": "proof-v2/finality/basefinal/verify.ts:127 >= -> >"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 9163,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/verify.ts:245 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13385,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/verify.ts:332 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13882,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/verify.ts:340 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 15153,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/verify.ts:360 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18911,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19536,
+   "find": "<",
+   "replace": "<=",
+   "note": "proof-v2/finality/basefinal/verify.ts:435 < -> <="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 4031,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/verify.ts:94 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8258,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/verify.ts:211 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 9285,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/verify.ts:248 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20012,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/verify.ts:450 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20208,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/verify.ts:454 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23648,
+   "find": ">",
+   "replace": ">=",
+   "note": "proof-v2/finality/basefinal/verify.ts:541 > -> >="
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7046,
+   "find": "&&",
+   "replace": "||",
+   "note": "proof-v2/finality/basefinal/verify.ts:179 && -> ||"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8968,
+   "find": "&&",
+   "replace": "||",
+   "note": "proof-v2/finality/basefinal/verify.ts:238 && -> ||"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 9338,
+   "find": "&&",
+   "replace": "||",
+   "note": "proof-v2/finality/basefinal/verify.ts:249 && -> ||"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18114,
+   "find": "&&",
+   "replace": "||",
+   "note": "proof-v2/finality/basefinal/verify.ts:417 && -> ||"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21657,
+   "find": "&&",
+   "replace": "||",
+   "note": "proof-v2/finality/basefinal/verify.ts:488 && -> ||"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 6445,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:166 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7922,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:201 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8263,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:211 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 10894,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:285 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11341,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:294 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11362,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:294 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 12969,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:327 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13616,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13637,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13666,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13698,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13722,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:336 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13900,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:340 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 16908,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:400 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18076,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:417 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18346,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:419 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18878,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18895,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18934,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19278,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:432 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21351,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:483 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21597,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:488 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21625,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:488 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23132,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:533 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23282,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:534 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23324,
+   "find": "||",
+   "replace": "&&",
+   "note": "proof-v2/finality/basefinal/verify.ts:534 || -> &&"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 6891,
+   "find": "!r.ok",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:177 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7328,
+   "find": "e instanceof RlpError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:186 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7713,
+   "find": "!a.exists",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:197 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 7820,
+   "find": "!r.ok",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:199 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8029,
+   "find": "it.rest.length !== 0",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:205 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8162,
+   "find": "e instanceof RlpError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:208 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 8247,
+   "find": "raw.length > 32 || raw.length === 0",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:211 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 10884,
+   "find": "!a.exists || p.proxy.get(pinKey(codeHashOf(a))) !== want",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:285 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11331,
+   "find": "!a.exists || row === undefined || row.role !== role",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:294 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11640,
+   "find": "!eq(addrWord(w), p.systemConfig)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:301 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 11901,
+   "find": "!eq(addrWord(w), p.portal)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:305 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 12208,
+   "find": "!eq(w.subarray(10, 30), p.systemConfig)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:311 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 12385,
+   "find": "asrRow.finalityDelaySeconds === null",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:313 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 12958,
+   "find": "!ga.exists || !eq(keccak_256(code), bytesToHash(ga.codeHash))",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:327 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13111,
+   "find": "lay === undefined",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:329 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13373,
+   "find": "code.length < tmplLen + 2",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:332 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 13877,
+   "find": "rest < lay.argsBaseLen || (rest - lay.argsBaseLen) % lay.argsPerRoot !== 0n",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:340 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14004,
+   "find": "(rest - lay.argsBaseLen) / lay.argsPerRoot !== row.nIntermediate",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:341 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14596,
+   "find": "!eq(code.subarray(0, tmplLen), want)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:351 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14683,
+   "find": "((code[code.length - 2]! << 8) | code[code.length - 1]!) !== argsLen2",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:352 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 15470,
+   "find": "isZero(reg)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:365 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 15601,
+   "find": "gt !== row.gameType",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:367 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 17475,
+   "find": "!isZero(bl)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:411 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 17525,
+   "find": "g.createdAt <= g.retirementTimestamp",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:412 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 17749,
+   "find": "!isZero(g.pause0)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:414 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 17872,
+   "find": "!isZero(g.pauseOnPortal)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:415 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 17999,
+   "find": "g.respected !== 1",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:416 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18056,
+   "find": "g.resolvedAt === 0n || (g.status !== StatusChallengerWins && g.status !== StatusDefenderWins)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:417 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18486,
+   "find": "g.status !== StatusDefenderWins",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:422 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 18857,
+   "find": "!isZero(g.countered) || ps === 'none' || g.resolvedAt < g.expectedResolution || path === undefined",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:427 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19246,
+   "find": "!isZero(l2seqW.subarray(0, 24)) || !isZero(w2.subarray(0, 24))",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:432 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19530,
+   "find": "l2seq < start",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:435 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19787,
+   "find": "n !== row.nIntermediate",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:442 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 19911,
+   "find": "!matched",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:448 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20002,
+   "find": "BigInt(k) > row.nIntermediate",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:450 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20350,
+   "find": "body.l2Spine.length === 0",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:459 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20702,
+   "find": "!eq(computed, claimed)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:469 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21070,
+   "find": "e instanceof FinalityStateError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:479 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21215,
+   "find": "!eq(cur.hash, prev.parentHash)",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:482 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21332,
+   "find": "prev.number === 0n || cur.number !== prev.number - 1n",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:483 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21570,
+   "find": "prev.number !== leg.number || !eq(prev.hash, leg.hash) || (leg.headerRlp !== undefined && !eq(last, leg.headerRlp))",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:488 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23023,
+   "find": "c.header.kind !== KIND_NAME",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:532 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23107,
+   "find": "c.header.chain !== CHAIN || c.header.level !== Level.Finalized",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:533 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 23888,
+   "find": "e instanceof FinalityStateError",
+   "replace": "false",
+   "note": "proof-v2/finality/basefinal/verify.ts:547 guard removed (if (false) throw)"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14447,
+   "find": "1",
+   "replace": "0",
+   "note": "proof-v2/finality/basefinal/verify.ts:347 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 14735,
+   "find": "1",
+   "replace": "0",
+   "note": "proof-v2/finality/basefinal/verify.ts:352 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20304,
+   "find": "1",
+   "replace": "0",
+   "note": "proof-v2/finality/basefinal/verify.ts:456 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 20985,
+   "find": "1n",
+   "replace": "0n",
+   "note": "proof-v2/finality/basefinal/verify.ts:474 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21383,
+   "find": "1n",
+   "replace": "0n",
+   "note": "proof-v2/finality/basefinal/verify.ts:483 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "proof-v2/finality/basefinal/verify.ts",
+   "offset": 21536,
+   "find": "1",
+   "replace": "0",
+   "note": "proof-v2/finality/basefinal/verify.ts:486 boundary +/- 1 -> 0"
+  },
+  {
+   "file": "s6/mpt.ts",
+   "offset": 3453,
+   "find": "===",
+   "replace": "!==",
+   "note": "s6/mpt.ts:91 eq -> neq"
+  }
+ ]
+}

@@ -80,17 +80,73 @@ function decodeRef(buf: Uint8Array): [Node, Uint8Array] {
 
 const hexOf = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 
+/** What a proof walk reads nodes from: the node whose keccak256 is the given hash, or undefined. A ProofDb is one; a recorder that wraps one is another. */
+export interface ProofReader {
+  get(hash: Uint8Array): Uint8Array | undefined;
+}
+
+/**
+ * A proof database: every node keyed by its own keccak256. Built once for a node set that is read many times (a kind that makes dozens
+ * of state reads from one evidence), so the nodes are hashed once and not once per read. An empty node is refused (MptError), unless
+ * skipEmpty is set: the database then holds every other node and the empty one is simply never found (an empty node can never be a trie node).
+ */
+export class ProofDb implements ProofReader {
+  private readonly db = new Map<string, Uint8Array>();
+  constructor(nodes: readonly Uint8Array[], skipEmpty = false) {
+    for (const n of nodes) {
+      if (n.length === 0) {
+        if (skipEmpty) continue;
+        fail('empty proof node');
+      }
+      this.db.set(hexOf(keccak_256(n)), n);
+    }
+  }
+
+  get(hash: Uint8Array): Uint8Array | undefined {
+    return this.db.get(hexOf(hash));
+  }
+}
+
+/**
+ * One node set of one verification, read many times: its proof database is built at most once, on the first read, and every later read
+ * uses it. reader() skips empty nodes (the reading of the leaf proofs, which never find one); strict() is the reading of the state and
+ * storage proofs of verifyAccountIn and verifySlotIn, which refuse a set holding an empty node as the per-call functions do (MptError
+ * "empty proof node", before anything is walked). Construction hashes nothing. The node list is kept as given (it is read by the empty-root rule of
+ * a slot read and by the "no proof" refusals).
+ */
+export class ProofNodes {
+  readonly nodes: readonly Uint8Array[];
+  private readonly hasEmpty: boolean;
+  private db: ProofDb | undefined;
+  constructor(nodes: readonly Uint8Array[]) {
+    this.nodes = nodes;
+    this.hasEmpty = nodes.some((n) => n.length === 0);
+  }
+
+  /** The proof database over every non-empty node, built on the first call. */
+  reader(): ProofDb {
+    this.db ??= new ProofDb(this.nodes, true);
+    return this.db;
+  }
+
+  /** reader(), after refusing a set that holds an empty node. */
+  strict(): ProofDb {
+    if (this.hasEmpty) fail('empty proof node');
+    return this.reader();
+  }
+}
+
 /** trie.VerifyProof: the value at key under root, undefined for a proven absence; MptError for anything else. */
 export function verifyProof(root: Uint8Array, key: Uint8Array, nodes: readonly Uint8Array[]): Uint8Array | undefined {
-  const db = new Map<string, Uint8Array>();
-  for (const n of nodes) {
-    if (n.length === 0) fail('empty proof node');
-    db.set(hexOf(keccak_256(n)), n);
-  }
+  return verifyProofIn(new ProofDb(nodes), root, key);
+}
+
+/** verifyProof over a proof database built once. */
+export function verifyProofIn(db: ProofReader, root: Uint8Array, key: Uint8Array): Uint8Array | undefined {
   let k = hexKey(key);
   let want = root;
   for (let i = 0; ; i++) {
-    const buf = db.get(hexOf(want));
+    const buf = db.get(want);
     if (buf === undefined) fail(`proof node ${i} (hash ${hexOf(want)}) missing`);
     let n: Node;
     try {
@@ -137,8 +193,13 @@ const ZERO32 = new Uint8Array(32);
 
 /** VerifyAccount. */
 export function verifyAccount(stateRoot: Uint8Array, account: Uint8Array, proof: readonly Uint8Array[]): AccountState {
-  if (proof.length === 0) fail('no account proof');
-  const enc = verifyProof(stateRoot, keccak_256(account), proof);
+  return verifyAccountIn(new ProofNodes(proof), stateRoot, account);
+}
+
+/** VerifyAccount over a node set whose proof database is built once (see ProofNodes); the answer is that of verifyAccount over set.nodes. */
+export function verifyAccountIn(set: ProofNodes, stateRoot: Uint8Array, account: Uint8Array): AccountState {
+  if (set.nodes.length === 0) fail('no account proof');
+  const enc = verifyProofIn(set.strict(), stateRoot, keccak_256(account));
   if (enc === undefined) return { exists: false, storageRoot: EMPTY_ROOT, codeHash: ZERO32 };
   let root: Uint8Array;
   let codeHash: Uint8Array;
@@ -158,13 +219,19 @@ export function verifyAccount(stateRoot: Uint8Array, account: Uint8Array, proof:
 
 /** VerifySlot: the slot's 32-byte value. */
 export function verifySlot(storageRoot: Uint8Array, slot: Uint8Array, proof: readonly Uint8Array[]): Uint8Array {
+  return verifySlotIn(new ProofNodes(proof), storageRoot, slot);
+}
+
+/** VerifySlot over a node set whose proof database is built once (see ProofNodes); the answer is that of verifySlot over set.nodes. */
+export function verifySlotIn(set: ProofNodes, storageRoot: Uint8Array, slot: Uint8Array): Uint8Array {
+  const proof = set.nodes;
   if (eq(storageRoot, EMPTY_ROOT)) {
     if (proof.length === 0) return ZERO32;
     if (proof.length === 1 && proof[0]!.length === 1 && proof[0]![0] === 0x80) return ZERO32;
     return fail(`the storage root is the empty root, and the proof holds ${proof.length} nodes`);
   }
   if (proof.length === 0) fail('no storage proof for a non-empty storage root');
-  const enc = verifyProof(storageRoot, keccak_256(slot), proof);
+  const enc = verifyProofIn(set.strict(), storageRoot, keccak_256(slot));
   if (enc === undefined) return ZERO32;
   let trimmed: Uint8Array;
   try {

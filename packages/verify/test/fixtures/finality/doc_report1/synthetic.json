@@ -1,0 +1,621 @@
+{
+ "reports": [
+  {
+   "id": "class/ledger_behind",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_ledger_behind",
+       "fields": {
+        "ledger_head_period": 1378,
+        "needed_period": 1391
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 3,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  finality_ledger_behind{ledger_head_period=\"1378\",needed_period=\"1391\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  leg\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/pin_unknown",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_pin_unknown",
+       "fields": {
+        "period": 1300
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 3,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  finality_pin_unknown{period=\"1300\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  leg\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/unrecognised_kind",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_evidence_unrecognised",
+       "fields": {
+        "kind": "x/y/v9",
+        "version": "v9"
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 3,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  finality_evidence_unrecognised{kind=\"x/y/v9\",version=\"v9\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  leg\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/wrapped_ledger_behind",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "l1_finality_unproven",
+       "fields": {
+        "inner": "finality_ledger_behind",
+        "reason": "lc_refused"
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 3,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_ledger_behind\",reason=\"lc_refused\"}\n  S7  level reached: included\nSUMMARY-ONLY (finality)  leg\n  an addendum's kind or pins are not known to this verifier; nothing is known to be wrong, and the levels above\n  included are not judged here.\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/wrapped_pin_unknown",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "l1_finality_unproven",
+       "fields": {
+        "inner": "finality_pin_unknown",
+        "reason": "lc_refused"
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_pin_unknown\",reason=\"lc_refused\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/wrapped_signature",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "l1_finality_unproven",
+       "fields": {
+        "inner": "finality_signature_invalid",
+        "reason": "lc_refused"
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  l1_finality_unproven{inner=\"finality_signature_invalid\",reason=\"lc_refused\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/signature_invalid",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_signature_invalid",
+       "fields": {
+        "index": 0
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  finality_signature_invalid{index=\"0\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/pin_mismatch",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_pin_mismatch",
+       "fields": {
+        "period": 1378
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  finality_pin_mismatch{period=\"1378\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/wrapper_without_inner",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "l1_finality_unproven",
+       "fields": {
+        "reason": "lc_refused"
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused  l1_finality_unproven{reason=\"lc_refused\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "class/no_state_at_all",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused"
+     },
+     "included": {
+      "status": "verified"
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  \n  S7    finalized  refused\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "finality_pins_class_test.go"
+  },
+  {
+   "id": "branch/verified_finalized",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "verified"
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "verified"
+     }
+    },
+    "headline": "finalized",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 0,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  verified\n  S7  level reached: finalized\nVERIFIED (finality)  leg  level finalized\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/verified_finalized_with_finalized_block",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "verified"
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "verified"
+     }
+    },
+    "headline": "finalized",
+    "finalizedBlock": {
+     "number": 7,
+     "hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+     "stateRoot": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+    },
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 0,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 7 hash cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd stateRoot efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\nVERIFIED (finality)  leg  level finalized\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/finalized_block_state",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "verified"
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "verified"
+     }
+    },
+    "headline": "finalized",
+    "finalizedBlockState": {
+     "code": "finality_finalized_block_unavailable",
+     "fields": {
+      "chain": 11155111,
+      "reason": "no_header"
+     }
+    },
+    "finalizedBlock": {
+     "number": 7,
+     "hash": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd",
+     "stateRoot": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef"
+    },
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  verified\n  S7    finalized  verified\n  S7  level reached: finalized\n  S7  finalized_block: number 7 hash cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd stateRoot efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\nFAILED (finality)  leg\n  the finalized level is verified but the leg block cannot be exposed for S8: finality_finalized_block_unavailable{chain=\"11155111\",reason=\"no_header\"}\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/pending_and_na",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "level_not_applicable",
+      "state": {
+       "code": "finality_level_not_applicable",
+       "fields": {
+        "chain": 1,
+        "level": "l1_posted"
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "pending",
+      "state": {
+       "code": "finality_pending",
+       "fields": {
+        "chain": 84532,
+        "level": "included",
+        "pending": "l1_posted",
+        "reason": "no_evidence_in_file"
+       }
+      }
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 0,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  pending  finality_pending{chain=\"84532\",level=\"included\",pending=\"l1_posted\",reason=\"no_evidence_in_file\"}\n  S7    finalized  level_not_applicable  finality_level_not_applicable{chain=\"1\",level=\"l1_posted\"}\n  S7  level reached: included\nVERIFIED (finality)  leg  level included\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/unsupported",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "unsupported": {
+     "code": "finality_chain_unsupported",
+     "fields": {
+      "chain": 1
+     }
+    },
+    "levels": {},
+    "headline": "none",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 3,
+    "text": "SUMMARY-ONLY (finality)  leg\n  finality_chain_unsupported{chain=\"1\"}\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/included_refused",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "included": {
+      "status": "refused",
+      "state": {
+       "code": "finality_included_invalid",
+       "fields": {
+        "cause": "x",
+        "chain": 84532
+       }
+      }
+     }
+    },
+    "headline": "none",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "FAILED (finality)  leg\n  the leg's Settlement does not verify as the included level: finality_included_invalid{cause=\"x\",chain=\"84532\"}\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/broken",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_chain_broken",
+       "fields": {
+        "check": "own_hash",
+        "seq": 1
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "refused",
+      "state": {
+       "code": "finality_chain_broken",
+       "fields": {
+        "check": "own_hash",
+        "seq": 1
+       }
+      }
+     }
+    },
+    "headline": "included",
+    "broken": {
+     "code": "finality_chain_broken",
+     "fields": {
+      "check": "own_hash",
+      "seq": 1
+     }
+    },
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n  S7    finalized  refused  finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  the addendum chain does not verify: finality_chain_broken{check=\"own_hash\",seq=\"1\"}\n"
+   },
+   "note": "printReport"
+  },
+  {
+   "id": "branch/mixed_failed_and_summary",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_signature_invalid",
+       "fields": {
+        "index": 2
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "refused",
+      "state": {
+       "code": "finality_pin_unknown",
+       "fields": {
+        "period": 1
+       }
+      }
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_pin_unknown{period=\"1\"}\n  S7    finalized  refused  finality_signature_invalid{index=\"2\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "worseExit"
+  },
+  {
+   "id": "branch/mixed_summary_after_failed",
+   "report": {
+    "chain": 11155111,
+    "number": 1,
+    "hash": "abababababababababababababababababababababababababababababababab",
+    "levels": {
+     "finalized": {
+      "status": "refused",
+      "state": {
+       "code": "finality_pin_unknown",
+       "fields": {
+        "period": 1
+       }
+      }
+     },
+     "included": {
+      "status": "verified"
+     },
+     "l1_posted": {
+      "status": "refused",
+      "state": {
+       "code": "finality_signature_invalid",
+       "fields": {
+        "index": 2
+       }
+      }
+     }
+    },
+    "headline": "included",
+    "pinsSha256": "00ff",
+    "pinsSource": "embedded"
+   },
+   "expect": {
+    "exit": 1,
+    "text": "  S7  chain 11155111  block 1  abababababab…  pins 00ff (embedded)\n  S7    included   verified\n  S7    l1_posted  refused  finality_signature_invalid{index=\"2\"}\n  S7    finalized  refused  finality_pin_unknown{period=\"1\"}\n  S7  level reached: included\nFAILED (finality)  leg\n  an addendum's evidence is present and does not check out\n"
+   },
+   "note": "worseExit"
+  }
+ ]
+}

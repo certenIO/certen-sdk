@@ -1,0 +1,207 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-TWINS-2 hand-mutation gate over the lines changed against d7ca45b in adiri/cfa1.ts, chain.ts, record.ts, kind.ts, sigs.ts: 95 curated mutants (every changed decision, constant, argument and message field) plus every operator mutant on a changed line (=== <-> !==, < <= > >= flips, && <-> ||, true <-> false, + <-> -, removed negations, numeric literals +1), 214 in all with the two supply/loader files of the other two lists, each applied through a vite transform plugin (no file edit) and run against vitest --bail=1 on units_f1fix, units_chain, units_cfa1, units_record, units_kind, units_survivors, vectors_adiri5, vectors_adiri4, vectors_fast (sigs.ts: units_f1fix, units_sigs). Control runs of the unmutated tree (222 and 65 tests green) preceded the gate. Result 204 killed, 10 equivalent (3 here, 4 in baseposted/mutation_equivalents_twins2_rb12.json, 3 in basefinal/mutation_equivalents_twins2_rb12.json), 0 unexplained. Line numbers are those of pv2/rb12-ts-twins2 at the head named in the check-in. || RB12-TS-SPEED hand-mutation gate over the files this work package wrote: adiri/msm.ts, adiri/batched.ts, adiri/pool.ts, adiri/pool-worker.ts, plus the plumbing lines it added to adiri/kind.ts, adiri/chain.ts and adiri/sigs.ts. A sed-style harness in the scratchpad (not committed) edited each file IN PLACE in a throwaway detached worktree (so the pool workers load the mutated file natively), ran the narrow test set of that file with `vitest --bail=1`, and restored the file with git checkout. Operators: === <-> !==, < <= > >= flips, && <-> ||, ?? <-> ||, + <-> -, ++ <-> --, true <-> false, * <-> /, << <-> >>, numeric literals +1 / -1, plus six hand-written plumbing mutants. 186 mutants were run (70 msm.ts positions sampled, 46 batched.ts, 70 pool.ts, 9 pool-worker.ts, 6 plumbing). Control runs of the unmutated tree preceded the gate (the first control found a real defect of this work package, fixed at 20d4c4f). First pass: 134 killed by a failing test, 8 killed because they never terminate (the mutated loop or window choice does not finish: `++` -> `--` in a loop, a window width that makes the bucket array enormous; the test run is cut at 6 minutes) and 44 survived. 23 of the 44 were killed by new tests (re-run at 9e785fb by text position: all 23 killed, see `killedAfter` below); the other 21 are the equivalents listed here, each with its reason.",
+  "controls": "unmutated tree green for every test set before the first mutant; the broken-harness check (a run that kills everything) did not occur: 44 survivors on the first pass.",
+  "killedAfter": [
+    "msm.ts:95 error-message digit (units_msm: exact message of the scalar-range refusal)",
+    "batched.ts:129 index 0 -> 1 of the 'combination rejected what the individual check accepts' branch (units_pool: verifyOne injected as accepting; index 0 and reason pairing)",
+    "pool.ts maxPoolSize 4 -> 3 and cores - 2 -> cores - 3 (units_pool: the exact rule from stubbed core counts)",
+    "pool.ts parallelUnavailable: Node version text, fs/url module absence, empty workerUrl (units_pool)",
+    "pool.ts constructor: five digits of the size-error text, the spawn loop bound (workerCount), dispose() setting dead and terminating every worker (alive, workerCount)",
+    "pool.ts failure reply without text / with empty text (fixtures worker_noerror, worker_emptyerror)",
+    "pool.ts bounds/decode/combine part counts (exact jobsRun), engineFor single-worker rule (stubbed cores)",
+    "pool-worker.ts progress tick 1 -> 0 (a real job longer than stallMs completes) and ok false -> true on an unknown job kind (named worker_error)",
+    "kind.ts default parallel 'auto' (units_pool)"
+  ],
+  "equivalents": [
+    {
+      "wp": "RB12-TS-TWINS-2",
+      "file": "cfa1.ts",
+      "line": 59,
+      "mutant": "j < signers.length -> j <= signers.length (checkRecordSigners)",
+      "reason": "the extra iteration reads signers[signers.length], undefined: `undefined >= committeeSize` is false and `j > 0 && undefined <= signers[j - 1]` is false, so nothing is thrown and the loop ends; every refusal is decided on an index below the length"
+    },
+    {
+      "wp": "RB12-TS-TWINS-2",
+      "file": "cfa1.ts",
+      "line": 61,
+      "mutant": "j > 0 -> j >= 0 (checkRecordSigners)",
+      "reason": "for j = 0 the added test reads signers[-1], undefined: `s <= undefined` is false, so the order test still cannot fire on the first signer; the first signer is judged by `s >= committeeSize` alone, exactly as with j > 0"
+    },
+    {
+      "wp": "RB12-TS-TWINS-2",
+      "file": "sigs.ts",
+      "line": 234,
+      "mutant": "mode: Mode = 'batched' -> mode: Mode (firstFailure default)",
+      "reason": "firstFailure branches on `mode === 'oneByOne'` only, so an undefined mode takes the batched path with or without the default parameter; the default makes the F1b rule explicit and typed (the tests units_f1fix F1b pin the observable consequence, that an unset mode draws its scalars from rand), it does not change a decision"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 0,
+      "line": 20,
+      "mutation": "(FIELD_P - 1n) / 2n -> (FIELD_P + 1n) / 2n",
+      "reason": "HALF_P is only compared with a square root y of x^3 + 4. No point of E has y = (p-1)/2 or (p+1)/2: y^2 - 4 is not a cube there (units_msm 'the boundary of the sign flag is never decided at it' computes it), so y > (p-1)/2 and y > (p+1)/2 (and #10 y >= (p-1)/2) agree on every curve point."
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 10,
+      "line": 63,
+      "mutation": "y > HALF_P -> y >= HALF_P",
+      "reason": "same boundary as #0: y = (p-1)/2 is not the y of any curve point"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 6,
+      "line": 41,
+      "mutation": "literal 0 -> 1 in the return TYPE annotation of decodeG1Signature",
+      "reason": "a type position: erased by the compiler, no runtime effect"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 7,
+      "line": 41,
+      "mutation": "literal 1 -> 2 in the return TYPE annotation of decodeG1Signature",
+      "reason": "a type position: erased by the compiler, no runtime effect"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 12,
+      "line": 75,
+      "mutation": "windowBits: let best = 1 -> 2",
+      "reason": "best is overwritten at c = 1, whose cost is always finite (< Infinity): the initial value is never read"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 13,
+      "line": 75,
+      "mutation": "windowBits: let best = 1 -> 0",
+      "reason": "same as #12"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 15,
+      "line": 77,
+      "mutation": "windowBits: for (c = 1 ...) -> for (c = 0 ...)",
+      "reason": "c = 0 has cost ceil(bits/0) * (n + 0) = Infinity or NaN, never < Infinity, so it is never chosen; the result is the same"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 29,
+      "line": 100,
+      "mutation": "const size = 1 << c -> 2 << c",
+      "reason": "the bucket array is twice as long; digits are below 2^c so the upper half is never filled and the running sum over it adds nothing: the same point, only a larger array"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 39,
+      "line": 119,
+      "mutation": "for (j = size - 1 ...) -> size - 0",
+      "reason": "buckets[size] is undefined (digits are below size): the extra iteration skips both additions"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "msm.ts",
+      "id": 44,
+      "line": 126,
+      "mutation": "acc ?? G1P.ZERO -> acc || G1P.ZERO",
+      "reason": "acc is a point object (always truthy) or undefined: the two operators agree"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "batched.ts",
+      "id": 115,
+      "line": 129,
+      "mutation": "reason ?? ReasonPairing -> reason || ReasonPairing",
+      "reason": "reason is a non-empty reason string or undefined: ?? and || agree"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 119,
+      "line": 76,
+      "mutation": "maxPoolSize: cores fallback 1 -> 2",
+      "reason": "both give max(1, min(4, cores - 2)) = 1 (units_pool asserts the result 1 for a runtime that reports no core count)"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 144,
+      "line": 177,
+      "mutation": "terminate-promise guard && -> ||",
+      "reason": "SUPERSEDED: the guarded code was replaced at 9e785fb by `void Promise.resolve(w.terminate()).catch(() => undefined)` inside try/catch, which has no operator left to mutate"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 145,
+      "line": 177,
+      "mutation": "terminate-promise guard typeof r.catch === 'function' -> !==",
+      "reason": "SUPERSEDED with #144"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 150,
+      "line": 205,
+      "mutation": "wait slice Math.min(250, ...) -> 251",
+      "reason": "the slice is only how often the thread wakes to look at the progress counters; any value from 1 ms to stallMs/4 is correct, so 250 and 251 are indistinguishable"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 151,
+      "line": 205,
+      "mutation": "wait slice Math.min(250, ...) -> 249",
+      "reason": "same as #150"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 155,
+      "line": 210,
+      "mutation": "now - start > maxMs -> >=",
+      "reason": "a millisecond-clock boundary: the wait wakes every <= 250 ms, so a run is never observed at exactly maxMs; no deterministic test can tell > from >= here"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 158,
+      "line": 216,
+      "mutation": "Atomics.load(pending, 0) > 0 -> >= 0 in the stall condition",
+      "reason": "differs only when the last job finishes inside the same wake-up in which the stall window expires with no progress in it: a race window of a few microseconds that cannot be forced; the effect would be a false stalled report at the instant of completion, the safe direction"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 171,
+      "line": 295,
+      "mutation": "decode merge loop k + 1 < b.length -> k - 1 < b.length",
+      "reason": "the extra iteration has b[k + 1] undefined, so its inner loop bound is NaN and it does nothing"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool.ts",
+      "id": 173,
+      "line": 295,
+      "mutation": "decode merge loop k + 1 < b.length -> <=",
+      "reason": "same: the extra iteration is empty"
+    },
+    {
+      "wp": "RB12-TS-SPEED",
+      "file": "pool-worker.ts",
+      "id": 189,
+      "line": 34,
+      "mutation": "progress tick increment 1 -> 2",
+      "reason": "the counters are only compared for change: adding 2 per record changes nothing the pool can observe"
+    }
+  ]
+}

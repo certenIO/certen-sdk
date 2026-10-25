@@ -1,0 +1,65 @@
+{
+  "gate": "hand mutation of ethtx.ts and span.ts: 96 comparison/condition/guard/arity/constant flips, each run against ethtx.test.ts + span.test.ts in an isolated copy; 84 killed, 12 survivors listed here as equivalent",
+  "equivalents": [
+    {
+      "file": "ethtx.ts",
+      "mutant": "decodeTx: `raw[0] > 0x7f` -> `raw[0] >= 0x7f`",
+      "reason": "the first byte 0x7f is an unsupported envelope type on the typed path and an RLP header that cannot open a list on the legacy path: both are an EthTxError"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "decodeTx: `raw.length <= 1` -> `raw.length < 1`",
+      "reason": "a one-byte typed input then reaches the type switch with an empty body: types 1-4 fail to split a list (EthTxError), every other type is unsupported (EthTxError); the verdict is the same EthTxError"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "optAddress: `it.kind === 'list' && it.content.length === 0` -> `... !== 0`",
+      "reason": "the guard only sharpens the message for an empty list; without it fixedOf refuses every list (empty or not) with the same EthTxError"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "isProtectedV: `bitLen(v) <= 8` -> `< 8`",
+      "reason": "differs only for a V of exactly 8 bits (128..255); both branches classify such a V as protected (it is none of 0, 1, 27, 28)"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "isProtectedV: drop `&& v !== 0n`",
+      "reason": "V = 0 becomes 'protected' and is refused by the chain-id derivation (the derived id wraps to a huge number); unprotected it is refused by recoverPlain (V - 27 is not 0 or 1). Both an EthTxError"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "deriveChainId: `bitLen(v) <= 64` -> `< 64`",
+      "reason": "for a V of exactly 64 bits the other branch computes (v - 35) >> 1, which equals the uint64 form (v - 35) / 2 because v >= 2^63 > 35"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "deriveChainId: `if (v === 27n || v === 28n) return 0n` -> `return 1n`",
+      "reason": "unreachable: deriveChainId is called only for a protected V, and 27 and 28 are never protected"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "deriveChainId: drop BigInt.asUintN(64, ...)",
+      "reason": "for a V below 35 go's uint64 subtraction wraps to a huge number and the unmasked bigint goes negative; neither equals a positive signer chain id (the pin l1_chain_id), so the result is the same chain-id mismatch"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "validSignatureValues: `r < 1n || s < 1n` -> `r < 0n || s < 0n`",
+      "reason": "r = 0 or s = 0 then reaches the noble Signature constructor, which refuses it (EthTxError); the range rule is repeated by the library"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "validSignatureValues: `r < N` -> `r <= N`",
+      "reason": "r = N then reaches the noble Signature constructor, which refuses it (EthTxError)"
+    },
+    {
+      "file": "ethtx.ts",
+      "mutant": "validSignatureValues: `s < N` -> `s <= N`",
+      "reason": "s = N is above N/2 and is already refused by the high-s rule that precedes the range check"
+    },
+    {
+      "file": "span.ts",
+      "mutant": "decodeSpanBatch: `c > MAX_SPAN_TXS - total` -> `>=`",
+      "reason": "differs only for a block count that makes the total exactly 2^20; every such batch is refused for its missing 2^20 signatures, recipients and data (a BatchStreamError either way), and a valid batch of that size would need more than 100 MB, above max_rlp_bytes_per_channel. The bound itself is pinned from above by the 2^20 + 1 and the exact-sum cases"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-SEPOLIA hand-mutation gate over the files this package wrote or changed: ethsepolia/{kind,states,lcssz}.ts and ledger.ts (whole files), and the changed regions of pins.ts (the C2d agreement block), ethl1/verify.ts (anchorStore, verifyBootstrapAnchor), ethl1/bls.ts (KeyCache, defaultKeyCache) and ethl1/api.ts (ethl1PinsFrom). Operators: === <-> !==, < <= > >= flips, && <-> ||, a single-line `if (c) throw` made never to fire, numeric literals +1, and the offsets +1/+4/+8 / -1 of the decoders. 182 mutants (a deterministic sample of every site the operators reach), each applied through a vite transform plugin (no file edit) and run against `vitest --bail=1` in two stages: stage A the fastest unit file of the target (units_lcssz, units_ledger, units_kind, units_pins + pins.test, ethl1 units_bls), stage B (survivors of A only) the rest of the target's tier (the Go vector shards of sets 1, 2 and 3, extend, ethl1 units_verify, units_keycache). The control runs of the UNMUTATED tree passed in every tier before the gate. Result: 171 killed (170 by a failing test, 1 by timeout: an infinite loop), 0 invalid, 11 equivalent (below). 23 first-pass survivors were triaged: 12 were killed by tests added for them (units_lcssz: update at exactly its fixed size and header-length copy, units_ledger: verifyLedger of no pins, uint64 wrap of the predecessor period, root-pin committee check without inner, verifyBootstrapAnchor committee_root pin_mismatch, units_kind: link count minimum element 5n/5n-1, kind-2 anchor at an entry without block_root, kind-1 anchor committee and anchorRoot with links following) or by the full Go vector shards, 11 are the equivalents listed here.",
+  "tool": "scratchpad hand-mutation harness (generator + vite plugin + runner), not committed",
+  "equivalents": [
+    {
+      "file": "ethsepolia/lcssz.ts",
+      "line": 66,
+      "mutation": "u32le: DataView length 4 -> 5",
+      "reason": "getUint32(0) reads the first four bytes of the view whatever its length; the only input on which a five-byte view differs is one that ends within four bytes of the buffer's end, and every caller has already proven the object longer than the offset it reads (2,056 / 25,216 / 24,820 bytes minimum)."
+    },
+    {
+      "file": "ethsepolia/lcssz.ts",
+      "line": 145,
+      "mutation": "updateToFinalityUpdate: tail length 7 * 32 -> 7 * 33",
+      "reason": "subarray clamps at the end of the update, and the extra bytes it takes are the first bytes of the attested and finalized headers that follow the tail in the update; they land at the output positions the two headers are copied to next, with the same bytes. Verified for header lengths (3,0) (0,5) (2,4) (0,0) (1,1) by units_lcssz."
+    },
+    {
+      "file": "ethsepolia/lcssz.ts",
+      "line": 247,
+      "mutation": "finalityUpdateParticipants: sync bits end 512 / 8 -> 513 / 8",
+      "reason": "subarray truncates the fractional end 64.125 to 64: the same 64 bytes."
+    },
+    {
+      "file": "ledger.ts",
+      "line": 130,
+      "mutation": "ledgerStep: the rethrow of an error that is not an LcsszError never fires",
+      "reason": "unreachable defensive guard: nextCommittee throws only LcsszError for every input (units_lcssz sweeps more than 1,000 shapes for every layout byte and requires exactly that), so the branch that rethrows anything else has no input."
+    },
+    {
+      "file": "ledger.ts",
+      "line": 49,
+      "mutation": "rootOf: loop bound < -> <= and 32 -> 33",
+      "reason": "rootOf reads hex strings the pins loader has validated as 0x plus 64 lower-case digits; the extra iteration reads an empty pair, fails the digit test and breaks (or writes outside the 32-byte root, a no-op); the partial-copy behaviour for invalid strings is unreachable through a parsed pins file."
+    },
+    {
+      "file": "ledger.ts",
+      "line": 49,
+      "mutation": "rootOf: Math.min(32, ...) -> Math.min(33, ...)",
+      "reason": "same as above: iteration 33 starts past the end of a 64-digit string and breaks at once."
+    },
+    {
+      "file": "ethsepolia/kind.ts",
+      "line": 69,
+      "mutation": "decodeBody: maxSpine < limit -> maxSpine <= limit",
+      "reason": "when the two are equal the assignment limit = maxSpine changes nothing."
+    },
+    {
+      "file": "ethsepolia/kind.ts",
+      "line": 150,
+      "mutation": "verify: the number comparison of the covered block never fires",
+      "reason": "unreachable: covers() has already required every header to be exactly one below its child, so blockAt(covered, n) returns the header numbered n; the guard mirrors the Go defensive check."
+    },
+    {
+      "file": "ethsepolia/kind.ts",
+      "line": 50,
+      "mutation": "readLC: lp(part, -1) -> lp(part, -2)",
+      "reason": "any negative bound means that only the bytes left bound the length."
+    },
+    {
+      "file": "ethl1/verify.ts",
+      "line": 225,
+      "mutation": "anchorStore: anchorPeriod > head -> >=",
+      "reason": "anchorStore reaches this line only when no ledger entry has the anchor period, and the head is the largest period of the ledger, so the period can never equal the head here."
+    },
+    {
+      "file": "ethl1/verify.ts",
+      "line": 158,
+      "mutation": "verifyBootstrapAnchor: anchorKind 2 -> 3",
+      "reason": "anchorStore takes the kind-2 branch for every kind other than 1, and the entry's missing block_root was refused with kind 2 on the line before, so the kind field is never reported from here."
+    }
+  ]
+}

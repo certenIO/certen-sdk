@@ -1,0 +1,22 @@
+[
+  {
+    "file": "packages/verify/src/proof-v2/finality/baseposted/kzg.ts",
+    "mutant": "decodeKzgG1 and decodeSetupG2: delete `if (p.is0()) throw new Error(...)`",
+    "reason": "Unreachable. A point parsed from a finite compressed encoding (flag bits 100 or 101, the only ones that reach fromBytes) is never the identity; the identity encoding 0xc0 00..00 returns earlier in decodeKzgG1, and decodeSetupG2 refuses flag bits 110 in checkFiniteCompressed. The guard stays as a statement of the invariant."
+  },
+  {
+    "file": "packages/verify/src/proof-v2/finality/baseposted/kzg.ts",
+    "mutant": "decodeKzgG1 and decodeSetupG2: delete `p.assertValidity()`",
+    "reason": "Redundant with @noble/curves 1.9.7: G1.fromBytes/G2.fromBytes run the same curve and prime-order-subgroup checks and throw 'bad point: not in prime-order subgroup' themselves (the outside-subgroup test in kzg.test.ts is refused by fromBytes). The explicit call is defence in depth against a noble change; no input distinguishes the two."
+  },
+  {
+    "file": "packages/verify/src/proof-v2/finality/baseposted/kzg.ts",
+    "mutant": "verifyBatchOnly: `prepared.length === 0 ||` replaced by `false ||`",
+    "reason": "batch([]) is true: every pair is the identity and is dropped by the identity filter of pairingProductIsOne (live.length === 0 returns true), so the empty set gives true with or without the guard."
+  },
+  {
+    "file": "packages/verify/src/proof-v2/finality/baseposted/kzg.ts",
+    "mutant": "domain(): delete the `if (domainCache !== undefined) return domainCache;` early return",
+    "reason": "Cache only. The Domain is a deterministic function of constants; recomputing it on every call returns an identical object graph, so no verdict changes (only the time per blob)."
+  }
+]

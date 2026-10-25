@@ -1,0 +1,102 @@
+{
+  "format": "certen-finality-ts-mutation-equivalents/1",
+  "run": "RB12-TS-ARBFINAL hand-mutation gate over every file of src/proof-v2/finality/arbfinal (states, pins, abi, receipt, wire, nodebounds, confirm, verify). 279 hand-specified mutants (278 behavioural + 1 deliberate no-op control that must survive): operators === <-> !==, < <= > >= flips, && <-> ||, removed negations and clauses, numeric literals +-1, swapped fields, orders and roles, removed single-line guards. Each applied through a vite transform plugin (no file edit; harness in the author scratchpad, not committed), control run of the UNMUTATED tree first (11 files, 400 tests green), then tier 1 (units_abi, units_confirm, units_pins, units_receipt, units_verify, units_wire, registry, vectors_meta, vectors_final2, vectors_final3 shards; --bail 1): 242 killed; survivors to tier 2 (the four finality_arb_final1 shards, 125 vectors): 20 killed; survivors to tier 3 (units_kind, vectors_x, units_confirm, written during the gate for the survivors it predicted): 4 killed. 266 killed, 12 equivalent (listed below, each with its reason), 1 no-op control survived as designed, 0 unexplained.",
+  "equivalents": [
+    {
+      "id": 73,
+      "file": "abi.ts",
+      "function": "unpackArgs",
+      "original": "if (data.length === 0) {",
+      "mutated": "if (data.length === 1) {",
+      "reason": "an empty input with arguments expected throws AbiError either way (the first head read fails with length insufficient), and with no arguments it returns [] either way: the explicit empty check only names the error geth names"
+    },
+    {
+      "id": 91,
+      "file": "receipt.ts",
+      "function": "decodeReceipt",
+      "original": "b[0]! > 0x7f",
+      "mutated": "b[0]! >= 0x7f",
+      "reason": "the byte 0x7f read as a legacy receipt is an RLP single byte, not a list, and fails to decode as the receipt list (ReceiptError); read as an envelope of type 0x7f it is an unsupported type (ReceiptError): both refuse"
+    },
+    {
+      "id": 92,
+      "file": "receipt.ts",
+      "function": "decodeReceipt",
+      "original": "b.length > 0 && b[0]! > 0x7f",
+      "mutated": "b[0]! > 0x7f",
+      "reason": "an empty input has no first byte: undefined > 0x7f is false, so it takes the typed path and is refused as too short, as with the guard"
+    },
+    {
+      "id": 93,
+      "file": "receipt.ts",
+      "function": "decodeReceipt",
+      "original": "if (b.length <= 1) throw new ReceiptError",
+      "mutated": "if (b.length < 1) throw new ReceiptError",
+      "reason": "a one-byte typed receipt reaches fromRlp with an empty payload and is refused as ReceiptError by the RLP decode instead of by the length check: the same refusal"
+    },
+    {
+      "id": 126,
+      "file": "wire.ts",
+      "function": "encodeEvidence",
+      "original": "w.nodes(encodeNodes(e.nodes));",
+      "mutated": "w.nodes(e.nodes);",
+      "reason": "encodeNodes only sorts and deduplicates; the decoder refuses unsorted NODES, so every body the tests encode from a decoded (already ascending, unique) evidence is identical; the sort matters only to builders of evidence, which is not part of the verifier"
+    },
+    {
+      "id": 128,
+      "file": "nodebounds.ts",
+      "function": "checkNodeBounds",
+      "original": "e.nodes.some((n) => n.length > maxNodeBytes)",
+      "mutated": "e.nodes.some((n) => n.length >= maxNodeBytes)",
+      "reason": "the some() test only decides whether the proof-path walks are worth running; the per-element test below it still lets a node of exactly maxNodeBytes through, so the verdict is the same (the walks only cost time)"
+    },
+    {
+      "id": 156,
+      "file": "confirm.ts",
+      "function": "decodeWalletCalls",
+      "original": "if (input.length < 4) return undefined;",
+      "mutated": "if (input.length <= 4) return undefined;",
+      "reason": "calldata of exactly four bytes has an empty argument part, which unpackArgs refuses (an empty input with arguments expected), so the result is undefined either way"
+    },
+    {
+      "id": 165,
+      "file": "confirm.ts",
+      "function": "proveWallet",
+      "original": "if (!acct.exists || roleOf(arb, acct.codeHash) !== RoleWalletProxy) return false;",
+      "mutated": "if (roleOf(arb, acct.codeHash) !== RoleWalletProxy) return false;",
+      "reason": "an absent account reads the empty storage root and a zero code hash; with a role that cannot be the zero hash (LoadPins refuses a zero key under the wallet roles) it fails the role test, and with the zero hash pinned as proxy the next step reads the implementation slot of an empty storage root, which is either an error or the zero word, never the pinned non-zero implementation word (LoadPins requires it non-zero): false either way. The implementation account has its own existence check, which is not redundant and is killed (units_confirm)"
+    },
+    {
+      "id": 205,
+      "file": "confirm.ts",
+      "function": "classifyConfirmation",
+      "original": "!sameBytes(c.dest, arb.rollup) || !cs.ok",
+      "mutated": "!sameBytes(c.dest, arb.rollup)",
+      "reason": "a call whose data is below four bytes has the zero selector, which no pinned selector equals (LoadPins refuses a zero selector), so none of the three selector tests matches: the same as skipping it"
+    },
+    {
+      "id": 226,
+      "file": "verify.ts",
+      "function": "configSlot",
+      "original": "BigInt.asUintN(256, bigOf(nodeSlot(assertion, assertionsSlot)) + offset)",
+      "mutated": "bigOf(nodeSlot(assertion, assertionsSlot)) + offset",
+      "reason": "the wrap needs a keccak256 output within 2^64 of 2^256: it cannot be produced from any assertion hash (2^192 expected work), so no input reaches the difference (Go common.BigToHash keeps the low 32 bytes: the same arithmetic)"
+    },
+    {
+      "id": 230,
+      "file": "verify.ts",
+      "function": "proven",
+      "original": "e instanceof MptError || e instanceof RlpError",
+      "mutated": "e instanceof MptError",
+      "reason": "s6/mpt.ts converts every RlpError of an account or slot read into an MptError (verifyAccount, verifySlot and verifyProof catch it where it can arise), so an RlpError never reaches this handler"
+    },
+    {
+      "id": 238,
+      "file": "verify.ts",
+      "function": "identityAt",
+      "original": "const codeHash = logic.exists ? logic.codeHash : new Uint8Array(32);",
+      "mutated": "const codeHash = logic.codeHash;",
+      "reason": "verifyAccount returns a zero code hash for an absent account, so both expressions are the zero hash"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+package arbposted
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strconv"
+	"testing"
+
+	"github.com/certen/independant-validator/pkg/finality/strictbrotli"
+)
+
+// Oracle of test/fixtures/finality/strictbrotli_double_fault1 (certen-sdk). Run inside pkg/finality/arbposted of the validator at cbb6373:
+//   FP_DF_DIR=<dir with *.br and cases_in.json> go test ./pkg/finality/arbposted -run TestFixPostedDoubleFault -count=1
+// It reads cases_in.json ([{id, stream, cap}]) and writes cases_go.json: for each case Go's answer of strictbrotli.Decompress(stream, cap) and of
+// decodePayload(0x00 || stream, cap, 1<<20), the Arbitrum batch decode that names the refusal.
+type dfIn struct {
+	ID     string `json:"id"`
+	Stream string `json:"stream"`
+	Cap    int    `json:"cap"`
+}
+
+type dfGo struct {
+	Kind  string `json:"kind"`
+	Bytes int    `json:"bytes,omitempty"`
+}
+
+type dfPayload struct {
+	Status               string `json:"status"`
+	ExceededUncompressed bool   `json:"exceeded_uncompressed"`
+}
+
+type dfOut struct {
+	ID           string    `json:"id"`
+	Stream       string    `json:"stream"`
+	Cap          int       `json:"cap"`
+	Strictbrotli dfGo      `json:"strictbrotli"`
+	Payload      dfPayload `json:"payload"`
+}
+
+func dfStatusName(s payloadStatus) string {
+	switch s {
+	case payloadOK:
+		return "ok"
+	case payloadOffL1:
+		return "off_l1"
+	case payloadUnknownHeader:
+		return "unknown_header"
+	case payloadUndecodable:
+		return "undecodable"
+	case payloadTooLarge:
+		return "too_large"
+	}
+	return "status_" + strconv.Itoa(int(s))
+}
+
+func TestFixPostedDoubleFault(t *testing.T) {
+	dir := os.Getenv("FP_DF_DIR")
+	if dir == "" {
+		t.Fatal("FP_DF_DIR is required")
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "cases_in.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var in []dfIn
+	if err := json.Unmarshal(raw, &in); err != nil {
+		t.Fatal(err)
+	}
+	var out []dfOut
+	for _, c := range in {
+		s, err := os.ReadFile(filepath.Join(dir, c.Stream+".br"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		o := dfOut{ID: c.ID, Stream: c.Stream, Cap: c.Cap}
+		b, exceeded, err := strictbrotli.Decompress(s, c.Cap)
+		switch {
+		case exceeded:
+			o.Strictbrotli = dfGo{Kind: "exceeded"}
+		case errors.Is(err, strictbrotli.ErrEmpty):
+			o.Strictbrotli = dfGo{Kind: "empty"}
+		case errors.Is(err, strictbrotli.ErrIncomplete):
+			o.Strictbrotli = dfGo{Kind: "incomplete"}
+		case errors.Is(err, strictbrotli.ErrTrailing):
+			o.Strictbrotli = dfGo{Kind: "trailing"}
+		case err != nil:
+			o.Strictbrotli = dfGo{Kind: "decode"}
+		default:
+			o.Strictbrotli = dfGo{Kind: "ok", Bytes: len(b)}
+		}
+		res := decodePayload(append([]byte{0}, s...), c.Cap, 1<<20)
+		o.Payload = dfPayload{Status: dfStatusName(res.status), ExceededUncompressed: res.exceededUncompressed}
+		out = append(out, o)
+	}
+	b, _ := json.MarshalIndent(out, "", " ")
+	if err := os.WriteFile(filepath.Join(dir, "cases_go.json"), append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
