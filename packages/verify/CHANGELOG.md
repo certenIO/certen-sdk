@@ -1,11 +1,20 @@
 # Changelog — @certen.io/proof-verify
 
 
+## Unreleased — R12-OUTCOME-TX: the finality member may carry the settlement header (leg.headerRlp) (2026-10-25)
+
+### Added
+- `finality.leg` accepts the OPTIONAL `headerRlp` (lower-case hex, no 0x, at most 16384 bytes): `parseSection` reads it strictly (`leg.headerRlp`: `not_lowercase_hex`, `bad_value`; an unknown spelling is still `unknown_key`) and `carriedLegRef` binds it: `keccak256(header)` must equal `blockHash` and the block number read positionally must equal `blockNumber`, else `finality_chain_broken{seq 0, check leg_binding}` whose `want`/`got` name only the differing member. `judgeFinalityText` with no Settlement source but a carried header recomputes D0 from that block and judges the addenda (`verifyCarried`); level 1 is not claimed (`finality_included_unavailable{reason: no_settlement}`), the headline is the highest verified addendum level. `newSectionWithHeader`, `carriedLegWithHeaderOf`. A leg without the member is read and rendered exactly as before; no state was added (`states.json` is unchanged). The Go twin is certen-validator `pkg/finality` (branch pv2/rb12-outcome-tx).
+- New byte-identical fixture set `test/fixtures/finality/finality_chain3` (14 leg vectors over two real headers, manifest sha256 867e31da...a178) and `chain3.test.ts`.
+- Deploy order: this verifier (and the Go `proofverify`) before the proof service composes the member; a verifier without it refuses a leg that carries it (`unknown_key`).
+- There is no outcome-evidence file path in this package, so the validator's `proofverify --outcome-file` fix (the member's settlement, not the recorder's block) has no twin here.
+
 ## Unreleased — R12-SPEC-Q1: the Base l1_posted sequencing window is judged on the completing frame only (2026-10-25)
 
 ### Fixed
 - `base-sepolia/l1_posted/v1` no longer refuses a channel with a frame below the batch's L1 origin (`l < epochNum`): OP derivation has no lower bound and op-batcher streams the ready frames of an open channel. The window is `last frame L1 block - epochNum <= seqWindowSize` on the completing frame (Go `pkg/finality/baseposted/verify.go`, validator branch pv2/rb12-specq1). The channel-timeout rule is unchanged. A verdict that was `batch_outside_sequencing_window` for such a channel is now `ok`.
 - New byte-identical fixture set `test/fixtures/finality/base_posted4` (8 cases, manifest sha256 674fb621...d817) and `vectors_set4.test.ts`; the two tests that pinned the lower bound (`synth.test.ts`, `units_d2fix.test.ts`) follow the rule. `finality_base_posted1..3` are unchanged.
+
 ## Unreleased — RB12 TS opssync: the pins walk and the Adiri refusals follow Go's RB12-OPS-A1 hardening, and the audit corners N-1, N-2, N-3 are closed (2026-10-24)
 
 ### Fixed (the pins file is a trust input, and its first defect is a function of its bytes)
