@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  StepRegistry, TagCaptured, abidec, bytes, fixedRulesNotJudged, header, must, newVerifier, ownedBy, reads, registerSteps2a, registrableSteps, slots, spec, steps2a, steps2b1, steps2b2, verified,
+  StepRegistry, TagCaptured, abidec, bytes, fixedRulesNotJudged, header, must, newVerifier, ownedBy, reads, registerSteps2a, registrableSteps, slots, spec, steps2a, steps2b1, steps2b2, steps2c, verified,
   type Env, type PartResult, type StepFn, type StepId, type StepOutput, type Verifier, type Words,
 } from '../../src/proof-v2/identity/index.js';
 import { VECTORS } from './fixtures.js';
@@ -159,7 +159,7 @@ export function standIn(id: StepId, w: World, b1Flavour = false): StepFn {
  */
 export function composedVerifier(w: World, real: { steps?: StepId[]; b1Flavour?: boolean } = {}): Verifier {
   const reg = new StepRegistry<StepFn>();
-  const fns = { ...steps2a(), ...steps2b1(), ...steps2b2() };
+  const fns = { ...steps2a(), ...steps2b1(), ...steps2b2(), ...steps2c() };
   const ported = new Set<StepId>([...ownedBy('2a'), ...(real.steps ?? [])]);
   for (const id of registrableSteps()) reg.register(id, ported.has(id) ? fns[id]! : standIn(id, w, real.b1Flavour === true));
   void registerSteps2a;

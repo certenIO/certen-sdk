@@ -3,7 +3,7 @@
 // load is the refused headline of that framework state), runs the verifier and compares with `expected` as Go's RunSet / MatchExpected do.
 import { expect } from 'vitest';
 import {
-  earlyReport, loadMaterialised, matchExpected, prelude, resolveManifest,
+  earlyReport, embeddedPin, loadMaterialised, manifestHash, matchExpected, prelude, resolveManifest,
   type Expected, type Manifest, type Report, type Verifier,
 } from '../../src/proof-v2/identity/index.js';
 import { setFiles, vectorIds } from './fixtures.js';
@@ -18,7 +18,7 @@ export const preludeVerifier: Verifier = (ctx, container, m: Manifest): Report =
   throw new Error('contractidentity: new verifier: the steps of this vector are not registered');
 };
 
-export function runSet(name: string, verify: Verifier | undefined): VectorResult[] {
+export function runSet(name: string, verify: Verifier | undefined, onReport?: (id: string, report: Report) => void): VectorResult[] {
   const files = setFiles(name);
   const out: VectorResult[] = [];
   for (const id of vectorIds(files)) {
@@ -30,12 +30,13 @@ export function runSet(name: string, verify: Verifier | undefined): VectorResult
     try {
       const inputs = loadMaterialised(td.decode(files.get(`${id}.inputs.json`)), files);
       const r = resolveManifest(inputs);
-      if (r.refusal) report = earlyReport(inputs.ctx, { sha256: '', source: '' } as Manifest, r.refusal);
+      if (r.refusal) { const sha = manifestHash(inputs.manifestRaw); report = earlyReport(inputs.ctx, { sha256: sha, source: sha === embeddedPin() ? 'embedded' : 'override:' + sha } as Manifest, r.refusal); }
       else report = verify(inputs.ctx, inputs.container, r.manifest!);
     } catch (e) {
       out.push({ id, outcome: 'fail', detail: `verifier error: ${(e as Error).message}` });
       continue;
     }
+    onReport?.(id, report);
     const why = matchExpected(expected, report);
     out.push(why === undefined ? { id, outcome: 'pass', detail: '' } : { id, outcome: 'fail', detail: why });
   }

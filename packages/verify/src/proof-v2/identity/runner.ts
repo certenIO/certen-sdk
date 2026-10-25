@@ -6,11 +6,12 @@ import { toHex } from './canon.js';
 import { decode } from './codec.js';
 import { contextFromFile, validateContext, type LegContext } from './context.js';
 import { factGroups, fingerprint, newEnv, type Env, type StepFn, type StepOutput } from './framework.js';
+import { withExtension } from './extension.js';
 import { embeddedPin, loadManifest, loadOverride, type Manifest } from './manifest.js';
 import * as N from './names.js';
 import { NodeSet } from './reads.js';
 import { computeHeadline, isCoreJudgedPart, JudgedParts, sortOpen, type OpenEntry, type PartResult, type Report, type RuleNotJudged } from './report.js';
-import { malformed, must, StateError } from './states.js';
+import { defaultRegistry, defaultVocabulary, malformed, must, StateError, validateState } from './states.js';
 import { execOrder, spec, stepTable, type StepId, type StepRegistry } from './steps.js';
 
 export type { LegContext };
@@ -24,8 +25,20 @@ export const fixedRulesNotJudged = (): RuleNotJudged[] => [
 ];
 
 /** earlyReport: the refused headline of a framework state (nothing else was judged). */
+export const fixedResiduals = (): string[] => [N.ResidualRPKC, N.ResidualRINNER, N.ResidualRSETTLEPOINTER, N.ResidualRWRITERS];
+/** The S6 object of the report: printed only when the context carries a valid status triple (F8). */
+function s6Report(c: LegContext): Report['s6'] {
+  if (c.s6Status === N.S6S6Proven) return { status: c.s6Status };
+  if (c.s6Status === N.S6S6Silent && defaultVocabulary().check('s6_reason', c.s6Reason)) return { status: c.s6Status, reason: c.s6Reason };
+  if (c.s6Status === N.S6S6NotProven && c.s6State !== '') return { status: c.s6Status, state: c.s6State };
+  return undefined;
+}
 export function earlyReport(ctx: LegContext, m: Manifest, st: StateError): Report {
-  return { headline: computeHeadline({ framework: st }), parts: [], chain: ctx.chain, rulesNotJudged: fixedRulesNotJudged(), s7FinalizedStatus: '', manifestSha256: m.sha256, manifestSource: m.source };
+  const s6 = s6Report(ctx);
+  return {
+    headline: computeHeadline({ framework: st }), parts: [], chain: ctx.chain, rulesJudged: [], rulesNotJudged: fixedRulesNotJudged(), residuals: fixedResiduals(), s7FinalizedStatus: '',
+    ...(s6 ? { s6 } : {}), judgedAtLevel: '', stateRootAuthenticated: false, block: 0n, blockHash: new Uint8Array(32), manifestSha256: m.sha256, manifestSource: m.source,
+  };
 }
 
 /** Steps 0, 1 and 1b: the chain row, the strict decode, the context, the node set. Returns the env or the framework refusal. */
@@ -50,19 +63,44 @@ const specPos = (id: StepId): number => stepTable.findIndex((s) => s.id === id);
 interface Contribution { step: StepId; p: PartResult }
 interface RunResult { parts: PartResult[]; framework?: StateError; rulesJudged: string[]; executed: StepId[] }
 
-function validateOutput(id: StepId, out: StepOutput): void {
-  const bad = (m: string): never => { throw new Error(`contractidentity: step ${id} output: ${m}`); };
+function validateOutput(id: StepId, out: StepOutput, registry9: boolean): void {
+  const bad = (m: string): never => { throw new Error('contractidentity: step ' + id + ' output: ' + m); };
   if (out.supersede && id !== '24') bad('only step 24 may supersede the part table');
+  const v = defaultVocabulary();
+  const classOf = (code: string): string => defaultRegistry().rows.find((r) => r.code === code)?.class ?? '';
+  const checkState = (st: StateError, what: string): void => { try { validateState(st); } catch (e) { bad(what + ': ' + (e as Error).message); } };
   const seen = new Set<string>();
   for (const p of out.parts ?? []) {
-    if (!JudgedParts.includes(p.part)) bad(`unknown part "${p.part}"`);
-    if (p.status === 'open') bad(`part ${p.part} has the status open: the runner derives it from the Open entries`);
-    if (seen.has(p.part)) bad(`part ${p.part} reported twice`);
+    if (!JudgedParts.includes(p.part)) bad('unknown part "' + p.part + '"');
+    if (p.status === 'open') bad('part ' + p.part + ' has the status open: the runner derives it from the Open entries');
+    if (seen.has(p.part)) bad('part ' + p.part + ' reported twice');
     seen.add(p.part);
-    if ((p.status === 'refused' || p.status === 'unproven') && !p.state) bad(`${p.status} part ${p.part} has no state`);
-    if (p.status === 'verified' && p.state) bad(`verified part ${p.part} carries a state`);
+    if (p.status === 'verified' && p.state) bad('verified part ' + p.part + ' carries a state');
+    if (p.status === 'refused' || p.status === 'unproven') {
+      if (!p.state) bad(p.status + ' part ' + p.part + ' has no state');
+      checkState(p.state!, 'part ' + p.part);
+      const cls = classOf(p.state!.code);
+      if (p.status === 'refused' && cls !== 'JR' && cls !== 'FR') bad('refused part ' + p.part + ' carries a ' + cls + ' state ' + p.state!.code);
+      if (p.status === 'unproven' && cls !== 'U') bad('unproven part ' + p.part + ' carries a ' + cls + ' state ' + p.state!.code);
+    }
+    if (p.status === 'not_applicable' && p.part === N.JudgedSettlementPath && p.state) {
+      checkState(p.state, 'part ' + p.part);
+      if (p.state.code !== N.CodeNotApplicable) bad('settlement_path not_applicable needs the not_applicable state');
+    }
   }
-  for (const o of out.open ?? []) if (!JudgedParts.includes(o.part)) bad(`Open entry on unknown part "${o.part}"`);
+  if (out.supersede && (out.parts ?? []).length !== JudgedParts.length) bad('a superseding output carries all ' + JudgedParts.length + ' parts, got ' + (out.parts ?? []).length);
+  const openCodes: Record<string, string> = { [N.OpenAlert]: N.CodeAlert, [N.OpenDrift]: N.CodeDrift, [N.OpenNotChecked]: N.CodeNotChecked };
+  for (const o of [...(out.open ?? []), ...(out.parts ?? []).flatMap((p) => p.open ?? [])]) {
+    if (!JudgedParts.includes(o.part)) bad('Open entry on unknown part "' + o.part + '"');
+    if (!v.check('open_kind', o.kind)) bad('Open entry kind "' + o.kind + '" is outside the vocabulary');
+    checkState(o.state, 'Open entry of ' + o.part);
+    if (o.state.code !== openCodes[o.kind]) bad('Open entry kind ' + o.kind + ' carries ' + o.state.code);
+  }
+  for (const f of out.findings ?? []) if (!JudgedParts.includes(f.part) || !f.state) bad('finding on part "' + f.part + '" is malformed'); else checkState(f.state, 'finding on ' + f.part);
+  for (const r of out.rulesJudged ?? []) if (!v.check('rule_id', r) && !(id === '13' && v.check('settlement_rule_id', r))) bad('rule id "' + r + '" is outside the vocabulary of this step');
+  if (out.framework) checkState(out.framework, 'framework state');
+  if (out.halt && !out.haltReason) bad('Halt without HaltReason');
+  void registry9;
 }
 
 function mergeParts(contribs: Contribution[], opens: OpenEntry[], executed: Set<StepId>, registry9: boolean, allowUndecided: boolean): PartResult[] {
@@ -119,7 +157,8 @@ function runSteps(env: Env, reg: StepRegistry<StepFn>): RunResult {
     const out = reg.get(id)!(env);
     for (const g of factGroups) if (before.get(g.name) !== fingerprint(env.facts[g.name]) && g.owner !== sp.owner) throw new Error(`contractidentity: step ${id} (package ${sp.owner}) wrote the facts of group ${g.name}`);
     executed.add(id);
-    validateOutput(id, out);
+    validateOutput(id, out, env.ctx.registry9 !== undefined);
+    if (out.supersede) { contribs.length = 0; opens.length = 0; }
     for (const p of out.parts ?? []) contribs.push({ step: id, p });
     opens.push(...(out.open ?? []));
     for (const r of out.rulesJudged ?? []) judged.add(r);
@@ -139,9 +178,12 @@ function buildReport(env: Env, res: RunResult): Report {
   });
   const ran23 = res.executed.includes('23');
   if (ran23 && f.C.rulesNotJudged.length === 0) throw new Error('contractidentity: report: step 23 ran and wrote no rules_not_judged (every outcome prints them)');
+  const s6 = s6Report(env.ctx);
   return {
-    headline, parts: res.parts, chain: env.ctx.chain, rulesNotJudged: ran23 ? f.C.rulesNotJudged : fixedRulesNotJudged(), s7FinalizedStatus: f.C.level.s7FinalizedStatus,
-    ...(f.C.registry ? { registry: f.C.registry } : {}), manifestSha256: env.manifest.sha256, manifestSource: env.manifest.source,
+    headline, parts: res.parts, chain: env.ctx.chain, rulesJudged: res.rulesJudged, rulesNotJudged: ran23 ? f.C.rulesNotJudged : fixedRulesNotJudged(), residuals: fixedResiduals(),
+    s7FinalizedStatus: f.C.level.s7FinalizedStatus, ...(f.C.registry ? { registry: f.C.registry } : {}), ...(f.A.authority ? { authority: f.A.authority } : {}), ...(s6 ? { s6 } : {}),
+    judgedAtLevel: f.C.level.judgedAtLevel, stateRootAuthenticated: f.C.level.authenticated, block: env.container?.leg.number ?? 0n, blockHash: env.container?.leg.hash ?? new Uint8Array(32),
+    manifestSha256: env.manifest.sha256, manifestSource: env.manifest.source,
   };
 }
 
@@ -161,7 +203,7 @@ export function resolveManifest(inp: Inputs): { manifest?: Manifest; refusal?: S
   try {
     let m = loadManifest(inp.manifestRaw, inp.manifestPin);
     if (m.sha256 !== embeddedPin()) m = loadOverride(inp.manifestRaw);
-    if (inp.extensionRaw) throw new Error('contractidentity: a manifest extension is merged by the extension port (WithExtension), which this package does not carry yet');
+    if (inp.extensionRaw) m = withExtension(m, inp.extensionRaw);
     return { manifest: m };
   } catch (e) {
     if (e instanceof StateError) return { refusal: e };

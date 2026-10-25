@@ -2,6 +2,7 @@
 // vectors.go MatchExpected). `verified_core` is a headline of its own: nothing here prints it as, counts it as or compares it with `verified`.
 import { canonical, type CanonValue } from './canon.js';
 import * as N from './names.js';
+import type { AuthorityObject } from './framework.js';
 import { defaultVocabulary, type StateError } from './states.js';
 
 export type PartStatus = 'verified' | 'refused' | 'unproven' | 'not_applicable' | 'open';
@@ -76,9 +77,11 @@ export function computeHeadline(inp: HeadlineInput): Headline {
 }
 
 export interface RuleNotJudged { row: string; reason: string }
+export interface S6Report { status: string; reason?: string; state?: string }
 export interface Report {
-  headline: Headline; parts: PartResult[]; chain?: bigint; rulesNotJudged: RuleNotJudged[]; s7FinalizedStatus: string;
-  registry?: { [k: string]: CanonValue }; manifestSha256?: string; manifestSource?: string;
+  headline: Headline; parts: PartResult[]; chain?: bigint; rulesJudged: string[]; rulesNotJudged: RuleNotJudged[]; residuals: string[]; s7FinalizedStatus: string;
+  registry?: { [k: string]: CanonValue }; authority?: AuthorityObject; s6?: S6Report; judgedAtLevel: string; stateRootAuthenticated: boolean; block: bigint; blockHash: Uint8Array;
+  manifestSha256?: string; manifestSource?: string;
 }
 export const openEntries = (r: Report): OpenEntry[] => sortOpen(r.parts.flatMap((p) => p.open ?? []));
 

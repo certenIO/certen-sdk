@@ -57,3 +57,8 @@ export const hashOf = (s: string): Uint8Array => {
   if (!m) throw new Error(`${JSON.stringify(s)} is not a 32-byte hash`);
   return Uint8Array.from(m[1]!.match(/../g)!, (h) => parseInt(h, 16));
 };
+/** Lexicographic byte order (the order of addresses and hashes). */
+export const cmpAddr = (a: Uint8Array, b: Uint8Array): number => {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i]! - b[i]!;
+  return a.length - b.length;
+};

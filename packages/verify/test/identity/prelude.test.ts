@@ -16,11 +16,10 @@ describe('steps 0 and 1 on the published vector sets', () => {
       const results = runSet(name, preludeVerifier);
       expect(results.length).toBe(listed);
       const needsSteps = (r: { detail: string }): boolean => r.detail.startsWith('verifier error: contractidentity: new verifier: the steps');
-      const needsExtension = (r: { detail: string }): boolean => r.detail.startsWith('verifier error: contractidentity: a manifest extension is merged');
-      const wrong = results.filter((r) => r.outcome !== 'pass' && !needsSteps(r) && !needsExtension(r));
+      const wrong = results.filter((r) => r.outcome !== 'pass' && !needsSteps(r));
       expect(wrong, JSON.stringify(wrong.slice(0, 3))).toEqual([]);
       const decided = results.filter((r) => r.outcome === 'pass').length;
-      console.log(`${name}: ${listed} vectors executed, ${decided} decided by steps 0-1 and identical to Go, ${listed - decided} need steps 1c-24 or the extension merge`);
+      console.log(`${name}: ${listed} vectors executed, ${decided} decided by steps 0-1 and identical to Go, ${listed - decided} need steps 1c-24`);
     });
   }
 });

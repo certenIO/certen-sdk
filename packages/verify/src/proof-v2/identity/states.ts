@@ -147,6 +147,23 @@ export class Registry {
   }
 }
 
+/** Registry.Validate: the state must be a state of a registry row, with exactly that row's fields and vocabulary values. Throws an Error otherwise. */
+export function validateState(st: StateError): void {
+  const reg = defaultRegistry();
+  const rows = reg.rows.filter((r) => r.code === st.code);
+  if (rows.length === 0) throw new Error('contractidentity: unregistered code ' + st.code);
+  const reason = typeof st.fields['reason'] === 'string' ? (st.fields['reason'] as string) : '';
+  const part = typeof st.fields['part'] === 'string' ? (st.fields['part'] as string) : '';
+  let pick: Row | undefined;
+  for (const r of rows) {
+    if (rows.length === 1) pick = r;
+    else if ((r.reason_set ?? '') !== '') { if (reason !== '' && reg.vocab.check(r.reason_set!, reason)) pick = r; } else if (r.part !== '') { if (reason === r.reason && part === r.part) pick = r; } else if (r.reason !== '') { if (reason === r.reason) pick = r; } else if (r.row === '(wrapper)') { if (!('reason' in st.fields)) pick = r; }
+    if (pick) break;
+  }
+  if (!pick) throw new Error('contractidentity: state ' + st.code + '(reason "' + reason + '", part "' + part + '") matches no registry row');
+  reg.newState(st.code, pick.row, st.fields);
+}
+
 let defaults: { vocab: Vocabulary; registry: Registry } | undefined;
 export function defaultRegistry(): Registry {
   if (!defaults) {

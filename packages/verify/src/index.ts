@@ -25,3 +25,4 @@ export * from './sigtypes/index.js';
 export * from './s3/index.js';
 export * from './s6/index.js';
 export * as finality from './proof-v2/finality/index.js';
+export * as identity from './proof-v2/identity/index.js';

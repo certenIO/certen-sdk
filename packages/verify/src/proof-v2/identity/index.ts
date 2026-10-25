@@ -22,3 +22,6 @@ export * as bytes from './bytes.js';
 export * from './steps2b_all.js';
 export * as attest from './attest.js';
 export * as abiattest from './abiattest.js';
+export * from './extension.js';
+export * from './reportmap.js';
+export * from './surface.js';

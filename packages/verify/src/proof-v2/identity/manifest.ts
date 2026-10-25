@@ -27,7 +27,7 @@ export interface Generation { role: string; generation: string; kind: string; pi
 export interface Selector { role: string; contract: string; selector: string }
 export interface Topic { topic0: string }
 export interface OwnerRow { role: string; address: string; validFromBlock: bigint; validToBlock: bigint | null }
-export interface SetRootRow { root: string; validFromBlock: bigint; validToBlock: bigint | null; pkcCount: bigint | null; pkcList: string[] | null }
+export interface SetRootRow { root: string; validFromBlock: bigint; validToBlock: bigint | null; thresholdNumerator: bigint; thresholdDenominator: bigint; keysDigest: string | null; pkcCount: bigint | null; pkcList: string[] | null }
 export interface Threshold { numerator: bigint; denominator: bigint }
 export interface Policy { blsThreshold: Threshold; verifierThreshold: Threshold; pubkeyBindingEnforced: boolean; blsZkVerificationEnabled: boolean; minimumGovernanceLevel: number }
 
@@ -35,7 +35,7 @@ const need = <T,>(v: unknown, what: string): T => { if (v === undefined || v ===
 const thr = (v: unknown): Threshold => { const o = need<{ numerator: number; denominator: number }>(v, 'threshold'); return { numerator: BigInt(o.numerator), denominator: BigInt(o.denominator) }; };
 
 export class Manifest {
-  constructor(readonly doc: Record<string, unknown>, readonly sha256: string, readonly source: string) {}
+  constructor(readonly doc: Record<string, unknown>, readonly sha256: string, readonly source: string, readonly extensionSha256: string = '') {}
   chains(): ChainEntry[] { return (this.doc['chains'] as ChainEntry[]) ?? []; }
   /** The chain row, or THROWS manifest_unknown{chain}. */
   chain(chain: bigint): ChainEntry {
@@ -86,9 +86,10 @@ export class Manifest {
     return (this.doc['policy'] as { txScan?: Record<string, { coveredTypes: number[]; systemTypes: number[] }> } | undefined)?.txScan?.[chain.toString()];
   }
   setRootRows(chain: bigint): SetRootRow[] {
-    const rows = ((this.doc['policy'] as { setRootHistory?: { chainId: number; root: string; validFromBlock: number; validToBlock: number | null; pkcCount?: number | null; pkcList?: string[] | null }[] })?.setRootHistory) ?? [];
+    const rows = ((this.doc['policy'] as { setRootHistory?: { chainId: number; root: string; validFromBlock: number; validToBlock: number | null; thresholdNumerator?: number; thresholdDenominator?: number; keysDigest?: string | null; pkcCount?: number | null; pkcList?: string[] | null }[] })?.setRootHistory) ?? [];
     return rows.filter((r) => BigInt(r.chainId) === chain).map((r) => ({
       root: r.root, validFromBlock: BigInt(r.validFromBlock), validToBlock: r.validToBlock === null || r.validToBlock === undefined ? null : BigInt(r.validToBlock),
+      thresholdNumerator: BigInt(r.thresholdNumerator ?? 0), thresholdDenominator: BigInt(r.thresholdDenominator ?? 0), keysDigest: r.keysDigest ?? null,
       pkcCount: r.pkcCount === null || r.pkcCount === undefined ? null : BigInt(r.pkcCount), pkcList: r.pkcList ?? null,
     })).sort((x, y) => (x.validFromBlock < y.validFromBlock ? -1 : x.validFromBlock > y.validFromBlock ? 1 : 0));
   }
@@ -118,12 +119,53 @@ export class Manifest {
   }
 }
 
+const uintKey = (k: string): boolean => /^(0|[1-9][0-9]*)$/.test(k);
+const canonHex32 = (v: unknown): boolean => typeof v === 'string' && /^0x[0-9a-f]{64}$/.test(v);
+/** The structural checks of Manifest.decode that every loaded or merged manifest passes (manifest_corrupt otherwise). */
+export function validateDoc(doc: Record<string, unknown>): void {
+  const bad = (): never => { throw manifestCorrupt(); };
+  const obj = (v: unknown): Record<string, unknown> => (v !== null && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : bad());
+  if (!Array.isArray(doc['chains']) || !Array.isArray(doc['deployments']) || !Array.isArray(doc['accounts'])) bad();
+  const policy = obj(doc['policy']);
+  const eip = obj(doc['eip2935']);
+  obj(doc['builds']);
+  for (const k of Object.keys(eip)) if (!uintKey(k)) bad();
+  const txScan = policy['txScan'] === undefined ? {} : obj(policy['txScan']);
+  for (const k of Object.keys(txScan)) if (!uintKey(k)) bad();
+  const owners = policy['owner'] === undefined ? {} : obj(policy['owner']);
+  for (const [k, rows] of Object.entries(owners)) {
+    if (!uintKey(k) || !Array.isArray(rows)) bad();
+    for (const r of rows as { validFromBlock?: unknown; validToBlock?: unknown }[]) {
+      if (typeof r.validFromBlock !== 'number') bad();
+      if (typeof r.validToBlock === 'number' && r.validToBlock < (r.validFromBlock as number)) bad();
+    }
+  }
+  const setRoots = policy['setRootHistory'] === undefined ? [] : policy['setRootHistory'];
+  if (!Array.isArray(setRoots)) bad();
+  for (const r of setRoots as { validFromBlock?: unknown; validToBlock?: unknown }[]) {
+    if (typeof r.validFromBlock !== 'number') bad();
+    if (typeof r.validToBlock === 'number' && r.validToBlock < (r.validFromBlock as number)) bad();
+  }
+  const seen = new Set<string>();
+  for (const g of (doc['generations'] ?? []) as { role: string; maskedKeccak: unknown }[]) {
+    if (!canonHex32(g.maskedKeccak)) bad();
+    const k = 'generations:' + g.role + ',' + String(g.maskedKeccak);
+    if (seen.has(k)) bad();
+    seen.add(k);
+  }
+  for (const d of doc['deployments'] as { chainId: number; role: string }[]) {
+    const k = d.chainId + ',' + d.role;
+    if (seen.has(k)) bad();
+    seen.add(k);
+  }
+}
+
 function parse(raw: Uint8Array): Record<string, unknown> {
   const norm = new TextDecoder('utf-8', { fatal: true }).decode(raw).replace(/\r\n/g, '\n');
   let doc: unknown;
   try { doc = JSON.parse(norm); } catch { throw manifestCorrupt(); }
   if (doc === null || typeof doc !== 'object' || Array.isArray(doc) || (doc as Record<string, unknown>)['schema'] !== ManifestSchema) throw manifestCorrupt();
-  if (!Array.isArray((doc as Record<string, unknown>)['chains'])) throw manifestCorrupt();
+  validateDoc(doc as Record<string, unknown>);
   return doc as Record<string, unknown>;
 }
 
