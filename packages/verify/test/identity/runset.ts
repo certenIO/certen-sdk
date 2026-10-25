@@ -18,10 +18,20 @@ export const preludeVerifier: Verifier = (ctx, container, m: Manifest): Report =
   throw new Error('contractidentity: new verifier: the steps of this vector are not registered');
 };
 
-export function runSet(name: string, verify: Verifier | undefined, onReport?: (id: string, report: Report) => void): VectorResult[] {
-  const files = setFiles(name);
+export interface RunSetOptions {
+  /** The files of the set when the caller already holds them (the mutation gate runs a set many times). */
+  files?: ReadonlyMap<string, Uint8Array>;
+  /** Stop after the first vector that does not pass (the kill gate asks only whether some vector fails). */
+  stopAtFirstFail?: boolean;
+  /** Run only these vector ids of the set. */
+  ids?: readonly string[];
+}
+
+export function runSet(name: string, verify: Verifier | undefined, onReport?: (id: string, report: Report) => void, opts: RunSetOptions = {}): VectorResult[] {
+  const files = opts.files ?? setFiles(name);
   const out: VectorResult[] = [];
   for (const id of vectorIds(files)) {
+    if (opts.ids && !opts.ids.includes(id)) continue;
     if (!verify) { out.push({ id, outcome: 'not_run', detail: 'no verifier' }); continue; }
     const expected = JSON.parse(td.decode(files.get(`${id}.expected.json`))) as Expected;
     // a loader rule: <id>.expected.json is exactly the `expected` of <id>.json
@@ -34,11 +44,13 @@ export function runSet(name: string, verify: Verifier | undefined, onReport?: (i
       else report = verify(inputs.ctx, inputs.container, r.manifest!);
     } catch (e) {
       out.push({ id, outcome: 'fail', detail: `verifier error: ${(e as Error).message}` });
+      if (opts.stopAtFirstFail) return out;
       continue;
     }
     onReport?.(id, report);
     const why = matchExpected(expected, report);
     out.push(why === undefined ? { id, outcome: 'pass', detail: '' } : { id, outcome: 'fail', detail: why });
+    if (why !== undefined && opts.stopAtFirstFail) return out;
   }
   return out;
 }
