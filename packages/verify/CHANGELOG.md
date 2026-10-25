@@ -1,6 +1,12 @@
 # Changelog — @certen.io/proof-verify
 
 
+## Unreleased — WP-S8-7a part 1: the S8 contract-identity verifier foundation (2026-10-25)
+
+### Added
+- `src/proof-v2/identity`: the TypeScript twin of the validator's pkg/contractidentity, foundation only: canonical form (`canon`), the closed vocabularies and the named-state registry (`states`, `names` generated from names_gen.go), the strict container decoder (`codec`, errors identical to Go on every decode vector), step 0 (manifest pin, schema, chain row), the step table (`steps`), headline algebra and expectation matching (`report`), the vector inputs loader and the prelude (`runner`). Steps 1b-24 are NOT in this release: a verifier built from an incomplete registry is refused at construction. Not exported from the package root; nothing in the existing verdicts changes.
+- `test/fixtures/identity`: byte-identical copies of the validator's published S8 vector sets (ten sets, 291 vectors, 1207 files pinned by vectors/PINS.json), `.gitattributes` `* -text`; `test/identity` pins PINS.json and the index MANIFEST.json by sha256, re-hashes every file, and runs all 291 vectors through steps 0-1 (16 are decided by them and identical to Go).
+
 ## Unreleased — R12-OUTCOME-TX: the finality member may carry the settlement header (leg.headerRlp) (2026-10-25)
 
 ### Added
