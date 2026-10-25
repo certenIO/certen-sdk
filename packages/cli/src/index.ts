@@ -49,6 +49,7 @@ import { registerOAuthClientCommands } from './commands/oauth-clients.js';
 import { registerOrgCommands } from './commands/orgs.js';
 import { registerErrorsCommands } from './commands/errors-catalogue.js';
 import { formatRootHelp } from './help-root.js';
+import { IDENTITY_EXIT_CODES } from './commands/proof-verify-identity.js';
 
 const VERSION = readVersion();
 
@@ -200,7 +201,8 @@ export async function run(argv: string[]): Promise<ExitCode> {
     // A command that finished and printed its result may still have a verdict that is not success (`proof verify`, `keys verify`):
     // it says so with process.exitCode. The entrypoint used to assign EXIT.OK over it, so those commands exited 0 on a failed check.
     const requested = Number(process.exitCode ?? EXIT.OK);
-    return ((Object.values(EXIT) as number[]).includes(requested) ? requested : EXIT.FAILED) as ExitCode;
+    // `proof verify-identity` has its own exit codes (Freeze item 6: 10, 20, 30, 40 beside 0, 2 and 5); every other value is still a failure
+    return ((Object.values(EXIT) as number[]).includes(requested) || IDENTITY_EXIT_CODES.includes(requested) ? requested : EXIT.FAILED) as ExitCode;
   } catch (err) {
     return handleError(err);
   }

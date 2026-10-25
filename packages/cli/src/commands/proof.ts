@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { CertenClient, CertenError, fetchSharedProof, decodeSharedBundle, type ChainReceipt } from '@certen.io/sdk';
 import { registerProofVerify } from './proof-verify.js';
+import { registerProofVerifyIdentity } from './proof-verify-identity.js';
 import { getApiKey, getApiUrl } from '../config.js';
 import { printOutput, hint, human, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -394,4 +395,5 @@ export function registerProofCommands(program: Command): void {
     });
 
   registerProofVerify(proof);
+  registerProofVerifyIdentity(proof);
 }
