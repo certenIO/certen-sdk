@@ -175,7 +175,7 @@ export function readBytes(storageRoot: Uint8Array, nodes: NodeSet, slot: Uint8Ar
   try { return assemble(dh, words); } catch (e) { return dyn(e); }
 }
 
-const rlpUint = (n: bigint): Uint8Array => {
+export const rlpUint = (n: bigint): Uint8Array => {
   if (n === 0n) return Uint8Array.of(0x80);
   const b: number[] = [];
   for (let v = n; v > 0n; v >>= 8n) b.unshift(Number(v & 0xffn));

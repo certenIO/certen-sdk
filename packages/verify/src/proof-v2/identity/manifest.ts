@@ -27,6 +27,7 @@ export interface Generation { role: string; generation: string; kind: string; pi
 export interface Selector { role: string; contract: string; selector: string }
 export interface Topic { topic0: string }
 export interface OwnerRow { role: string; address: string; validFromBlock: bigint; validToBlock: bigint | null }
+export interface SetRootRow { root: string; validFromBlock: bigint; validToBlock: bigint | null; pkcCount: bigint | null; pkcList: string[] | null }
 export interface Threshold { numerator: bigint; denominator: bigint }
 export interface Policy { blsThreshold: Threshold; verifierThreshold: Threshold; pubkeyBindingEnforced: boolean; blsZkVerificationEnabled: boolean; minimumGovernanceLevel: number }
 
@@ -75,6 +76,35 @@ export class Manifest {
       if (ends.length === 0 || block <= ends.reduce((m, x) => (x < m ? x : m))) out.push(r);
     });
     return out;
+  }
+  selector(key: string): Selector | undefined { return (this.doc['selectors'] as Record<string, Selector> | undefined)?.[key]; }
+  eip2935(chain: bigint): { address: string; codeHash: string; window: bigint } | undefined {
+    const r = (this.doc['eip2935'] as Record<string, { address: string; codeHash: string; window: number }> | undefined)?.[chain.toString()];
+    return r ? { address: r.address, codeHash: r.codeHash, window: BigInt(r.window) } : undefined;
+  }
+  txScan(chain: bigint): { coveredTypes: number[]; systemTypes: number[] } | undefined {
+    return (this.doc['policy'] as { txScan?: Record<string, { coveredTypes: number[]; systemTypes: number[] }> } | undefined)?.txScan?.[chain.toString()];
+  }
+  setRootRows(chain: bigint): SetRootRow[] {
+    const rows = ((this.doc['policy'] as { setRootHistory?: { chainId: number; root: string; validFromBlock: number; validToBlock: number | null; pkcCount?: number | null; pkcList?: string[] | null }[] })?.setRootHistory) ?? [];
+    return rows.filter((r) => BigInt(r.chainId) === chain).map((r) => ({
+      root: r.root, validFromBlock: BigInt(r.validFromBlock), validToBlock: r.validToBlock === null || r.validToBlock === undefined ? null : BigInt(r.validToBlock),
+      pkcCount: r.pkcCount === null || r.pkcCount === undefined ? null : BigInt(r.pkcCount), pkcList: r.pkcList ?? null,
+    })).sort((x, y) => (x.validFromBlock < y.validFromBlock ? -1 : x.validFromBlock > y.validFromBlock ? 1 : 0));
+  }
+  setRootRowFor(chain: bigint, block: bigint, root: string): SetRootRow | undefined {
+    const rows = this.setRootRows(chain);
+    for (const [i, r] of rows.entries()) {
+      if (block < r.validFromBlock || r.root.toLowerCase() !== root.toLowerCase()) continue;
+      const next = rows.slice(i + 1).find((x) => x.validFromBlock > r.validFromBlock)?.validFromBlock ?? null;
+      const ends = [r.validToBlock, next === null ? null : next - 1n].filter((x): x is bigint => x !== null);
+      if (ends.length === 0 || block <= ends.reduce((m, x) => (x < m ? x : m))) return r;
+    }
+    return undefined;
+  }
+  authWriters(buildKey: string): { status: string; conditions: Record<string, string> } | undefined { return (this.doc['builds'] as Record<string, { authWriters?: { status: string; conditions: Record<string, string> } }> | undefined)?.[buildKey]?.authWriters ?? undefined; }
+  authAllowList(buildKey: string): { rows: { function: string; allowedWrites: string | string[]; deploymentOnly: boolean }[] } | undefined {
+    return (this.doc['builds'] as Record<string, { authWriterAllowList?: { rows: { function: string; allowedWrites: string | string[]; deploymentOnly: boolean }[] } }> | undefined)?.[buildKey]?.authWriterAllowList ?? undefined;
   }
   /** The checked creation bytecode of a build (CreationArtifactBytes): its length, keccak256 and sha256 must be the row's. */
   creationArtifactBytes(buildKey: string): Uint8Array {

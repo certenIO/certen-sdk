@@ -7,7 +7,7 @@ import type { BlockRef } from './codec.js';
 import * as N from './names.js';
 import { must, defaultVocabulary, type StateError } from './states.js';
 
-export interface Settlement { header: Uint8Array; blockHash: Uint8Array; hasTx: boolean; hasReceipt: boolean }
+export interface Settlement { header: Uint8Array; blockHash: Uint8Array; hasTx: boolean; hasReceipt: boolean; txLeafIndex: bigint }
 export interface Tx { to?: Uint8Array; data: Uint8Array }
 export interface Log { address: Uint8Array; topics: Uint8Array[]; data: Uint8Array }
 export interface ReceiptLeaf { type: number; postStateOrStatus: Uint8Array; cumulativeGasUsed: bigint; bloom: Uint8Array; logs: Log[] }
@@ -70,7 +70,7 @@ export function contextFromFile(f: Record<string, unknown>): LegContext {
   if (st) {
     c.settlement = {
       header: hexLoose(str(st['block_header_rlp'] ?? '0x', 'settlement.block_header_rlp')), blockHash: hexLoose(str(st['block_hash'] ?? '0x', 'settlement.block_hash')),
-      hasTx: obj(st['tx_inclusion_proof']) !== undefined, hasReceipt: obj(st['receipt_inclusion_proof']) !== undefined,
+      hasTx: obj(st['tx_inclusion_proof']) !== undefined, hasReceipt: obj(st['receipt_inclusion_proof']) !== undefined, txLeafIndex: BigInt(Number(obj(st['tx_inclusion_proof'])?.['leaf_index'] ?? 0)),
     };
   }
   if (typeof f['tx'] === 'string') c.tx = parseTx(unhex(f['tx']));

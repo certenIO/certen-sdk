@@ -13,18 +13,18 @@ export const AuthorityLevelMax = 4;
 export interface ABILimits { maxLegs: number; maxValidators: number }
 export const defaultABILimits = (): ABILimits => ({ maxLegs: 64, maxValidators: 64 });
 
-type T =
+export type T =
   | { k: 'u'; bits: number } | { k: 'a' } | { k: 'b' } | { k: 'w' } | { k: 'e'; max: number } | { k: 'y' } | { k: 's' }
   | { k: 'd'; elem: T; cap: number } | { k: 'f'; elem: T; n: number } | { k: 't'; fields: [string, T][] };
 interface V { w: Uint8Array; b: Uint8Array; items: V[] }
 const noV = (): V => ({ w: new Uint8Array(32), b: new Uint8Array(0), items: [] });
-const tU = (bits: number): T => ({ k: 'u', bits });
-const tAddr: T = { k: 'a' };
-const tB32: T = { k: 'w' };
-const tBytes: T = { k: 'y' };
-const tString: T = { k: 's' };
-const tArr = (elem: T, cap = 0): T => ({ k: 'd', elem, cap });
-const tTup = (...fields: [string, T][]): T => ({ k: 't', fields });
+export const tU = (bits: number): T => ({ k: 'u', bits });
+export const tAddr: T = { k: 'a' };
+export const tB32: T = { k: 'w' };
+export const tBytes: T = { k: 'y' };
+export const tString: T = { k: 's' };
+export const tArr = (elem: T, cap = 0): T => ({ k: 'd', elem, cap });
+export const tTup = (...fields: [string, T][]): T => ({ k: 't', fields });
 
 const dynamic = (t: T): boolean => (t.k === 'y' || t.k === 's' || t.k === 'd' ? true : t.k === 'f' ? dynamic(t.elem) : t.k === 't' ? t.fields.some(([, f]) => dynamic(f)) : false);
 const headSize = (t: T): number => (dynamic(t) ? 32 : t.k === 'f' ? t.n * headSize(t.elem) : t.k === 't' ? t.fields.reduce((n, [, f]) => n + headSize(f), 0) : 32);
@@ -113,7 +113,7 @@ class Dec {
   }
 }
 
-function decodeArgs(args: Uint8Array, fields: [string, T][]): V[] {
+export function decodeArgs(args: Uint8Array, fields: [string, T][]): V[] {
   const d = new Dec(args);
   const r = d.seq(fields.map(([, t]) => t), fields.map(([n]) => n), 0);
   if (r.end !== args.length) throw new ABIError('trailing', '', r.end, 0n, 0n, `${args.length - r.end} bytes after the encoding`);

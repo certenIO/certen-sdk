@@ -43,7 +43,7 @@ export function statedU(st: Stated, part: string): StateError {
 export class Rd {
   bad: StateError | undefined;
   readonly root: Uint8Array;
-  constructor(readonly env: Env, readonly name: string = N.AtSettle) { this.root = env.facts.A.stateRootN; }
+  constructor(readonly env: Env, readonly name: string = N.AtSettle, root?: Uint8Array) { this.root = root ?? env.facts.A.stateRootN; }
   ok(): boolean { return this.bad === undefined; }
   private fail(e: unknown, a: Uint8Array): void {
     if (!(e instanceof ReadError)) throw e;

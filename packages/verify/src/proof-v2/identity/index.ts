@@ -19,3 +19,6 @@ export * as reads from './reads.js';
 export * as slots from './slots.js';
 export * as abidec from './abidec.js';
 export * as bytes from './bytes.js';
+export * from './steps2b_all.js';
+export * as attest from './attest.js';
+export * as abiattest from './abiattest.js';

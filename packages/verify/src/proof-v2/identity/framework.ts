@@ -3,10 +3,11 @@
 import { readHeader, type HeaderFields } from '../finality/rlpheader.js';
 import type { Container, Limits, Stated } from './codec.js';
 import { defaultIdentityLimits, TagStated } from './codec.js';
-import type { LegContext } from './context.js';
+import type { LegContext, ReceiptLeaf, Tx } from './context.js';
 import type { ChainEntry, Manifest } from './manifest.js';
 import type { Finding, OpenEntry, PartResult, RuleNotJudged } from './report.js';
 import type { NodeSet, AccountState } from './reads.js';
+const noStation = (): AuthStation => ({ stateRoot: new Uint8Array(32), words: {}, accounts: {}, verifier: new Uint8Array(20), verifierPublished: false, groth16: new Uint8Array(20) });
 import { zeroAccount } from './reads.js';
 import { must, type StateError } from './states.js';
 import type { CanonValue } from './canon.js';
@@ -29,9 +30,20 @@ export interface FactsA {
   anchorRefusal?: StateError; record?: AnchorRecord; verifier: Uint8Array; verifierState: AccountState; verifierCode: Uint8Array; groth16: Uint8Array;
   groth16State: AccountState; groth16Code: Uint8Array; groth16Build: string; verifierFlags: Uint8Array; settleAuth?: Words; authority?: AuthorityObject;
 }
-export interface AuthStation { stateRoot: Uint8Array; words: Words }
-export interface FactsB1 { attestCaptured: boolean; stateRootPre: Uint8Array; stateRootPost: Uint8Array; pkc: Uint8Array; headerLinked: boolean }
-export interface FactsB2 { pre: AuthStation; post: AuthStation }
+export interface ValidatorRow { address: Uint8Array; registered: boolean; power: Uint8Array; blsKey?: Uint8Array }
+export interface AuthStation { stateRoot: Uint8Array; words: Words; accounts: Record<string, AccountState>; verifier: Uint8Array; verifierPublished: boolean; groth16: Uint8Array }
+export interface AuthDiff { row: string; pre: Uint8Array; post: Uint8Array }
+export interface OwnerCheck { address: Uint8Array; pre: AccountState; post: AccountState }
+export interface IBResult { evaluated: boolean; verified: boolean; state?: StateError; owners: OwnerCheck[]; types: number[] }
+export interface AttestCall {
+  anchorId: Uint8Array; operationCommitment: Uint8Array; outerSigned?: bigint; outerTotal?: bigint; validatorAddresses: Uint8Array[]; votingPowers: bigint[];
+  authorityLevel: number; blobInnerSigned?: bigint; blobInnerTotal?: bigint;
+}
+export interface FactsB1 {
+  attestCaptured: boolean; headerV?: HeaderFields; headerVParent?: HeaderFields; stateRootPre: Uint8Array; stateRootPost: Uint8Array; hopChain: { link: number; walked: number };
+  headerLinked: boolean; attestTx?: Tx; attestReceipt?: ReceiptLeaf; txIndex: number; call: AttestCall; messageHash: Uint8Array; pkc: Uint8Array; messageRecomputed: Uint8Array;
+}
+export interface FactsB2 { pre: AuthStation; post: AuthStation; changed: AuthDiff[]; recordCreatedInBlock: boolean; governanceExecutedFlip: boolean; validators: ValidatorRow[]; codeFailure?: StateError; ib: IBResult }
 export interface LevelBinding { authenticated: boolean; judgedAtLevel: string; s7FinalizedStatus: string }
 export interface FactsC { registry?: { [k: string]: CanonValue }; registryLink: string; level: LevelBinding; rulesNotJudged: RuleNotJudged[] }
 export interface Facts { A: FactsA; B1: FactsB1; B2: FactsB2; C: FactsC }
@@ -45,8 +57,11 @@ export function newFacts(): Facts {
       verifier: zeros(20), verifierState: zeroAccount(), verifierCode: new Uint8Array(0), groth16: zeros(20), groth16State: zeroAccount(), groth16Code: new Uint8Array(0), groth16Build: '',
       verifierFlags: zeros(2),
     },
-    B1: { attestCaptured: false, stateRootPre: zeros(32), stateRootPost: zeros(32), pkc: zeros(32), headerLinked: false },
-    B2: { pre: { stateRoot: zeros(32), words: {} }, post: { stateRoot: zeros(32), words: {} } },
+    B1: {
+      attestCaptured: false, stateRootPre: zeros(32), stateRootPost: zeros(32), hopChain: { link: 0, walked: 0 }, headerLinked: false, txIndex: 0,
+      call: { anchorId: zeros(32), operationCommitment: zeros(32), validatorAddresses: [], votingPowers: [], authorityLevel: 0 }, messageHash: zeros(32), pkc: zeros(32), messageRecomputed: zeros(32),
+    },
+    B2: { pre: noStation(), post: noStation(), changed: [], recordCreatedInBlock: false, governanceExecutedFlip: false, validators: [], ib: { evaluated: false, verified: false, owners: [], types: [] } },
     C: { registryLink: '', level: { authenticated: false, judgedAtLevel: '', s7FinalizedStatus: '' }, rulesNotJudged: [] },
   };
 }
