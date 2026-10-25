@@ -745,6 +745,17 @@ export interface S6ReplayGuardCheck {
   established: string[];
   /** The named state the evidence carried, when it carried one. */
   named?: S6ReplayNamedState;
+  /**
+   * The link of a proven slot (ReplayGuardCheck of pkg/ethproof): the chain, the contract and its pinned generation, the replay slot (the LeafConsumed key and the slot), the settlement block
+   * the receipt was proven into, the block the slot is proven at and the code hash the contract holds there. Present exactly when state is proven; a named state carries none of them.
+   */
+  chainId?: number;
+  contract?: Uint8Array;
+  generation?: string;
+  slot?: S6ReplaySlot;
+  settlementBlock?: S6BlockRef;
+  provenAt?: S6BlockRef;
+  codeHash?: Uint8Array;
 }
 
 /** keccak256(abi.encode(bytes32 key, uint256 base)). */
@@ -933,7 +944,19 @@ function verifyProof(p: S6ReplayGuardProof, s: S6DecodedSettlement): S6ReplayGua
   } else {
     unproven(R.beforeUndisclosed, 'the parent-state half is neither proven nor disclosed as unavailable');
   }
-  return { state: S6_PROVEN, reason: '', beforeVerified, established };
+  return {
+    state: S6_PROVEN,
+    reason: '',
+    beforeVerified,
+    established,
+    chainId: p.chainId,
+    contract: p.contract,
+    generation: p.generation,
+    slot: p.slot,
+    settlementBlock: { number: Number(nNumber), hash: header.hash },
+    provenAt: p.provenAt,
+    codeHash: afterRes.account.codeHash,
+  };
 }
 
 /** ReplayGuardEvidence.VerifyAgainst: a proof is verified; a named state is held to this transaction and block and
