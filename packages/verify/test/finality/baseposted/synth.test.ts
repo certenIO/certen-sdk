@@ -299,9 +299,9 @@ describe('batch lookup and binding', () => {
     s.body.deposits = [s.deposit, Uint8Array.of(0x7e, 0x01)];
     expectState(s, 'batch_binding_mismatch', { field: 'transactions_root' });
   });
-  it('the sequencing window: frames before the epoch or after epoch + window are refused, the bounds are inclusive', () => {
+  it('the sequencing window: judged on the completing frame alone, a frame before the epoch is kept (streamed channel), the upper bound is inclusive', () => {
     expect(ok({ nFrames: 1, frameBlocks: [990n], epochNum: 990n }).fields.l1_blocks).toEqual([990n]);
-    expectState(makeSynth({ frameBlocks: [989n], epochNum: 990n }), 'batch_outside_sequencing_window');
+    expect(ok({ frameBlocks: [989n], epochNum: 990n }).fields.l1_blocks).toEqual([989n]);
     expect(ok({ frameBlocks: [4590n], epochNum: 990n }).fields.l1_blocks).toEqual([4590n]);
     expectState(makeSynth({ frameBlocks: [4591n], epochNum: 990n }), 'batch_outside_sequencing_window');
   });

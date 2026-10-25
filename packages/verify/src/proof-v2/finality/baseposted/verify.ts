@@ -388,7 +388,10 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
   if (info === undefined) throw st(CodeBatchBindingMismatch, { field: 'l1_info_deposit' });
   if (bt.epochNum !== info.num) throw st(CodeBatchBindingMismatch, { field: 'epoch_num' });
   if (!prefixEq(bt.epochHash, bt.epochLen, info.hash)) throw st(CodeBatchBindingMismatch, { field: 'epoch_hash' });
-  for (const l of frameL1) if (l < bt.epochNum || l - bt.epochNum > bp.seqWindowSize) throw st(CodeBatchOutsideWindow);
+  // OP derivation drops a batch when epoch_num + sequence_window_size < inclusion_block_number, the inclusion block being the one whose frame COMPLETES
+  // the channel; it has no lower bound (op-batcher streams the ready frames of an open channel). frameL1 is non-decreasing, so its last element is that block.
+  const last = frameL1[frameL1.length - 1]!;
+  if (last > bt.epochNum && last - bt.epochNum > bp.seqWindowSize) throw st(CodeBatchOutsideWindow);
   const all = [...body.deposits, ...bt.txs];
   if (!sameBytes(trieRoot(all), l2.transactionRoot)) throw st(CodeBatchBindingMismatch, { field: 'transactions_root' });
   return {
