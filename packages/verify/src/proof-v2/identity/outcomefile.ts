@@ -10,6 +10,7 @@ import { IncludedReason, includedUnavailable } from '../finality/state.js';
 import type { InclusionProof, Settlement } from '../finality/evidence.js';
 import { readHeader } from '../finality/rlpheader.js';
 import { toHex } from './canon.js';
+import { CiMemberError, memberText } from './cliflag.js';
 import type { BatchFacts, Registry9 } from './context.js';
 
 /** The file is not an outcome evidence this verifier can read (the reason, for a message). */
@@ -33,7 +34,7 @@ export interface OutcomeEvidence {
   chainId: bigint;
   anchor: { batchRoot: string; batchOperationId: string; accumulateSetRoot: string; incarnation: string; certenSetRoot: string };
   quorum: { thresholdNumerator: bigint; thresholdDenominator: bigint; validators: OutcomeQuorumValidator[] };
-  member: { leaf: { status: number; tx: string; blockNumber: bigint; blockHash: string }; adiUrl: string; transaction?: OutcomeInclusion; replayGuard?: unknown };
+  member: { leaf: { status: number; tx: string; blockNumber: bigint; blockHash: string }; adiUrl: string; transaction?: OutcomeInclusion; replayGuardText?: string };
 }
 
 type Obj = Record<string, unknown>;
@@ -63,9 +64,10 @@ export function hash32(s: string, what: string): Uint8Array {
 
 /** Reads the members the S8 phase needs out of an outcome evidence file's text. */
 export function readOutcomeEvidence(input: string | Uint8Array): OutcomeEvidence {
+  const text = typeof input === 'string' ? input : new TextDecoder().decode(input);
   let doc: unknown;
   try {
-    doc = JSON.parse(typeof input === 'string' ? input : new TextDecoder().decode(input));
+    doc = JSON.parse(text);
   } catch (e) {
     return bad(`the outcome evidence does not decode: ${(e as Error).message}`);
   }
@@ -102,7 +104,15 @@ export function readOutcomeEvidence(input: string | Uint8Array): OutcomeEvidence
       receiptProof: hexList(field(o, 'receiptProof', 'transaction'), 'transaction.receiptProof'),
     };
   }
-  if (m['replayGuard'] !== undefined && m['replayGuard'] !== null) out.member.replayGuard = m['replayGuard'];
+  // the member's S6 evidence is kept as the text the file has it in (token for token), for the strict S6 decoder: a duplicate key on the way to it is refused
+  let rg: string | undefined;
+  try {
+    rg = memberText(text, 'member', 'replayGuard');
+  } catch (e) {
+    if (e instanceof CiMemberError) return bad(`the outcome evidence member.replayGuard: ${e.message}`);
+    throw e;
+  }
+  if (rg !== undefined) out.member.replayGuardText = rg;
   return out;
 }
 

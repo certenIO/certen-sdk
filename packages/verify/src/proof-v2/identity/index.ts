@@ -27,3 +27,4 @@ export * from './reportmap.js';
 export * from './surface.js';
 export * from './cliflag.js';
 export * from './outcomefile.js';
+export * from './legcontext.js';

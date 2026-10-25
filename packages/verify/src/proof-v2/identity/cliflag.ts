@@ -12,6 +12,7 @@
 // The text and the exit codes are the Go tool's byte for byte; the S7 phase runs first and combineExit joins the two (an S7 FAILED wins, then a non-zero S8
 // code, then S7's). Nothing here judges a container: that is the verifier's, and what cannot be established is a named state in its report.
 import { sha256 } from '@noble/hashes/sha2';
+import { foldEqual } from '../../s3/fold.js';
 import { legBinding } from '../finality/addendum.js';
 import { readHeader } from '../finality/rlpheader.js';
 import { canonical, toHex, type CanonValue } from './canon.js';
@@ -134,7 +135,12 @@ export function digestOf(chain: bigint, number: bigint, hash: Uint8Array, contai
 
 // ---- the strict reader ----
 
-type Node = { k: 'object'; members: [string, Node][] } | { k: 'string'; v: string } | { k: 'number'; raw: string } | { k: 'other' };
+type Node =
+  | { k: 'object'; members: [string, Node, string][] }
+  | { k: 'array'; items: Node[] }
+  | { k: 'string'; v: string; raw: string }
+  | { k: 'number'; raw: string }
+  | { k: 'lit'; raw: string };
 
 const WS = new Set([' ', '\t', '\n', '\r']);
 const NUM = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y;
@@ -152,16 +158,18 @@ function parseNode(text: string): Node {
     const c = text[i];
     if (c === '{') {
       i++;
-      const members: [string, Node][] = [];
+      const members: [string, Node, string][] = [];
       skip();
       if (text[i] === '}') return (i++, { k: 'object', members });
       for (;;) {
         skip();
         if (text[i] !== '"') throw new CiMemberError('not a JSON object');
+        const keyStart = i;
         const key = str();
+        const keyRaw = text.slice(keyStart, i);
         skip();
         if (text[i++] !== ':') throw new CiMemberError('expected ":" after an object key');
-        members.push([key, value(depth + 1)]);
+        members.push([key, value(depth + 1), keyRaw]);
         skip();
         const d = text[i++];
         if (d === '}') return { k: 'object', members };
@@ -171,17 +179,22 @@ function parseNode(text: string): Node {
     if (c === '[') {
       i++;
       skip();
-      if (text[i] === ']') return (i++, { k: 'other' });
+      const items: Node[] = [];
+      if (text[i] === ']') return (i++, { k: 'array', items });
       for (;;) {
-        value(depth + 1);
+        items.push(value(depth + 1));
         skip();
         const d = text[i++];
-        if (d === ']') return { k: 'other' };
+        if (d === ']') return { k: 'array', items };
         if (d !== ',') throw new CiMemberError('expected "," or "]" in an array');
       }
     }
-    if (c === '"') return { k: 'string', v: str() };
-    for (const lit of ['true', 'false', 'null']) if (text.startsWith(lit, i)) return (i += lit.length, { k: 'other' });
+    if (c === '"') {
+      const at = i;
+      const v = str();
+      return { k: 'string', v, raw: text.slice(at, i) };
+    }
+    for (const lit of ['true', 'false', 'null']) if (text.startsWith(lit, i)) return (i += lit.length, { k: 'lit', raw: lit });
     NUM.lastIndex = i;
     const m = NUM.exec(text);
     if (!m) throw new CiMemberError(c === undefined ? 'unexpected end of JSON input' : `invalid character ${JSON.stringify(c)} looking for the beginning of a value`);
@@ -221,18 +234,34 @@ function onlyKeys(m: Map<string, Node>, ...allowed: string[]): void {
   for (const k of m.keys()) if (!allowed.includes(k)) throw new CiMemberError(`unknown key ${JSON.stringify(k)}`);
 }
 
-/** The raw text of a member, re-serialised for strictObject: a nested object is re-read from its node, so a duplicate key inside it is still seen. */
+/** The text of a node, token for token: keys, strings and numbers are written as they were read (escapes included) and members keep their order and their duplicates, so a strict reader still sees them. */
 function textOf(n: Node): string {
   switch (n.k) {
     case 'object':
-      return `{${n.members.map(([k, v]) => `${JSON.stringify(k)}:${textOf(v)}`).join(',')}}`;
-    case 'string':
-      return JSON.stringify(n.v);
-    case 'number':
-      return n.raw;
+      return `{${n.members.map(([, v, kr]) => `${kr}:${textOf(v)}`).join(',')}}`;
+    case 'array':
+      return `[${n.items.map(textOf).join(',')}]`;
     default:
-      return 'null';
+      return n.raw;
   }
+}
+
+/**
+ * The text of the LAST top-level member of a JSON object whose key is `name` (matched exactly, else case-insensitively, as encoding/json matches a struct field) and, with `path`, of the
+ * member below it: a duplicate key on the way down is refused. undefined: absent or null. Throws CiMemberError when the text is not one JSON object.
+ */
+export function memberText(input: string, name: string, ...path: string[]): string | undefined {
+  const root = parseNode(input);
+  if (root.k !== 'object') throw new CiMemberError('not a JSON object');
+  let found: Node | undefined;
+  for (const [k, v] of root.members) if (k === name || foldEqual(name, k)) found = v;
+  for (const key of path) {
+    if (found === undefined || found.k !== 'object') return undefined;
+    const hits = found.members.filter(([k]) => k === key);
+    if (hits.length > 1) throw new CiMemberError(`duplicate key ${JSON.stringify(key)}`);
+    found = hits[0]?.[1];
+  }
+  return found === undefined || (found.k === 'lit' && found.raw === 'null') ? undefined : textOf(found);
 }
 
 const U64_MAX = (1n << 64n) - 1n;
