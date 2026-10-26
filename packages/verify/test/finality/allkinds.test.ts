@@ -25,7 +25,7 @@ const finalityDir = join(here, '..', '..', 'src', 'proof-v2', 'finality');
 
 /** Validator origin/main (e9aefbf5, with Train 3 and PR 167) pkg/finality/testdata/finality/states.json, and PinsSHA256 of pkg/finality/pins/finality-pins.json (unchanged since cbb6373). */
 const VALIDATOR_STATES_SHA256 = 'aec95426bbfaae838fcf395f2645f4140ff70a2359f30ae91983d9422e29695e';
-const VALIDATOR_PINS_SHA256 = 'fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440';
+const VALIDATOR_PINS_SHA256 = '9f4fc10feca95909272c9f6eaef1a38d7a06110cfead0a88cb79e8ffd7a3d1cf';
 /** The registry finality_chain2's manifest pins; it moved to finality_chain2_registry/ when the current registry replaced it. */
 const CHAIN2_STATES_SHA256 = 'd0e2d25048ba1dfe40e910538e6870675b2fbe3a4b0b47cdb9b1e0ffb084b73a';
 

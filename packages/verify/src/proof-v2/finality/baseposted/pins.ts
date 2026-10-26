@@ -5,7 +5,8 @@
  * ignored. The batcher is never a pin: it is proven from SystemConfig.batcherHash at each frame block.
  */
 import { JsonError } from '../../../s3/gojson.js';
-import { Raw, decodeVal, type FieldDef, type GoVal, type Sch } from '../../../s3/jsonx.js';
+import { foldEqual } from '../../../s3/fold.js';
+import { JNum, JObj, Raw, decodeVal, type FieldDef, type GoVal, type JVal, type Sch } from '../../../s3/jsonx.js';
 import { kzgSetupPin, type Pins } from '../pins.js';
 import { Code, PinsReason, newState, pinsCorrupt, type FinalityStateError } from '../state.js';
 import { ChainBaseSepolia } from '../table.js';
@@ -16,6 +17,21 @@ export const KIND_NAME = 'base-sepolia/l1_posted/v1';
 export const CHAIN = ChainBaseSepolia;
 /** The impl_pins role of the SystemConfig implementation (V2_SPEC_S7 section 4.2). */
 export const ROLE_SYSTEM_CONFIG_IMPL = 'syscfg_impl';
+
+/**
+ * The post_denim capability row (V2_SPEC_S7 5.4 O6; the twin of baseposted/pins.go PostDenim): what the verifier assumes of Base after the Denim fork -
+ * 200 ms blocks, five per timestamp second, singular batches only. batchTypes is judged (the selected batch's type must be in it) and
+ * blockIntervalMs * blocksPerSecond must be one second. The BaseTime pair is shape-validated and carried; l1_posted does not judge it (TECH_DEBT O6).
+ */
+export interface PostDenim {
+  batchTypes: number[];
+  blockIntervalMs: bigint;
+  blocksPerSecond: bigint;
+  /** 20 bytes */
+  baseTimePredeploy: Uint8Array;
+  /** 4 bytes */
+  baseTimeSelector: Uint8Array;
+}
 
 export interface BasePins {
   chainId: bigint;
@@ -47,6 +63,8 @@ export interface BasePins {
   kzgSetupKey: string;
   /** impl_pins rows with role syscfg_impl, as lower-case 0x hex of the 32-byte code hash */
   systemConfigImplHashes: Set<string>;
+  /** the post_denim row, or null when the pins file has none: every block with timestamp >= denimTime is then batch_format_unsupported{post_denim} */
+  postDenim: PostDenim | null;
 }
 
 const f = (name: string, json: string, sch: Sch): FieldDef => ({ name, json, sch });
@@ -69,8 +87,66 @@ const baseSch: Sch = {
     f('L2BlockTime', 'l2_block_time', 'u64'),
     f('KZGSetupSHA256', 'kzg_setup_sha256', 'string'),
     f('ImplPins', 'impl_pins', { map: 'raw' }),
+    f('PostDenim', 'post_denim', 'raw'),
   ],
 };
+
+const postDenimSch: Sch = {
+  struct: [
+    f('BatchTypes', 'batch_types', 'raw'),
+    f('BlockIntervalMS', 'block_interval_ms', 'u64'),
+    f('BlocksPerSecond', 'blocks_per_second', 'u64'),
+    f('BaseTimePredeploy', 'base_time_predeploy', 'string'),
+    f('BaseTimeSelector', 'base_time_selector', 'string'),
+  ],
+};
+
+/**
+ * Go's json decode of a []uint8 (rawPostDenim.BatchTypes): null is the nil slice, a string is standard base64 (padding required, CR and LF
+ * ignored), an array decodes element by element into uint8 (a null element is the zero value, a number must be a plain integer 0..255).
+ * undefined: Go reports an error.
+ */
+function uint8Slice(v: JVal | undefined): number[] | undefined {
+  if (v === undefined || v === null) return [];
+  if (typeof v === 'string') {
+    const t = v.replace(/[\r\n]/g, '');
+    if (t.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(t)) return undefined;
+    return Array.from(atob(t), (c) => c.charCodeAt(0));
+  }
+  if (!Array.isArray(v)) return undefined;
+  const out: number[] = [];
+  for (const e of v) {
+    if (e === null) out.push(0);
+    else if (e instanceof JNum && /^(0|[1-9][0-9]*)$/.test(e.lit) && Number(e.lit) <= 255) out.push(Number(e.lit));
+    else return undefined;
+  }
+  return out;
+}
+
+/** The capability row, or undefined for any malformed row (the caller names the key). Unknown keys are refused (Go DisallowUnknownFields). */
+function parsePostDenim(raw: Raw): PostDenim | undefined {
+  const v = raw.v;
+  if (!(v instanceof JObj)) return undefined;
+  const def = (postDenimSch as { struct: FieldDef[] }).struct;
+  for (const [k] of v.pairs) if (!def.some((x) => x.json === k || foldEqual(x.json, k))) return undefined;
+  let r: { [k: string]: GoVal };
+  try {
+    r = decodeVal(postDenimSch, v, 'post_denim') as { [k: string]: GoVal };
+  } catch (e) {
+    if (e instanceof JsonError) return undefined;
+    throw e;
+  }
+  const batchTypes = uint8Slice((r.BatchTypes as Raw).v);
+  if (batchTypes === undefined || batchTypes.length !== 1 || batchTypes[0] !== 0) return undefined;
+  const interval = r.BlockIntervalMS as bigint;
+  const perSecond = r.BlocksPerSecond as bigint;
+  // Go multiplies two uint64 values: the product wraps modulo 2^64, and this twin reproduces that so the two verifiers judge one pins file alike (RB12-F23)
+  if (interval === 0n || perSecond === 0n || interval > 1000n || BigInt.asUintN(64, interval * perSecond) !== 1000n) return undefined;
+  const pre = unhex(r.BaseTimePredeploy as string, 20);
+  const sel = unhex(r.BaseTimeSelector as string, 4);
+  if (pre === undefined || sel === undefined) return undefined;
+  return { batchTypes, blockIntervalMs: interval, blocksPerSecond: perSecond, baseTimePredeploy: pre, baseTimeSelector: sel };
+}
 
 const roleSch: Sch = { struct: [f('Role', 'role', 'string')] };
 
@@ -141,6 +217,13 @@ export function parseBasePins(p: Pins | null | undefined): BasePins {
     }
   }
   if (hashes.size === 0) throw bad('impl_pins');
+  let postDenim: PostDenim | null = null;
+  const pdRaw = r.PostDenim as Raw;
+  if (pdRaw.v !== undefined) {
+    const pd = parsePostDenim(pdRaw);
+    if (pd === undefined) throw bad('post_denim');
+    postDenim = pd;
+  }
   return {
     chainId: big('ChainID'),
     l1ChainId: big('L1ChainID'),
@@ -159,6 +242,7 @@ export function parseBasePins(p: Pins | null | undefined): BasePins {
     kzgSetupSha256: kzg.value,
     kzgSetupKey: kzg.key,
     systemConfigImplHashes: hashes,
+    postDenim,
   };
 }
 

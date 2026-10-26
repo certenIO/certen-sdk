@@ -144,6 +144,43 @@ function systemConfigAt(db: NodeDb, bp: BasePins, stateRoot: Uint8Array, l1: big
 }
 
 /** The prefix compare of a (possibly truncated) committed hash: n leading bytes are committed, 0 means none. */
+/** The O6 gate: a block with timestamp >= denim_time is batch_format_unsupported{post_denim} unless the pins carry the post_denim capability row. */
+export function denimGate(bp: Pick<BasePins, 'denimTime' | 'postDenim'>, ts: bigint): void {
+  if (ts >= bp.denimTime && bp.postDenim === null) throw st(CodeBatchFormat, { type: 'post_denim' });
+}
+
+/**
+ * The batch of the channel that produced the block l2 (derivation takes, for a block, the first valid batch of its position). Before denim_time a
+ * timestamp names one block (2 s blocks), so the first batch with the block's timestamp is it and the parent-hash binding is O5's. From denim_time
+ * five blocks share a timestamp second (200 ms blocks), so the timestamp alone names five batches and the block is the one whose parent hash the batch
+ * commits in full: a batch of an allowed type (singular) with the block's timestamp and a 32-byte parent equal to the block's. A span batch with the
+ * block's timestamp would be dropped by derivation (op-node SpanBatchPostDenim), so it is never taken: with no match it is
+ * batch_format_unsupported{type: span_post_denim}; a singular batch of the second with another parent is batch_binding_mismatch{parent_hash}; none
+ * at all is batch_not_found (the twin of baseposted/verify.go selectBatch).
+ */
+export function selectBatch(bp: Pick<BasePins, 'denimTime' | 'postDenim'>, batches: Batch[], l2: Pick<HeaderFields, 'timestamp' | 'parentHash'>): Batch {
+  if (l2.timestamp < bp.denimTime) {
+    const first = batches.find((x) => x.timestamp === l2.timestamp);
+    if (first === undefined) throw st(CodeBatchNotFound, { timestamp: l2.timestamp, n_batches: batches.length });
+    return first;
+  }
+  denimGate(bp, l2.timestamp);
+  let sameSecond = false;
+  let span = false;
+  for (const b of batches) {
+    if (b.timestamp !== l2.timestamp) continue;
+    if (!(bp.postDenim?.batchTypes.includes(b.type) ?? false)) {
+      span = true;
+      continue;
+    }
+    sameSecond = true;
+    if (b.parentLen === 32 && prefixEq(b.parentHash, 32, l2.parentHash)) return b;
+  }
+  if (span) throw st(CodeBatchFormat, { type: 'span_post_denim' });
+  if (sameSecond) throw st(CodeBatchBindingMismatch, { field: 'parent_hash' });
+  throw st(CodeBatchNotFound, { timestamp: l2.timestamp, n_batches: batches.length });
+}
+
 function prefixEq(have: Uint8Array, n: number, want: Uint8Array): boolean {
   if (n <= 0 || n > 32) return false;
   for (let i = 0; i < n; i++) if (have[i] !== want[i]) return false;
@@ -213,8 +250,9 @@ export class BasePostedKind implements Kind {
     const l2 = readHeader(b.headerRlp);
     if (!sameBytes(l2.hash, b.hash)) throw blockMismatch('blockHash', b.hash, l2.hash);
     if (l2.number !== b.number) throw blockMismatch('blockNumber', b.number, l2.number);
-    // O6: post-Denim blocks (200 ms blocks, shared timestamps, new batch format) are not yet pinned.
-    if (l2.timestamp >= bp.denimTime) throw st(CodeBatchFormat, { type: 'post_denim' });
+    // O6: a post-Denim block (200 ms blocks, five per timestamp second, singular batches only) is judged only under pins that carry the post_denim
+    // capability row; under pins without it the refusal is the named state it always was.
+    denimGate(bp, l2.timestamp);
     // O1: L1 finality, then the spine.
     let head;
     try {
@@ -373,8 +411,7 @@ export function verifyChannel(bp: BasePins, body: Body, covered: Covered, l2: He
     if (e instanceof RlpError || e instanceof BatchStreamError) throw st(CodeChannelMalformed);
     throw e;
   }
-  const bt = batches.find((x) => x.timestamp === l2.timestamp);
-  if (bt === undefined) throw st(CodeBatchNotFound, { timestamp: l2.timestamp, n_batches: batches.length });
+  const bt = selectBatch(bp, batches, l2);
   // O5: binding.
   if (!prefixEq(bt.parentHash, bt.parentLen, l2.parentHash)) throw st(CodeBatchBindingMismatch, { field: 'parent_hash' });
   const dep0 = body.deposits[0];

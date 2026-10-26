@@ -22,8 +22,8 @@ const pinsFile = readFileSync(join(here, '..', '..', 'src', 'proof-v2', 'finalit
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
 const want = (raw: Uint8Array): Uint8Array => hexToBytes(sha256Hex(raw));
 
-/** The sha256 of certen-validator pv2/rb11-e1-raise@cbb6373 pkg/finality/pins/finality-pins.json (PinsSHA256 there; the sync target). The framework's first value, 507d72b3..., was the file at pv2/rb11-b-finality-framework@4377bb3. */
-const VALIDATOR_PINS_SHA256 = 'fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440';
+/** The sha256 of certen-validator pv2/rb12-eps-denim@c05fe30d pkg/finality/pins/finality-pins.json (PinsSHA256 there; the sync target; before it pv2/rb11-e1-raise@cbb6373 held fdba733e...5440). The framework's first value, 507d72b3..., was the file at pv2/rb11-b-finality-framework@4377bb3. */
+const VALIDATOR_PINS_SHA256 = '9f4fc10feca95909272c9f6eaef1a38d7a06110cfead0a88cb79e8ffd7a3d1cf';
 
 const codeOf = (f: () => unknown): string => {
   try {

@@ -27,7 +27,7 @@ export const PINS_FORMAT = 'certen-finality-pins/1';
  * The SHA-256 of the embedded pins file. A verifier refuses to start (finality_pins_corrupt) if the embedded bytes hash otherwise; the
  * CI job finality-pins-sync compares this constant and the file across the three repositories.
  */
-export const PINS_SHA256 = 'fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440';
+export const PINS_SHA256 = '9f4fc10feca95909272c9f6eaef1a38d7a06110cfead0a88cb79e8ffd7a3d1cf';
 
 /** The report's pins_source for the embedded file. */
 export const PINS_SOURCE_EMBEDDED = 'embedded';

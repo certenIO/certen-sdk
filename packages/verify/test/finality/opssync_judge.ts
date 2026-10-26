@@ -16,7 +16,8 @@ import type { Params } from '../../src/proof-v2/finality/adiri/record.js';
 import { parseBasePins as parseBaseFinalPins } from '../../src/proof-v2/finality/basefinal/pins.js';
 import { parseBasePins as parseBasePostedPins } from '../../src/proof-v2/finality/baseposted/pins.js';
 import { embeddedLedgerLinks, extendPins } from '../../src/proof-v2/finality/ledger.js';
-import { embeddedPins, parsePinsOverride, pinsIdentity, type Pins } from '../../src/proof-v2/finality/pins.js';
+import { parsePinsOverride, pinsIdentity, type Pins } from '../../src/proof-v2/finality/pins.js';
+import { publishedPins as embeddedPins } from './published_pins.js';
 import { FinalityStateError, hexLower } from '../../src/proof-v2/finality/state.js';
 
 export interface JudgeIn {
