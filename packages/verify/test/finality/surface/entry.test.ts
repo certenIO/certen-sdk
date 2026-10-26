@@ -39,10 +39,11 @@ const docFor = (name: string): unknown => {
 };
 
 describe('the public entry', () => {
-  it('adds exactly the name `finality` to the 171 names it exported at the base commit', () => {
+  it('adds exactly the names `finality` and `identity` (the S8 contract-identity namespace) to the 171 names it exported at the base commit', () => {
     expect(captured.exports.length).toBe(171);
     expect(captured.exports).not.toContain('finality');
-    expect(Object.keys(entry).sort()).toEqual([...captured.exports, 'finality'].sort());
+    expect(captured.exports).not.toContain('identity');
+    expect(Object.keys(entry).sort()).toEqual([...captured.exports, 'finality', 'identity'].sort());
   });
 
   it('exposes the finality barrel as one namespace, with registerAllKinds and embeddedPins reachable through it', () => {
