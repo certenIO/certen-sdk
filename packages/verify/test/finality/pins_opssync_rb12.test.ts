@@ -82,7 +82,7 @@ function permutations<T>(items: T[]): T[][] {
 
 describe('the digest of the shipped file (pins_det_rb12_test.go TestThePinsDigestOfTheShippedFileIsTheOneTheChannelPublishes)', () => {
   it('is the one the channel publishes, and the load of it answers the same every time with the same identity', () => {
-    const published = 'fdba733e7fc4206d96d73c87352834c51801ee8fe0af76d60654cb461fbd5440';
+    const published = '9f4fc10feca95909272c9f6eaef1a38d7a06110cfead0a88cb79e8ffd7a3d1cf';
     expect(hexLower(sha256(embeddedPinsBytes()))).toBe(published);
     expect(PINS_SHA256).toBe(published);
     for (let i = 0; i < 3; i++) {

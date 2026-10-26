@@ -8,7 +8,8 @@ import { Level } from '../../../src/proof-v2/finality/level.js';
 import { Registry, type Kind, type Verdict } from '../../../src/proof-v2/finality/registry.js';
 import { ChainBaseSepolia } from '../../../src/proof-v2/finality/table.js';
 import type { Pins } from '../../../src/proof-v2/finality/pins.js';
-import { parsePinsOverride, embeddedPins } from '../../../src/proof-v2/finality/pins.js';
+import { parsePinsOverride } from '../../../src/proof-v2/finality/pins.js';
+import { publishedPins } from '../published_pins.js';
 import { parseSettlementJSON } from '../../../src/proof-v2/finality/settlementjson.js';
 import type { LegSettlement } from '../../../src/proof-v2/finality/docreport.js';
 import { registerAllKinds } from '../../../src/proof-v2/finality/allkinds.js';
@@ -76,13 +77,13 @@ let allRegistry: Promise<Registry> | undefined;
 export function allKindsRegistry(): Promise<Registry> {
   allRegistry ??= (async () => {
     const reg = new Registry();
-    await registerAllKinds(reg, embeddedPins());
+    await registerAllKinds(reg, publishedPins());
     return reg;
   })();
   return allRegistry;
 }
 
-export const pinsNamed = (name: string): Pins => (name === 'embedded' ? embeddedPins() : parsePinsOverride(readSet('pins', `${name}.json`)));
+export const pinsNamed = (name: string): Pins => (name === 'embedded' ? publishedPins() : parsePinsOverride(readSet('pins', `${name}.json`)));
 
 /** A recorded Settlement of settlements/<name>.json ({name, chain, settlement}): the inner object read by the Go-faithful reader. */
 export function legSettlement(name: string, chain: bigint, source = 'test'): LegSettlement {

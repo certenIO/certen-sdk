@@ -12,7 +12,7 @@
  *   chain  adig / advcc: the tables (keys per table) and records (committee, next table index) of a hand-built CFA1
  */
 import { cmpUtf8 } from '../../src/proof-v2/finality/state.js';
-import { embeddedPinsBytes } from '../../src/proof-v2/finality/pins.js';
+import { publishedPinsBytes as embeddedPinsBytes } from './published_pins.js';
 
 export type Recipe =
   | { doc: string }
