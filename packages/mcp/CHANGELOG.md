@@ -1,5 +1,9 @@
 # Changelog — @certen.io/mcp
 
+## 0.7.1 — depends on @certen.io/proof-verify 0.2.0 (2026-10-26)
+
+No code change; the dependency range moves from ^0.1.0 to ^0.2.0.
+
 ## 0.7.0 — the gateway asks over MCP: any-address balance, identity facts, an intent estimate, sponsor-paid credits and gas, and the destination transaction (CLI UX, Phase G; 2026-10-17)
 
 Additive: five tools (three read, two write) and one added field on the tools that return a transaction. No tool is removed or renamed, no parameter becomes required, and the server still holds no key and still registers no write tool without `CERTEN_MCP_ALLOW_WRITES=1`.

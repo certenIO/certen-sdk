@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/sdk",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "TypeScript client for the CERTEN Gateway API — proof-gated cross-chain execution on Accumulate",
   "license": "MIT",
   "type": "module",
@@ -76,7 +76,7 @@
   },
   "//publishConfig": "Provenance is passed as --provenance by .github/workflows/release.yml. Setting it here instead would break every publish outside CI with an error that does not explain itself.",
   "peerDependencies": {
-    "@certen.io/proof-verify": "^0.1.0"
+    "@certen.io/proof-verify": "^0.2.0"
   },
   "peerDependenciesMeta": {
     "@certen.io/proof-verify": {

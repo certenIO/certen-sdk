@@ -1,5 +1,9 @@
 # Changelog — @certen.io/sdk
 
+## 0.12.1 — peer range follows @certen.io/proof-verify 0.2.0 (2026-10-26)
+
+No code change; the optional peer `@certen.io/proof-verify` range moves from ^0.1.0 to ^0.2.0 (a caret range on 0.x does not cross a minor).
+
 ## 0.12.0 — the gateway asks: readiness, quote, credit top-up, gas drip, any-address balance, and the destination transaction (CLI UX, Phase G; 2026-10-17)
 
 Additive. `@certen.io/cli` 0.12.0 and `@certen.io/mcp` 0.7.0 need this release, so it goes out first. Needs a gateway that serves the five operations (deployed 2026-10-16); against an older one each answers `ENDPOINT_NOT_ON_GATEWAY`. Two of the calls spend the platform's funds and are off unless the deployment's operator switched them on.

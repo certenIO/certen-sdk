@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/cli",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Command line for the CERTEN Gateway API",
   "license": "MIT",
   "type": "module",
@@ -48,7 +48,7 @@
   "dependencies": {
     "@certen.io/sdk": "^0.12.0",
     "commander": "^14.0.3",
-    "@certen.io/proof-verify": "^0.1.0"
+    "@certen.io/proof-verify": "^0.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

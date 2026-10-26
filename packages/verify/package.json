@@ -1,6 +1,6 @@
 {
   "name": "@certen.io/proof-verify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Independent verifier for CERTEN proof v2: checks a proof offline against Accumulate's own encodings, with no CERTEN code in the trust path",
   "license": "MIT",
   "type": "module",
