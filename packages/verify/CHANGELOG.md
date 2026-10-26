@@ -1,5 +1,9 @@
 # Changelog — @certen.io/proof-verify
 
+## 0.2.0 — staged finality (S7), the S8 contract-identity verifier, post-Denim Base legs (2026-10-26)
+
+Minor release: a large additive surface since 0.1.0 (the sections below were written as Unreleased while it was built). New public namespaces `finality` and `identity`; `identity.verifyContractIdentity` is the S8 verifier and judges the portable document's `contractIdentity` member. The embedded finality pins change (PINS_SHA256 now 9f4fc10f...d1cf: a `base_sepolia.post_denim` capability row), so this release and the validators of the same date judge Base legs alike; a verifier without the row refuses post-Denim Base blocks as `batch_format_unsupported{post_denim}`. Base post-Denim batches are located by timestamp AND the full parent hash (five blocks share a second). `s6` replay verification now returns the link of a proven slot. Not independently reviewed; see the repository TECH_DEBT.md of the validator programme for the owner-paused items.
+
 
 ## Unreleased — WP-S8-7a part 1: the S8 contract-identity verifier foundation (2026-10-25)
 

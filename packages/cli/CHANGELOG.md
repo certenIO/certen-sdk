@@ -1,5 +1,9 @@
 # Changelog — @certen.io/cli
 
+## 0.13.0 — certen proof verify-identity (2026-10-26)
+
+Adds `certen proof verify-identity <@document> --outcome-file <file>`: judges the portable document's S8 contract-identity member and prints one of six headline rows with its own exit codes (0 verified, 5 not applicable, 10 verified core, 20 pending, 30 unproven, 40 refused, 2 usage/internal, 1 when the finality phase fails). Exit 5 here means "not applicable" and differs from `certen proof verify`'s NO_EVIDENCE; the new command has its own exit path and `certen proof verify` is unchanged. `verified_core` is never printed or exit-coded as `verified`. Needs `@certen.io/proof-verify` 0.2.0.
+
 ## 0.12.0 — the gateway's newer routes: an address's balance, an estimate, an identity's facts, credits and gas from the platform, and the destination transaction (2026-10-17)
 
 The CLI now uses the five operations and the one field the gateway added for the CLI UX plan. Needs `@certen.io/sdk` 0.12.0, which carries them. **Every existing command and flag keeps its meaning;** what is new is
