@@ -14,7 +14,8 @@ const embedded = (): { base_sepolia: Section } => JSON.parse(Buffer.from(embedde
 const parsed = (edit: (s: Section) => void): BasePins => {
   const doc = embedded();
   edit(doc.base_sepolia);
-  return parseBasePins(parsePinsOverride(new TextEncoder().encode(JSON.stringify(doc, null, 2))));
+  const text = JSON.stringify(doc, (_k, v) => (typeof v === 'bigint' ? `__BIG__${v}` : v), 2).replace(/"__BIG__([0-9]+)"/g, '$1');
+  return parseBasePins(parsePinsOverride(new TextEncoder().encode(text)));
 };
 const stateOf = (f: () => unknown): string => {
   try {
@@ -48,6 +49,7 @@ describe('the post_denim capability row', () => {
     ['only the span type', (r) => ({ ...r, batch_types: [1] })],
     ['no batch type', (r) => ({ ...r, batch_types: [] })],
     ['an interval that does not make one second', (r) => ({ ...r, block_interval_ms: 200, blocks_per_second: 4 })],
+    ['an interval times count that only wraps to one second modulo 2^64 (RB12-F23)', (r) => ({ ...r, block_interval_ms: 1000, blocks_per_second: 2305843009213693953n })],
     ['a zero interval', (r) => ({ ...r, block_interval_ms: 0 })],
     ['an interval above one second', (r) => ({ ...r, block_interval_ms: 2000, blocks_per_second: 1 })],
     ['an upper-case selector', (r) => ({ ...r, base_time_selector: '0x' + String(r.base_time_selector).slice(2).toUpperCase() })],

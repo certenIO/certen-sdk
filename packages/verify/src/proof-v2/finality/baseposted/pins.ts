@@ -140,8 +140,8 @@ function parsePostDenim(raw: Raw): PostDenim | undefined {
   if (batchTypes === undefined || batchTypes.length !== 1 || batchTypes[0] !== 0) return undefined;
   const interval = r.BlockIntervalMS as bigint;
   const perSecond = r.BlocksPerSecond as bigint;
-  // Go multiplies two uint64 values: the product wraps modulo 2^64, and this twin reproduces that so the two verifiers judge one pins file alike (RB12-F23)
-  if (interval === 0n || perSecond === 0n || interval > 1000n || BigInt.asUintN(64, interval * perSecond) !== 1000n) return undefined;
+  // exact product: the Go twin refuses a row whose interval times count only equals one second after wrapping modulo 2^64 (RB12-F23)
+  if (interval === 0n || perSecond === 0n || interval > 1000n || interval * perSecond !== 1000n) return undefined;
   const pre = unhex(r.BaseTimePredeploy as string, 20);
   const sel = unhex(r.BaseTimeSelector as string, 4);
   if (pre === undefined || sel === undefined) return undefined;
