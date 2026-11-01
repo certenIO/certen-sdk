@@ -38,6 +38,20 @@ const receipt = await buildReceipt(certen, sent.intentId, { rpc: nodeYouTrust })
 // receipt.verdict: 'verified' | 'partial' | 'failed' | 'pending' | 'unproven'. receipt.gaps names what is not established.
 ```
 
+## Receiving webhooks
+Events are pushed to a URL you register; every delivery is signed. Verify the RAW request bytes (not a parsed-and-reserialized body), then act on `payload`.
+```ts
+import { constructWebhookEventFromRequest, isWebhookEvent, CertenWebhookSignatureError } from '@certen.io/sdk';
+
+const hook = await constructWebhookEventFromRequest(request, process.env.CERTEN_WEBHOOK_SECRET!);   // throws CertenWebhookSignatureError (.reason) -> answer 400
+if (isWebhookEvent(hook, 'transaction.completed')) await settle(hook.payload.intent_id, hook.deliveryId);
+```
+- Header `X-Certen-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + "." + body)>`; the body is the payload's canonical JSON, with no `{event,data}` envelope. `±300s` replay window.
+- `X-Certen-Event` and `X-Certen-Delivery` are NOT signed. Route on the event, act on `payload`. `deliveryId` is stable across retries and `redeliver` -- dedupe on it.
+- `verifyWebhookSignature({ body | payload, signature | headers, secret })` returns `{ ok, reason, hint }` as data. `secret` may be an array while rotating. A missing or short secret THROWS (`WEBHOOK_SECRET_INVALID`): never read it as `''`.
+- `signWebhookPayload(secret, payload, { event, deliveryId })` makes a valid delivery to test a receiver. `webhooks.checkDelivery(id, secret)` says whether a secret signed a recorded delivery. `webhooks.rotateSecret(id, { secret })` rotates to a value you chose, so a receiver accepting both has no failed deliveries.
+- CLI: `certen webhooks sign | check-signature | check-delivery <id>` (the secret comes from `$CERTEN_WEBHOOK_SECRET` or `--secret-file`, never a flag). The MCP server has no webhook-secret tool by design: it never accepts key material.
+
 ## Rules
 - **Your key never reaches this SDK.** You pass a `sign` function; it gets bytes and returns a signature.
   Sign the RAW BYTES of the hex string — do not hash it again, and do not sign the ASCII of the hex.

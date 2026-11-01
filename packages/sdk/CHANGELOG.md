@@ -1,5 +1,23 @@
 # Changelog — @certen.io/sdk
 
+## Unreleased — webhook signing and verification (2026-11-01)
+
+Additive. The gateway has always signed every webhook delivery and its customer guide has always told receivers to `import { verifyWebhookSignature } from '@certen.io/sdk'`; the SDK had no such export, so every receiver hand-rolled the HMAC. The scheme (`X-Certen-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + "." + body)>`, body = the payload's canonical JSON) was read from the gateway's signer and delivery code, and this release is checked against vectors produced by running that code.
+
+### Added
+- **`verifyWebhookSignature({ body | payload, signature | headers, secret, toleranceSeconds?, now? })`**: the verdict as data (`ok`, or `reason` + `hint`). Verifies the raw bytes; `payload` accepts an already-parsed body for a framework that parsed it first. `secret` may be an array, for the window around a rotation (`secretIndex` says which matched). The signature is checked before the clock, so `timestamp-outside-tolerance` always means an authentic signature that is old or skewed, never a forgery. When a mismatch is the body having been re-serialized (the usual mistake) the hint says so.
+- **`constructWebhookEvent`, `constructWebhookEventFromRequest`, `isWebhookEvent`**: verify and parse in one call (throws `CertenWebhookSignatureError`, status 400, `.reason`), for Node (`Buffer` + `req.headers`) and for Fetch-style requests (Next.js, Hono, Workers, Bun, Deno). `ReceivedWebhook` keeps the authenticated `payload` and `timestamp` apart from `type` and `deliveryId`, which come from headers the signature does not cover.
+- **`signWebhookPayload(secret, payload, { timestamp?, event?, deliveryId? })`**: signs the way the gateway does, returning the body and the delivery headers, to exercise a receiver before the first real event. **`canonicalizeWebhookPayload`** is the gateway's canonical JSON (byte-identical on JSON values; it throws on a `Date`, `Map`, cycle or `NaN` where the gateway would sign `{}`).
+- **`webhooks.checkDelivery(id, secret)`** and **`checkWebhookDelivery(delivery, secret)`**: reproduce the signature the gateway recorded for a delivery attempt, answering "is my secret the one it signed with?". The secret is used locally and never sent.
+- **`webhooks.rotateSecret(id, { secret? })`**: the gateway has always accepted a caller-chosen secret (16-255 characters); the SDK could not send one. With your own value a receiver can be switched to accept both secrets before rotating, so there is no window of failed deliveries. Called with no argument it behaves exactly as before.
+- **`WEBHOOK_EVENTS`, `WebhookEventPayloads`, `isKnownWebhookEvent`**: the events and the body of each, transcribed from the gateway's event registry (events are pushed, so they are not in the OpenAPI document). **`WebhookDelivery`** now declares the fields the gateway returns (`last_error`, `dlq_at`, `signature_version`, `signature_hex`, `signed_at_unix`, `signed_canonical_payload`, `delivery_id_header`).
+- Error codes `WEBHOOK_SIGNATURE_INVALID` (400), `WEBHOOK_SECRET_INVALID` and `INVALID_WEBHOOK_OPTION`.
+- Guide: `docs/guides/receive-webhooks.md`.
+
+### Behaviour worth knowing
+- **A missing, empty or shorter-than-8-character secret throws `WEBHOOK_SECRET_INVALID` instead of verifying.** HMAC under an empty key is computable, so a receiver that read an unset environment variable as `''` (the gateway guide's own snippet does) would accept a forged delivery. `toleranceSeconds` must be finite; to check an old capture pass `now`.
+- Portable: the HMAC is built on the SDK's existing `sha256.ts`, so it is in the browser entry and runs without `node:crypto`. It is held to RFC 4231 and to `node:crypto` at every length around the block boundary.
+
 ## 0.12.1 — peer range follows @certen.io/proof-verify 0.2.0 (2026-10-26)
 
 No code change; the optional peer `@certen.io/proof-verify` range moves from ^0.1.0 to ^0.2.0 (a caret range on 0.x does not cross a minor).

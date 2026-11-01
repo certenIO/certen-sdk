@@ -208,6 +208,7 @@ constructor argument. An escrow or any other contract ABI belongs on top of `cal
 | `certen.governance` | `create` · `submitSignature` · `get` |
 | `certen.pending` | `list` |
 | `certen.portfolio` | `get` |
+| `certen.webhooks` | `register` · `list` · `update` · `remove` · `rotateSecret` · `verify` · `deliveries` · `delivery` · `checkDelivery` · `redeliver` |
 | `certen.admin` | `createOrg` · `createApiKey` · `listApiKeys` · `revokeApiKey` · `rotateApiKey` · `getAuditLog` · `getUsage` |
 
 The gateway serves ~80 endpoints; this covers the integration surface. For anything else, the
@@ -286,6 +287,32 @@ books, at most 8). Both are validated before anything is sent.
   (`'expired'`, `'expectation_unmet'`, `'target_reverted'`, …). `describeReasonCode()` renders it.
   `expectation_unmet` means the call ran but its `expectedEvents` are missing: it is not a success.
 
+## Webhooks: verify that an event came from CERTEN
+
+Every delivery is signed (`X-Certen-Signature: t=<unix>,v1=<HMAC-SHA256 of t + "." + body>`). Verify the **raw bytes** that arrived:
+
+```ts
+import { constructWebhookEventFromRequest, isWebhookEvent, CertenWebhookSignatureError } from '@certen.io/sdk';
+
+export async function POST(request: Request) {            // Next.js / Hono / Workers / Bun / Deno
+  try {
+    const hook = await constructWebhookEventFromRequest(request, process.env.CERTEN_WEBHOOK_SECRET!);
+    if (isWebhookEvent(hook, 'transaction.completed')) await settle(hook.payload.intent_id, hook.deliveryId);
+    return new Response(null, { status: 204 });
+  } catch (err) {
+    if (err instanceof CertenWebhookSignatureError) return new Response(err.reason, { status: 400 });
+    throw err;
+  }
+}
+```
+
+`constructWebhookEvent({ body, headers, secret })` is the same for Node and Express (`express.raw`, not `express.json`);
+`verifyWebhookSignature` returns the verdict as data; `signWebhookPayload` signs the way the gateway does, to try a receiver
+before the first real event; `webhooks.checkDelivery(id, secret)` answers "is my secret the right one?" from a delivery
+the gateway recorded. All of it is pure and portable (it runs in the browser entry too). A missing or too-short secret
+**throws** instead of verifying, because an HMAC under an empty key is computable. `X-Certen-Event` and
+`X-Certen-Delivery` sit outside the signature; the guide says what that means for your handler.
+
 ## Guides
 
 - [Onboard an identity](https://docs.kompendium.co/onboard-an-identity.html)
@@ -293,6 +320,7 @@ books, at most 8). Both are validated before anything is sent.
 - [Proof-gate a contract call](https://docs.kompendium.co/proof-gated-contract-call.html)
 - [M-of-N panels](https://docs.kompendium.co/multisig-panel.html)
 - [Verify a proof](https://docs.kompendium.co/verify-a-proof.html)
+- [Receive webhooks](https://github.com/certenIO/certen-sdk/blob/main/docs/guides/receive-webhooks.md)
 
 ## License
 

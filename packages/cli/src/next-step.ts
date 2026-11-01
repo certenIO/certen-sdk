@@ -120,6 +120,10 @@ const USAGE_CODES = [
   // The commands that spend the platform's funds: a credit count that is not a whole number of at least 1, an Idempotency-Key the gateway would
   // refuse (or its own refusal for none, which the CLI never sends).
   'INVALID_CREDITS', 'INVALID_IDEMPOTENCY_KEY', 'IDEMPOTENCY_KEY_REQUIRED',
+  // `webhooks sign | check-signature | check-delivery`: a secret that is missing or unusable (it is read from the environment or a file, never a flag),
+  // an unreadable file, or a payload or body that was not given. Raised before any request; the command's help says what it takes.
+  'WEBHOOK_SECRET_REQUIRED', 'WEBHOOK_SECRET_INVALID', 'INVALID_WEBHOOK_OPTION', 'SECRET_FILE_UNREADABLE', 'INPUT_UNREADABLE',
+  'PAYLOAD_REQUIRED', 'INVALID_PAYLOAD', 'BODY_REQUIRED',
 ] as const;
 
 const STEPS: Record<string, Step> = {
@@ -256,6 +260,11 @@ const STEPS: Record<string, Step> = {
   DRIP_UNCONFIRMED: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
   DRIP_DECLINED: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
   DRIP_RECIPIENT_REJECTS: (c) => `certen gas --chain ${chainOf(c.details)}`,
+
+  // ── webhooks ──
+  // A signature that does not hold is a finding, not a mistake in how the command was typed. For a captured delivery the next question is whether
+  // the secret is the right one (`check-delivery` asks the gateway what it signed); for `check-delivery` itself it is which endpoint the secret belongs to.
+  WEBHOOK_SIGNATURE_INVALID: (c) => (c.command[1] === 'check-delivery' ? 'certen webhooks list' : 'certen webhooks check-delivery <delivery-id>'),
 
   // ── money ──
   DEPOSIT_NOT_CREDITED: 'certen balance',

@@ -203,6 +203,45 @@ export class CertenForeignOriginError extends CertenError {
   }
 }
 
+/**
+ * Why a received webhook was not accepted. Each is a distinct fix for the receiver, which is why they are not one
+ * "invalid signature":
+ *
+ *   missing-signature            no `X-Certen-Signature` header reached the verifier (a proxy dropped it, or the wrong header was read).
+ *   malformed-signature          the header is present but is not `t=<unix>,v1=<64 hex>`.
+ *   unsupported-version          the header is well formed but carries no `v1` — only a version this SDK does not know.
+ *   signature-mismatch           no `v1` matches HMAC-SHA256(secret, t + "." + body). Forged, altered, the wrong secret, or the body
+ *                                was not the raw bytes. `hint` says which of the last two it looks like.
+ *   timestamp-outside-tolerance  the signature IS authentic, but `t` is further from now than the tolerance. A replay, or a skewed clock.
+ *   invalid-payload              the signature held, but the body is not JSON (the gateway never sends this).
+ */
+export type WebhookSignatureFailure =
+  | 'missing-signature'
+  | 'malformed-signature'
+  | 'unsupported-version'
+  | 'signature-mismatch'
+  | 'timestamp-outside-tolerance'
+  | 'invalid-payload';
+
+/**
+ * A webhook was not accepted. Thrown by `constructWebhookEvent`; `verifyWebhookSignature` reports the same reasons as data.
+ *
+ * Status 400 because that is what the receiver should answer: a delivery that fails verification is not retried into success, and
+ * the gateway retries any non-2xx, so answering 400 and answering 500 cost the same. Never retryable.
+ *
+ * `reason` is safe to log. Nothing here carries the secret or the signature.
+ */
+export class CertenWebhookSignatureError extends CertenError {
+  constructor(
+    message: string,
+    public readonly reason: WebhookSignatureFailure,
+    public readonly hint?: string,
+  ) {
+    super(hint ? `${message} ${hint}` : message, 400, 'WEBHOOK_SIGNATURE_INVALID', { details: { reason, ...(hint ? { hint } : {}) } });
+    this.name = 'CertenWebhookSignatureError';
+  }
+}
+
 /** A live way to settle a 402, minted by the gateway with the refusal. */
 export interface PaymentResolution {
   /** Reference the deposit is matched by. */

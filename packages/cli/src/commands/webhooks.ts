@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
-import { CertenClient } from '@certen.io/sdk';
+import {
+  CertenClient, CertenError, signWebhookPayload, verifyWebhookSignature, DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+} from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getOutputFormat } from '../config.js';
 import { printOutput, human, hint, isJsonMode } from '../output.js';
-import { CliError, EXIT } from '../errors.js';
+import { CliError, UsageError, EXIT } from '../errors.js';
 
 /**
  * Webhooks — where events go, and what happened to each one.
@@ -22,6 +25,64 @@ async function getClient(): Promise<CertenClient> {
 }
 
 const machineOutput = (): boolean => isJsonMode() || getOutputFormat() === 'json';
+
+/** Where the signing secret is read from when no file is named. */
+const SECRET_ENV = 'CERTEN_WEBHOOK_SECRET';
+
+/**
+ * The signing secret, from a file or the environment — never from a flag.
+ *
+ * A secret on the command line lands in shell history and in every process listing on the machine, which is exactly where a value that
+ * authenticates every delivery should not be. (`webhooks add --secret` takes one because the person is choosing it for the gateway to
+ * store; these commands only ever USE a secret that already exists.) A single trailing newline is dropped from a file, because editors and
+ * `echo` add one and the secret does not contain it; the SDK says so, by hint, if a newline is left on anyway.
+ */
+function readSecret(opts: { secretFile?: string }): string {
+  if (opts.secretFile) {
+    let text: string;
+    try {
+      text = readFileSync(opts.secretFile, 'utf8');
+    } catch (err) {
+      throw new UsageError(`Cannot read the secret file ${opts.secretFile}: ${(err as Error).message}`, 'SECRET_FILE_UNREADABLE', 'certen webhooks --help');
+    }
+    return text.replace(/\r?\n$/, '');
+  }
+  const fromEnv = process.env[SECRET_ENV];
+  if (!fromEnv) {
+    throw new UsageError(
+      `No signing secret. Put it in $${SECRET_ENV} or name a file with --secret-file <path>. It is not accepted as a flag: that would put it in your shell history and the process list.`,
+      'WEBHOOK_SECRET_REQUIRED', 'certen webhooks --help',
+    );
+  }
+  return fromEnv;
+}
+
+/** The SDK refuses an unusable secret or option with a CertenError; at a command line that is a wrong invocation (exit 2), not a failed operation. */
+function asUsage(err: unknown): never {
+  // Literal codes, not `err.code`: the drift gate in next-step.test.ts can only hold a code to its next-step entry when it can read it.
+  if (err instanceof CertenError && err.code === 'WEBHOOK_SECRET_INVALID') {
+    throw new UsageError(err.message, 'WEBHOOK_SECRET_INVALID', 'certen webhooks --help');
+  }
+  if (err instanceof CertenError && err.code === 'INVALID_WEBHOOK_OPTION') {
+    throw new UsageError(err.message, 'INVALID_WEBHOOK_OPTION', 'certen webhooks --help');
+  }
+  throw err;
+}
+
+/** Text from a file, or standard input when the path is `-`. Bytes, because a signature is over bytes. */
+function readInput(path: string, what: string): Buffer {
+  try {
+    return readFileSync(path === '-' ? 0 : path);
+  } catch (err) {
+    throw new UsageError(`Cannot read ${what} ${path === '-' ? 'from standard input' : path}: ${(err as Error).message}`, 'INPUT_UNREADABLE', 'certen webhooks --help');
+  }
+}
+
+function wholeSeconds(value: string | undefined, flag: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^[0-9]+$/.test(value)) throw new UsageError(`"${value}" is not a whole number of seconds for ${flag}.`, 'INVALID_NUMBER', 'certen webhooks --help');
+  return Number(value);
+}
 
 export function registerWebhookCommands(program: Command): void {
   const webhooks = program
@@ -210,5 +271,133 @@ export function registerWebhookCommands(program: Command): void {
         // Worth saying: this is one of the few genuinely non-idempotent operations on the API.
         human('  Each call delivers again — make sure your receiver can handle a repeat.');
       }
+    });
+
+  // ── Signing and verifying ───────────────────────────────────────────────────────────────────────
+  // The gateway signs every delivery; these are the other half. `sign` and `check-signature` are
+  // local — no API key, no network — because the only thing they need is the secret you already hold.
+
+  webhooks
+    .command('sign')
+    .description('Sign a payload the way the gateway signs a delivery, to try your receiver (local; needs the endpoint secret)')
+    .option('--payload <json>', 'The JSON payload to sign')
+    .option('--payload-file <path>', 'Read the payload from a file ("-" for standard input)')
+    .option('--event <name>', 'Also emit X-Certen-Event, e.g. transaction.completed')
+    .option('--delivery-id <id>', 'Also emit X-Certen-Delivery')
+    .option('--timestamp <unix>', 'Sign at this unix time instead of now')
+    .option('--secret-file <path>', `Read the secret from a file (default: $${SECRET_ENV})`)
+    .action((opts: {
+      payload?: string; payloadFile?: string; event?: string; deliveryId?: string; timestamp?: string; secretFile?: string;
+    }) => {
+      if ((opts.payload === undefined) === (opts.payloadFile === undefined)) {
+        throw new UsageError('Give the payload with exactly one of --payload <json> or --payload-file <path>.', 'PAYLOAD_REQUIRED', 'certen webhooks sign --help');
+      }
+      const secret = readSecret(opts);
+      const text = opts.payload ?? readInput(opts.payloadFile as string, 'the payload').toString('utf8');
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch (err) {
+        throw new UsageError(`The payload is not valid JSON: ${(err as Error).message}`, 'INVALID_PAYLOAD', 'certen webhooks sign --help');
+      }
+      let signed;
+      try {
+        signed = signWebhookPayload(secret, payload, {
+          timestamp: wholeSeconds(opts.timestamp, '--timestamp'), event: opts.event, deliveryId: opts.deliveryId,
+        });
+      } catch (err) {
+        if (err instanceof TypeError) throw new UsageError(err.message, 'INVALID_PAYLOAD', 'certen webhooks sign --help');
+        return asUsage(err);
+      }
+
+      printOutput({
+        body: signed.canonicalPayload, headers: signed.headers, signature: signed.header, timestamp: signed.timestamp,
+      }, { machineOnly: true });
+      if (machineOutput()) return;
+      human('');
+      human('  Send this body EXACTLY as written — the signature is over these bytes:');
+      human('');
+      human(`  ${signed.canonicalPayload}`);
+      human('');
+      human('  with these headers:');
+      for (const [name, value] of Object.entries(signed.headers)) human(`    ${name}: ${value}`);
+      human('');
+      human(`  Your receiver accepts it for ${DEFAULT_WEBHOOK_TOLERANCE_SECONDS} seconds from ${signed.timestamp} (its default replay window).`);
+    });
+
+  webhooks
+    .command('check-signature')
+    .description('Check a captured delivery\'s signature against your secret (local; exits 1 when it does not verify)')
+    .requiredOption('--signature <header>', 'The X-Certen-Signature header value: t=<unix>,v1=<hex>')
+    .option('--body <text>', 'The request body. Prefer --body-file: a shell can alter a body passed as an argument')
+    .option('--body-file <path>', 'Read the raw request body from a file ("-" for standard input)')
+    .option('--tolerance <seconds>', `How far from now the timestamp may be (default ${DEFAULT_WEBHOOK_TOLERANCE_SECONDS})`)
+    .option('--now <unix>', 'Treat this as the current time — to check a capture taken earlier')
+    .option('--secret-file <path>', `Read the secret from a file (default: $${SECRET_ENV})`)
+    .action((opts: {
+      signature: string; body?: string; bodyFile?: string; tolerance?: string; now?: string; secretFile?: string;
+    }) => {
+      if ((opts.body === undefined) === (opts.bodyFile === undefined)) {
+        throw new UsageError('Give the body with exactly one of --body <text> or --body-file <path>.', 'BODY_REQUIRED', 'certen webhooks check-signature --help');
+      }
+      const secret = readSecret(opts);
+      const body = opts.body ?? readInput(opts.bodyFile as string, 'the request body');
+      let result;
+      try {
+        result = verifyWebhookSignature({
+          body: typeof body === 'string' ? body : new Uint8Array(body),
+          signature: opts.signature,
+          secret,
+          toleranceSeconds: wholeSeconds(opts.tolerance, '--tolerance'),
+          now: wholeSeconds(opts.now, '--now'),
+        });
+      } catch (err) {
+        return asUsage(err);
+      }
+
+      if (!result.ok) {
+        throw new CliError(
+          result.message, 'WEBHOOK_SIGNATURE_INVALID', EXIT.FAILED, false,
+          {
+            reason: result.reason,
+            ...(result.hint ? { hint: result.hint } : {}),
+            ...(result.timestamp !== undefined ? { timestamp: result.timestamp, age_seconds: result.ageSeconds } : {}),
+          },
+          'certen webhooks check-delivery <delivery-id>',
+        );
+      }
+      printOutput({ valid: true, timestamp: result.timestamp, age_seconds: result.ageSeconds, version: result.version }, { machineOnly: true });
+      if (machineOutput()) return;
+      human('');
+      human(`  Signature verified (${result.version}, signed ${result.ageSeconds}s ago).`);
+      human('');
+    });
+
+  webhooks
+    .command('check-delivery <id>')
+    .description('Is your secret the one the gateway signed this delivery with? (the secret never leaves this machine)')
+    .option('--secret-file <path>', `Read the secret from a file (default: $${SECRET_ENV})`)
+    .action(async (id: string, opts: { secretFile?: string }) => {
+      const secret = readSecret(opts);
+      let check;
+      try {
+        check = await (await getClient()).webhooks.checkDelivery(id, secret);
+      } catch (err) {
+        return asUsage(err);
+      }
+
+      if (!check.ok) {
+        throw new CliError(
+          check.message, 'WEBHOOK_SIGNATURE_INVALID', EXIT.FAILED, false,
+          { reason: check.reason, delivery_id: check.deliveryId, ...(check.hint ? { hint: check.hint } : {}) },
+          check.reason === 'not-signed' ? 'certen webhooks deliveries' : undefined,
+        );
+      }
+      printOutput({ valid: true, delivery_id: check.deliveryId, signed_at: check.timestamp, version: check.version }, { machineOnly: true });
+      if (machineOutput()) return;
+      human('');
+      human('  Yes — that secret signed this delivery. If your receiver still rejects it, the secret is not the problem:');
+      human('  look at how the body reaches the verifier (a framework parsing it first, a proxy rewriting it).');
+      human('');
     });
 }

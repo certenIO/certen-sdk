@@ -132,10 +132,21 @@ describe('the browser entry, bundled for a browser and run without Node globals'
 
   it('loads and exposes the client, errors and helpers; the Node-only exports are absent', () => {
     const { sdk } = browserLike();
-    for (const name of ['CertenClient', 'CertenError', 'CertenForeignOriginError', 'CertenWaitTimeoutError', 'intentOutcome', 'classifyIntentStatus', 'parseShareTarget', 'verifyExecutionProof', 'chainInfo', 'DEFAULT_BASE_URL']) {
+    for (const name of ['CertenClient', 'CertenError', 'CertenForeignOriginError', 'CertenWaitTimeoutError', 'intentOutcome', 'classifyIntentStatus', 'parseShareTarget', 'verifyExecutionProof', 'chainInfo', 'DEFAULT_BASE_URL', 'verifyWebhookSignature', 'signWebhookPayload', 'constructWebhookEvent', 'CertenWebhookSignatureError']) {
       expect(typeof sdk[name], name).not.toBe('undefined');
     }
     for (const name of ['CertenAgent', 'ed25519Signer', 'fetchSharedProof', 'decodeSharedBundle']) expect(sdk[name], name).toBeUndefined();
+  });
+
+  it('signs and verifies a webhook with no Node globals (the HMAC is portable, not node:crypto)', () => {
+    const { sdk } = browserLike();
+    const secret = 'whsec_test_secret_0123456789';
+    // The payload is built OUTSIDE the context, so this also proves the canonicalizer does not rely on this realm's Object.prototype.
+    const s = sdk.signWebhookPayload(secret, { b: 'hello', a: 1 }, { timestamp: 1716624000 });
+    // The value the gateway's own code produces for this input (packages/sdk/test/webhook-signature.test.ts).
+    expect(s.header).toBe('t=1716624000,v1=5b085ed362bf7b76234b8afa51a0f244985467e7ddc83947aa0f6b37fea5a5f8');
+    expect(sdk.verifyWebhookSignature({ body: s.canonicalPayload, signature: s.header, secret, now: 1716624000 }).ok).toBe(true);
+    expect(sdk.verifyWebhookSignature({ body: `${s.canonicalPayload} `, signature: s.header, secret, now: 1716624000 }).reason).toBe('signature-mismatch');
   });
 
   it('sends a request with the key, an encoded path and NO User-Agent (a browser forbids setting one)', async () => {

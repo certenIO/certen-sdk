@@ -37,8 +37,24 @@ export {
   CertenWaitTimeoutError,
   CertenProofNotAvailableError,
   CertenForeignOriginError,
+  CertenWebhookSignatureError,
   HEADER_AUTHORITY_NOT_EXECUTABLE,
 } from './errors.js';
+export type { WebhookSignatureFailure } from './errors.js';
+// Signing and verifying webhook deliveries (HMAC-SHA256 over `t.body`), the typed events, and checking a stored delivery. Pure and
+// portable: built on sha256.ts, so a receiver runs the same in Node, a Worker and a browser bundle. See webhook-signature.ts.
+export {
+  verifyWebhookSignature, constructWebhookEvent, constructWebhookEventFromRequest, isWebhookEvent, signWebhookPayload,
+  parseWebhookSignatureHeader, canonicalizeWebhookPayload, checkWebhookDelivery,
+  WEBHOOK_SIGNATURE_VERSION, DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+  WEBHOOK_SIGNATURE_HEADER, WEBHOOK_EVENT_HEADER, WEBHOOK_DELIVERY_HEADER, WEBHOOK_TIMESTAMP_HEADER,
+} from './webhook-signature.js';
+export type {
+  WebhookBody, WebhookHeaders, WebhookRequestLike, VerifyWebhookOptions, WebhookVerification, VerifiedWebhookSignature, ParsedWebhookSignature,
+  SignWebhookOptions, SignedWebhook, ConstructWebhookEventOptions, ReceivedWebhook, DeliverySignatureRecord, WebhookDeliveryCheck,
+} from './webhook-signature.js';
+export { WEBHOOK_EVENTS, isKnownWebhookEvent } from './webhook-events.js';
+export type { WebhookEventName, WebhookEventPayloads, WebhookIntentHeader } from './webhook-events.js';
 // Transaction-header fields (additional authorities, deadline): the validators the SDK runs before
 // sending, exported so the CLI and MCP apply the identical rules. See header-fields.ts.
 export {
