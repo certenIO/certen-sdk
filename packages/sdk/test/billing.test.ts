@@ -4,6 +4,7 @@ import { AddressInfo } from 'net';
 import {
   CertenClient, fetchSharedProof, parseShareTarget,
   fetchOAuthToken, refreshOAuthToken, revokeOAuthToken,
+  WEBHOOK_DELIVERY_STATUSES, isWebhookDeliveryStatus, webhookEndpointVerified,
 } from '../src/index.js';
 import * as nodeCrypto from 'node:crypto';
 import { canonicalJson, foldAuditPath } from '../src/verify-receipt.js';
@@ -1029,8 +1030,8 @@ describe('webhooks — the push mechanism that had no client surface', () => {
   it('reads deliveries — the half that makes a failure visible', async () => {
     const s = await startServer((req, res) => json(res, 200, {
       deliveries: [{
-        id: 'd1', event_type: 'proof.completed', status: 'failed',
-        attempts: 3, response_status: 500, error: 'upstream 500',
+        id: 'd1', event_type: 'proof.completed', status: 'dlq',
+        attempts: 3, response_status: 500, last_error: 'Request failed with status code 500', dlq_at: '2026-11-01T10:00:00.000Z',
       }],
       pagination: { limit: 50, offset: 0, has_more: false, returned: 1 },
     }));
@@ -1040,10 +1041,68 @@ describe('webhooks — the push mechanism that had no client surface', () => {
       expect(s.recorded[0].path).toBe('/v1/webhooks/deliveries?limit=50&offset=0');
       // Without the error and the status, a failed delivery is indistinguishable from an event
       // that never fired.
-      expect(out.deliveries[0]).toMatchObject({ status: 'failed', error: 'upstream 500' });
+      // `last_error` is the field the gateway sends (the type once also named an `error` it never sent).
+      expect(out.deliveries[0]).toMatchObject({ status: 'dlq', last_error: 'Request failed with status code 500', dlq_at: '2026-11-01T10:00:00.000Z' });
     } finally {
       await s.close();
     }
+  });
+
+  it('asks the gateway for one status, on every page, and sends none when none is given', async () => {
+    // A status filtered after the fetch returns a short or empty page while more of that status exist; the gateway has the filter.
+    // The page is chosen by the offset asked for (not by request count), so the direct call below cannot shift the walk.
+    const s = await startServer((req, res) => json(res, 200, new URL(req.url ?? '', 'http://stub.test').searchParams.get('offset') === '0'
+      ? { deliveries: [{ id: 'a', status: 'dlq' }, { id: 'b', status: 'dlq' }], pagination: { limit: 2, offset: 0, has_more: true, returned: 2 } }
+      : { deliveries: [{ id: 'c', status: 'dlq' }], pagination: { limit: 2, offset: 2, has_more: false, returned: 1 } }));
+    try {
+      const certen = new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url });
+      await certen.webhooks.deliveries({ status: 'dlq', limit: 10, offset: 5 });
+      expect(s.recorded[0].path).toBe('/v1/webhooks/deliveries?limit=10&offset=5&status=dlq');
+      const seen: string[] = [];
+      for await (const d of certen.webhooks.deliveriesAll(2, { status: 'dlq' })) seen.push(d.id);
+      expect(seen).toEqual(['a', 'b', 'c']);
+      const paged = s.recorded.slice(1);
+      expect(paged).toHaveLength(2);
+      for (const r of paged) expect(r.path, r.path).toContain('status=dlq');
+      // and the unfiltered call still sends exactly what it always did
+      await certen.webhooks.deliveries();
+      expect(s.recorded[3].path).toBe('/v1/webhooks/deliveries?limit=50&offset=0');
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('refuses a status the gateway would answer with an empty list, before any request', async () => {
+    // GET /v1/webhooks/deliveries does not validate ?status=. "DLQ" comes back as { deliveries: [] }, which reads as "nothing has failed".
+    const s = await startServer((req, res) => json(res, 200, { deliveries: [], pagination: { limit: 50, offset: 0, has_more: false, total: 0 } }));
+    try {
+      const certen = new CertenClient({ apiKey: 'ck_live_test', baseUrl: s.url });
+      for (const bad of ['DLQ', 'dead', 'succeeded', 'delivered ', '', null, 7]) {
+        await expect(certen.webhooks.deliveries({ status: bad as never }), String(bad)).rejects.toMatchObject({ code: 'INVALID_WEBHOOK_OPTION', status: 0 });
+        // the paging form fails where it is written, not on the first iteration
+        expect(() => certen.webhooks.deliveriesAll(2, { status: bad as never }), String(bad)).toThrow(/is not a delivery status/);
+      }
+      await expect(certen.webhooks.deliveries({ status: 'DLQ' as never })).rejects.toThrow(/pending, delivered, failed, dlq/);
+      expect(s.recorded).toHaveLength(0);
+    } finally {
+      await s.close();
+    }
+  });
+
+  it('keeps the status vocabulary in step with the gateway, and reads verification from whichever field a route sends', () => {
+    // webhook_deliveries.status has a CHECK constraint on exactly these four (gateway migration 004).
+    expect([...WEBHOOK_DELIVERY_STATUSES]).toEqual(['pending', 'delivered', 'failed', 'dlq']);
+    for (const ok of WEBHOOK_DELIVERY_STATUSES) expect(isWebhookDeliveryStatus(ok)).toBe(true);
+    for (const no of ['DLQ', 'succeeded', '', ' dlq', undefined, null, 1, {}]) expect(isWebhookDeliveryStatus(no), String(no)).toBe(false);
+
+    const base = { id: 'e', url: 'https://x.test', event_types: [], description: null, is_active: true, created_at: '2026-11-01T00:00:00Z' };
+    // register and verify send `verified`; list and update send `verified_at`. Reading `.verified` off a listed endpoint was `undefined`.
+    expect(webhookEndpointVerified({ ...base, verified: true })).toBe(true);
+    expect(webhookEndpointVerified({ ...base, verified: false })).toBe(false);
+    expect(webhookEndpointVerified({ ...base, verified_at: '2026-11-01T09:00:00.000Z' })).toBe(true);
+    expect(webhookEndpointVerified({ ...base, verified_at: null })).toBe(false);
+    expect(webhookEndpointVerified(base)).toBeUndefined();
+    expect(webhookEndpointVerified({ ...base, verified: false, verified_at: '2026-11-01T09:00:00.000Z' })).toBe(false);
   });
 
   it('walks every delivery on has_more', async () => {

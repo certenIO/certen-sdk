@@ -313,6 +313,11 @@ the gateway recorded. All of it is pure and portable (it runs in the browser ent
 **throws** instead of verifying, because an HMAC under an empty key is computable. `X-Certen-Event` and
 `X-Certen-Delivery` sit outside the signature; the guide says what that means for your handler.
 
+When an event does not arrive, `webhooks.deliveries({ status: 'dlq' })` lists the deliveries that used every retry (`'pending'`, `'delivered'`,
+`'failed'` and `'dlq'` are the four statuses; `last_error` says why), asked of the gateway rather than filtered from a page. An unknown status
+is refused before the request, because the gateway answers it with an empty list that reads as "nothing has failed". `webhooks.list()` reports
+each endpoint's verification as `verified_at`, not `verified` (only `register` and `verify` send that), so read it with `webhookEndpointVerified(endpoint)`.
+
 ## Guides
 
 - [Onboard an identity](https://docs.kompendium.co/onboard-an-identity.html)

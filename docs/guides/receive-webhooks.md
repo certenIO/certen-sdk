@@ -180,6 +180,23 @@ const { deliveries } = await certen.webhooks.deliveries({ limit: 20 });
 await certen.webhooks.redeliver(deliveries[0].id);   // sends it again (not retry-safe — make your handler idempotent first)
 ```
 
+Ask for one status instead of reading a page and filtering it (a page of 20 can hold none of the failures while hundreds exist further back).
+There are four: `pending` (queued, or an attempt failed and a retry is scheduled), `delivered`, `failed` (never attempted: no usable destination or
+secret, or a URL the outbound rules refuse; `last_error` says which) and `dlq` (every retry used). The gateway does not check the value: an unknown
+one, `DLQ` or `succeeded` for example, comes back as an empty list, which reads as "nothing has failed". The SDK and CLI refuse it first.
+
+```ts
+for await (const d of certen.webhooks.deliveriesAll(100, { status: 'dlq' })) console.log(d.id, d.last_error);
+```
+
+```bash
+certen webhooks deliveries --status dlq        # --failed is "anything not delivered", taken from the page fetched
+```
+
+`certen webhooks list` shows whether each endpoint is verified and active, and how many delivery attempts to it have failed in a row (every retry counts, one success resets it): the gateway switches an
+endpoint off when the count reaches its limit, which is the usual reason events stop arriving. (The list route reports verification as `verified_at`;
+`register` and `verify` report `verified`. `webhookEndpointVerified(endpoint)` reads either.)
+
 **"Is my secret the right one?"** `webhooks.checkDelivery(id, secret)` fetches the delivery, which records
 what the gateway signed on its last attempt, and reproduces the signature locally. The secret never leaves
 your machine.

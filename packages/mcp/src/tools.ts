@@ -1,5 +1,5 @@
-import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, type SigningSummary } from '@certen.io/sdk';
-import type { CertenClient } from '@certen.io/sdk';
+import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, WEBHOOK_DELIVERY_STATUSES, type SigningSummary } from '@certen.io/sdk';
+import type { CertenClient, WebhookDeliveryStatus } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
 import { runReadinessTool, runReceiptTool, shareSource } from './agent-tools.js';
 import { withDestinationNote, withDestinationNotes } from './destination.js';
@@ -359,9 +359,11 @@ const READ_TOOLS: ToolDef[] = [
     mutates: false,
     endpoint: 'GET /v1/webhooks/endpoints',
     description:
-      'Webhook endpoints registered for this organization. `verified` and `is_active` are the two '
-      + 'fields that decide whether anything actually arrives — an inactive or unverified endpoint '
-      + 'explains "the event never fired" far more often than a missing event does.',
+      'Webhook endpoints registered for this organization. `is_active` and `verified_at` (null = never '
+      + 'verified, or its URL changed since) are the two fields that decide whether anything actually '
+      + 'arrives — an inactive or unverified endpoint explains "the event never fired" far more often '
+      + 'than a missing event does. `consecutive_failures` and `last_success_at` say why an endpoint '
+      + 'was switched off: `consecutive_failures` counts failed delivery attempts (every retry adds one) since the last success, and the gateway disables an endpoint when it reaches its limit.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     run: (c) => c.webhooks.list(),
   },
@@ -373,17 +375,30 @@ const READ_TOOLS: ToolDef[] = [
     description:
       'Delivery attempts, newest first, with the status and error for each. Reach for this FIRST '
       + 'when someone reports a missing event: a failed delivery and an event that never happened '
-      + 'look identical from outside, and only this tells them apart. A failed one can be sent '
+      + 'look identical from outside, and only this tells them apart. `last_error` says why one '
+      + 'failed. Pass `status: "dlq"` to see only the ones that used every retry, or `"failed"` for '
+      + 'the ones never attempted (no usable destination or secret, or a URL the outbound rules '
+      + 'refuse) — asked of the gateway, so the page is a page of that status. Either can be sent '
       + 'again with certen_webhook_redeliver.',
     inputSchema: {
       type: 'object',
       properties: {
         limit: num('How many. Default 50.'),
         offset: num('Skip this many, for paging.'),
+        status: {
+          type: 'string',
+          enum: [...WEBHOOK_DELIVERY_STATUSES],
+          description: 'Only deliveries in this status. pending = queued or awaiting a retry; delivered = the endpoint answered 2xx; failed = never attempted; dlq = every retry used.',
+        },
       },
       additionalProperties: false,
     },
-    run: (c, a) => c.webhooks.deliveries({ limit: optN(a, 'limit'), offset: optN(a, 'offset') }),
+    run: (c, a) => c.webhooks.deliveries({
+      limit: optN(a, 'limit'),
+      offset: optN(a, 'offset'),
+      // Checked by the SDK too: the gateway answers an unknown status with an empty list, not an error.
+      ...(optS(a, 'status') !== undefined ? { status: optS(a, 'status') as WebhookDeliveryStatus } : {}),
+    }),
   },
   {
     name: 'certen_scopes',

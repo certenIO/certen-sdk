@@ -14,6 +14,8 @@
  * `X-Certen-Event` header, which the signature does NOT cover. See `ReceivedWebhook`.
  */
 
+import type { WebhookEndpoint } from './types.js';
+
 export const WEBHOOK_EVENTS = {
   TransactionCompleted: 'transaction.completed',
   TransactionFailed: 'transaction.failed',
@@ -181,4 +183,38 @@ export interface WebhookEventPayloads {
     remaining_usd: string;
     how_to_continue: string;
   };
+}
+
+/**
+ * Where a delivery stands, as the gateway records it (`webhook_deliveries.status` carries a CHECK constraint on exactly these four).
+ *
+ * Transcribed from the gateway like the events above, with one difference that matters: `GET /v1/webhooks/deliveries?status=` does
+ * NOT validate its value. A status that is not one of these (a typo, the wrong case) is not an error there, it is an empty page, which
+ * reads as "nothing has failed". `webhooks.deliveries({ status })` refuses an unknown one before it sends the request.
+ *
+ *   - `pending`   queued, or an attempt failed and a retry is scheduled (`last_error` says why that attempt failed).
+ *   - `delivered` the endpoint answered 2xx.
+ *   - `failed`    never attempted: no active destination, no usable secret, or the URL was refused by the outbound rules. Retrying
+ *                 changes nothing until the endpoint is fixed; `last_error` names which.
+ *   - `dlq`       every retry was used and the delivery was moved to the dead-letter queue (`dlq_at`). `webhooks.redeliver(id)`
+ *                 queues it again.
+ */
+export const WEBHOOK_DELIVERY_STATUSES = ['pending', 'delivered', 'failed', 'dlq'] as const;
+
+export type WebhookDeliveryStatus = (typeof WEBHOOK_DELIVERY_STATUSES)[number];
+
+/** True for one of the four statuses a delivery can have. Case-sensitive, as the gateway's filter is. */
+export function isWebhookDeliveryStatus(value: unknown): value is WebhookDeliveryStatus {
+  return typeof value === 'string' && (WEBHOOK_DELIVERY_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Whether an endpoint passed its verification ping, from whichever field the route that returned it carries: `verified` from `register`
+ * and `verify`, `verified_at` from `list` and `update`. `undefined` means the response said neither, which is not the same as `false`
+ * (reading `endpoint.verified` on a listed endpoint gives `undefined`, and `!undefined` called every verified endpoint unverified).
+ */
+export function webhookEndpointVerified(endpoint: Pick<WebhookEndpoint, 'verified' | 'verified_at'>): boolean | undefined {
+  if (typeof endpoint.verified === 'boolean') return endpoint.verified;
+  if (endpoint.verified_at !== undefined) return endpoint.verified_at !== null;
+  return undefined;
 }
