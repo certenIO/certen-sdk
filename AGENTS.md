@@ -2,7 +2,7 @@
 
 TypeScript client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) —
 proof-gated cross-chain execution on Accumulate. An npm workspaces monorepo publishing
-`@certen.io/sdk` (v0.12.1), `@certen.io/cli` (v0.13.0), `@certen.io/mcp` (v0.7.1) and
+`@certen.io/sdk` (v0.13.0), `@certen.io/cli` (v0.14.0), `@certen.io/mcp` (v0.8.0) and
 `@certen.io/proof-verify` (v0.2.0). A release that bumps one of these edits this line;
 `packages/cli/test/agents-md.test.ts` fails until it does.
 

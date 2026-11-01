@@ -1,24 +1,12 @@
 # Changelog — @certen.io/sdk
 
-## Unreleased — webhook deliveries: ask for one status, and a `WebhookEndpoint` that matches what `list` sends (2026-11-01)
+## 0.13.0 — webhook signing and verification, and webhook deliveries you can ask for by status (2026-11-01)
 
-Additive, plus one type that stops claiming a field the gateway does not send.
-
-### Added
-- **`webhooks.deliveries({ status })` and `webhooks.deliveriesAll(pageSize, { status })`**: the gateway has always filtered `GET /v1/webhooks/deliveries` on `status` (and the OpenAPI document lists it); the SDK could not send it, so finding the dead-letter queue meant paging through everything. The filter is the gateway's, so a page is a page of that status. **`WEBHOOK_DELIVERY_STATUSES`** (`pending`, `delivered`, `failed`, `dlq`), **`WebhookDeliveryStatus`** and **`isWebhookDeliveryStatus`** name the four, taken from the CHECK constraint on the gateway's `webhook_deliveries.status` and from the code that sets each.
-- **`webhookEndpointVerified(endpoint)`**: whether an endpoint passed its verification ping, from whichever field the route returned.
-- `WebhookEndpoint` now declares `verified_at`, `last_success_at` and `consecutive_failures`, which `list` sends. `consecutive_failures` counts failed delivery attempts (every retry adds one) since the last success, and is what the gateway checks before it switches an endpoint off (`is_active: false`).
-
-### Changed
-- **An unknown `status` throws `INVALID_WEBHOOK_OPTION` before the request.** The gateway does not validate it: `?status=DLQ` or `?status=succeeded` is answered with `{ deliveries: [] }`, which reads as "nothing has failed". `deliveriesAll` throws at the call, not on the first iteration.
-- **`WebhookEndpoint.verified` is optional, and `verification_error` too.** They were typed as always present. Only `register` and `verify` send `verified`; `list` and `update` send `verified_at`, so reading `endpoint.verified` on a listed endpoint was `undefined`, and `!endpoint.verified` called every verified endpoint unverified. Code that read it as a plain `boolean` now needs a decision for `undefined`: `webhookEndpointVerified(endpoint)` makes it.
-- `WebhookDelivery.error` is marked `@deprecated`: the gateway has never sent it; the reason is `last_error`.
-
-## Unreleased — webhook signing and verification (2026-11-01)
+### Webhook signing and verification
 
 Additive. The gateway has always signed every webhook delivery and its customer guide has always told receivers to `import { verifyWebhookSignature } from '@certen.io/sdk'`; the SDK had no such export, so every receiver hand-rolled the HMAC. The scheme (`X-Certen-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + "." + body)>`, body = the payload's canonical JSON) was read from the gateway's signer and delivery code, and this release is checked against vectors produced by running that code.
 
-### Added
+#### Added
 - **`verifyWebhookSignature({ body | payload, signature | headers, secret, toleranceSeconds?, now? })`**: the verdict as data (`ok`, or `reason` + `hint`). Verifies the raw bytes; `payload` accepts an already-parsed body for a framework that parsed it first. `secret` may be an array, for the window around a rotation (`secretIndex` says which matched). The signature is checked before the clock, so `timestamp-outside-tolerance` always means an authentic signature that is old or skewed, never a forgery. When a mismatch is the body having been re-serialized (the usual mistake) the hint says so.
 - **`constructWebhookEvent`, `constructWebhookEventFromRequest`, `isWebhookEvent`**: verify and parse in one call (throws `CertenWebhookSignatureError`, status 400, `.reason`), for Node (`Buffer` + `req.headers`) and for Fetch-style requests (Next.js, Hono, Workers, Bun, Deno). `ReceivedWebhook` keeps the authenticated `payload` and `timestamp` apart from `type` and `deliveryId`, which come from headers the signature does not cover.
 - **`signWebhookPayload(secret, payload, { timestamp?, event?, deliveryId? })`**: signs the way the gateway does, returning the body and the delivery headers, to exercise a receiver before the first real event. **`canonicalizeWebhookPayload`** is the gateway's canonical JSON (byte-identical on JSON values; it throws on a `Date`, `Map`, cycle or `NaN` where the gateway would sign `{}`).
@@ -28,9 +16,23 @@ Additive. The gateway has always signed every webhook delivery and its customer 
 - Error codes `WEBHOOK_SIGNATURE_INVALID` (400), `WEBHOOK_SECRET_INVALID` and `INVALID_WEBHOOK_OPTION`.
 - Guide: `docs/guides/receive-webhooks.md`.
 
-### Behaviour worth knowing
+#### Behaviour worth knowing
 - **A missing, empty or shorter-than-8-character secret throws `WEBHOOK_SECRET_INVALID` instead of verifying.** HMAC under an empty key is computable, so a receiver that read an unset environment variable as `''` (the gateway guide's own snippet does) would accept a forged delivery. `toleranceSeconds` must be finite; to check an old capture pass `now`.
 - Portable: the HMAC is built on the SDK's existing `sha256.ts`, so it is in the browser entry and runs without `node:crypto`. It is held to RFC 4231 and to `node:crypto` at every length around the block boundary.
+
+### Webhook deliveries: ask for one status, and a `WebhookEndpoint` that matches what `list` sends
+
+Additive, plus one type that stops claiming a field the gateway does not send.
+
+#### Added
+- **`webhooks.deliveries({ status })` and `webhooks.deliveriesAll(pageSize, { status })`**: the gateway has always filtered `GET /v1/webhooks/deliveries` on `status` (and the OpenAPI document lists it); the SDK could not send it, so finding the dead-letter queue meant paging through everything. The filter is the gateway's, so a page is a page of that status. **`WEBHOOK_DELIVERY_STATUSES`** (`pending`, `delivered`, `failed`, `dlq`), **`WebhookDeliveryStatus`** and **`isWebhookDeliveryStatus`** name the four, taken from the CHECK constraint on the gateway's `webhook_deliveries.status` and from the code that sets each.
+- **`webhookEndpointVerified(endpoint)`**: whether an endpoint passed its verification ping, from whichever field the route returned.
+- `WebhookEndpoint` now declares `verified_at`, `last_success_at` and `consecutive_failures`, which `list` sends. `consecutive_failures` counts failed delivery attempts (every retry adds one) since the last success, and is what the gateway checks before it switches an endpoint off (`is_active: false`).
+
+#### Changed
+- **An unknown `status` throws `INVALID_WEBHOOK_OPTION` before the request.** The gateway does not validate it: `?status=DLQ` or `?status=succeeded` is answered with `{ deliveries: [] }`, which reads as "nothing has failed". `deliveriesAll` throws at the call, not on the first iteration.
+- **`WebhookEndpoint.verified` is optional, and `verification_error` too.** They were typed as always present. Only `register` and `verify` send `verified`; `list` and `update` send `verified_at`, so reading `endpoint.verified` on a listed endpoint was `undefined`, and `!endpoint.verified` called every verified endpoint unverified. Code that read it as a plain `boolean` now needs a decision for `undefined`: `webhookEndpointVerified(endpoint)` makes it.
+- `WebhookDelivery.error` is marked `@deprecated`: the gateway has never sent it; the reason is `last_error`.
 
 ## 0.12.1 — peer range follows @certen.io/proof-verify 0.2.0 (2026-10-26)
 
