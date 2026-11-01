@@ -1049,9 +1049,26 @@ export interface WebhookEndpoint {
   event_types: string[];
   description: string | null;
   is_active: boolean;
-  /** Whether the verification ping succeeded. An unverified endpoint may still be delivered to. */
-  verified: boolean;
-  verification_error: string | null;
+  /**
+   * Whether the verification ping succeeded. An unverified endpoint may still be delivered to.
+   *
+   * Only `register` and `verify` answer with this. `list` and `update` answer with `verified_at` instead, so on an endpoint
+   * from either of those this is `undefined`, not `false` (it was typed as a plain `boolean` and read as "unverified" for every
+   * endpoint a list returned). Use `webhookEndpointVerified(endpoint)` to read either.
+   */
+  verified?: boolean;
+  /** When the endpoint was last verified; `null` if it never was, or if its URL changed since (an update clears it). Sent by `list` and `update`. */
+  verified_at?: string | null;
+  /** Why the last verification ping failed. Sent by `register` and `verify`; `list` does not carry it. */
+  verification_error?: string | null;
+  /** When a delivery to this endpoint last succeeded. Sent by `list`. */
+  last_success_at?: string | null;
+  /**
+   * Delivery ATTEMPTS to this endpoint that failed since its last success. It counts attempts, not deliveries: one event that is
+   * retried twelve times and never answered adds twelve. One success resets it to 0, and the gateway disables the endpoint
+   * (`is_active: false`) when it reaches its limit (100 by default). Sent by `list` and `update`.
+   */
+  consecutive_failures?: number;
   created_at: string;
   [k: string]: unknown;
 }
@@ -1065,13 +1082,18 @@ export interface WebhookEndpoint {
 export interface WebhookDelivery {
   id: string;
   event_type?: string;
+  /**
+   * One of `WEBHOOK_DELIVERY_STATUSES` (`pending`, `delivered`, `failed`, `dlq`). Typed as a plain string so a status the gateway adds later is
+   * not a type error on a response; `isWebhookDeliveryStatus` narrows it, and `deliveries({ status })` takes the narrow type.
+   */
   status?: string;
   attempts?: number;
   response_status?: number | null;
+  /** @deprecated The gateway has never sent this. It names the failure in `last_error`. */
   error?: string | null;
   created_at?: string;
   delivered_at?: string | null;
-  /** Why the last attempt failed. This is the field the gateway sends; `error` above is what this type used to name it. */
+  /** Why the last attempt failed, or why the delivery was never attempted. `null` once it is delivered. */
   last_error?: string | null;
   /** When the delivery was moved to the dead-letter queue after its last attempt, if it was. */
   dlq_at?: string | null;

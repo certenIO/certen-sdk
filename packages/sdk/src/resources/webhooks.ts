@@ -5,6 +5,19 @@ import { apiPath } from '../internal.js';
 import { CertenError } from '../errors.js';
 import { assertWebhookSecret, checkWebhookDelivery } from '../webhook-signature.js';
 import type { WebhookDeliveryCheck } from '../webhook-signature.js';
+import { WEBHOOK_DELIVERY_STATUSES, isWebhookDeliveryStatus } from '../webhook-events.js';
+import type { WebhookDeliveryStatus } from '../webhook-events.js';
+
+/** Refuses a status the gateway would answer with an empty page instead of an error. Says what is accepted; never echoes more than a short slice. */
+function assertDeliveryStatus(status: unknown): asserts status is WebhookDeliveryStatus {
+  if (isWebhookDeliveryStatus(status)) return;
+  const shown = typeof status === 'string' ? JSON.stringify(status.length > 40 ? `${status.slice(0, 40)}...` : status) : typeof status;
+  throw new CertenError(
+    `${shown} is not a delivery status. Use one of ${WEBHOOK_DELIVERY_STATUSES.join(', ')} (lowercase), or omit it for every status. `
+    + 'The gateway does not reject an unknown status; it returns an empty list, which would read as "nothing has failed".',
+    0, 'INVALID_WEBHOOK_OPTION',
+  );
+}
 
 /**
  * Webhook endpoints, and what happened to each delivery.
@@ -133,21 +146,31 @@ export class WebhooksResource {
    *
    * This is the half that makes webhooks debuggable: a delivery that failed is otherwise invisible
    * to the person waiting for the event.
+   *
+   * `status` asks the gateway for one status only (`'dlq'` is the dead-letter queue: deliveries that used every retry). That is
+   * not the same as filtering a page afterwards, which returns a short or empty page while more of that status exist. It is
+   * checked here first because the gateway does not check it: an unknown status (a typo, the wrong case) is answered with an
+   * empty list, which reads as "nothing has failed". See `WEBHOOK_DELIVERY_STATUSES` for what each one means.
    */
   async deliveries(
-    params: { limit?: number; offset?: number } = {},
+    params: { limit?: number; offset?: number; status?: WebhookDeliveryStatus } = {},
   ): Promise<{ deliveries: WebhookDelivery[]; pagination?: Pagination }> {
-    const { data } = await this.http.get('/v1/webhooks/deliveries', {
-      params: { limit: params.limit ?? 50, offset: params.offset ?? 0 },
-    });
+    const query: Record<string, string | number> = { limit: params.limit ?? 50, offset: params.offset ?? 0 };
+    if (params.status !== undefined) {
+      assertDeliveryStatus(params.status);
+      query.status = params.status;
+    }
+    const { data } = await this.http.get('/v1/webhooks/deliveries', { params: query });
     return data;
   }
 
-  /** Every delivery, paging automatically on `has_more`. */
-  deliveriesAll(pageSize = 100): AsyncIterableIterator<WebhookDelivery> {
+  /** Every delivery (of one `status`, if given), paging automatically on `has_more`. */
+  deliveriesAll(pageSize = 100, params: { status?: WebhookDeliveryStatus } = {}): AsyncIterableIterator<WebhookDelivery> {
+    // Checked before the first page is asked for, not on the first `next()`: a bad status should fail where it was written.
+    if (params.status !== undefined) assertDeliveryStatus(params.status);
     return paginate<WebhookDelivery>(
       async (limit, offset) => {
-        const page = await this.deliveries({ limit, offset });
+        const page = await this.deliveries({ limit, offset, ...(params.status !== undefined ? { status: params.status } : {}) });
         return { items: page.deliveries ?? [], hasMore: page.pagination?.has_more };
       },
       pageSize,

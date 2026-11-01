@@ -53,8 +53,8 @@ export type {
   WebhookBody, WebhookHeaders, WebhookRequestLike, VerifyWebhookOptions, WebhookVerification, VerifiedWebhookSignature, ParsedWebhookSignature,
   SignWebhookOptions, SignedWebhook, ConstructWebhookEventOptions, ReceivedWebhook, DeliverySignatureRecord, WebhookDeliveryCheck,
 } from './webhook-signature.js';
-export { WEBHOOK_EVENTS, isKnownWebhookEvent } from './webhook-events.js';
-export type { WebhookEventName, WebhookEventPayloads, WebhookIntentHeader } from './webhook-events.js';
+export { WEBHOOK_EVENTS, isKnownWebhookEvent, WEBHOOK_DELIVERY_STATUSES, isWebhookDeliveryStatus, webhookEndpointVerified } from './webhook-events.js';
+export type { WebhookEventName, WebhookEventPayloads, WebhookIntentHeader, WebhookDeliveryStatus } from './webhook-events.js';
 // Transaction-header fields (additional authorities, deadline): the validators the SDK runs before
 // sending, exported so the CLI and MCP apply the identical rules. See header-fields.ts.
 export {

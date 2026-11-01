@@ -135,8 +135,8 @@ export const ERROR_CODES = [
     code: 'INVALID_WEBHOOK_OPTION',
     status: 0,
     retryable: false,
-    meaning: 'A webhook verifier or signer was called with an option that makes no sense: both or neither of `body` and `payload`, a `toleranceSeconds` that is not a finite number of at least 0, a `now` that is not unix seconds or a Date, or a `timestamp` that is not whole unix seconds.',
-    fix: 'Pass exactly one of `body` (the raw request bytes) or `payload`. To check an old capture, pass `now` instead of widening the tolerance; an unbounded tolerance is refused because it turns replay protection off.',
+    meaning: 'A webhook call was made with an option that makes no sense: both or neither of `body` and `payload`, a `toleranceSeconds` that is not a finite number of at least 0, a `now` that is not unix seconds or a Date, a `timestamp` that is not whole unix seconds, or a delivery `status` that is not one of pending, delivered, failed or dlq (the gateway answers an unknown status with an empty list, not an error, so it is refused before the request).',
+    fix: 'Pass exactly one of `body` (the raw request bytes) or `payload`. To check an old capture, pass `now` instead of widening the tolerance; an unbounded tolerance is refused because it turns replay protection off. For `webhooks.deliveries({ status })` use one of pending, delivered, failed, dlq, in lowercase, or leave it out for every status.',
   },
   {
     code: 'PROOF_V2_EVIDENCE_NOT_SERVED',

@@ -1,5 +1,18 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — `webhooks deliveries --status`, and the failure reason and verification state it should always have shown (2026-11-01)
+
+Needs the `@certen.io/sdk` that carries `deliveries({ status })` and `webhookEndpointVerified` (unreleased). Two commands printed something other than what the gateway sent; both are fixed.
+
+### Added
+- **`certen webhooks deliveries --status <pending|delivered|failed|dlq>`**: asked of the gateway, so `--status dlq` lists every delivery that used its retries, not the ones that happen to be on the first page. A status that is not one of the four is a usage error (exit `2`, `INVALID_VALUE`) before any request: the gateway answers an unknown status with an empty list, which reads as "nothing has failed". With `--failed` it is `CONFLICTING_FLAGS`.
+- `webhooks list` shows how many delivery attempts to an endpoint have failed in a row (every retry counts) and when one last succeeded. The gateway switches an endpoint off after enough failures, which is the usual reason it shows `INACTIVE`.
+
+### Fixed
+- **`webhooks deliveries` never showed why a delivery failed.** It printed `d.error`; the gateway sends `last_error`. It now prints it, says when a delivery was given up (`dlq_at`), offers `redeliver` for `failed` and `dlq`, and says `retrying on its own` for a `pending` one with an error.
+- **`webhooks list` printed every endpoint as `UNVERIFIED`.** It read `verified`, which `register` and `verify` send but `list` does not (it sends `verified_at`). A listed endpoint with no information either way now reads `verification unknown`, not `UNVERIFIED`.
+- `--failed` no longer treats a status `succeeded` (which the gateway has never had) as delivered. Its meaning is unchanged: anything not `delivered`, taken from the page that was fetched. For one status across every page use `--status`.
+
 ## Unreleased — webhook signing and verification (2026-11-01)
 
 Needs the `@certen.io/sdk` that carries `verifyWebhookSignature` (unreleased). Additive; no existing command or flag changes. Full detail: `docs/CLI-CONTRACT.md` section 17.

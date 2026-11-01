@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import {
   CertenClient, CertenError, signWebhookPayload, verifyWebhookSignature, DEFAULT_WEBHOOK_TOLERANCE_SECONDS,
+  WEBHOOK_DELIVERY_STATUSES, isWebhookDeliveryStatus, webhookEndpointVerified,
 } from '@certen.io/sdk';
+import type { WebhookDelivery, WebhookDeliveryStatus } from '@certen.io/sdk';
 import { getApiKey, getApiUrl, getOutputFormat } from '../config.js';
 import { printOutput, human, hint, isJsonMode } from '../output.js';
 import { CliError, UsageError, EXIT } from '../errors.js';
@@ -105,17 +107,27 @@ export function registerWebhookCommands(program: Command): void {
         return;
       }
       for (const e of endpoints) {
-        // `verified` and `is_active` are the two states that decide whether anything arrives, so
-        // they belong on the same line as the URL rather than behind a second command.
+        // Verified and active are the two states that decide whether anything arrives, so they belong on the
+        // same line as the URL rather than behind a second command. The list route sends `verified_at`, not
+        // `verified` (only register and verify send that), so read it through the helper that knows both:
+        // reading `e.verified` here called every verified endpoint UNVERIFIED.
+        const verified = webhookEndpointVerified(e);
         const state = [
           e.is_active ? 'active' : 'INACTIVE',
-          e.verified ? 'verified' : 'UNVERIFIED',
+          verified === undefined ? 'verification unknown' : verified ? 'verified' : 'UNVERIFIED',
         ].join(', ');
         human(`  ${e.url}`);
         human(`    ${e.id}  (${state})`);
         if (e.event_types?.length) human(`    events: ${e.event_types.join(', ')}`);
         else human('    events: all');
         if (e.verification_error) human(`    last verification error: ${e.verification_error}`);
+        // The gateway counts failed ATTEMPTS (every retry adds one) and switches an endpoint off when the count reaches
+        // its limit; one success resets it. That is the usual reason for INACTIVE.
+        if ((e.consecutive_failures ?? 0) > 0) {
+          const n = e.consecutive_failures;
+          const last = e.last_success_at ? `last success ${String(e.last_success_at).slice(0, 19).replace('T', ' ')}` : 'none has succeeded';
+          human(`    ${n} failed ${n === 1 ? 'attempt' : 'attempts'} in a row; ${last}`);
+        }
       }
       human('');
     });
@@ -210,12 +222,27 @@ export function registerWebhookCommands(program: Command): void {
     .option('--limit <n>', 'How many to fetch (page size with --all)', '50')
     .option('--offset <n>', 'Skip this many')
     .option('--all', 'Fetch every page')
-    .option('--failed', 'Only deliveries that did not succeed')
-    .action(async (opts: { limit: string; offset?: string; all?: boolean; failed?: boolean }) => {
+    .option('--status <status>', `Only this status, asked of the gateway: ${WEBHOOK_DELIVERY_STATUSES.join(', ')} (dlq = used every retry)`)
+    .option('--failed', 'Only deliveries that are not delivered (pending, failed and dlq), filtered from the page fetched; for one status across every page use --status')
+    .action(async (opts: { limit: string; offset?: string; all?: boolean; failed?: boolean; status?: string }) => {
       const limit = Number(opts.limit);
       if (!Number.isInteger(limit) || limit < 1) {
         throw new CliError(`"${opts.limit}" is not a whole number for --limit.`, 'INVALID_NUMBER', EXIT.USAGE);
       }
+      // Checked before any request. The gateway does not check it: an unknown status comes back as an empty list, which reads as "nothing has failed".
+      if (opts.status !== undefined && !isWebhookDeliveryStatus(opts.status)) {
+        throw new UsageError(
+          `"${opts.status}" is not a delivery status. Use one of: ${WEBHOOK_DELIVERY_STATUSES.join(', ')} (lowercase).`,
+          'INVALID_VALUE', 'certen webhooks deliveries --help',
+        );
+      }
+      if (opts.status !== undefined && opts.failed) {
+        throw new CliError(
+          '--failed and --status both narrow the list. Use --status failed or --status dlq for one status, or --failed for everything not delivered.',
+          'CONFLICTING_FLAGS', EXIT.USAGE,
+        );
+      }
+      const status = opts.status as WebhookDeliveryStatus | undefined;
       const offset = opts.offset === undefined ? undefined : Number(opts.offset);
       if (opts.all && offset !== undefined) {
         throw new CliError(
@@ -225,18 +252,16 @@ export function registerWebhookCommands(program: Command): void {
       }
 
       const client = await getClient();
-      const all = [];
+      const all: WebhookDelivery[] = [];
       if (opts.all) {
-        for await (const d of client.webhooks.deliveriesAll(limit)) all.push(d);
+        for await (const d of client.webhooks.deliveriesAll(limit, status ? { status } : {})) all.push(d);
       } else {
-        all.push(...(await client.webhooks.deliveries({ limit, offset })).deliveries);
+        all.push(...(await client.webhooks.deliveries({ limit, offset, ...(status ? { status } : {}) })).deliveries);
       }
 
-      // Filtered here rather than server-side because the endpoint takes no status filter; doing
-      // it locally is honest about that and still answers the question people arrive with.
-      const deliveries = opts.failed
-        ? all.filter((d) => d.status !== 'delivered' && d.status !== 'succeeded')
-        : all;
+      // `--status` is the gateway's own filter, so a page is a page of that status. `--failed` is "anything not delivered", which is
+      // three statuses and one query cannot ask for, so it is applied to the page that was fetched.
+      const deliveries = opts.failed ? all.filter((d) => d.status !== 'delivered') : all;
 
       if (machineOutput()) {
         printOutput({ deliveries });
@@ -244,17 +269,18 @@ export function registerWebhookCommands(program: Command): void {
       }
       human('');
       if (deliveries.length === 0) {
-        human(opts.failed ? '  No failed deliveries.' : '  No deliveries yet.');
+        human(status ? `  No ${status} deliveries.` : opts.failed ? '  No failed deliveries.' : '  No deliveries yet.');
         return;
       }
       for (const d of deliveries) {
         const when = String(d.created_at ?? '').slice(0, 19).replace('T', ' ');
         human(`  ${when}  ${String(d.event_type ?? '?').padEnd(28)} ${d.status ?? '?'}`);
         if (d.response_status) human(`    HTTP ${d.response_status}, attempt ${d.attempts ?? 1}`);
-        if (d.error) human(`    ${d.error}`);
-        if (d.status && d.status !== 'delivered' && d.status !== 'succeeded') {
-          human(`    retry it: certen webhooks redeliver ${d.id}`);
-        }
+        // `last_error` is the field the gateway sends. This printed `d.error`, which it never has, so no failure reason was ever shown.
+        if (d.last_error) human(`    ${d.last_error}`);
+        if (d.dlq_at) human(`    gave up after ${d.attempts ?? '?'} attempts, ${String(d.dlq_at).slice(0, 19).replace('T', ' ')}`);
+        if (d.status === 'pending' && d.last_error) human('    retrying on its own');
+        else if (d.status === 'failed' || d.status === 'dlq') human(`    retry it: certen webhooks redeliver ${d.id}`);
       }
       human('');
     });
