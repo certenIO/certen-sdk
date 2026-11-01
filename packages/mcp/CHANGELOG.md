@@ -1,8 +1,8 @@
 # Changelog — @certen.io/mcp
 
-## Unreleased — `certen_webhook_deliveries` takes a `status`, and `certen_webhook_endpoints` names the field it returns (2026-11-01)
+## 0.8.0 — `certen_webhook_deliveries` takes a `status`, and `certen_webhook_endpoints` names the field it returns (2026-11-01)
 
-Additive: one optional parameter. No tool is removed or renamed, no parameter becomes required, and the server still holds no key. Needs the `@certen.io/sdk` that carries `webhooks.deliveries({ status })` (unreleased).
+Additive: one optional parameter. No tool is removed or renamed, no parameter becomes required, and the server still holds no key. Needs `@certen.io/sdk` 0.13.0, which carries `webhooks.deliveries({ status })`; the range is raised with it.
 
 - **`certen_webhook_deliveries` accepts `status`** (`pending`, `delivered`, `failed`, `dlq`), asked of the gateway, so an agent debugging a missing event can ask for the dead-letter queue (`dlq`) or the deliveries that were never attempted (`failed`) instead of paging through everything. An unknown value is refused before the request: the gateway answers it with an empty list, which an agent would read as "nothing has failed". The description now says `last_error` is the reason.
 - **`certen_webhook_endpoints` named a field the list does not return.** Its description told an agent to read `verified`; the list route sends `verified_at` (null = never verified, or the URL changed since), which the description now names, together with `consecutive_failures` and `last_success_at`, which say why the gateway switched an endpoint off.

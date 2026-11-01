@@ -1,27 +1,29 @@
 # Changelog — @certen.io/cli
 
-## Unreleased — `webhooks deliveries --status`, and the failure reason and verification state it should always have shown (2026-11-01)
+## 0.14.0 — webhook signing and verification, and `webhooks deliveries --status` (2026-11-01)
 
-Needs the `@certen.io/sdk` that carries `deliveries({ status })` and `webhookEndpointVerified` (unreleased). Two commands printed something other than what the gateway sent; both are fixed.
+### Webhook signing and verification
 
-### Added
-- **`certen webhooks deliveries --status <pending|delivered|failed|dlq>`**: asked of the gateway, so `--status dlq` lists every delivery that used its retries, not the ones that happen to be on the first page. A status that is not one of the four is a usage error (exit `2`, `INVALID_VALUE`) before any request: the gateway answers an unknown status with an empty list, which reads as "nothing has failed". With `--failed` it is `CONFLICTING_FLAGS`.
-- `webhooks list` shows how many delivery attempts to an endpoint have failed in a row (every retry counts) and when one last succeeded. The gateway switches an endpoint off after enough failures, which is the usual reason it shows `INACTIVE`.
+Needs `@certen.io/sdk` 0.13.0, which carries `verifyWebhookSignature`; the range is raised with it. Additive; no existing command or flag changes. Full detail: `docs/CLI-CONTRACT.md` section 17.
 
-### Fixed
-- **`webhooks deliveries` never showed why a delivery failed.** It printed `d.error`; the gateway sends `last_error`. It now prints it, says when a delivery was given up (`dlq_at`), offers `redeliver` for `failed` and `dlq`, and says `retrying on its own` for a `pending` one with an error.
-- **`webhooks list` printed every endpoint as `UNVERIFIED`.** It read `verified`, which `register` and `verify` send but `list` does not (it sends `verified_at`). A listed endpoint with no information either way now reads `verification unknown`, not `UNVERIFIED`.
-- `--failed` no longer treats a status `succeeded` (which the gateway has never had) as delivered. Its meaning is unchanged: anything not `delivered`, taken from the page that was fetched. For one status across every page use `--status`.
-
-## Unreleased — webhook signing and verification (2026-11-01)
-
-Needs the `@certen.io/sdk` that carries `verifyWebhookSignature` (unreleased). Additive; no existing command or flag changes. Full detail: `docs/CLI-CONTRACT.md` section 17.
-
-### Added
+#### Added
 - **`certen webhooks sign`**: sign a payload the way the gateway signs a delivery, to try a receiver. Local: no API key, no network.
 - **`certen webhooks check-signature`**: check a captured delivery's `X-Certen-Signature` against your secret. Local. Exit `0` verified, `1` not (the reason is `error.details.reason`), `2` a wrong invocation.
 - **`certen webhooks check-delivery <id>`**: is your secret the one the gateway signed this delivery with? Reads the delivery; the secret never leaves the machine.
 - The secret comes from `$CERTEN_WEBHOOK_SECRET` or `--secret-file`, **never a flag** (a flag lands in shell history and the process list).
+
+### `webhooks deliveries --status`, and the failure reason and verification state it should always have shown
+
+Needs `@certen.io/sdk` 0.13.0, which carries `deliveries({ status })` and `webhookEndpointVerified`. Two commands printed something other than what the gateway sent; both are fixed.
+
+#### Added
+- **`certen webhooks deliveries --status <pending|delivered|failed|dlq>`**: asked of the gateway, so `--status dlq` lists every delivery that used its retries, not the ones that happen to be on the first page. A status that is not one of the four is a usage error (exit `2`, `INVALID_VALUE`) before any request: the gateway answers an unknown status with an empty list, which reads as "nothing has failed". With `--failed` it is `CONFLICTING_FLAGS`.
+- `webhooks list` shows how many delivery attempts to an endpoint have failed in a row (every retry counts) and when one last succeeded. The gateway switches an endpoint off after enough failures, which is the usual reason it shows `INACTIVE`.
+
+#### Fixed
+- **`webhooks deliveries` never showed why a delivery failed.** It printed `d.error`; the gateway sends `last_error`. It now prints it, says when a delivery was given up (`dlq_at`), offers `redeliver` for `failed` and `dlq`, and says `retrying on its own` for a `pending` one with an error.
+- **`webhooks list` printed every endpoint as `UNVERIFIED`.** It read `verified`, which `register` and `verify` send but `list` does not (it sends `verified_at`). A listed endpoint with no information either way now reads `verification unknown`, not `UNVERIFIED`.
+- `--failed` no longer treats a status `succeeded` (which the gateway has never had) as delivered. Its meaning is unchanged: anything not `delivered`, taken from the page that was fetched. For one status across every page use `--status`.
 
 ## 0.13.0 — certen proof verify-identity (2026-10-26)
 
