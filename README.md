@@ -53,6 +53,7 @@ Task-shaped guides, in the order most people need them:
 | [Proof-gate a contract call](docs/guides/proof-gated-contract-call.md) | Arbitrary contract functions — escrow, settlement, anything past a transfer. |
 | [M-of-N panels](docs/guides/multisig-panel.md) | Arbitration, dual control, break-glass. |
 | [Verify a proof](docs/guides/verify-a-proof.md) | Handing evidence to someone who should not have to trust you. |
+| [Receive webhooks](docs/guides/receive-webhooks.md) | Knowing an event came from CERTEN: verify the signature, handle each delivery once, rotate the secret. |
 
 Reference: [authentication](docs/authentication.md) · [errors](docs/errors.md) ·
 [idempotency](docs/idempotency.md)
@@ -79,7 +80,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->41614 tests in 419 files (sdk 910, cli 1405, mcp 357, verify 38942), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->41969 tests in 443 files (sdk 989, cli 1432, mcp 357, verify 39191), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 

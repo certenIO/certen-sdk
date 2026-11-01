@@ -31,7 +31,7 @@ has been built once. If you see the CLI failing to resolve SDK types, you skippe
 
 | Command | Covers | Needs network |
 |---|---|:--:|
-| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->41614 tests in 419 files (sdk 910, cli 1405, mcp 357, verify 38942), 0 skipped<!-- test-counts:end --> | no |
+| `node scripts/test-all.mjs` | every package, one vitest process — <!-- test-counts:start -->41969 tests in 443 files (sdk 989, cli 1432, mcp 357, verify 39191), 0 skipped<!-- test-counts:end --> | no |
 | `node scripts/typecheck-all.mjs` | `tsc --noEmit` in every package | no |
 | `node scripts/build-all.mjs` | compiles every package, sdk first | no |
 | `npm test` / `npm run typecheck` / `npm run build` | delegate to the three above | no |
@@ -153,7 +153,9 @@ docs/guides/       task-shaped guides
 `packages/mcp/test/tiers.test.ts` — treat them as invariants, not preferences:
 
 - **It never signs and never accepts key material.** A test asserts no tool parameter is even named
-  like a private key. If you add a tool, it takes a hash or a signature, never a key.
+  like a private key. If you add a tool, it takes a hash or a signature, never a key. A webhook signing secret
+  is key material too: `verifyWebhookSignature` and `signWebhookPayload` are SDK and CLI capabilities
+  and are deliberately not MCP tools, because the secret is what makes a delivery trustworthy.
 - **Write tools are not registered unless `CERTEN_MCP_ALLOW_WRITES=1`**, and every *mutating* tool
   additionally requires `confirm: true`. `tier` controls visibility; `mutates` controls confirmation.
   They are separate fields because the admin read tools are gated but have nothing to confirm.

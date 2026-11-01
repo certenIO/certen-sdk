@@ -1071,6 +1071,21 @@ export interface WebhookDelivery {
   error?: string | null;
   created_at?: string;
   delivered_at?: string | null;
+  /** Why the last attempt failed. This is the field the gateway sends; `error` above is what this type used to name it. */
+  last_error?: string | null;
+  /** When the delivery was moved to the dead-letter queue after its last attempt, if it was. */
+  dlq_at?: string | null;
+  /**
+   * What the gateway signed on the LAST attempt, so a receiver can reproduce it: `signature_hex` is HMAC-SHA256(secret,
+   * `${signed_at_unix}.${signed_canonical_payload}`). All null until an attempt has been made. See `checkWebhookDelivery`
+   * and `webhooks.checkDelivery`.
+   */
+  signature_version?: string | null;
+  signature_hex?: string | null;
+  signed_at_unix?: number | null;
+  signed_canonical_payload?: string | null;
+  /** The `X-Certen-Delivery` header value: one per delivery, the same on every retry and on `redeliver`. */
+  delivery_id_header?: string | null;
   [k: string]: unknown;
 }
 

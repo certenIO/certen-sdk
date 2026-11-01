@@ -1,5 +1,15 @@
 # Changelog — @certen.io/cli
 
+## Unreleased — webhook signing and verification (2026-11-01)
+
+Needs the `@certen.io/sdk` that carries `verifyWebhookSignature` (unreleased). Additive; no existing command or flag changes. Full detail: `docs/CLI-CONTRACT.md` section 17.
+
+### Added
+- **`certen webhooks sign`**: sign a payload the way the gateway signs a delivery, to try a receiver. Local: no API key, no network.
+- **`certen webhooks check-signature`**: check a captured delivery's `X-Certen-Signature` against your secret. Local. Exit `0` verified, `1` not (the reason is `error.details.reason`), `2` a wrong invocation.
+- **`certen webhooks check-delivery <id>`**: is your secret the one the gateway signed this delivery with? Reads the delivery; the secret never leaves the machine.
+- The secret comes from `$CERTEN_WEBHOOK_SECRET` or `--secret-file`, **never a flag** (a flag lands in shell history and the process list).
+
 ## 0.13.0 — certen proof verify-identity (2026-10-26)
 
 Adds `certen proof verify-identity <@document> --outcome-file <file>`: judges the portable document's S8 contract-identity member and prints one of six headline rows with its own exit codes (0 verified, 5 not applicable, 10 verified core, 20 pending, 30 unproven, 40 refused, 2 usage/internal, 1 when the finality phase fails). Exit 5 here means "not applicable" and differs from `certen proof verify`'s NO_EVIDENCE; the new command has its own exit path and `certen proof verify` is unchanged. `verified_core` is never printed or exit-coded as `verified`. Needs `@certen.io/proof-verify` 0.2.0.

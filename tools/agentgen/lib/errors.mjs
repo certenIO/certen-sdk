@@ -118,6 +118,27 @@ export const ERROR_CODES = [
     fix: 'Pass the real id. The SDK encodes every id as a single path segment; it refuses an empty one rather than requesting a different route (identity.get("") would have listed identities).',
   },
   {
+    code: 'WEBHOOK_SIGNATURE_INVALID',
+    status: 400,
+    retryable: false,
+    meaning: 'A webhook delivery was not accepted by `constructWebhookEvent`. `reason` (also on `details`) is one of `missing-signature`, `malformed-signature`, `unsupported-version`, `signature-mismatch`, `timestamp-outside-tolerance` (the signature is authentic but older or newer than the tolerance) or `invalid-payload`. `hint` names the usual cause when there is one. Raised on the receiving side; the gateway never returns it.',
+    fix: 'Answer 400 and process nothing. `signature-mismatch` with a hint about re-serialization means the body was parsed before it was verified: verify the raw request bytes. `timestamp-outside-tolerance` is a replay or a skewed clock. Check which secret the receiver holds with `webhooks.checkDelivery(id, secret)`.',
+  },
+  {
+    code: 'WEBHOOK_SECRET_INVALID',
+    status: 0,
+    retryable: false,
+    meaning: 'The signing secret given to a webhook verifier or signer is missing, empty, not a string or shorter than 8 characters, so it cannot be the secret the gateway signed with. Raised before anything is compared, and the message never contains the secret.',
+    fix: 'Pass the secret returned when the endpoint was registered or rotated. If it comes from an environment variable or secret store, check that the variable is set: an empty key would otherwise make a forged delivery verify, which is why this is an error and not a failed check.',
+  },
+  {
+    code: 'INVALID_WEBHOOK_OPTION',
+    status: 0,
+    retryable: false,
+    meaning: 'A webhook verifier or signer was called with an option that makes no sense: both or neither of `body` and `payload`, a `toleranceSeconds` that is not a finite number of at least 0, a `now` that is not unix seconds or a Date, or a `timestamp` that is not whole unix seconds.',
+    fix: 'Pass exactly one of `body` (the raw request bytes) or `payload`. To check an old capture, pass `now` instead of widening the tolerance; an unbounded tolerance is refused because it turns replay protection off.',
+  },
+  {
     code: 'PROOF_V2_EVIDENCE_NOT_SERVED',
     status: 0,
     retryable: false,

@@ -1151,6 +1151,40 @@ transaction hash and the explorer link; `skipped` says the gateway found the acc
 
 Every one of these codes has an explicit `error.next` (section 11). Nothing here prints the API key, a passphrase or a node URL, on either channel.
 
+### 17. Webhook signatures: `certen webhooks sign`, `check-signature`, `check-delivery`
+
+The gateway signs every webhook delivery (`X-Certen-Signature: t=<unix>,v1=<hex HMAC-SHA256(secret, t + "." + body)>`, the body being the
+payload's canonical JSON). These three commands are the receiving end's tools; the SDK carries the same checks as functions
+(`docs/guides/receive-webhooks.md`).
+
+| Command | Needs | Does |
+|---|---|---|
+| `webhooks sign (--payload <json> \| --payload-file <path>)` | the secret | Signs a payload the way the gateway does, to try a receiver. `--event`, `--delivery-id`, `--timestamp` are optional. **Local: no API key, no network.** |
+| `webhooks check-signature --signature <header> (--body <text> \| --body-file <path>)` | the secret | Checks a captured delivery. `--body-file -` reads standard input; a file is hashed as bytes. `--tolerance <s>` (default 300), `--now <unix>` (to check an older capture). **Local.** |
+| `webhooks check-delivery <id>` | the secret, an API key | Fetches the delivery (`GET /v1/webhooks/deliveries/{id}`, `webhook:read`) and reproduces the signature the gateway recorded for its last attempt. The secret is used locally and never sent. |
+
+**The secret is never a flag.** It is read from `$CERTEN_WEBHOOK_SECRET` or `--secret-file <path>` (one trailing newline is dropped from a file),
+because a flag lands in shell history and in every process listing. It is never printed, on success or on failure. A missing secret is
+`WEBHOOK_SECRET_REQUIRED` and a secret shorter than 8 characters is `WEBHOOK_SECRET_INVALID`, both exit `2`: the commands refuse to verify against a
+key that cannot have signed anything, because HMAC under an empty key is computable.
+
+**Data** (the `data` of the success envelope):
+
+```json
+{ "ok": true, "data": { "valid": true, "timestamp": 1716624000, "age_seconds": 0, "version": "v1" } }
+```
+
+`sign` returns `{ "body", "headers", "signature", "timestamp" }` (send `body` exactly as given; `headers` are the ones a delivery carries).
+`check-delivery` returns `{ "valid": true, "delivery_id", "signed_at", "version" }`.
+
+**Exit codes.** `0` the signature holds. `1` it does not: the failure envelope is `WEBHOOK_SIGNATURE_INVALID` with `error.details.reason` one of
+`missing-signature`, `malformed-signature`, `unsupported-version`, `signature-mismatch`, `timestamp-outside-tolerance` (authentic but outside the
+tolerance: a replay or a skewed clock, never a forgery) or, for `check-delivery`, `not-signed` (no attempt has been made yet); `details.hint` names the
+usual cause when there is one, for example that the body was re-serialized before it was checked. `2` a wrong invocation, raised before any request:
+`WEBHOOK_SECRET_REQUIRED`, `WEBHOOK_SECRET_INVALID`, `INVALID_WEBHOOK_OPTION`, `SECRET_FILE_UNREADABLE`, `INPUT_UNREADABLE`, `INVALID_NUMBER`,
+`PAYLOAD_REQUIRED`, `INVALID_PAYLOAD`, `BODY_REQUIRED`. `check-delivery` exits as any gateway call does when the delivery is not found (`1`) or the
+gateway is unreachable (`3`).
+
 ## Example: a correct retry loop
 
 ```bash

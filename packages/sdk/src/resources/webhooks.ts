@@ -2,6 +2,9 @@ import { AxiosInstance } from 'axios';
 import { paginate } from '../client.js';
 import type { WebhookEndpoint, WebhookDelivery, Pagination } from '../types.js';
 import { apiPath } from '../internal.js';
+import { CertenError } from '../errors.js';
+import { assertWebhookSecret, checkWebhookDelivery } from '../webhook-signature.js';
+import type { WebhookDeliveryCheck } from '../webhook-signature.js';
 
 /**
  * Webhook endpoints, and what happened to each delivery.
@@ -36,6 +39,9 @@ export class WebhooksResource {
    *
    * Supply your own `secret` to keep the value out of a response body entirely. Omit `eventTypes`
    * to receive everything.
+   *
+   * Verify each delivery with `verifyWebhookSignature` / `constructWebhookEvent` (exported from the package), and exercise a receiver
+   * before the first real event with `signWebhookPayload`.
    */
   async register(params: {
     url: string;
@@ -81,14 +87,35 @@ export class WebhooksResource {
   }
 
   /**
-   * Issue a new signing secret.
+   * Issue a new signing secret. Requires `webhook:write`.
    *
-   * NOT retry-safe: each call invalidates the secret the previous one issued, so a retry can strand
-   * a receiver that was verifying correctly seconds earlier. Returns the new secret once.
+   * The old secret stops working **immediately**: the very next delivery, and every retry of an earlier one (each attempt is signed
+   * afresh with the current secret), is signed with the new one. A receiver still holding the old value rejects them until it is
+   * switched, so rotate with a plan:
+   *
+   *   - With no `secret`, the gateway generates one and returns it once. The window between this call and your deploy is a window of
+   *     failed verifications, and retried deliveries only recover if it is shorter than the retry schedule.
+   *   - With your own `secret` (16–255 characters), you choose the value, so the receiver can be deployed accepting BOTH
+   *     (`verifyWebhookSignature({ secret: [newSecret, oldSecret] })`) before you rotate, and there is no window at all. The gateway
+   *     still returns the secret once.
+   *
+   * Without a `secret`, NOT retry-safe (the gateway classifies it so): each call invalidates the secret the previous one issued, so a
+   * retry can strand a receiver that was verifying correctly seconds earlier. With one, repeating the call sets the same value.
    */
-  async rotateSecret(id: string): Promise<{ secret: string; [k: string]: unknown }> {
+  async rotateSecret(id: string, params: { secret?: string } = {}): Promise<{ secret: string; [k: string]: unknown }> {
+    if (params.secret !== undefined) {
+      // Before the request: a value the gateway will refuse should not travel, and the message here does not echo it.
+      assertWebhookSecret(params.secret);
+      if (params.secret.length < 16 || params.secret.length > 255) {
+        throw new CertenError(
+          `A webhook secret you supply must be 16 to 255 characters; this one is ${params.secret.length}. Omit it to have the gateway generate one.`,
+          0, 'WEBHOOK_SECRET_INVALID',
+        );
+      }
+    }
     const { data } = await this.http.post(
       apiPath`/v1/webhooks/endpoints/${id}/rotate-secret`,
+      params.secret !== undefined ? { secret: params.secret } : undefined,
     );
     return data;
   }
@@ -131,6 +158,23 @@ export class WebhooksResource {
   async delivery(id: string): Promise<WebhookDelivery> {
     const { data } = await this.http.get(apiPath`/v1/webhooks/deliveries/${id}`);
     return data;
+  }
+
+  /**
+   * Is `secret` the one the gateway signed this delivery with? Fetches the delivery and reproduces the signature it recorded from the
+   * signed bytes it also recorded. Requires `webhook:read`. The secret is used locally and never sent anywhere.
+   *
+   * The question to ask when a receiver rejects deliveries: `ok: true` means the secret is right and the fault is in how the receiver
+   * gets the body (a framework parsing it first, a proxy changing it); `signature-mismatch` means the receiver holds the wrong
+   * secret — rotated away, or another endpoint's. The signature is the LAST attempt's: each attempt re-signs.
+   *
+   * Resolves the verdict as data, with the delivery id attached. A delivery that does not exist or is not yours rejects as usual (404).
+   */
+  async checkDelivery(id: string, secret: string | readonly string[]): Promise<WebhookDeliveryCheck & { deliveryId: string }> {
+    // Before the request: an unusable secret is the caller's mistake and should not cost a round trip.
+    assertWebhookSecret(secret);
+    const delivery = await this.delivery(id);
+    return { deliveryId: id, ...checkWebhookDelivery(delivery, secret) };
   }
 
   /**
