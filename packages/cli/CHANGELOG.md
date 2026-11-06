@@ -1,5 +1,15 @@
 # Changelog — @certen.io/cli
 
+## 0.15.0 — evidence 2.1 verification, the authority pin, the gas drip reason, and waits that fit a proof cycle (2026-11-06)
+
+Needs the `@certen.io/sdk` of the same release.
+
+### Fixed
+- **`certen proof verify`, `send`, `watch` and `receipt` verify the proofs the gateway serves today** (evidence 2.1; they printed "failed at trust_base" for every one). The layers include `govRootV4` and `S7`; `overall: verified` (exit `0`) now needs the finality section judged and, with your own `--rpc`, the outcome.
+- **`certen governance add-authority --account <adi>/data` works.** The gateway returns the signer's own book pinned ahead of the authority asked for, and the CLI's check refused the change ("the change is not the one asked for"). It now accepts exactly that pin, shows it ("also keeps ..."), and refuses anything else; `--pinned-authority <book>` (repeatable) names another book you have confirmed the account already has.
+- **`certen gas --drip` reports the gateway's reason.** It sent an empty body with a JSON content type, so the gateway answered `BAD_REQUEST: Request body is not valid JSON` before the route ran (the real answer on the hosted gateway is `503 DRIP_DISABLED`, with the manual funding route printed above it).
+- **The default wait for a transaction is 90 minutes (poll 15 s), not 7 minutes (8 s)** for `send`, `call`, `tx create` and `tx status --wait`: a proof cycle takes minutes, not seconds (a median of about 26 on the hosted gateway, a p90 of about an hour). A wait that runs out still ends `TX_WAIT_TIMEOUT`, resumable with `certen watch`; the "60-110 seconds" messages and help texts are corrected.
+
 ## 0.14.0 — webhook signing and verification, and `webhooks deliveries --status` (2026-11-01)
 
 ### Webhook signing and verification

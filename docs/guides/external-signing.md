@@ -88,8 +88,8 @@ releases the sign request so you can retry rather than stranding it.
 
 ## 4. Wait for the proof
 
-Execution is not instant — a real cross-chain proof cycle runs **~60–110 seconds**. That is validator work,
-not a configurable delay.
+Execution is not instant — a real cross-chain proof cycle takes **minutes** (measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour). That is validator work,
+not a configurable delay: poll `GET /v1/transaction/{id}` rather than holding a request open.
 
 ```bash
 curl "$CERTEN_API_URL/v1/transaction/<intent_id>" -H "X-API-Key: $API_KEY"

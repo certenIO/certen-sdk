@@ -215,8 +215,8 @@ export interface ListIdentitiesParams {
 /**
  * How the proof cycle is scheduled. It changes WHEN the proof is produced, never what it proves.
  *
- * - `on_demand` (default) — starts immediately, completes in roughly 60–110 seconds. Use it for
- *   anything a user or counterparty is waiting on.
+ * - `on_demand` (default) — starts immediately. It takes minutes, not seconds (measured on the hosted gateway: a median of about
+ *   26 minutes, a p90 of about an hour), so poll rather than hold a request open.
  * - `on_cadence` — batched with other proofs by the validators. Cheaper per proof, higher latency.
  *   Use it for bulk settlement where nobody is watching the clock.
  *
@@ -383,6 +383,35 @@ export interface ChainMemberProof {
   write_back_tx?: string | null;
 }
 
+/**
+ * How far one proof of `TransactionResponse.proofs` has been carried toward finality on its own chain, AS THE VALIDATORS RECORDED IT (PROOF_V2 section 7).
+ * The gateway never says `verified`: check it offline with `verifyEvidence` or `@certen.io/proof-verify`.
+ */
+export interface ProofFinality {
+  /** `recorded`; `unavailable` (the proof service did not answer in time or answered something else: see `reason`, `status`, `detail`); or `chain_unsupported`. */
+  state: 'recorded' | 'unavailable' | 'chain_unsupported' | (string & {});
+  proof_id?: string;
+  chain_id?: number;
+  /** For an intent on several chains: the indices of its request legs on this chain. */
+  legs?: number[];
+  /** The highest level the validators hold evidence for. */
+  level?: 'included' | 'l1_posted' | 'finalized' | (string & {});
+  /** Each level's own state (`present`, `pending`, `unavailable`, `refused`, `not_applicable`, `not_judged`), as the builder stated it. */
+  levels?: Record<string, unknown>;
+  /** The level above `level` still being worked toward; null when there is none. */
+  next_level?: 'l1_posted' | 'finalized' | null;
+  /** When the builder expects `next_level`, if it said. */
+  eta?: string | null;
+  /** What `level` proves on this chain, and nothing more. */
+  statement?: string;
+  statement_source?: string;
+  note?: string;
+  leg?: Record<string, unknown> | null;
+  reason?: string;
+  status?: number | null;
+  detail?: string;
+}
+
 export type ValidatorState =
   | 'not_discovered' | 'in_progress' | 'awaiting_signatures' | 'settling' | 'settled' | 'refused'
   | 'failed' | 'unavailable' | 'executed_proof_pending' | 'executed_proof_unavailable';
@@ -505,6 +534,8 @@ export interface TransactionResponse {
   proof_lookup?: ProofLookup | null;
   /** Every chain member's proof, one per chain the intent settles on. Empty until the validators produced one. */
   proofs?: ChainMemberProof[];
+  /** How far each proof of `proofs` has been carried toward finality on its own chain, in the same order. The validators' record, not verified by the gateway. */
+  finality?: ProofFinality[];
   /**
    * The one transaction this intent made on its destination chain, as the validators recorded it. Null until they have recorded one, and
    * null for an intent on several chains (it names one transaction, so it does not guess). Not verified by the gateway.

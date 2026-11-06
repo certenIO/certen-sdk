@@ -6,7 +6,7 @@
  *
  * `verifyBundle` takes a proof bundle (or the proof v2 portable document itself) and returns one verdict per layer:
  *
- *   - the Accumulate side (trust base, L1-L4, G0, G1, the validator set, govRoot v3) is checked from the portable document
+ *   - the Accumulate side (trust base, L1-L4, G0, G1, the validator set, govRoot v3 or v4) is checked from the portable document
  *     `@certen.io/proof-verify` understands, and
  *   - the execution outcome (S6) from the bundle's own execution component, with the destination chain's block header
  *     when the caller supplies it.
@@ -16,6 +16,7 @@
  */
 import { decodeSharedBundle } from './shared-proof.js';
 import {
+  finality as proofFinality,
   noEvidence,
   verifyProofDocument,
   PORTABLE_FORMAT,
@@ -44,6 +45,11 @@ export interface VerifyBundleOptions extends VerifyOptions {
   expect?: { address?: string; topic0?: string; topic1?: string };
   /** The block header (number, hash, receiptsRoot) from the destination chain's own RPC. Without it the receipts root is the validators' statement. */
   header?: { hash?: string; receiptsRoot?: string; number?: string };
+  /**
+   * The verification of the portable document, when the caller already made it. `verifyEvidence` does: judging the finality section registers the verifier's Kinds,
+   * which is asynchronous, and this function is not. Without it the document is verified here, synchronously, and its finality section (S7) is not judged.
+   */
+  base?: Verification;
 }
 
 /** The execution component's verification as plain JSON (no bigint), so a result can be printed or returned as it is. */
@@ -92,9 +98,9 @@ export function portableDocumentOf(input: unknown): Record<string, unknown> | nu
 
 export function verifyBundle(input: unknown, opts: VerifyBundleOptions = {}): BundleVerification {
   const doc = portableDocumentOf(input);
-  const base: Verification = doc
+  const base: Verification = opts.base ?? (doc
     ? verifyProofDocument(doc, opts)
-    : noEvidence(`${PROOF_V2_EVIDENCE_NOT_SERVED}: the input carries no proof v2 portable document, so the Accumulate side cannot be checked here`);
+    : noEvidence(`${PROOF_V2_EVIDENCE_NOT_SERVED}: the input carries no proof v2 portable document, so the Accumulate side cannot be checked here`));
 
   const component = executionComponentOf(input);
   let execution: ExecutionSummary | null = null;
@@ -121,6 +127,9 @@ export function verifyBundle(input: unknown, opts: VerifyBundleOptions = {}): Bu
   const allVerified = inScope.every((l) => l.verdict === 'verified');
   const overall: Verification['overall'] = !doc && !component ? 'no_evidence' : anyFailed ? 'failed' : allVerified ? 'verified' : 'partial';
   const verified = overall === 'verified';
+  // A verified bundle rests on a verified document, whose own lists already name what its finality section established (S7 at the level reached); S6 is added.
+  const documentStatements = base.overall === 'verified' ? base.covers : COVERED_STATEMENTS;
+  const documentNotCoveredStatements = base.overall === 'verified' ? base.notCovered : NOT_COVERED_STATEMENTS;
   const failedLayer = layers.find((l) => l.verdict === 'failed');
 
   const bundle = (input && typeof input === 'object' ? (((input as Record<string, unknown>).bundle as Record<string, unknown> | undefined) ?? (input as Record<string, unknown>)) : {}) as Record<string, unknown>;
@@ -130,8 +139,8 @@ export function verifyBundle(input: unknown, opts: VerifyBundleOptions = {}): Bu
     overall,
     independent: verified,
     layers,
-    covers: verified ? [...COVERED_STATEMENTS, 'S6'] : [],
-    notCovered: verified ? NOT_COVERED_STATEMENTS.filter((s) => s !== 'S6') : [...COVERED_STATEMENTS, ...NOT_COVERED_STATEMENTS],
+    covers: verified ? [...documentStatements, 'S6'] : [],
+    notCovered: verified ? documentNotCoveredStatements.filter((s) => s !== 'S6') : [...COVERED_STATEMENTS, ...NOT_COVERED_STATEMENTS],
     ...(failedLayer ? { failure: { layer: failedLayer.id, message: failedLayer.reason ?? 'failed' } } : {}),
     execution,
     headerCheck,
@@ -295,11 +304,26 @@ export interface VerifyEvidenceOptions {
   rpc?: string;
   /** An event the execution receipt must contain. */
   expect?: { address?: string; topic0?: string; topic1?: string };
-  /** A govRoot v3 to compare the one computed here with. */
+  /** A govRoot to compare the one computed here with (v3 for a 2.0 document, v4 for 2.1), from a source of your own. See `VerifyOptions.expectGovRoot`. */
   expectGovRoot?: string;
   /** Injectable for tests; defaults to the platform `fetch`. */
   fetch?: typeof fetch;
   timeoutMs?: number;
+}
+
+/** The Settlement the finality section is judged against: the chain and the header and inclusion proofs of the bundle's execution component, read the way the validator reads them. */
+function settlementOf(component: object | null): NonNullable<NonNullable<VerifyOptions['finality']>['settlement']> | undefined {
+  if (!component) return undefined;
+  const chainId = String((component as { chain_id?: unknown }).chain_id);
+  const chain = /^[0-9]+$/.test(chainId) ? BigInt(chainId) : undefined;
+  if (chain === undefined) return undefined;
+  try {
+    return { chain, settlement: proofFinality.parseSettlementJSON(JSON.stringify(component)), source: 'bundle execution component' };
+  } catch (e) {
+    // A component whose proofs the validator's own reader would refuse supplies no Settlement: the section then judges nothing, and says so.
+    if (e instanceof proofFinality.SettlementJsonError) return undefined;
+    throw e;
+  }
 }
 
 /**
@@ -346,7 +370,15 @@ export async function verifyEvidence(
       }
     }
   }
-  const v = verifyBundle(bundleInputOf(evidence), { expect: options.expect, header, expectGovRoot: options.expectGovRoot });
+  // The Accumulate side is verified here, asynchronously, so the finality section (S7) is judged by every ported Kind against the Settlement the bundle's own
+  // execution component carries: the header and inclusion proofs the verifier checks itself. Without a component there is no Settlement, and S7 says so.
+  const input = bundleInputOf(evidence);
+  const doc = portableDocumentOf(input);
+  const settlement = settlementOf(component);
+  const base = doc
+    ? await proofFinality.verifyProofDocumentWithKinds(doc, { expectGovRoot: options.expectGovRoot, ...(settlement && proofFinality.carriesFinality(doc) ? { finality: { settlement } } : {}) })
+    : undefined;
+  const v = verifyBundle(input, { expect: options.expect, header, expectGovRoot: options.expectGovRoot, ...(base ? { base } : {}) });
   // "Consulted" means a header was actually COMPARED: a header handed in for a proof with no execution component compared nothing.
   return Object.assign(v, { nodeConsulted: header !== undefined && v.headerCheck !== null });
 }

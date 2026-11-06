@@ -237,7 +237,7 @@ describe('tool invariants', () => {
 
   it('the long-running wait tool warns about its duration', () => {
     const wait = ALL_TOOLS.find((t) => t.name === 'certen_execute_wait')!;
-    expect(wait.description).toMatch(/60-110 seconds/i);
+    expect(wait.description).toMatch(/minutes, not seconds/i);
   });
 });
 

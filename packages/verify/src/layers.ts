@@ -21,6 +21,8 @@ import { VerifyError } from './proof-v2/bytes.js';
 import { carriesFinality, judgeFinalityDocument, type DocumentFinality, type FinalityOptions } from './proof-v2/finality/docreport.js';
 import { LEVELS, levelName } from './proof-v2/finality/level.js';
 import { hexLower } from './proof-v2/finality/state.js';
+import { govRootV4FromPortable, NamedState, VERSION_21, type Report21 } from './s3/index.js';
+import { verifyPortable21Traced } from './s3/traced.js';
 
 export type LayerVerdict = 'verified' | 'failed' | 'not_checked' | 'not_in_document';
 export type Overall = 'verified' | 'partial' | 'failed' | 'no_evidence';
@@ -45,7 +47,8 @@ export interface Verification {
   /** Statements this verification establishes (when overall is verified) and statements the document cannot speak to. */
   covers: string[];
   notCovered: string[];
-  report?: Report;
+  /** The verifier's report: a `Report` for a document of evidence 2.0, a `Report21` (the proven pages, what was not established) for evidence 2.1. */
+  report?: Report | Report21;
   /**
    * The finality section (S7): present only when the document carries a finality member or the caller passed VerifyOptions.finality, and then also as the
    * layer `S7`. A document with neither is verified exactly as before.
@@ -54,10 +57,16 @@ export interface Verification {
   /** The first layer that failed. */
   failure?: { layer: string; message: string };
   govRootV3?: string;
+  /** For a document of evidence 2.1: the govRoot v4 derived from the verified facts (the layer `govRootV4`). */
+  govRootV4?: string;
 }
 
 export interface VerifyOptions {
-  /** A govRoot v3 to compare the one computed here with (for example the one a V8.2 anchor committed). */
+  /**
+   * A govRoot to compare the one computed here with: v3 for a document of evidence 2.0, v4 for evidence 2.1. It is a value the CALLER holds from somewhere
+   * else, never one read out of the document, and a mismatch is a failed layer. Nothing on chain commits it: an anchor's own `governanceRoot` is zero for
+   * the root-only anchors the validators post today, so without a value of your own the layer still verifies, against the pinned incarnation alone.
+   */
   expectGovRoot?: string;
   /**
    * Judge the finality section against the caller's Settlement, pins and Kinds (see FinalityOptions). The synchronous verifyProofDocument registers no Kind of
@@ -128,6 +137,7 @@ export function applyFinality(core: Verification, finality: DocumentFinality): V
     finality,
     ...(failure ? { failure } : {}),
     ...(core.govRootV3 ? { govRootV3: core.govRootV3 } : {}),
+    ...(core.govRootV4 ? { govRootV4: core.govRootV4 } : {}),
   };
 }
 
@@ -156,7 +166,15 @@ function finalityLayer(f: DocumentFinality): Layer {
   return { ...base, verdict: f.class === 'failed' ? 'failed' : 'not_checked', evidence, reason: why };
 }
 
+/** A portable document whose evidence is version 2.1: the one the validators emit since the G1 activation (evidence 2.1 is required of every intent). */
+function carries21(doc: unknown): boolean {
+  if (!doc || typeof doc !== 'object' || (doc as { format?: unknown }).format !== PORTABLE_FORMAT) return false;
+  const ev = (doc as { evidence?: unknown }).evidence;
+  return !!ev && typeof ev === 'object' && (ev as { version?: unknown }).version === VERSION_21;
+}
+
 function verifyCore(doc: unknown, opts: VerifyOptions): Verification {
+  if (carries21(doc)) return verifyCore21(doc, opts);
   const done = new Map<Stage, Record<string, unknown>>();
   let report: Report | undefined;
   let failure: { stage: Stage; message: string } | undefined;
@@ -236,6 +254,128 @@ function verifyCore(doc: unknown, opts: VerifyOptions): Verification {
     ...(failedLayer ? { failure: { layer: failedLayer, message: failure!.message } } : {}),
     ...(govRootV3 ? { govRootV3 } : {}),
   };
+}
+
+/**
+ * The per-layer verification of a document of evidence 2.1. The layers are those of evidence 2.0 (trust_base, L4, L1, L2, L3, G0, G1, G1_chains, L4_set), with the
+ * governing pages of a 2.1 document in G1 (every page that decides who may approve, on every partition, delegates followed) and govRoot v4 where 2.0 has v3.
+ *
+ * The walk is the validator's own (s3/portable21.ts), observed through its trace, so every layer reports what that walk established and nothing else. A refusal
+ * that says a value is wrong is a `failed` layer. A NamedState, a fact the verifier will not establish (named with the partition and block it was judged at), is
+ * `not_checked` with that name as the reason: not a tamper, and not a pass. A fact the report lists as `unproven` likewise keeps the pages layer from reading
+ * `verified`.
+ */
+const ORDER21: Stage[] = ['trust_base', 'spine', 'receipt', 'anchor', 'set', 'pages'];
+
+type StateRow = { code: string; partition: string; block: number; detail: string };
+const stateText = (s: StateRow): string => NamedState.format(s.code, s.partition, s.block, s.detail);
+
+const OUTSIDE21 = OUTSIDE.map((o) =>
+  o.id === 'G1b'
+    ? { ...o, reason: 'this layer report does not claim S3(b): the 2.1 report names the pages it proved and, in report.unproven, every fact it could not establish' }
+    : o,
+);
+
+function verifyCore21(doc: unknown, opts: VerifyOptions): Verification {
+  const done = new Map<Stage, Record<string, unknown>>();
+  let report: Report21 | undefined;
+  let stop: { stage: Stage; message: string; refusal: boolean } | undefined;
+  try {
+    report = verifyPortable21Traced(doc, (stage, facts) => void done.set(stage, facts));
+  } catch (e) {
+    if (!(e instanceof VerifyError)) throw e;
+    // The walk ends at the first thing it cannot accept: the first stage it had not completed. A refusal after the last stage (the genesis link, judged once
+    // everything else was) belongs to the spine, which that link starts.
+    stop = { stage: ORDER21.find((s) => !done.has(s)) ?? 'spine', message: e.message, refusal: e instanceof NamedState };
+  }
+
+  const layers: Layer[] = [];
+  let failedLayer: string | undefined;
+  let failureMessage: string | undefined;
+  let stoppedAt: string | undefined;
+  const notReached = (): string => (stoppedAt ? `not reached: ${stoppedAt} ${failedLayer === stoppedAt ? 'failed' : 'not established'}` : 'not reached');
+  for (const l of IN_DOCUMENT) {
+    if (l.stage === 'derived') continue;
+    const base = { id: l.id, statement: l.statement, title: l.title };
+    if (stop && stop.stage === l.stage && !stoppedAt) {
+      stoppedAt = l.id;
+      if (stop.refusal) {
+        layers.push({ ...base, verdict: 'not_checked', evidence: {}, reason: stop.message });
+      } else {
+        failedLayer = l.id;
+        failureMessage = stop.message;
+        layers.push({ ...base, verdict: 'failed', evidence: {}, reason: stop.message });
+      }
+      continue;
+    }
+    const facts = done.get(l.stage);
+    // A layer is judged by its own stage: one whose stage completed is as it was established, wherever it stands in the list (the set is checked before the pages).
+    layers.push(facts ? { ...base, ...inDocumentVerdict21(l.id, facts) } : { ...base, verdict: 'not_checked', evidence: {}, reason: notReached() });
+  }
+
+  // govRoot v4 comes last among the in-document layers: it is derived from the report, so it exists only for one the walk completed.
+  const gr = { id: 'govRootV4', statement: 'S3', title: 'govRoot v4 is derived from the verified facts' };
+  let govRootV4: string | undefined;
+  if (!report) {
+    layers.push({ ...gr, verdict: 'not_checked', evidence: {}, reason: notReached() });
+  } else if (report.setVerdict !== 'verified') {
+    layers.push({ ...gr, verdict: 'not_checked', evidence: { setVerdict: report.setVerdict }, reason: `the validator set is ${String(report.setVerdict)}, not verified from genesis, so govRoot v4 cannot be derived` });
+  } else if (!(doc as { govRootV3Inputs?: unknown }).govRootV3Inputs) {
+    // the block's name is v3's; the root derived from it is the evidence's. A document without it is verified as far as it goes, and says what it does not carry.
+    layers.push({ ...gr, verdict: 'not_checked', evidence: {}, reason: 'the document carries no govRootV3Inputs' });
+  } else {
+    try {
+      govRootV4 = govRootV4FromPortable(report, doc).root;
+      const want = opts.expectGovRoot?.toLowerCase().replace(/^0x/, '');
+      if (want !== undefined && want !== govRootV4) {
+        failedLayer ??= gr.id;
+        failureMessage ??= `govRoot v4 computed here is ${govRootV4}, not the ${want} expected`;
+        layers.push({ ...gr, verdict: 'failed', evidence: { computed: govRootV4, expected: want }, reason: `govRoot v4 computed here is ${govRootV4}, not the ${want} expected` });
+      } else {
+        layers.push({ ...gr, verdict: 'verified', evidence: { root: govRootV4, comparedWith: want ?? null } });
+      }
+    } catch (e) {
+      if (!(e instanceof VerifyError)) throw e;
+      failedLayer ??= gr.id;
+      failureMessage ??= e.message;
+      layers.push({ ...gr, verdict: 'failed', evidence: {}, reason: e.message });
+    }
+  }
+
+  for (const o of OUTSIDE21) layers.push({ id: o.id, statement: o.statement, title: o.title, verdict: 'not_in_document', evidence: {}, reason: o.reason });
+
+  const inScope = layers.filter((l) => l.verdict !== 'not_in_document');
+  const overall: Overall = inScope.some((l) => l.verdict === 'failed') ? 'failed' : inScope.every((l) => l.verdict === 'verified') ? 'verified' : 'partial';
+  return {
+    overall,
+    independent: overall === 'verified',
+    layers,
+    covers: overall === 'verified' ? COVERED_STATEMENTS : [],
+    notCovered: overall === 'verified' ? NOT_COVERED_STATEMENTS : [...COVERED_STATEMENTS, ...NOT_COVERED_STATEMENTS],
+    ...(report ? { report } : {}),
+    ...(failedLayer ? { failure: { layer: failedLayer, message: failureMessage ?? 'failed' } } : {}),
+    ...(govRootV4 ? { govRootV4 } : {}),
+  };
+}
+
+function inDocumentVerdict21(id: string, f: Record<string, unknown>): Pick<Layer, 'verdict' | 'evidence' | 'reason'> {
+  if (id === 'G1') {
+    const proven = (f.proven ?? []) as { url: string; partition: string; block: number; roles: unknown[]; declared: unknown[] }[];
+    const unproven = (f.unproven ?? []) as StateRow[];
+    const disclosures = (f.disclosures ?? []) as StateRow[];
+    const evidence: Record<string, unknown> = {
+      pages: proven.map((p) => ({ url: p.url, partition: p.partition, block: p.block, roles: p.roles, declaredRoles: p.declared })),
+      authorizationMode: f.authorizationMode,
+      arrivals: f.arrivals,
+      ...(disclosures.length > 0 ? { disclosures: disclosures.map(stateText) } : {}),
+      ...(unproven.length > 0 ? { unproven: unproven.map(stateText) } : {}),
+    };
+    if (proven.length === 0) return { verdict: 'not_checked', evidence, reason: 'the document proves no governing page' };
+    if (unproven.length > 0) return { verdict: 'not_checked', evidence, reason: `${unproven.length} fact(s) could not be established: ${unproven.map(stateText).join('; ')}` };
+    return { verdict: 'verified', evidence };
+  }
+  if (id === 'G1_chains') return inDocumentVerdict(id, { pages: f.pageChains ?? [] });
+  return inDocumentVerdict(id, f);
 }
 
 /** The verification for evidence that is not there at all: nothing was checked, and nothing is claimed. */

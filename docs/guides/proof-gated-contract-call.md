@@ -56,7 +56,7 @@ proof-gated to that exact `(target, value, calldata)` triple.
 | `amount` (leg) | The leg's native value. Set it to the same figure as `contractCall.value` for a payable call. |
 
 From here the flow is identical to [external-signing.md](external-signing.md): sign `hash_to_sign`, POST it
-to `submit_url`, wait ~60–110s, read the proof.
+to `submit_url`, poll `GET /v1/transaction/{id}` until it completes (minutes, not seconds: measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour), then read the proof.
 
 ---
 

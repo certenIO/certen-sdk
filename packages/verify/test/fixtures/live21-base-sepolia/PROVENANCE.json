@@ -1,0 +1,16 @@
+{
+  "what": "A real proof of a real proof-gated contract call: portable proof v2 document (evidence 2.1) and its bundle, as the hosted gateway served them.",
+  "network": "Accumulate Kermit testnet + Base Sepolia (chain 84532)",
+  "intent_id": "b384a040-e6a3-4ef4-9f40-f86224410c09",
+  "proof_id": "6c28abe7-475e-4b1a-9374-db7954cc2381",
+  "accumulate_tx": "348e3d94f7df467dbbfdd76b1a7bc799a9dc6f75a32ef07387c9ab2f9731e6f9",
+  "settlement_tx": "0x475db46d6a7de1c67850a7f04d0155cab62feeff2a63aa195a26e18b9971ea23",
+  "settlement_block": 55033944,
+  "anchor_tx": "0x6fb5749a44a6b51f3e6c4868241dfd2f460e5915ba2c5b89fb24b6a519574af6",
+  "emitter": "0x12dD00C619C1Ac3F58eC68ed44ec1023fE33B9Ff",
+  "event_topic0": "0x5b0ad3c09f09584bfc917bcf1e3138cdb459d5c6c7e211c5320922f55c0f7fe9",
+  "captured": "2026-11-06",
+  "govRootV4_computed_by_this_verifier": "fcf46aa282d2ab79cc9f8b305cd87075745e3d31e48ce5e8077d3a166a3afe17",
+  "note": "Public chain data from a testnet identity created for this purpose; contains no credentials. The document is unmodified. Frozen: never edit, regenerate from a new run instead.",
+  "accumulate_tx_principal": "acc://ref-carson-1105a.acme/data"
+}

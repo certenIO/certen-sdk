@@ -30,7 +30,7 @@ async function getClient(): Promise<CertenClient> {
  */
 async function submitGovernance(
   build: (adiUrl: string) => Record<string, unknown>,
-  opts: { identity?: string; signWith?: string; signerKeyPage?: string; yes?: boolean },
+  opts: { identity?: string; signWith?: string; signerKeyPage?: string; yes?: boolean; pinnedAuthority?: string[] },
 ): Promise<void> {
   const ctx = resolveContext({ identity: opts.identity }, { fields: ['identity'] });
   requireIdentity(ctx);
@@ -61,6 +61,7 @@ async function submitGovernance(
     operations: [operation as unknown as ExpectedOperation],
     signerPublicKey: signer.publicKey,
     signerKeyPage: opts.signerKeyPage,
+    ...(opts.pinnedAuthority?.length ? { pinnedAuthorities: opts.pinnedAuthority } : {}),
   });
   // A person reads what was rebuilt, and says yes, before the signature. Piped, or with --yes or --json, the card is shown and it goes on.
   await confirmBeforeSigning({
@@ -119,7 +120,14 @@ export function registerGovernanceCommands(program: Command): void {
     .description('Name a key book as a REQUIRED authority: every transaction then waits for it to sign too — how a policy signer regulates an agent')
     .option('--identity <ref>', IDENTITY_HELP)
     .requiredOption('--authority <book-url>', 'The key book that must co-sign, e.g. acc://owner-policy.acme/book')
-    .option('--account <url>', 'The account to put it on: the identity (default), "book" for its key book — so seats and thresholds face the authority too — or a full account URL under the identity'))
+    .option('--account <url>', 'The account to put it on: the identity (default), "book" for its key book — so seats and thresholds face the authority too — or a full account URL under the identity')
+    .option(
+      '--pinned-authority <book-url>',
+      'A key book you have confirmed, from a source other than the gateway, is already an authority of this account, so the gateway may pin it ahead of the change (repeatable). '
+        + 'The gateway keeps the inherited authorities of an account when it adds one; your own ADI book is always accepted as that pin, any other only if named here',
+      (v: string, prev: string[]) => [...prev, v],
+      [] as string[],
+    ))
     .action(async (opts) => {
       await submitGovernance((adi) => ({ type: 'add_authority', authority_url: opts.authority, ...accountTarget(adi, opts.account) }), opts);
     });

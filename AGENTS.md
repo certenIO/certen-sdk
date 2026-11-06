@@ -2,8 +2,8 @@
 
 TypeScript client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) —
 proof-gated cross-chain execution on Accumulate. An npm workspaces monorepo publishing
-`@certen.io/sdk` (v0.13.0), `@certen.io/cli` (v0.14.0), `@certen.io/mcp` (v0.8.0) and
-`@certen.io/proof-verify` (v0.2.0). A release that bumps one of these edits this line;
+`@certen.io/sdk` (v0.14.0), `@certen.io/cli` (v0.15.0), `@certen.io/mcp` (v0.9.0) and
+`@certen.io/proof-verify` (v0.3.0). A release that bumps one of these edits this line;
 `packages/cli/test/agents-md.test.ts` fails until it does.
 
 > Building **on** CERTEN rather than **on this SDK**? You want `llms.txt` (quickstart + rules) and
@@ -198,9 +198,10 @@ output shape is a contract change — `packages/cli/test/conformance.test.ts` en
 - **`DEFAULT_BASE_URL` must be a host that actually serves the API.** It was once
   `https://api.certen.io`, which resolves to the marketing site, so every call returned HTML and the
   failure read as a broken SDK. Point it only at a host whose `/v1/health` answers.
-- **A proof cycle is 60–110 seconds of real validator work.** `execute.wait()` budgets 360s. This is
-  not a delay that can be tuned away — do not "fix" a slow test by shortening the wait, and do not wrap
-  the call in a 30-second timeout.
+- **A proof cycle takes minutes, not seconds.** Measured on the hosted gateway, recent `on_demand` intents took a
+  median of about 26 minutes and a p90 of about an hour; `execute.wait()` budgets 90 minutes. This is not a delay
+  that can be tuned away — do not "fix" a slow test by shortening the wait, and do not wrap the call in a short
+  timeout. A wait that runs out is `CertenWaitTimeoutError`, not a failed intent: check it again, never open a second.
 - **`identity.create` returns `202` and keeps provisioning.** Poll until the status is terminal and
   `can_sign` is true before relying on the identity.
 - **`vote` is `approve` | `reject` | `abstain`** — lowercase string, not a number, not `accept`.

@@ -9,8 +9,8 @@ import { parseSpanMs } from './duration.js';
  * Waiting for asynchronous work to finish.
  *
  * Two of this product's central operations return before they are usable — `POST /v1/identity`
- * answers 202 while provisioning continues, and a transaction intent takes a 60–110 second proof
- * cycle to reach a terminal state. Every document in the repo warns about both. The CLI
+ * answers 202 while provisioning continues, and a transaction intent takes a proof cycle of
+ * minutes to reach a terminal state. Every document in the repo warns about both. The CLI
  * nonetheless printed the interim response and exited, leaving each user to write the same poll
  * loop, and leaving anyone who did not write one holding an identity that fails at the last step
  * of every flow with an error that never mentions provisioning.
@@ -23,11 +23,12 @@ import { parseSpanMs } from './duration.js';
 /** `certen fund`'s defaults are 60 min / 5 s; these are per-operation because the work differs. */
 export const IDENTITY_WAIT = { timeoutMin: 5, intervalSec: 3 };
 /**
- * A proof cycle is 60–110 seconds of real validator work and `execute.wait()` budgets 360s. Seven
- * minutes leaves room for a queue without being an unbounded hang. Do NOT shorten this to make a
- * test faster — it is not a tunable delay.
+ * A proof cycle takes minutes, not seconds: measured on the hosted gateway, recent `on_demand` intents took a median of about
+ * 26 minutes and a p90 of about an hour, so a wait of seven (which this was) ran out on most healthy intents. Ninety minutes is
+ * past the p90 and still bounded, and a wait that does run out is resumable and says so (`certen watch`). Do NOT shorten this to
+ * make a test faster — it is not a tunable delay.
  */
-export const TX_WAIT = { timeoutMin: 7, intervalSec: 8 };
+export const TX_WAIT = { timeoutMin: 90, intervalSec: 15 };
 /**
  * Waiting for gas to arrive in an abstract account is waiting for a person (a faucet form, then a wallet confirmation) and then a block, so
  * it is minutes, not seconds. Half an hour is generous and still bounded: an unbounded wait is a hang to anything that is not a person.
@@ -220,7 +221,7 @@ export async function waitForTransaction(
   hooks: { signal?: AbortSignal; onPoll?: (tx: TransactionResponse) => void } = {},
 ): Promise<Record<string, unknown>> {
   const say = progress();
-  say('Waiting for the proof cycle. This is 60-110 seconds of real validator work.');
+  say(`Waiting for the proof cycle. It takes minutes, not seconds (about 26 at the median, up to an hour). Ctrl-C is safe: certen watch ${intentId} picks it up.`);
 
   try {
     const result = await client.execute.wait(intentId, {

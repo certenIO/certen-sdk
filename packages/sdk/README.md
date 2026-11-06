@@ -28,7 +28,7 @@ const { intentId } = await certen.execute.transfer({
   sign: (hashHex) => ed25519Sign(hashHex),   // YOU hold the key
 });
 
-await certen.execute.wait(intentId);                 // ~60-110s of real validator work
+await certen.execute.wait(intentId);                 // minutes of real validator work (budget: 90 min)
 const proof = await certen.execute.proof(intentId);  // hand this to your counterparty
 ```
 
@@ -266,8 +266,7 @@ gateway recorded for the identity and the amount is the operator's.
 **Identity creation is asynchronous.** `identity.create` resolves with a `202`-shaped result and provisioning
 continues. Poll `identity.get` until the status is terminal, and check `can_sign` before building on it.
 
-**A proof cycle takes ~60–110 seconds.** Real validator work, not a tunable delay. Do not wrap it in a 30s
-timeout.
+**A proof cycle takes minutes, not seconds** (measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour). Real validator work, not a tunable delay. Do not wrap it in a short timeout: `execute.wait()` budgets 90 minutes.
 
 **`vote` is `approve` | `reject` | `abstain`** — a lowercase string, not a number, and not `accept`.
 

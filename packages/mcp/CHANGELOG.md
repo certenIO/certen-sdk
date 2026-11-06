@@ -1,5 +1,13 @@
 # Changelog — @certen.io/mcp
 
+## 0.9.0 — evidence 2.1 verification, and tool descriptions that match the proof cycle (2026-11-06)
+
+Needs the `@certen.io/sdk` of the same release.
+
+### Fixed
+- **`certen_proof_verify` and `certen_receipt` verify the proofs the gateway serves today** (evidence 2.1), through the SDK's `verifyEvidence`.
+- **`certen_execute_wait` no longer says it takes 60-110 seconds.** It says minutes (a median of about 26 on the hosted gateway), that its 360 s default budget is shorter than a typical cycle so `WAIT_TIMEOUT` is to be expected and is not a failure, and to call again. The same correction is made in the `proofClass` description, the server instructions and the README.
+
 ## 0.8.0 — `certen_webhook_deliveries` takes a `status`, and `certen_webhook_endpoints` names the field it returns (2026-11-01)
 
 Additive: one optional parameter. No tool is removed or renamed, no parameter becomes required, and the server still holds no key. Needs `@certen.io/sdk` 0.13.0, which carries `webhooks.deliveries({ status })`; the range is raised with it.

@@ -54,8 +54,8 @@ export interface ProofGatedCallParams extends HeaderFields {
   /** Nominate which page of the book signs, e.g. `acc://panel.acme/book/2`. */
   signerKeyPage?: string;
   /**
-   * Schedule the proof cycle: `on_demand` (default, ~60–110s) or `on_cadence` (batched, cheaper,
-   * slower). It changes when the proof is produced, never what it proves.
+   * Schedule the proof cycle: `on_demand` (default: starts now, and takes minutes, not seconds) or `on_cadence` (batched,
+   * cheaper). It changes when the proof is produced, never what it proves.
    */
   proofClass?: ProofClass;
   idempotencyKey?: string;
@@ -113,8 +113,8 @@ export interface TransferParams extends HeaderFields {
   signerPublicKey?: string;
   signerKeyPage?: string;
   /**
-   * Schedule the proof cycle: `on_demand` (default, ~60–110s) or `on_cadence` (batched, cheaper,
-   * slower). It changes when the proof is produced, never what it proves.
+   * Schedule the proof cycle: `on_demand` (default: starts now, and takes minutes, not seconds) or `on_cadence` (batched,
+   * cheaper). It changes when the proof is produced, never what it proves.
    */
   proofClass?: ProofClass;
   idempotencyKey?: string;
@@ -460,8 +460,10 @@ export class ExecuteResource {
   /**
    * Poll an intent to a terminal state.
    *
-   * A real proof cycle is 60–110 seconds of validator work, so the default budget is generous. This is not
-   * a delay that can be tuned away, and a 30-second timeout around it will simply always fire.
+   * A proof cycle takes minutes, not seconds: measured on the hosted gateway, recent `on_demand` intents took a median of about
+   * 26 minutes and a p90 of about an hour. So the default budget is 90 minutes, and a timeout of a minute or ten will fire on
+   * a healthy intent. Running out of time is `CertenWaitTimeoutError`: the intent is NOT failed and may yet complete, so
+   * check it again (`transaction.get`) or wait again; never open a second one.
    *
    * What each status does (one table, `intent-states.ts`):
    * - `completed` / `proven`: resolves. Executed and proven.
@@ -476,7 +478,7 @@ export class ExecuteResource {
    */
   async wait(
     intentId: string,
-    { timeoutMs = 360_000, intervalMs = 8_000, onPoll, onState, until = 'terminal', signal }: {
+    { timeoutMs = 5_400_000, intervalMs = 15_000, onPoll, onState, until = 'terminal', signal }: {
       timeoutMs?: number;
       intervalMs?: number;
       /** Called with every poll's response. */

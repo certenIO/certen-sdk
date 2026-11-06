@@ -183,6 +183,10 @@ export const CUSTOM_OUTPUT_SCHEMAS: Readonly<Record<string, Schema>> = {
       notCovered: { type: 'array', items: str },
       failure: { type: 'object', properties: { layer: str, message: str }, required: ['layer', 'message'], additionalProperties: false },
       govRootV3: str,
+      // The root derived from a proof of evidence 2.1 (the layer `govRootV4`); `govRootV3` is the one for evidence 2.0. Each is present only for its own evidence.
+      govRootV4: str,
+      // The finality section (S7), present when the proof document carries one: how far each leg was carried on its own chain, as the verifier judged it.
+      finality: { type: 'object', additionalProperties: true },
       execution: { type: ['object', 'null'], additionalProperties: true },
       headerCheck: { type: ['object', 'null'], additionalProperties: true },
       bundleStatements: { type: 'object', additionalProperties: true },

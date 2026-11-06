@@ -351,6 +351,10 @@ export class CertenClient {
         headers.Authorization = `Bearer ${await this.bearerToken()}`;
       }
       req.headers = req.headers ?? headers;
+      // No body, no content type. The gateway reads `Content-Type: application/json` with an empty body as malformed JSON and answers 400 before the route runs, which made
+      // every body-less POST (the gas drip) fail whatever the gateway was configured to do. The header is cleared rather than deleted: axios would add its own form content
+      // type to a POST that has none, and the gateway refuses that too.
+      if (req.data === undefined || req.data === null) (req.headers as unknown as { setContentType?: (v: null) => unknown }).setContentType?.(null);
       if (autoIdem && (req.method ?? 'GET').toUpperCase() === 'POST' && !shouldSkip(reqPath)) {
         const headers = req.headers ?? {};
         if (!('Idempotency-Key' in headers) && !('idempotency-key' in headers)) {

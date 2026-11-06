@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 /**
  * Documentation exposed as MCP resources.
  *
- * This is how a client gets CERTEN's semantics — the retry rules, the 60-110s proof cycle, the
+ * This is how a client gets CERTEN's semantics — the retry rules, the minutes-long proof cycle, the
  * lowercase `vote` — without a web fetch and without guessing. The same files the repo already
  * generates for `llms.txt` consumers, served over the protocol.
  */
@@ -29,7 +29,7 @@ export const RESOURCES: ResourceDef[] = [
     name: 'CERTEN quickstart and rules',
     description:
       'Start here. Canonical usage plus the rules that decide whether your code works: idempotency, '
-      + 'the 60-110s proof cycle, retryable error codes, and the lowercase vote values.',
+      + 'the minutes-long proof cycle, retryable error codes, and the lowercase vote values.',
     mimeType: 'text/markdown',
     file: 'llms.txt',
   },

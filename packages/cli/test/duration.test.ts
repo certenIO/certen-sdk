@@ -56,7 +56,7 @@ describe('parseSpanMs', () => {
 describe('wait budgets take units, and every default is untouched', () => {
   it('keeps the per-operation defaults when nothing is given', () => {
     expect(parseWaitBudget(undefined, undefined, IDENTITY_WAIT)).toEqual({ timeoutMs: 5 * 60_000, intervalMs: 3_000 });
-    expect(parseWaitBudget(undefined, undefined, TX_WAIT)).toEqual({ timeoutMs: 7 * 60_000, intervalMs: 8_000 });
+    expect(parseWaitBudget(undefined, undefined, TX_WAIT)).toEqual({ timeoutMs: 90 * 60_000, intervalMs: 15_000 });
   });
 
   it('takes 90s, 6m and 1h for the timeout, and a bare number as minutes', () => {

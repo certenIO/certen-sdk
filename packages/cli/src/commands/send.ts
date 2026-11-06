@@ -63,7 +63,7 @@ export function registerSendCommands(program: Command): void {
     .option('--force', 'Send even if the abstract account is short of gas (the gas checks only)')
     .option('--gas-reserve <amount>', 'Gas to hold back, in whole native units, or "none". The default is an estimate, not a quote')
     .option('--accumulate-rpc <url>', 'Accumulate API to read the key page from (default: the one the gateway advertises)')
-    .addOption(new Option('--proof-class <class>', 'When the proof runs: on_demand starts now (~60-110s); on_cadence batches it (cheaper, slower)').choices(['on_demand', 'on_cadence']))
+    .addOption(new Option('--proof-class <class>', 'When the proof runs: on_demand starts now (the cycle takes minutes); on_cadence batches it (cheaper)').choices(['on_demand', 'on_cadence']))
     .option('--idempotency-key <key>', 'Idempotency key (one is generated if omitted)')
     .option('--expires-in <duration>', EXPIRES_IN_HELP)
     .action(async (amount: string, asset: string, opts: {
@@ -245,7 +245,7 @@ export function registerSendCommands(program: Command): void {
       }
 
       hint('');
-      hint(`  Signed. Intent ${sent.intentId}.${wait ? '' : ' The proof cycle runs now (60-110s).'}`);
+      hint(`  Signed. Intent ${sent.intentId}.${wait ? '' : ' The proof cycle runs now (it takes minutes, not seconds).'}`);
 
       // ── the outcome ────────────────────────────────────────────────────────────────────────────────────
       const followed = await followIntent({

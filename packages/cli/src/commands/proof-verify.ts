@@ -83,7 +83,7 @@ export function registerProofVerify(proof: Command): void {
     .description('Verify a proof layer by layer, locally. A bundle file or share link is checked with no API key; the verdict never comes from a flag in the bundle.')
     .option('--rpc <url>', 'A JSON-RPC endpoint of the execution chain you trust: the bundle\'s receipts root and block hash are compared to the header it returns')
     .option('--expect <address:topic0[:topic1]>', 'An event the receipt must contain (contract address and event topic, optionally the first indexed argument)')
-    .option('--govroot <hex>', 'A govRoot v3 to compare the one computed here with (for example the one an anchor committed)')
+    .option('--govroot <hex>', 'A govRoot to compare the one computed here with: v3 for a 2.0 proof, v4 for 2.1. A value you hold from your own record; nothing on chain commits one')
     .action(async (target: string, opts: { rpc?: string; expect?: string; govroot?: string }) => {
       const fromFile = target.startsWith('@');
       const fromShare = /^https?:\/\//i.test(target) || /^cps_/.test(target);

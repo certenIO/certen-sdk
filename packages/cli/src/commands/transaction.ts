@@ -126,7 +126,7 @@ export function registerTransactionCommands(program: Command): void {
     .addOption(
       new Option(
         '--proof-class <class>',
-        'When the proof runs: on_demand starts now (~60-110s); on_cadence batches it (cheaper, slower)',
+        'When the proof runs: on_demand starts now (the cycle takes minutes); on_cadence batches it (cheaper)',
       ).choices(['on_demand', 'on_cadence']),
     )
     .option('--idempotency-key <key>', 'Idempotency key (one is generated if omitted)')
@@ -338,7 +338,7 @@ export function registerTransactionCommands(program: Command): void {
       if (!wait) {
         printOutput(signed as unknown as Record<string, unknown>);
         hint('');
-        hint(`The proof cycle runs now (60-110s). Check with: certen tx status ${intentId}`);
+        hint(`The proof cycle runs now (it takes minutes, not seconds). Check with: certen tx status ${intentId}`);
         return;
       }
 

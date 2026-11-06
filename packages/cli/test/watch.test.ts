@@ -85,7 +85,7 @@ describe('watch: an intent that is still running', () => {
     const r = await e.run(['watch', INTENT_ID, '--poll-interval', '1s']);
     expect(r.code).toBe(4);
     expect(r.stderr).toContain(`Intent ${INTENT_ID} is anchoring. Waiting; Ctrl-C stops the wait and leaves the intent running.`);
-    expect(r.stdout).toContain('Waiting for the proof cycle. This is 60-110 seconds of real validator work.');
+    expect(r.stdout).toContain('Waiting for the proof cycle. It takes minutes, not seconds');
     expect(r.stdout).toContain('Status: executed. The action ran on its chain; its proof is still being produced.');
     expect(r.stdout).toContain(INTENT_ID);
     expect(r.stdout).toContain('PARTIAL:');
