@@ -138,12 +138,16 @@ jobs:
           # documentation was bundled perfectly.
           #
           # Installing both makes the check do what it was always meant to: exercise the ARTEFACTS
-          # about to be published, rather than whatever the registry happens to hold.
+          # about to be published, rather than whatever the registry happens to hold. The same goes for
+          # @certen.io/proof-verify, which the SDK, the CLI and this package depend on and which is
+          # versioned with them: a release that bumps it fails here with `notarget` until it is published.
           cd "$GITHUB_WORKSPACE/packages/sdk" && npm pack
           SDK_TGZ=$(ls *.tgz | head -1)
+          cd "$GITHUB_WORKSPACE/packages/verify" && npm pack
+          VERIFY_TGZ=$(ls *.tgz | head -1)
 
           mkdir -p /tmp/mcp-consume && cd /tmp/mcp-consume && npm init -y >/dev/null
-          npm install "$GITHUB_WORKSPACE/packages/sdk/$SDK_TGZ" "$GITHUB_WORKSPACE/packages/mcp/$TGZ"
+          npm install "$GITHUB_WORKSPACE/packages/verify/$VERIFY_TGZ" "$GITHUB_WORKSPACE/packages/sdk/$SDK_TGZ" "$GITHUB_WORKSPACE/packages/mcp/$TGZ"
           # Speak MCP to the installed binary and require it to serve its resources.
           # Driven by a script rather than a pipe: closing stdin immediately lets the server race
           # its own shutdown against the second request, which failed a release once while the
