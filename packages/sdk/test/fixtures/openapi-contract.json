@@ -958,6 +958,7 @@
             "proof_id",
             "proof_bundle_url",
             "proofs",
+            "finality",
             "destination",
             "validator",
             "error_message",
@@ -983,6 +984,23 @@
               "proof_id",
               "proof_bundle_url",
               "write_back_tx"
+            ],
+            "finality": [
+              "state",
+              "proof_id",
+              "chain_id",
+              "legs",
+              "level",
+              "levels",
+              "next_level",
+              "eta",
+              "statement",
+              "statement_source",
+              "note",
+              "leg",
+              "reason",
+              "status",
+              "detail"
             ],
             "destination": [
               "chain_id",
@@ -1149,9 +1167,20 @@
             "genesis",
             "majors",
             "evidence",
-            "govRootV3Inputs"
+            "govRootV3Inputs",
+            "finality"
           ]
         },
+        "responseShapes": {}
+      }
+    },
+    "/v1/proof/{id}/contract-identity": {
+      "get": {
+        "required": [],
+        "properties": [],
+        "propertyTypes": {},
+        "query": [],
+        "responses": {},
         "responseShapes": {}
       }
     },

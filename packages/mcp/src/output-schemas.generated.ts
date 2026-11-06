@@ -633,7 +633,7 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
       },
       "proof_lookup": {
         "type": "object",
-        "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+        "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and a reason code). A null proof_id with `unavailable` is NOT \"not anchored yet\". The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
         "additionalProperties": false,
         "properties": {
           "state": {
@@ -651,7 +651,14 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
             ]
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "proof_service_not_found",
+              "proof_service_error",
+              "proof_service_timeout",
+              "proof_service_response_too_large",
+              "proof_service_unreachable"
+            ]
           }
         }
       },
@@ -699,6 +706,94 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
                 "string",
                 "null"
               ]
+            }
+          }
+        }
+      },
+      "finality": {
+        "type": "array",
+        "description": "How far each proof of `proofs` has been carried toward finality on its own chain, AS THE VALIDATORS RECORDED IT (PROOF_V2 section 7): one entry per entry of `proofs`, in the same order, with the same `proof_id` and `chain_id` (and `legs` when the intent declares several chains). `level` is the highest level the validators hold evidence for: `included` (derived from the proof's own settlement evidence), `l1_posted` (Base and Arbitrum Sepolia: the block's transactions are in a batch committed in finalized L1 state) or `finalized` (final under the chain's own consensus or rollup L1 contracts); `statement` says exactly what each proves and what it does not. The levels are independent and in any order: `levels` states each one (`present` with its kind and seq; or the builder's last stated reason `pending` / `unavailable` / `refused` / `not_applicable`, with `reason` as stored; or `not_judged`), `next_level` is the level above `level` still being worked toward, and `eta` is when the builder expects it, if it said. `statement` is what `level` proves on this chain, verbatim from V2_SPEC_S7 r2 section 1.1, and nothing more. The gateway never says `verified`: the level is the validators' record and can be verified offline, from the proof file, with `proofverify` or `@certen.io/proof-verify`. `state` is `recorded`; `unavailable` (the proof service answered 404 or another error, could not be reached, did not answer within the 3 s lookup deadline shared by all the legs, or answered something that is not a finality summary: `reason`, `status` and a fixed `detail` say which, never the upstream error text, and nothing is guessed); or `chain_unsupported` (the chain is not one of Sepolia, Base Sepolia, Arbitrum Sepolia or Adiri: no finality statement exists for it).",
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "recorded",
+                "unavailable",
+                "chain_unsupported"
+              ]
+            },
+            "proof_id": {
+              "type": "string"
+            },
+            "chain_id": {
+              "type": "integer"
+            },
+            "legs": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "included",
+                "l1_posted",
+                "finalized"
+              ]
+            },
+            "levels": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The three levels, each `{ state, ... }`: `included` is `derived`; `l1_posted` and `finalized` are `present`, `pending`, `unavailable`, `refused`, `not_applicable` or `not_judged`. A level may carry `pins_sha256`: the sha256 (64 lowercase hex) of the pins the validators judged it under, when recorded - the validators' record, for comparison with the pins the caller verifies under."
+            },
+            "next_level": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "l1_posted",
+                "finalized",
+                null
+              ]
+            },
+            "eta": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "statement": {
+              "type": "string"
+            },
+            "statement_source": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "leg": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "detail": {
+              "type": "string"
             }
           }
         }
@@ -944,7 +1039,7 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           },
           "unavailable": {
             "type": "array",
-            "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and reason. Empty when every part was answered.",
+            "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and a reason code. Empty when every part was answered. The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -959,7 +1054,14 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
                   ]
                 },
                 "reason": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "proof_service_not_found",
+                    "proof_service_error",
+                    "proof_service_timeout",
+                    "proof_service_response_too_large",
+                    "proof_service_unreachable"
+                  ]
                 }
               }
             }
@@ -2243,7 +2345,7 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
       },
       "proof_lookup": {
         "type": "object",
-        "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+        "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and a reason code). A null proof_id with `unavailable` is NOT \"not anchored yet\". The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
         "additionalProperties": false,
         "properties": {
           "state": {
@@ -2261,7 +2363,14 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
             ]
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "proof_service_not_found",
+              "proof_service_error",
+              "proof_service_timeout",
+              "proof_service_response_too_large",
+              "proof_service_unreachable"
+            ]
           }
         }
       },
@@ -2309,6 +2418,94 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
                 "string",
                 "null"
               ]
+            }
+          }
+        }
+      },
+      "finality": {
+        "type": "array",
+        "description": "How far each proof of `proofs` has been carried toward finality on its own chain, AS THE VALIDATORS RECORDED IT (PROOF_V2 section 7): one entry per entry of `proofs`, in the same order, with the same `proof_id` and `chain_id` (and `legs` when the intent declares several chains). `level` is the highest level the validators hold evidence for: `included` (derived from the proof's own settlement evidence), `l1_posted` (Base and Arbitrum Sepolia: the block's transactions are in a batch committed in finalized L1 state) or `finalized` (final under the chain's own consensus or rollup L1 contracts); `statement` says exactly what each proves and what it does not. The levels are independent and in any order: `levels` states each one (`present` with its kind and seq; or the builder's last stated reason `pending` / `unavailable` / `refused` / `not_applicable`, with `reason` as stored; or `not_judged`), `next_level` is the level above `level` still being worked toward, and `eta` is when the builder expects it, if it said. `statement` is what `level` proves on this chain, verbatim from V2_SPEC_S7 r2 section 1.1, and nothing more. The gateway never says `verified`: the level is the validators' record and can be verified offline, from the proof file, with `proofverify` or `@certen.io/proof-verify`. `state` is `recorded`; `unavailable` (the proof service answered 404 or another error, could not be reached, did not answer within the 3 s lookup deadline shared by all the legs, or answered something that is not a finality summary: `reason`, `status` and a fixed `detail` say which, never the upstream error text, and nothing is guessed); or `chain_unsupported` (the chain is not one of Sepolia, Base Sepolia, Arbitrum Sepolia or Adiri: no finality statement exists for it).",
+        "items": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "recorded",
+                "unavailable",
+                "chain_unsupported"
+              ]
+            },
+            "proof_id": {
+              "type": "string"
+            },
+            "chain_id": {
+              "type": "integer"
+            },
+            "legs": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "included",
+                "l1_posted",
+                "finalized"
+              ]
+            },
+            "levels": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "The three levels, each `{ state, ... }`: `included` is `derived`; `l1_posted` and `finalized` are `present`, `pending`, `unavailable`, `refused`, `not_applicable` or `not_judged`. A level may carry `pins_sha256`: the sha256 (64 lowercase hex) of the pins the validators judged it under, when recorded - the validators' record, for comparison with the pins the caller verifies under."
+            },
+            "next_level": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "l1_posted",
+                "finalized",
+                null
+              ]
+            },
+            "eta": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "statement": {
+              "type": "string"
+            },
+            "statement_source": {
+              "type": "string"
+            },
+            "note": {
+              "type": "string"
+            },
+            "leg": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": true
+            },
+            "reason": {
+              "type": "string"
+            },
+            "status": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "detail": {
+              "type": "string"
             }
           }
         }
@@ -2554,7 +2751,7 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
           },
           "unavailable": {
             "type": "array",
-            "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and reason. Empty when every part was answered.",
+            "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and a reason code. Empty when every part was answered. The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -2569,7 +2766,14 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
                   ]
                 },
                 "reason": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "proof_service_not_found",
+                    "proof_service_error",
+                    "proof_service_timeout",
+                    "proof_service_response_too_large",
+                    "proof_service_unreachable"
+                  ]
                 }
               }
             }
@@ -2620,7 +2824,7 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
             },
             "proof_lookup": {
               "type": "object",
-              "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+              "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and a reason code). A null proof_id with `unavailable` is NOT \"not anchored yet\". The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
               "additionalProperties": false,
               "properties": {
                 "state": {
@@ -2638,7 +2842,14 @@ export const GENERATED_OUTPUT_SCHEMAS: Readonly<Record<string, Readonly<Record<s
                   ]
                 },
                 "reason": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "proof_service_not_found",
+                    "proof_service_error",
+                    "proof_service_timeout",
+                    "proof_service_response_too_large",
+                    "proof_service_unreachable"
+                  ]
                 }
               }
             },

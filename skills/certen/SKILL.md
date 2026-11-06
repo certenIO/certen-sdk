@@ -20,7 +20,7 @@ without trusting the agent or its owner. Use it for anything where money is at s
 one party has to agree: escrow legs, settlement, arbitration, insurance, a regulator's seat.
 
 Do NOT use it for chat, discovery, or small per-message fees. A proof costs money (about $0.35 on
-Base, about $1 to $4 on Ethereum) and takes 60 to 110 seconds. Putting that in front of a $3 fee
+Base, about $1 to $4 on Ethereum) and takes minutes. Putting that in front of a $3 fee
 makes everything slow and proves nothing anyone needs proved.
 
 Every command below prints JSON with `--json`, wrapped as `{"ok": true, "data": ...}` on success
@@ -127,7 +127,7 @@ certen watch <intent_id> --json                                # pick a wait bac
   Never describe a `partial` receipt as verified. If the owner gave you a node they trust on the chain, pass `--rpc <url>` (or set `CERTEN_RPC_URL`): without one the proof's execution layer is the validators' own
   statement, and the verdict stays `partial` naming it. That is the honest answer, not an error to work around.
 - `--wait` is off by default with `--json`: pass it, or the command returns once the signature is in (`send` exits `0`, the receipt reads `pending`) and you follow with `certen watch <intent_id> --json`.
-  The proof cycle is 60 to 110 seconds of real work; do not shorten the wait.
+  The proof cycle takes minutes (about 26 at the median, up to an hour); do not shorten the wait.
 - The receipt is saved to `~/.certen/receipts/<intent_id>.json` (no secret in it). `certen receipt --share` makes a link a counterparty can verify with no key.
 
 ## Execute something, proof-gated

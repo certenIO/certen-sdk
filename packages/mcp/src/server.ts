@@ -86,7 +86,7 @@ export function createHandlers(opts: ServerOptions = {}): Record<string, Handler
             : 'Write tools are DISABLED. This server is read-only; set CERTEN_MCP_ALLOW_WRITES=1 to '
               + 'enable them. Do not tell the user to set it without saying what it permits.')
           + '\n\nRead certen://docs/llms.txt before writing code against this API — a proof cycle '
-          + 'legitimately takes 60-110 seconds, and most integration mistakes come from not knowing that.';
+          + 'legitimately takes minutes (a median of about 26 on the hosted gateway), and most integration mistakes come from not knowing that.';
 
   const capabilities = { tools: {}, resources: {} };
 

@@ -77,10 +77,11 @@ const AWAITING_EXECUTION = ['anchoring', 'submitted', 'executing', 'proving'];
 /**
  * How long before "still working" becomes "not working".
  *
- * A proof cycle is 60–110 seconds of real validator work and `execute.wait()` budgets 360s. Fifteen
- * minutes is far enough past both that a queue backlog is not mistaken for a stall.
+ * A proof cycle takes minutes, not seconds: measured on the hosted gateway, recent `on_demand` intents took a median of about
+ * 26 minutes and a p90 of about an hour, and `execute.wait()` budgets 90. Ninety minutes is past the p90 with room for a queue
+ * backlog, so an intent that is only slow is not reported as stuck.
  */
-const STALL_AFTER_MS = 15 * 60_000;
+const STALL_AFTER_MS = 90 * 60_000;
 
 /**
  * Numeric EVM chain id → registry slug (from the chain catalogue), for chains where the portfolio

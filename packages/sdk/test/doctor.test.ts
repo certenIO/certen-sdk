@@ -363,7 +363,7 @@ describe('the execution check', () => {
   });
 
   it('does not flag an intent that is merely recent', async () => {
-    // A proof cycle is 60-110s. Anything inside the threshold is working, not stalled.
+    // Anything inside the threshold is working, not stalled.
     const stub = await startServer(gateway({
       '/v1/transactions': { transactions: [stalledRow('anchoring', 2)] },
     }));
@@ -385,9 +385,20 @@ describe('the execution check', () => {
     }
   });
 
+  it('does not flag an intent that is merely slow: a proof cycle takes minutes (a median of about 26, a p90 of about an hour)', async () => {
+    const stub = await startServer(gateway({
+      '/v1/transactions': { transactions: [stalledRow('anchoring', 26), stalledRow('proving', 62)] },
+    }));
+    try {
+      expect(byName((await client(stub.url).doctor()).checks, 'intents executing').status).toBe('ok');
+    } finally {
+      await stub.close();
+    }
+  });
+
   it('names an intent to investigate with', async () => {
     const stub = await startServer(gateway({
-      '/v1/transactions': { transactions: [stalledRow('anchoring', 90)] },
+      '/v1/transactions': { transactions: [stalledRow('anchoring', 150)] },
     }));
     try {
       const check = byName((await client(stub.url).doctor()).checks, 'intents executing');

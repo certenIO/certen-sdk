@@ -29,7 +29,7 @@ const { intentId } = await certen.execute.contractCall({
   sign: (hashHex) => ed25519Sign(hashHex),   // YOU hold the key
 });
 
-await certen.execute.wait(intentId);          // ~60–110s: real validator work
+await certen.execute.wait(intentId);          // minutes: real validator work (budget: 90 min)
 const proof = await certen.execute.proof(intentId);   // hand this to your counterparty
 ```
 
@@ -66,8 +66,7 @@ until the status is terminal and check `can_sign` before relying on it.
 **Send an idempotency key on every POST.** The SDK does this for you. A network error is otherwise
 indistinguishable from success, and a blind retry can open a second intent or burn identity quota.
 
-**A proof cycle takes 60–110 seconds.** Real validator work, not a tunable delay. Do not wrap it in a
-30-second timeout.
+**A proof cycle takes minutes, not seconds** (measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour). Real validator work, not a tunable delay. Do not wrap it in a short timeout: `execute.wait()` budgets 90 minutes.
 
 **`vote` is `approve` | `reject` | `abstain`** — a lowercase string, not a number, and not `accept`.
 
@@ -80,7 +79,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->41977 tests in 444 files (sdk 992, cli 1437, mcp 357, verify 39191), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->42014 tests in 449 files (sdk 1008, cli 1437, mcp 358, verify 39211), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 

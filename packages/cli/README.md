@@ -203,7 +203,7 @@ certen watch <intent-id>  # pick a wait back up after Ctrl-C or a timeout
    type and where it came from, then what the signature will authorise, **rebuilt from the gateway's bytes and matched to your request**. At a terminal it asks `Sign with "dev"? [Y/n]`; on
    anything that is not a known testnet the chain name is in capitals and the default is **no**. `--yes` says yes in advance (it is required when nobody is at a terminal, or `send` refuses before
    reading a passphrase). `--yes` and `--json` skip the question; **nothing skips the check of what is signed**.
-4. **It signs, waits for the proof cycle (60–110 seconds, never shortened), verifies the proof here, checks the value arrived, and writes the receipt.** Ctrl-C stops the wait, not the
+4. **It signs, waits for the proof cycle (minutes, never shortened), verifies the proof here, checks the value arrived, and writes the receipt.** Ctrl-C stops the wait, not the
    intent: it prints `certen watch <intent-id>`, exits `130`, and the receipt so far is already saved.
 
 The same card, with the same question, now precedes the signature in `call`, `tx create --sign-with`, `governance <operation> --sign-with` and `pending sign --sign-with` (each takes `--yes`). Piped,
@@ -470,8 +470,7 @@ service), the default login refuses with that reason and writes nothing; use `--
 Poll until the status is terminal, and check `can_sign` — it derives from the on-chain key page, so
 it can read `true` while the status is still `creating`.
 
-**A proof cycle takes 60–110 seconds.** Real validator work, not a tunable delay. Do not wrap it in
-a 30-second timeout.
+**A proof cycle takes minutes, not seconds** (measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour). Real validator work, not a tunable delay. Do not wrap it in a short timeout; the default wait is 90 minutes, and one that runs out is resumable with `certen watch`.
 
 **Sign the bytes, not the text.** If you are producing signatures outside this CLI: sign the raw
 bytes of the hash, do not hash it again, and do not sign the ASCII of the hex string. All three

@@ -7,13 +7,14 @@ claim; a proof is evidence. This is how you hand one over and how the other side
 
 ---
 
-## The four reads
+## The reads
 
 | Endpoint | What it gives you | Scope |
 |---|---|---|
 | `GET /v1/proof/{id}` | The proof artifact for a proof id | `proof:read` |
 | `GET /v1/proof/{id}/bundle` | The full bundle — JSON, or a binary attachment | `proof:read` |
 | `GET /v1/proof/{id}/custody` | The custody chain | `proof:read` |
+| `GET /v1/proof/{id}/contract-identity` | The contract-identity state the validators recorded (`recorded`, `absent`, `malformed` or `too_large`); their record, not verified by the gateway | `proof:read` |
 | `GET /v1/proof/tx/{txHash}/receipt` | An Accumulate-native merkle inclusion receipt, read from the network | `proof:read` |
 
 ```bash
@@ -70,6 +71,36 @@ An AI agent asks the MCP server instead: `certen_receipt { intentId }` does the 
 (`header: { receiptsRoot, hash, number }`); a header with no `receiptsRoot` compares nothing, and is refused rather than counted. If whoever runs the server configured a node for the chain
 (`CERTEN_RPC_URL_<CHAIN>`), it reads the recipient's balance and compares the header itself, and a transfer can come back confirmed. A proof *share link* given to `certen_proof_verify` is opened
 only on the server's own gateway or an origin its operator allows (`CERTEN_SHARE_ORIGINS`). `certen_readiness` is the question before it: can this identity, on this chain, act right now?
+
+## What `verified` rests on
+
+A proof the validators emit today is **evidence 2.1**; the verifier reads 2.0 and 2.1. The layers of a 2.1 proof, in the order `certen proof verify` prints them:
+
+| Layer | What it establishes |
+|---|---|
+| `trust_base` | the document's genesis hashes to the incarnation pin the verifier ships with. This is the only trust input: nothing else needs supplying |
+| `L4`, `L4_set` | the validator set, walked from genesis, and the set in force when the proof was made |
+| `L1`, `L2`, `L3`, `G0` | the transaction's receipt chain into a Directory root the validators certified |
+| `G1`, `G1_chains` | every page that decides who may approve the intent, on every partition, at its own block: which are authority books, which pages voted, which signed first (`G1.evidence.pages`, each with its `roles`) |
+| `govRootV4` | the governance root derived from those facts (`govRootV3` for a 2.0 proof) |
+| `S7` | staged finality of the settlement, judged against the Settlement (block header and inclusion proofs) in the bundle's own execution component. `l1_posted` today; `finalized` waits for the chain's own finality and is reported as pending, which does not stop `verified` |
+| `outcome` | the execution receipt on the destination chain, against a block header **from your own node** (`--rpc`) and, if you pass it, the event it must contain (`--expect <address:topic0>`) |
+
+Exit `0` (`overall: verified`) needs every one of them. Without `--rpc`, `outcome` is `not_checked` and the verdict is `partial` (exit `4`): the receipts root would otherwise be the validators' word about themselves.
+
+A layer says `not_checked` when the verifier will not establish a fact, and names it (`g1_authority_not_ready{...}`): not a tamper, and not a pass. Anything that is wrong is `failed`, at the layer it is in, and the layers after it say `not reached`. `@certen.io/proof-verify` alone (`verifyPortableAny`) gives the report for either version; `certen proof verify`, the SDK's `verifyEvidence` and the MCP `certen_proof_verify` add the layers, the finality judgement and the outcome check.
+
+### The root you expect
+
+`--govroot <hex>` (`expectGovRoot` in the SDK) compares the root derived from the proof with a value you hold from your own record. It is optional: without it the layer still verifies, against the pinned incarnation alone, and a mismatch fails `govRootV4`. **There is no on-chain value to read it from.** The anchors the validators post are root-only, and `getAnchor(...).governanceRoot` is zero for them (read on Base Sepolia for two anchors a month apart), so do not look for one there.
+
+### Reading who approved
+
+`G1.evidence.pages` is how a counterparty sees that a second party approved. An intent governed by two books, because the intent account has both as authorities, lists both books as `authority-book` and both pages as `voter`, with `authorizationMode: authorities_required`. The intent also declares them (`authorization.authorities` in its governance section). Accumulate keeps a write to such an account `pending` until every required authority has signed, so a delivered intent carries every vote. See [co-authority-approval.md](co-authority-approval.md).
+
+### How long it takes
+
+A proof cycle takes minutes, not seconds: measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour. `certen send`, `call` and `tx create --wait` wait up to 90 minutes and can be resumed with `certen watch <intent-id>`; a script should poll `GET /v1/transaction/{id}` (or take the `transaction.completed` webhook) and treat a wait that ran out as "not finished", never as a failure to retry.
 
 ## Independent verification, without this API
 

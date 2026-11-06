@@ -48,14 +48,14 @@ describe('wait budgets are validated before any network call', () => {
       timeoutMs: 5 * 60_000, intervalMs: 3_000,
     });
     expect(parseWaitBudget(undefined, undefined, TX_WAIT)).toEqual({
-      timeoutMs: 7 * 60_000, intervalMs: 8_000,
+      timeoutMs: 90 * 60_000, intervalMs: 15_000,
     });
   });
 
   it('gives a transaction longer than an identity — a proof cycle is real validator work', () => {
     expect(TX_WAIT.timeoutMin).toBeGreaterThan(IDENTITY_WAIT.timeoutMin);
-    // 60-110s of proof work plus queueing. Anything under a couple of minutes would always fire.
-    expect(TX_WAIT.timeoutMin * 60).toBeGreaterThan(110);
+    // Measured on the hosted gateway: recent on_demand intents took a median of about 26 minutes and a p90 of about an hour. A budget under that fires on healthy intents.
+    expect(TX_WAIT.timeoutMin).toBeGreaterThan(62);
   });
 
   it('rejects a non-numeric or non-positive timeout as a usage error', () => {

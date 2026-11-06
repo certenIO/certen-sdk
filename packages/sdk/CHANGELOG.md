@@ -1,5 +1,21 @@
 # Changelog — @certen.io/sdk
 
+## 0.14.0 — evidence 2.1 through `verifyEvidence`, body-less POSTs, and proof-cycle timing that matches the gateway (2026-11-06)
+
+Needs `@certen.io/proof-verify` with the 2.1 layer report (same release).
+
+### Fixed
+- **`verifyEvidence` verifies the proofs the gateway serves today (evidence 2.1).** It registers the finality kinds and judges the finality section (S7) against the Settlement in the bundle's own execution component (header and inclusion proofs, which the verifier checks itself), only for a document that carries a finality section. A verified result's `covers` names `S7(<level>)` and `S6`; without a header of your own the outcome stays `not_checked` and the result `partial`. `verifyBundle` stays synchronous and takes an optional `base` verification; called without one it does not judge S7.
+- **A request with no body carries no `Content-Type`.** The client set `application/json` on every request, so a body-less POST (the gas drip) was rejected by the gateway as malformed JSON before its route ran, whether or not the drip was enabled, and the real reason (`DRIP_DISABLED`) never reached the caller.
+- **`execute.wait()` defaults to 90 minutes (interval 15 s), not 6 minutes (8 s).** A proof cycle takes minutes, not seconds: measured on the hosted gateway, recent `on_demand` intents took a median of about 26 minutes and a p90 of about an hour, so the old budget ran out on most healthy intents. A wait that runs out is still `CertenWaitTimeoutError`, which says the intent may yet complete. **Behaviour change** for callers that relied on the default to give up early: pass `timeoutMs`.
+- **`doctor` stops calling an intent stalled after 15 minutes** (now 90): a healthy one routinely takes longer.
+- The "60–110 seconds" claim is removed from the documentation, JSDoc and `llms.txt`.
+
+### Added
+- `checkGovernanceSigning({ pinnedAuthorities })`, for the gateway's pin of inherited authorities (see `@certen.io/proof-verify`).
+- **`proof.contractIdentity(proofId)`**: `GET /v1/proof/{id}/contract-identity`, the contract-identity state the validators recorded for a proof, returned as the gateway sent it.
+- **`TransactionResponse.finality`** and the **`ProofFinality`** type: how far each proof has been carried toward finality on its own chain, as the validators recorded it. The gateway already returned it; the type did not declare it.
+
 ## 0.13.0 — webhook signing and verification, and webhook deliveries you can ask for by status (2026-11-01)
 
 ### Webhook signing and verification

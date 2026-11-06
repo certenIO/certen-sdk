@@ -21,7 +21,7 @@ const { intentId } = await certen.execute.contractCall({
   sign: (hashHex) => ed25519Sign(hashHex),   // YOU hold the key
 });
 
-await certen.execute.wait(intentId);                  // ~60–110s: real validator work
+await certen.execute.wait(intentId);                  // minutes: real validator work (budget: 90 min)
 const proof = await certen.execute.proof(intentId);   // hand this to your counterparty
 ```
 
@@ -58,8 +58,9 @@ if (isWebhookEvent(hook, 'transaction.completed')) await settle(hook.payload.int
 - **Every POST carries an Idempotency-Key.** The SDK adds one for you. A network error is otherwise
   indistinguishable from success, and a blind retry opens a SECOND intent — on a transfer, that is paying
   twice. Do not disable `autoIdempotencyKey` on anything carrying value.
-- **A proof cycle takes 60–110 seconds.** Real validator work, not a tunable delay. `execute.wait()`
-  budgets 360s by default. Do not wrap it in a 30-second timeout; it will always fire.
+- **A proof cycle takes minutes, not seconds.** Measured on the hosted gateway, recent `on_demand` intents took a median of
+  about 26 minutes and a p90 of about an hour. `execute.wait()` budgets 90 minutes by default. Do not wrap it in a short
+  timeout; it will fire on a healthy intent. A wait that runs out is not a failed intent: check it again, never open a second.
 - **Identity creation is asynchronous.** `identity.create` returns `202` and provisioning continues. Poll
   `identity.get` until the status is terminal and `can_sign` is true before you try to sign with it.
 - **`vote` is `approve` | `reject` | `abstain`** — lowercase string, not a number, not `accept`. It is folded

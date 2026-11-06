@@ -278,7 +278,7 @@ export function registerCallCommands(program: Command): void {
       if (!wait) {
         printOutput(opened as unknown as Record<string, unknown>);
         hint('');
-        hint(`The proof cycle runs now (60-110s). Follow it: certen tx status ${opened.intentId} --wait`);
+        hint(`The proof cycle runs now (it takes minutes, not seconds). Follow it: certen tx status ${opened.intentId} --wait`);
         return;
       }
 

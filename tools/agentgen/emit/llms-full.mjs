@@ -89,8 +89,8 @@ export function emitLlmsFull({ spec, ops, map, sdkVersion }) {
   L.push('- **Every POST needs an Idempotency-Key.** The SDK adds one automatically. A network error is');
   L.push('  otherwise indistinguishable from success, and a blind retry opens a SECOND intent — on a value');
   L.push('  transfer that means paying twice.');
-  L.push('- **A proof cycle takes 60–110 seconds.** Real validator work, not a tunable delay. `execute.wait()`');
-  L.push('  defaults to a 360s budget. A 30-second timeout around it will simply always fire.');
+  L.push('- **A proof cycle takes minutes, not seconds.** Measured on the hosted gateway, recent `on_demand` intents took a median of');
+  L.push('  about 26 minutes and a p90 of about an hour. `execute.wait()` defaults to a 90-minute budget. A short timeout around it will fire on a healthy intent.');
   L.push('- **Identity creation is asynchronous.** `identity.create` returns `202` and provisioning continues.');
   L.push('  Poll `identity.get` until the status is terminal and `can_sign` is true before relying on it.');
   L.push('- **`vote` is `approve` | `reject` | `abstain`** — a lowercase string, not a number, and not `accept`.');

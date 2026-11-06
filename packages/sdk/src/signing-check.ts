@@ -190,6 +190,11 @@ export interface GovernanceSigningContext {
   operations: ExpectedOperation[];
   signerPublicKey?: string;
   signerKeyPage?: string;
+  /**
+   * Key books you have confirmed, from a source other than the gateway, are already authorities of the account being changed. The gateway pins an account's inherited
+   * authorities ahead of an authority it adds (so the account keeps them); the signer's own ADI book is always accepted as such a pin, any other only if named here.
+   */
+  pinnedAuthorities?: string[];
 }
 
 /** Before signing a governance change (`POST /v1/governance`). */
@@ -197,6 +202,7 @@ export async function checkGovernanceSigning(signingData: unknown, c: Governance
   return run((v) => v.verifySigningData(signingData, {
     adiUrl: c.adiUrl,
     governance: c.operations,
+    ...(c.pinnedAuthorities?.length ? { pinnedAuthorities: c.pinnedAuthorities } : {}),
     ...(c.signerPublicKey ? { signerPublicKey: c.signerPublicKey } : {}),
     ...(c.signerKeyPage ? { signerKeyPage: c.signerKeyPage } : {}),
   }));

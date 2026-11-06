@@ -494,15 +494,24 @@ describe('failure replies are reported as they are', () => {
   });
 
   it('a real job longer than stallMs completes because every record reports progress', () => {
-    const p = make({ size: 1, stallMs: 1000 });
     const it0 = item(0);
     const dec = localEngine.decode([it0.sig]);
-    const n = 700;
+    const job = (n: number) => ({ points: new Array(n).fill(dec.points[0]!), msgs: new Array(n).fill(it0.msg), scalars: new Array(n).fill(3n), groups: new Array(n).fill(0), dst: SignatureDST });
+    const stallMs = 1000;
+    // What a record costs is the machine's, not the test's: a fixed count outlasted the stall window on a slow machine and finished inside it on a fast CI runner.
+    // Time a warm worker, then size the job to run well past the window wherever it runs.
+    const probe = poolEngine(make({ size: 1 }));
+    probe.combine(job(20));
+    const t1 = Date.now();
+    probe.combine(job(200));
+    const perRecordMs = Math.max((Date.now() - t1) / 200, 0.01);
+    const n = Math.ceil((2.5 * stallMs) / perRecordMs);
+    const p = make({ size: 1, stallMs });
     const t0 = Date.now();
-    const res = poolEngine(p).combine({ points: new Array(n).fill(dec.points[0]!), msgs: new Array(n).fill(it0.msg), scalars: new Array(n).fill(3n), groups: new Array(n).fill(0), dst: SignatureDST });
+    const res = poolEngine(p).combine(job(n));
     expect(res.hashPts).toHaveLength(n);
     // longer than the stall window: only the progress ticks of the worker keep the run alive
-    expect(Date.now() - t0).toBeGreaterThan(1000);
+    expect(Date.now() - t0).toBeGreaterThan(stallMs);
     expect(p.alive).toBe(true);
   });
 });

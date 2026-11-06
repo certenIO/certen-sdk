@@ -35,7 +35,7 @@ certen identity retire <id> --yes   # free the quota slot of an identity you no 
 ```
 
 When `setup` says **Ready**, `certen send` is the first thing to do with the identity: it checks readiness again before it asks for your passphrase, shows what the signature will authorise, signs, waits for
-the proof cycle (60–110 seconds), verifies the proof here and writes `~/.certen/receipts/<intent-id>.json`. Exit `0` there means **verified**, `4` means done but not fully verified (it names what is missing). See
+the proof cycle (minutes), verifies the proof here and writes `~/.certen/receipts/<intent-id>.json`. Exit `0` there means **verified**, `4` means done but not fully verified (it names what is missing). See
 [first-proof-in-three-commands.md](first-proof-in-three-commands.md) for what each line of the receipt means; the contract-call route (`certen call`) is described there too.
 
 `certen login` and `certen init` are the same steps one at a time, and unchanged.

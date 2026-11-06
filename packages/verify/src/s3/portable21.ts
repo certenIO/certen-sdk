@@ -10,7 +10,7 @@ import { equal, fail, goHexStrict, hexBytes, receiptPrefixTo, receiptValid, toHe
 import { genesisGlobals, selfAnchorBlock, Spine } from '../proof-v2/spine.js';
 import { CertifyCode, certifyState, CertifyState, checkGenesisLink, decodeReceiptBin, GENESIS_LINK_INDEX, recordDecodes, recordHasRootProof } from './certify.js';
 import type { Rcpt } from './rcpt.js';
-import { computeIncarnation, PORTABLE_FORMAT } from '../proof-v2/verify.js';
+import { computeIncarnation, PORTABLE_FORMAT, type Stage } from '../proof-v2/verify.js';
 import { optList, type Rec } from '../proof-v2/shapes.js';
 import { sameUrl } from '../proof-v2/accumulate.js';
 import { decodeAnchor21, partitionOfAnchor } from './directory.js';
@@ -85,7 +85,7 @@ function newReport(): Report21 {
  * verifier could not establish (with the partition and block it was judged at), a plain VerifyError for a malformed or inconsistent
  * document.
  */
-export function verifyPortable21(document: unknown): Report21 {
+export function verifyPortable21(document: unknown, trace?: Trace21): Report21 {
   const doc = document && typeof document === 'object' && !Array.isArray(document) ? (document as Rec) : undefined;
   if (!doc || doc.format !== PORTABLE_FORMAT) fail(`portable format ${JSON.stringify(doc?.format)} is not ${PORTABLE_FORMAT}`);
 
@@ -115,6 +115,7 @@ export function verifyPortable21(document: unknown): Report21 {
   if (ev.version !== VERSION_21) fail('not a v2.1 Accumulate proof');
   const id = computeIncarnation(g, networkRecord, globalsRecord);
   if (!equal(id, pin)) fail(`incarnation evidence is for ${toHex(id)}, not the pinned ${toHex(pin)}`);
+  trace?.('trust_base', { incarnation: toHex(id), pin: toHex(pin) });
   const rep = newReport();
   rep.incarnation = toHex(id);
 
@@ -123,8 +124,14 @@ export function verifyPortable21(document: unknown): Report21 {
   if (need === 0 || need > majors.length) fail(`evidence builds on ${need} major blocks; the archive has ${majors.length}`);
   const at = spineStates(genesis, majors, need, [ev.majors, ev.check.majors], createHash('sha256').update(exactKey([g, majors])).digest('hex'));
   rep.majors = need;
-  return verifyFrom(ev, rep, at, pin, goHexStrict(g.rootChainAnchor ?? '', 'genesis.rootChainAnchor', 32));
+  return verifyFrom(ev, rep, at, pin, goHexStrict(g.rootChainAnchor ?? '', 'genesis.rootChainAnchor', 32), trace);
 }
+
+/**
+ * Called as each stage of the walk completes, with the facts it established: the same stages, in the same words, as the evidence 2.0 verifier's trace
+ * (proof-v2/verify.ts), so a per-layer report can say which layer a failure belongs to. It observes the walk and changes nothing about it.
+ */
+export type Trace21 = (stage: Stage, facts: Record<string, unknown>) => void;
 
 /** A link that does not decode is certify_link_invalid at its ordinal (or at genesis), judged before any item. */
 function certifyFail(index: number | string): never {
@@ -180,7 +187,7 @@ function walkRuns(sp: Spine, runs: unknown[], bins: Uint8Array[], nested: boolea
 }
 
 /** verifyFrom checks everything after the spine's starting points: at holds the spine after ev.majors and after ev.check.majors major blocks. */
-function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Uint8Array, genesisRoot: Uint8Array): Report21 {
+function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Uint8Array, genesisRoot: Uint8Array, trace?: Trace21): Report21 {
   // S1-S2: the receipt from the transaction to a certified root.
   const certified = at.get(ev.majors);
   if (!certified) fail(`certify: evidence.majors ${ev.majors} is not a major block of the archive`);
@@ -198,6 +205,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   // certified root (checkGenesisLink); its position in the certified tree is not authenticated.
   // (A continuous document with neither is judged at the end of this function: the offline walk requires the link of every document.)
   if (links.length > 0 || genesisLink !== undefined) checkGenesisLink(genesisLink, genesisRoot, cert.rootChainAnchor);
+  trace?.('spine', { majors: rep.majors, certifiedBlock: cert.lastMinorBlock, certifiedRoot: toHex(cert.rootChainAnchor), validators: cert.validators().length, threshold: cert.directoryThreshold(), networkUpdatesApplied: cert.applied.length });
   // decodeReceipt: the transaction's receipt is the one its binary form decodes to
   const r = decodeReceiptBin(ev.receipt.bin) ?? fail('receipt: fields are out of order');
   const tx = ev.txHash.length === 64 && /^[0-9a-fA-F]{64}$/.test(ev.txHash) ? hexBytes(ev.txHash, 'txHash', 32) : fail('txHash is not 32 bytes of hex');
@@ -207,6 +215,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   rep.certifiedBlock = cert.lastMinorBlock;
   rep.certifiedRoot = toHex(cert.rootChainAnchor);
   rep.txHash = toHex(tx);
+  trace?.('receipt', { txHash: toHex(tx), steps: r.entries.length, root: toHex(r.anchor), certifiedBlock: cert.lastMinorBlock });
 
   // The partition anchor: executed by the Directory, proven into the same certified root, naming the block whose root chain the
   // transaction's receipt passes through and whose state root the pages are proven into.
@@ -225,6 +234,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   rep.anchorStateRoot = toHex(anchor.body.stateTreeAnchor);
   rep.anchorRootChainAnchor = toHex(anchor.body.rootChainAnchor);
   const partId = parsePartitionUrl(anchor.body.source!)!;
+  trace?.('anchor', { partition: srcURL, anchorBlock: anchor.body.minorBlockIndex, anchorTxHash: toHex(anchor.tx), stateRoot: toHex(anchor.body.stateTreeAnchor) });
 
   // The validator set: walked to a certified block at or after the certified one, proven there, equal to the set the walk derived. Every
   // write the walk applied must be accounted for by the network account's main chain.
@@ -258,6 +268,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
   rep.accumulateSetRoot = sc.accumulateSetRoot;
   rep.validators = chk.validators().length;
   rep.threshold = chk.directoryThreshold();
+  trace?.('set', { verdict: sc.verdict, checkBlock: chk.lastMinorBlock, validators: rep.validators, threshold: rep.threshold, accumulateSetRoot: sc.accumulateSetRoot });
 
   const x = { source: srcURL, id: partId, block: anchor.body.minorBlockIndex, stateRoot: new Uint8Array(anchor.body.stateTreeAnchor) };
   const inn: XIn = {
@@ -267,6 +278,7 @@ function verifyFrom(ev: Evidence, rep: Report21, at: Map<number, Spine>, pin: Ui
     network: chk.g.network.networkName ?? '',
   };
   verify21(ev, rep, inn);
+  trace?.('pages', { proven: rep.proven, pageChains: rep.pageChains, unproven: rep.unproven, disclosures: rep.disclosures, authorizationMode: rep.authorizationMode, arrivals: rep.arrivals.length });
   // RB9-F6 / F-VE-2 (b), owner decision 2026-10-19: the offline walk (Verify21FromGenesis) requires the genesis link of EVERY evidence 2.1 document, the
   // continuous form included. Offline, the spine is started from the pinned incarnation's genesis RECORDS, which bind its validator set but not its root
   // chain, so without the link a complete chain of another incarnation that shares those records would pass the pin. A document with links, or with a genesis

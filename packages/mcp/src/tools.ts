@@ -633,10 +633,11 @@ const READ_TOOLS: ToolDef[] = [
     mutates: false,
     endpoint: 'GET /v1/transaction/{id}',
     description:
-      'Poll an intent until it reaches a terminal state. THIS TAKES 60-110 SECONDS in the normal '
-      + 'case — that is real validator work, not a tunable delay. Do not treat a slow response as a '
-      + 'hang, and do not retry it: a second call just starts a second poll against the same intent. '
-      + 'Default budget is 360s. Prefer certen_transaction_get if you only want the current state. '
+      'Poll an intent until it reaches a terminal state. THIS TAKES MINUTES, NOT SECONDS: recent on_demand '
+      + 'intents on the hosted gateway took a median of about 26 minutes and a p90 of about an hour. That is real validator work, '
+      + 'not a tunable delay. Do not treat a slow response as a hang, and do not retry it as if it had failed: a second call just '
+      + 'starts a second poll against the same intent. The default budget is 360s, which is SHORTER than a typical cycle, so expect '
+      + 'WAIT_TIMEOUT and call again (or raise timeoutMs); it is not a failure. Prefer certen_transaction_get if you only want the current state. '
       + 'The result carries `outcome`, the named state: `completed` (executed and proven); '
       + '`completed_unproven` (the action EXECUTED but its proof can never be produced - gas only, fee waived, '
       + 'nothing to verify; this is not a failure and not "completed"); `executed` (only with until:"executed": the '
@@ -781,7 +782,8 @@ const READ_TOOLS: ToolDef[] = [
     description:
       'Verify a proof LOCALLY, layer by layer, and report exactly which layers were checked and which were not. The Accumulate side '
       + '(genesis pin, validator quorum from genesis, transaction receipt to a certified Directory root, partition anchor, governing '
-      + 'pages, validator set, govRoot v3) is checked here from the proof v2 document, not taken from the gateway; the execution '
+      + 'pages, validator set, govRoot: v3 for a document of evidence 2.0, v4 for evidence 2.1, which is what the validators emit now; the '
+      + 'finality section, when the document carries one) is checked here from the proof v2 document, not taken from the gateway; the execution '
       + 'outcome is checked from the execution receipt in the bundle itself. A flag in the bundle saying "verified" is NEVER used: it is '
       + 'returned as bundleStatements, the statement the validators make about themselves. overall is verified only when every layer the '
       + 'document carries was checked here; partial names the layers that were not established; failed names the layer that does '
@@ -811,7 +813,7 @@ const READ_TOOLS: ToolDef[] = [
           properties: { address: { type: 'string' }, topic0: { type: 'string' }, topic1: { type: 'string' } },
           additionalProperties: false,
         },
-        govRoot: str('A govRoot v3 (hex) to compare the one computed here with'),
+        govRoot: str('A govRoot (hex; v3 for a 2.0 proof, v4 for 2.1) from your own record, to compare the one computed here with. Nothing on chain commits one'),
       },
       required: ['target'],
       additionalProperties: false,
@@ -901,7 +903,7 @@ const READ_TOOLS: ToolDef[] = [
       + 'compares the proof\'s block header with it too, so a transfer can be CONFIRMED and the receipt VERIFIED. Without one it cannot read a recipient\'s balance. Pass `transfer` { chain, to, amount } for a native transfer and its effect is `unchecked`, so the receipt is '
       + 'not VERIFIED, until you have read the recipient from your own node; pass `call` { chain, expect: { address, topic0 } } for a contract call and the event is looked for in the '
       + 'proof\'s own execution receipt. With neither there is no request on record, the effect is `not_applicable`, and VERIFIED then speaks to the proof only. Does not wait: '
-      + 'certen_execute_wait first (60-110 seconds), or read `pending` and come back. Reads only; it keeps no state and writes nothing (the CLI keeps receipts in ~/.certen; here the '
+      + 'certen_execute_wait first (minutes), or read `pending` and come back. Reads only; it keeps no state and writes nothing (the CLI keeps receipts in ~/.certen; here the '
       + 'result is the record). The same document as `certen receipt --json`, plus `destination`: the gateway\'s record of the destination transaction (hash, chain_id, `settlement`; null '
       + 'when it has none), AS THE VALIDATORS RECORDED IT and not verified by the gateway, with `destination_note` saying so. `ids.destination_tx_source` says where the receipt\'s own '
       + 'hash came from: `proof` (the execution proof carries it) or `validators` (their word only). Neither is by itself confirmation that a transfer happened: read `verdict` and `effect`.',
@@ -1309,8 +1311,8 @@ const WRITE_TOOLS: ToolDef[] = [
           type: 'string',
           enum: ['on_demand', 'on_cadence'],
           description:
-            'When the proof cycle runs. `on_demand` (default) starts immediately and takes roughly '
-            + '60-110 seconds. `on_cadence` batches it with other proofs: cheaper, slower. Affects when '
+            'When the proof cycle runs. `on_demand` (default) starts immediately and takes minutes, '
+            + 'not seconds. `on_cadence` batches it with other proofs: cheaper. Affects when '
             + 'the proof is produced, never what it proves.',
         },
         additionalAuthorities: {

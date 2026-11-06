@@ -197,7 +197,7 @@ proof v2 portable document (`@certen.io/proof-verify`) and the bundle's own exec
 |---|---|
 | `overall` | `verified` (every layer the document carries was checked here) · `partial` · `failed` · `no_evidence` |
 | `independent` | `true` only for `verified`: the statements in `covers` were derived here with CERTEN not trusted |
-| `layers[]` | `{ id, statement, title, verdict, evidence, reason? }` for `trust_base`, `L4`, `L1`, `L2`, `L3`, `G0`, `G1`, `G1_chains`, `L4_set`, `govRootV3`, `outcome`, `G1b`, `G2`, `L5`. `verdict` is `verified`, `failed`, `not_checked` (inside the document's scope, not established: `reason` says why) or `not_in_document` (a layer this document type does not carry) |
+| `layers[]` | `{ id, statement, title, verdict, evidence, reason? }` for `trust_base`, `L4`, `L1`, `L2`, `L3`, `G0`, `G1`, `G1_chains`, `L4_set`, `govRootV3` (evidence 2.0) or `govRootV4` (evidence 2.1), `S7` (the finality section, when the document carries one), `outcome`, `G1b`, `G2`, `L5`. `verdict` is `verified`, `failed`, `not_checked` (inside the document's scope, not established: `reason` says why) or `not_in_document` (a layer this document type does not carry) |
 | `covers` / `notCovered` | The statements (PROOF_V2 §3: S1…S9) a `verified` result establishes, and those it cannot speak to |
 | `failure` | `{ layer, message }` for the first layer that failed |
 | `execution`, `headerCheck` | The execution receipt walked to the bundle's receipts root, and the comparison with a header from `--rpc` |
@@ -682,8 +682,8 @@ order:
    independent check should not discover it was not made after the value has gone.
 5. **Unlock, open, check, confirm, sign.** The passphrase is read now; the intent is opened; the SDK rebuilds and matches the signing data (`SIGNING_DATA_MISMATCH` and friends,
    exit `1`); the card is shown; a person says yes (or `--yes` / `--json` did).
-6. **The outcome.** Unless `--no-wait` (and with `--json` the default is `--no-wait`, as for `tx create`; pass `--wait`), it waits for the proof cycle (60–110 seconds; the budget is
-   `--timeout`, default 7 minutes, never shortened), verifies the proof **here**, checks the value arrived, writes the receipt and prints it.
+6. **The outcome.** Unless `--no-wait` (and with `--json` the default is `--no-wait`, as for `tx create`; pass `--wait`), it waits for the proof cycle (minutes, not seconds: about 26 at the median; the budget is
+   `--timeout`, default 90 minutes, never shortened), verifies the proof **here**, checks the value arrived, writes the receipt and prints it.
 
 **Exit codes of `send`, `receipt` and `watch` come from the receipt** (and are the same for all three):
 

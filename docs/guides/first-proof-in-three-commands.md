@@ -69,7 +69,7 @@ It does these things, in this order, so that the unsafe ones cannot happen first
 1. checks what you typed, with no network: the amount, the recipient (a mixed-case address whose EIP-55 checksum fails is a mistyped one and is refused), the asset;
 2. checks readiness **before it asks for your passphrase** (the same checks as `certen status`), so a passphrase is never asked for in order to fail;
 3. shows the **confirmation card** and asks. The card says what the signature will authorise, *rebuilt from the gateway's bytes and matched to your request*; if the gateway had returned anything else, nothing would be signed. `--yes` skips the question, never that check;
-4. signs, then waits for the **proof cycle**: 60–110 seconds of real validator work, not a hang and not a tunable delay. Ctrl-C stops the wait, not the intent; `certen watch <intent-id>` picks it back up;
+4. signs, then waits for the **proof cycle**: minutes of real validator work (about 26 at the median, up to an hour), not a hang and not a tunable delay. Ctrl-C stops the wait, not the intent; `certen watch <intent-id>` picks it back up;
 5. verifies the proof **here**, from the proof's own bytes, and checks whether the value arrived;
 6. writes the receipt to `~/.certen/receipts/<intent-id>.json` and prints it.
 
@@ -321,7 +321,7 @@ is in the execution receipt.
 You do not supply the ADI URL, the abstract account, or the numeric chain id — all three are derived from the identity. (Omitting them
 upstream produces a bodyless `502`, which reads as "the gateway is down" rather than "you left out a field". You should never have to know that.)
 
-`--wait` polls to a terminal state. **A proof cycle is 60–110 seconds of real validator work** — not a tunable delay, and not a hang. Drop
+`--wait` polls to a terminal state. **A proof cycle takes minutes of real validator work** (about 26 at the median, up to an hour) — not a tunable delay, and not a hang. Drop
 `--wait` to return immediately and follow it later with `certen watch <intent-id>` (or `certen tx status <id> --wait`). `--dry-run` prints the
 intent without sending it, which is also the starting point if you need a multi-leg intent: edit it and pass it to
 `certen tx create --intent @file.json`.

@@ -310,6 +310,68 @@ describe('governance changes: what was asked for is what the transaction does', 
     const sd = sdFor(page, { type: 'updateKeyPage', operation: [{ type: 'add', entry: { keyHash: KEY } }, { type: 'add', entry: { keyHash: 'cc'.repeat(32) } }] });
     expect(mismatch(() => verifySigningData(sd, { governance: [{ type: 'add_key', public_key_hash: KEY }] }))).toBe('transaction.body.operation');
   });
+
+  // The gateway pins an account's inherited authorities ahead of an addAuthority (gap G-19): the first authority an account is given makes its set explicit, and
+  // every inherited one would stop governing it. So `certen governance add-authority --account <adi>/data` gets back [the ADI's own book, then the one asked for].
+  describe('the gateway pins the signer\'s own book ahead of an authority it was asked to add', () => {
+    const data = `${adi}/data`;
+    const own = `${adi}/book`;
+    const asked = 'acc://arkova.acme/book';
+    const add = (authority: string) => ({ type: 'addAuthority', authority });
+    const ask = [{ type: 'add_authority' as const, authority_url: asked, account_url: data }];
+    const verify = (ops: unknown[], extra: Partial<Expectation> = {}) =>
+      verifySigningData(sdFor(data, { type: 'updateAccountAuth', operations: ops }), { adiUrl: adi, governance: ask, ...extra });
+
+    it('accepts [own book, asked] and says what was pinned, so a person sees it', () => {
+      const s = verify([add(own), add(asked)]);
+      expect(s.pinnedAuthorities).toEqual([own]);
+      expect(s.operations).toHaveLength(2);
+      expect(s.text.join('\n')).toMatch(/also keeps\s+acc:\/\/rb7-adiri-10061842\.acme\/book/);
+    });
+
+    it('still accepts exactly the one asked for, with nothing pinned', () => {
+      const s = verify([add(asked)]);
+      expect(s.pinnedAuthorities).toEqual([]);
+      expect(s.text.join('\n')).not.toMatch(/also keeps/);
+    });
+
+    it('compares authorities without regard to case', () => {
+      expect(verify([add(own.toUpperCase().replace('ACC://', 'acc://')), add(asked)]).pinnedAuthorities).toHaveLength(1);
+    });
+
+    it('refuses a pin of any book that is not the signer\'s own: that is how an authority nobody asked for would arrive', () => {
+      expect(mismatch(() => verify([add('acc://attacker.acme/book'), add(asked)]))).toBe('transaction.body.operations');
+    });
+
+    it('refuses the own book after the requested operation, repeated, or with any further operation', () => {
+      expect(mismatch(() => verify([add(asked), add(own)]))).toBe('transaction.body.operations');
+      expect(mismatch(() => verify([add(own), add(own), add(asked)]))).toBe('transaction.body.operations');
+      expect(mismatch(() => verify([add(own), add(asked), add('acc://attacker.acme/book')]))).toBe('transaction.body.operations');
+      expect(mismatch(() => verify([add(own), { type: 'removeAuthority', authority: own }, add(asked)]))).toBe('transaction.body.operations');
+    });
+
+    it('refuses a pin with the requested operation missing', () => {
+      expect(mismatch(() => verify([add(own)]))).toBe('transaction.body.operations');
+    });
+
+    it('accepts another book as a pin only when the caller named it, and then in order with the own book', () => {
+      const root = 'acc://root-authority.acme/book';
+      expect(mismatch(() => verify([add(own), add(root), add(asked)]))).toBe('transaction.body.operations');
+      expect(verify([add(own), add(root), add(asked)], { pinnedAuthorities: [root] }).pinnedAuthorities).toEqual([own, root]);
+      // naming a book permits it as a pin, nothing else: the request is still required to follow
+      expect(mismatch(() => verify([add(own), add(root)], { pinnedAuthorities: [root] }))).toBe('transaction.body.operations');
+    });
+
+    it('does not apply to a change that is not an authority addition', () => {
+      // asked to remove one, a returned list that also adds the own book is not a pin: a pin only keeps what an addition would drop
+      const sd = sdFor(data, { type: 'updateAccountAuth', operations: [add(own), { type: 'removeAuthority', authority: asked }] });
+      expect(mismatch(() => verifySigningData(sd, { adiUrl: adi, governance: [{ type: 'remove_authority', authority_url: asked, account_url: data }] }))).toBe('transaction.body.operations');
+      // and the removal as asked, with nothing added, is accepted
+      expect(() => verifySigningData(sdFor(data, { type: 'updateAccountAuth', operations: [{ type: 'removeAuthority', authority: asked }] }), { adiUrl: adi, governance: [{ type: 'remove_authority', authority_url: asked, account_url: data }] })).not.toThrow();
+      const keyPage = sdFor(page, { type: 'updateKeyPage', operation: [{ type: 'add', entry: { keyHash: KEY } }, { type: 'add', entry: { keyHash: 'cc'.repeat(32) } }] });
+      expect(mismatch(() => verifySigningData(keyPage, { governance: [{ type: 'add_key', public_key_hash: KEY }] }))).toBe('transaction.body.operation');
+    });
+  });
 });
 
 describe('co-signing an existing transaction keeps its original initiator', () => {

@@ -118,7 +118,7 @@ answer for an opt-in chain is told apart: not listed at all is `unknown_chain`, 
 | `certen_pending_list` | The pending actions inbox. |
 | `certen_governance_get` | Status of a governance operation. |
 | `certen_proof_get` | The proof for a completed intent. |
-| `certen_execute_wait` | Poll to a terminal state — **takes 60–110 seconds**. |
+| `certen_execute_wait` | Poll to a terminal state — **takes minutes**. |
 | `certen_readiness` | **Can this identity, on this chain, act right now?** One call: ordered checks, a `fix` in words for each, never `ready` over an `unknown`. |
 | `certen_receipt` | **What happened to this intent?** One call: the ids to keep, the proof verified here layer by layer, and what of the effect is established. |
 | `certen_chain_balance` | **The native balance of ANY EVM address** on a chain, through the gateway's own node. `"0"` is a real read; an unreadable balance is an error, never a zero. |
@@ -205,7 +205,7 @@ without a web fetch: `certen://docs/llms.txt`, `certen://docs/llms-full.txt`,
 `certen://docs/errors`, `certen://docs/cli-contract`, and the five guides under `certen://guides/`.
 
 Read `certen://docs/llms.txt` first. Most integration mistakes come from not knowing that a proof
-cycle legitimately takes 60–110 seconds.
+cycle legitimately takes minutes.
 
 ## No third-party dependencies
 

@@ -92,6 +92,16 @@ export class ProofResource {
     }
   }
 
+  /**
+   * The contract-identity state the validators recorded for a proof (`certen-contract-identity/1`): `recorded` (with the leg, the digest and the
+   * member), `absent`, `malformed` or `too_large`, each with a fixed status text. The validators' record, not verified by the gateway: verify it
+   * offline with `@certen.io/proof-verify`. The gateway defines the members, not this SDK, so they come back as sent.
+   */
+  async contractIdentity(proofId: string): Promise<Record<string, unknown>> {
+    const { data } = await this.http.get(apiPath`/v1/proof/${proofId}/contract-identity`);
+    return data;
+  }
+
   /** The custody chain for a proof. */
   async custody(proofId: string): Promise<ProofCustody> {
     const { data } = await this.http.get(apiPath`/v1/proof/${proofId}/custody`);

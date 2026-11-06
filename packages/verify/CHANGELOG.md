@@ -1,5 +1,17 @@
 # Changelog — @certen.io/proof-verify
 
+## 0.3.0 — verification of evidence 2.1, and the governance pin a signer accepts (2026-11-06)
+
+Evidence 2.1 is what the validators have emitted since the G1 activation, and `verifyProofDocument` accepted 2.0 only: every proof the live gateway served came back "failed at trust_base: not a v2 Accumulate proof" through `certen proof verify`, the SDK's `verifyEvidence` and the MCP tool. `verifyPortableAny` already verified 2.1; the layer report did not.
+
+### Fixed
+- **`verifyProofDocument` verifies a 2.1 document, layer by layer.** The layers are those of 2.0 (`trust_base`, `L4`, `L1`, `L2`, `L3`, `G0`, `G1`, `G1_chains`, `L4_set`) with `govRootV4` where 2.0 has `govRootV3`. They are built from the same walk the validator's verifier makes: `verifyPortable21` takes an optional trace (stage by stage, as 2.0's does) and changes no verdict. A plain refusal is a `failed` layer; a named state (a fact the verifier will not establish, with the partition and block it was judged at) is `not_checked` with that name; a fact in `report.unproven` keeps `G1` from reading `verified`. A document without `govRootV3Inputs` is `not_checked` at `govRootV4`, not failed. Checked against every document of the Go-written conformance corpus (135) and a real proof from the hosted gateway (`test/fixtures/live21-base-sepolia`).
+- **`expectGovRoot` compares the root of the document's version** (v3 for 2.0, v4 for 2.1); a mismatch fails the layer. It is a value you hold from somewhere else: nothing on chain commits one (the anchors are root-only, `governanceRoot` is zero).
+- **`verifySigningData` accepts the pin the gateway puts ahead of an `addAuthority`.** An account that inherits its ADI's authorities loses them when it is given one of its own, so the gateway adds them back in the same transaction (`certen governance add-authority --account <adi>/data` returns `[own book, the one asked for]`) and the exact-match check refused it. Accepted now: the signer's own ADI book first, each once, then exactly what was asked for. A pin of any other book is refused unless named in the new `Expectation.pinnedAuthorities`; any other extra, reordered or foreign operation is refused as before. `SigningSummary.pinnedAuthorities` lists what was pinned and the text says so.
+
+### Added
+- `Verification.govRootV4`; `Verification.report` is `Report | Report21`.
+
 ## 0.2.0 — staged finality (S7), the S8 contract-identity verifier, post-Denim Base legs (2026-10-26)
 
 Minor release: a large additive surface since 0.1.0 (the sections below were written as Unreleased while it was built). New public namespaces `finality` and `identity`; `identity.verifyContractIdentity` is the S8 verifier and judges the portable document's `contractIdentity` member. The embedded finality pins change (PINS_SHA256 now 9f4fc10f...d1cf: a `base_sepolia.post_denim` capability row), so this release and the validators of the same date judge Base legs alike; a verifier without the row refuses post-Denim Base blocks as `batch_format_unsupported{post_denim}`. Base post-Denim batches are located by timestamp AND the full parent hash (five blocks share a second). `s6` replay verification now returns the link of a proven slot. Not independently reviewed; see the repository TECH_DEBT.md of the validator programme for the owner-paused items.

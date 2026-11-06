@@ -108,6 +108,11 @@ export interface Expectation {
   vote?: 'approve' | 'reject' | 'abstain';
   /** The key page that will sign, when the caller named it. */
   signerKeyPage?: string;
+  /**
+   * Key books you have confirmed, from a source other than the gateway, are already authorities of the account a governance change targets, and that the gateway may
+   * therefore pin ahead of the change. The signer's own ADI book (`<adi>/book`) is always accepted as a pin; any other is refused unless it is named here.
+   */
+  pinnedAuthorities?: string[];
 }
 
 // ── output ──────────────────────────────────────────────────────────────────────────────────────────
@@ -138,6 +143,11 @@ export interface SigningSummary {
   legs: SummaryLeg[];
   /** For a governance change: the operations the transaction carries, as Accumulate renders them. */
   operations: unknown[];
+  /**
+   * For a governance change: the authorities the gateway pinned ahead of the change you asked for (see `Expectation.pinnedAuthorities`). An account that inherits its ADI's
+   * authorities loses them the moment it is given one of its own, so the gateway adds them back in the same transaction; they are listed here so a person sees them.
+   */
+  pinnedAuthorities: string[];
   hashes: { transaction: string; signatureMetadata: string; toSign: string };
   /** What a person should read before a signature is made. */
   text: string[];
@@ -272,7 +282,7 @@ export function verifySigningData(signingData: unknown, expect: Expectation = {}
 
   let summary: Omit<SigningSummary, 'text'>;
   if (body.type === 'writeData') {
-    summary = { kind: 'cross-chain intent', ...base, ...checkIntent(base.principal, base.memo, body, expect), operations: [] };
+    summary = { kind: 'cross-chain intent', ...base, ...checkIntent(base.principal, base.memo, body, expect), operations: [], pinnedAuthorities: [] };
   } else {
     summary = { kind: String(body.type), ...base, intentId: undefined, legs: [], ...checkGovernance(principal, body, expect) };
   }
@@ -383,7 +393,39 @@ function accumulateOperation(op: ExpectedOperation): { body: string; key: string
 
 const canon = (v: unknown): string => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Rec).sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, y]) => [k, typeof y === 'string' ? y.toLowerCase() : y])) : x));
 
-function checkGovernance(principal: string, body: Rec, expect: Expectation): { operations: unknown[] } {
+/** The ADI a principal belongs to: `acc://name.acme` for `acc://name.acme`, `acc://name.acme/data` or `acc://name.acme/book/1`. */
+const adiOf = (principal: string): string => /^(acc:\/\/[^/]+)/i.exec(principal)?.[1]?.toLowerCase() ?? lc(principal);
+
+/**
+ * The gateway pins an account's inherited authorities ahead of an `addAuthority`, because the first authority an account is given makes its set explicit and every
+ * inherited one would silently stop governing it (gateway governance.orchestrator, gap G-19). So what it returns is `[pins..., the request minus anything pinned]`.
+ *
+ * That is accepted here, and ONLY that: an `addAuthority` list that starts with authorities this signer may safely see pinned (their own ADI's book, or one the caller
+ * named after confirming it independently), each once, followed by exactly the rest of what was asked for, in order. A pin of any other book, a pin after a requested
+ * operation, a repeated pin, or any further operation is refused as before: the pin is a way for the gateway to say "and keep what you already had", never a way to add
+ * an authority nobody asked for. Returns the pins, or undefined when the list is not of that shape.
+ */
+function pinsAhead(principal: string, type: string, wanted: unknown[], actual: unknown[], named: string[] = []): string[] | undefined {
+  if (type !== 'updateAccountAuth') return undefined;
+  const addedAuthority = (op: unknown): string | undefined => {
+    const o = op && typeof op === 'object' ? (op as Rec) : undefined;
+    return o && o.type === 'addAuthority' && typeof o.authority === 'string' ? lc(o.authority) : undefined;
+  };
+  // A pin exists only to keep what an ADDITION would otherwise drop: for any other request the list must match exactly.
+  if (!wanted.every((w) => addedAuthority(w) !== undefined)) return undefined;
+  const allowed = new Set([`${adiOf(principal)}/book`, ...named.map(lc)]);
+  const pins: string[] = [];
+  for (const op of actual) {
+    const a = addedAuthority(op);
+    if (a === undefined || !allowed.has(a) || pins.includes(a)) break;
+    pins.push(a);
+  }
+  if (pins.length === 0) return undefined;
+  const rest = wanted.filter((w) => { const a = addedAuthority(w); return a === undefined || !pins.includes(a); });
+  return JSON.stringify(rest.map(canon)) === JSON.stringify(actual.slice(pins.length).map(canon)) ? pins : undefined;
+}
+
+function checkGovernance(principal: string, body: Rec, expect: Expectation): { operations: unknown[]; pinnedAuthorities: string[] } {
   const type = String(body.type);
   const field = type === 'updateKeyPage' ? 'operation' : type === 'updateAccountAuth' ? 'operations' : type === 'createKeyPage' ? 'keys' : undefined;
   if (field === undefined) {
@@ -391,6 +433,7 @@ function checkGovernance(principal: string, body: Rec, expect: Expectation): { o
     throw new SigningDataMismatch('transaction.body.type', 'writeData, updateKeyPage, updateAccountAuth or createKeyPage', type, 'a transaction this SDK cannot describe');
   }
   const operations = optList(body[field], `transaction.body.${field}`);
+  let pinnedAuthorities: string[] = [];
   if (expect.adiUrl !== undefined) {
     const adi = expect.adiUrl.replace(/\/+$/, '').toLowerCase();
     if (lc(principal) !== adi && !lc(principal).startsWith(`${adi}/`)) throw new SigningDataMismatch('transaction.header.principal', `${expect.adiUrl}/...`, principal, 'a governance change must stay inside the identity');
@@ -401,9 +444,13 @@ function checkGovernance(principal: string, body: Rec, expect: Expectation): { o
     if (bodies.size !== 1 || !bodies.has(type)) throw new SigningDataMismatch('transaction.body.type', [...bodies].join('|'), type);
     const want = mapped.map((m) => canon(m.value));
     const got = operations.map(canon);
-    if (JSON.stringify(want) !== JSON.stringify(got)) throw new SigningDataMismatch(`transaction.body.${field}`, mapped.map((m) => m.value), operations, 'the change is not the one asked for');
+    if (JSON.stringify(want) !== JSON.stringify(got)) {
+      const pins = pinsAhead(principal, type, mapped.map((m) => m.value), operations, expect.pinnedAuthorities);
+      if (pins === undefined) throw new SigningDataMismatch(`transaction.body.${field}`, mapped.map((m) => m.value), operations, 'the change is not the one asked for');
+      pinnedAuthorities = pins;
+    }
   }
-  return { operations };
+  return { operations, pinnedAuthorities };
 }
 
 // ── what a person reads ─────────────────────────────────────────────────────────────────────────────
@@ -421,6 +468,7 @@ function describe(s: Omit<SigningSummary, 'text'>): string[] {
     for (const e of l.expectedEvents) t.push(`                    must emit ${(e.topic0 ?? "").slice(0, 18)}... from ${e.contract}${e.topic1 ? ` (first argument ${e.topic1.slice(0, 18)}...)` : ''}`);
   }
   for (const op of s.operations) t.push(`  change            ${JSON.stringify(op)}`);
+  if (s.pinnedAuthorities.length) t.push(`  also keeps        ${s.pinnedAuthorities.join(', ')}   (already authorities of this account: pinned in the same transaction so the change does not drop them)`);
   t.push(`  signing hash      ${s.hashes.toSign}`);
   return t;
 }

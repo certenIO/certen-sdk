@@ -8216,7 +8216,7 @@
                       "on_cadence"
                     ],
                     "default": "on_demand",
-                    "description": "How the proof cycle is scheduled. `on_demand` (default) starts immediately and completes in roughly 60-110 seconds — use it for anything a user is waiting on. `on_cadence` batches this proof with others, which costs less per proof and takes longer; use it for bulk settlement where latency does not matter. The choice affects only WHEN the proof is produced, never what it proves or how strong it is."
+                    "description": "How the proof cycle is scheduled. `on_demand` (default) starts the proof cycle immediately; it takes minutes, not seconds (measured on the hosted gateway: a median of about 26 minutes and a p90 of about an hour for recent intents), so poll `GET /v1/transaction/{id}` or take the `transaction.completed` webhook rather than holding a request open. `on_cadence` batches this proof with others, which costs less per proof; use it for bulk settlement where latency does not matter. The choice affects only WHEN the proof is produced, never what it proves or how strong it is."
                   },
                   "subject": {
                     "type": "object",
@@ -9083,7 +9083,7 @@
                     },
                     "proof_lookup": {
                       "type": "object",
-                      "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+                      "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and a reason code). A null proof_id with `unavailable` is NOT \"not anchored yet\". The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
                       "additionalProperties": false,
                       "properties": {
                         "state": {
@@ -9099,7 +9099,14 @@
                           "nullable": true
                         },
                         "reason": {
-                          "type": "string"
+                          "type": "string",
+                          "enum": [
+                            "proof_service_not_found",
+                            "proof_service_error",
+                            "proof_service_timeout",
+                            "proof_service_response_too_large",
+                            "proof_service_unreachable"
+                          ]
                         }
                       }
                     },
@@ -9139,6 +9146,86 @@
                           "write_back_tx": {
                             "type": "string",
                             "nullable": true
+                          }
+                        }
+                      }
+                    },
+                    "finality": {
+                      "type": "array",
+                      "description": "How far each proof of `proofs` has been carried toward finality on its own chain, AS THE VALIDATORS RECORDED IT (PROOF_V2 section 7): one entry per entry of `proofs`, in the same order, with the same `proof_id` and `chain_id` (and `legs` when the intent declares several chains). `level` is the highest level the validators hold evidence for: `included` (derived from the proof's own settlement evidence), `l1_posted` (Base and Arbitrum Sepolia: the block's transactions are in a batch committed in finalized L1 state) or `finalized` (final under the chain's own consensus or rollup L1 contracts); `statement` says exactly what each proves and what it does not. The levels are independent and in any order: `levels` states each one (`present` with its kind and seq; or the builder's last stated reason `pending` / `unavailable` / `refused` / `not_applicable`, with `reason` as stored; or `not_judged`), `next_level` is the level above `level` still being worked toward, and `eta` is when the builder expects it, if it said. `statement` is what `level` proves on this chain, verbatim from V2_SPEC_S7 r2 section 1.1, and nothing more. The gateway never says `verified`: the level is the validators' record and can be verified offline, from the proof file, with `proofverify` or `@certen.io/proof-verify`. `state` is `recorded`; `unavailable` (the proof service answered 404 or another error, could not be reached, did not answer within the 3 s lookup deadline shared by all the legs, or answered something that is not a finality summary: `reason`, `status` and a fixed `detail` say which, never the upstream error text, and nothing is guessed); or `chain_unsupported` (the chain is not one of Sepolia, Base Sepolia, Arbitrum Sepolia or Adiri: no finality statement exists for it).",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": true,
+                        "properties": {
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "recorded",
+                              "unavailable",
+                              "chain_unsupported"
+                            ]
+                          },
+                          "proof_id": {
+                            "type": "string"
+                          },
+                          "chain_id": {
+                            "type": "integer"
+                          },
+                          "legs": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "included",
+                              "l1_posted",
+                              "finalized"
+                            ]
+                          },
+                          "levels": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "description": "The three levels, each `{ state, ... }`: `included` is `derived`; `l1_posted` and `finalized` are `present`, `pending`, `unavailable`, `refused`, `not_applicable` or `not_judged`. A level may carry `pins_sha256`: the sha256 (64 lowercase hex) of the pins the validators judged it under, when recorded - the validators' record, for comparison with the pins the caller verifies under."
+                          },
+                          "next_level": {
+                            "type": "string",
+                            "enum": [
+                              "l1_posted",
+                              "finalized",
+                              null
+                            ],
+                            "nullable": true
+                          },
+                          "eta": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "statement": {
+                            "type": "string"
+                          },
+                          "statement_source": {
+                            "type": "string"
+                          },
+                          "note": {
+                            "type": "string"
+                          },
+                          "leg": {
+                            "type": "object",
+                            "additionalProperties": true,
+                            "nullable": true
+                          },
+                          "reason": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "detail": {
+                            "type": "string"
                           }
                         }
                       }
@@ -9350,7 +9437,7 @@
                         },
                         "unavailable": {
                           "type": "array",
-                          "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and reason. Empty when every part was answered.",
+                          "description": "Each part the proof service failed to answer for, with its HTTP status (null when it could not be reached) and a reason code. Empty when every part was answered. The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
                           "items": {
                             "type": "object",
                             "additionalProperties": false,
@@ -9363,7 +9450,14 @@
                                 "nullable": true
                               },
                               "reason": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "proof_service_not_found",
+                                  "proof_service_error",
+                                  "proof_service_timeout",
+                                  "proof_service_response_too_large",
+                                  "proof_service_unreachable"
+                                ]
                               }
                             }
                           }
@@ -9570,7 +9664,7 @@
                           },
                           "proof_lookup": {
                             "type": "object",
-                            "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and reason). A null proof_id with `unavailable` is NOT \"not anchored yet\".",
+                            "description": "Present when this read looked the proof id up because it was not yet recorded: `resolved` (proof_id carries it), `not_found` (not anchored yet - poll again), or `unavailable` (the proof service failed to answer, with its HTTP status, null when unreachable, and a reason code). A null proof_id with `unavailable` is NOT \"not anchored yet\". The reason is a code, never the proof service's own text: `proof_service_not_found`, `proof_service_error` (it answered another error status), `proof_service_timeout`, `proof_service_response_too_large`, `proof_service_unreachable`.",
                             "additionalProperties": false,
                             "properties": {
                               "state": {
@@ -9586,7 +9680,14 @@
                                 "nullable": true
                               },
                               "reason": {
-                                "type": "string"
+                                "type": "string",
+                                "enum": [
+                                  "proof_service_not_found",
+                                  "proof_service_error",
+                                  "proof_service_timeout",
+                                  "proof_service_response_too_large",
+                                  "proof_service_unreachable"
+                                ]
                               }
                             }
                           },
@@ -10764,7 +10865,7 @@
         "tags": [
           "Proof"
         ],
-        "description": "The portable proof v2 document for a proof ID (`certen-proof-v2-accumulate-portable/1`), proxied from the proof-service: the incarnation pin and genesis, the Directory's major blocks from the first, and the evidence (the transaction's receipt to a certified Directory root, the partition anchor, the governing pages, the validator set in force) with the govRoot v3 inputs when the intent's certificate has been built. A verifier (`@certen.io/proof-verify`, certen-sdk `proof.portable()`) checks it offline; nothing in it is a verdict. 404 `PROOF_V2_NOT_AVAILABLE` when this proof has no v2 document (an older proof, or a build that failed). Requires the proof:read scope.",
+        "description": "The portable proof v2 document for a proof ID (`certen-proof-v2-accumulate-portable/1`), proxied from the proof-service: the incarnation pin and genesis, the Directory's major blocks from the first, and the evidence (the transaction's receipt to a certified Directory root, the partition anchor, the governing pages, the validator set in force) with the govRoot v3 inputs when the intent's certificate has been built, and, once the validators have stored any, the `finality` member (`certen-finality-addenda/1`: the leg's block and the append-only addenda that carry it to `l1_posted` and `finalized`, composed at request time; absent when there are none; it is evidence for the offline verifier, not a statement that the level holds). A verifier (`@certen.io/proof-verify`, certen-sdk `proof.portable()`) checks it offline; nothing in it is a verdict. 404 `PROOF_V2_NOT_AVAILABLE` when this proof has no v2 document (an older proof, or a build that failed). Requires the proof:read scope.",
         "parameters": [
           {
             "schema": {
@@ -10786,7 +10887,7 @@
         "x-scope-mode": "any",
         "responses": {
           "200": {
-            "description": "The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, and `govRootV3Inputs` when recorded.",
+            "description": "The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, `govRootV3Inputs` when recorded, and `finality` when the validators have stored any.",
             "headers": {
               "x-ratelimit-limit": {
                 "schema": {
@@ -10807,7 +10908,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, and `govRootV3Inputs` when recorded.",
+                  "description": "The portable document: `format`, `pin`, `genesis`, `majors[]`, `evidence`, `govRootV3Inputs` when recorded, and `finality` when the validators have stored any.",
                   "type": "object",
                   "additionalProperties": true,
                   "required": [
@@ -10845,6 +10946,11 @@
                     "govRootV3Inputs": {
                       "type": "object",
                       "additionalProperties": true
+                    },
+                    "finality": {
+                      "type": "object",
+                      "additionalProperties": true,
+                      "description": "`certen-finality-addenda/1`: `format`, `leg`, `addenda[]`. Absent when there are no addenda."
                     }
                   }
                 }
@@ -10981,7 +11087,7 @@
             }
           },
           "502": {
-            "description": "Failed to fetch the document from the proof-service.",
+            "description": "Failed to fetch the document from the proof-service. PROOF_V2_FINALITY_UNUSABLE when the proof service refused to serve it because of its staged finality evidence, with the named state in the message. PROOF_V2_TOO_LARGE when the document it declared is larger than the gateway passes through (285,212,672 bytes). PROOF_V2_BODY_UNFRAMED when it answered without a declared length or encoded, so the gateway could not bound it.",
             "headers": {
               "x-ratelimit-limit": {
                 "schema": {
@@ -11002,7 +11108,186 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "description": "Failed to fetch the document from the proof-service.",
+                  "description": "Failed to fetch the document from the proof-service. PROOF_V2_FINALITY_UNUSABLE when the proof service refused to serve it because of its staged finality evidence, with the named state in the message. PROOF_V2_TOO_LARGE when the document it declared is larger than the gateway passes through (285,212,672 bytes). PROOF_V2_BODY_UNFRAMED when it answered without a declared length or encoded, so the gateway could not bound it.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "PROOF_V2_BUSY: the gateway is already streaming the most proof v2 documents it serves at once (8), or this organisation already holds its share of them (2), or the proof service is serving its own limit of large documents; retry after the Retry-After seconds. A stream that makes no progress for 30 s, or lasts longer than 30 s + 1 s per MiB, is closed.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "PROOF_V2_BUSY: the gateway is already streaming the most proof v2 documents it serves at once (8), or this organisation already holds its share of them (2), or the proof service is serving its own limit of large documents; retry after the Retry-After seconds. A stream that makes no progress for 30 s, or lasts longer than 30 s + 1 s per MiB, is closed.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proof/{id}/contract-identity": {
+      "get": {
+        "summary": "Get the contract-identity state of a proof",
+        "tags": [
+          "Proof"
+        ],
+        "description": "The state of the contract-identity container the validators recorded for this proof (certen-contract-identity/1): recorded (with the leg, the digest and the member), absent, malformed or too_large, each with a fixed status text. It is the validators record: the gateway has not verified it; verify it offline with proofverify or @certen.io/proof-verify. ETag follows the recorded row; a matching If-None-Match is 304. Requires the proof:read scope.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "apiKey": []
+          }
+        ],
+        "x-required-scopes": [
+          "proof:read"
+        ],
+        "x-scope-mode": "any",
+        "responses": {
+          "200": {
+            "description": "The state.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "The state.",
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "retry-after": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "Rate limit exceeded. Every response — not only this one — carries `x-ratelimit-limit`, `x-ratelimit-remaining` and `x-ratelimit-reset`, so this is avoidable by watching `x-ratelimit-remaining` reach 0. **`x-ratelimit-reset` is SECONDS REMAINING, not a Unix timestamp** — reading it as an epoch yields an instant in 1970 and silently disables any throttle built on it. On this response, wait `retry-after` seconds and prefer that over any local backoff curve.",
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "CONTRACT_IDENTITY_UNAVAILABLE: the proof service could not be read.",
+            "headers": {
+              "x-ratelimit-limit": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-remaining": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "x-ratelimit-reset": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "description": "CONTRACT_IDENTITY_UNAVAILABLE: the proof service could not be read.",
                   "type": "object",
                   "additionalProperties": true
                 }
