@@ -1,5 +1,9 @@
 # Changelog — @certen.io/cli
 
+## 0.15.1 — requires the verifier that reads the initiating-signature member (2026-11-13)
+
+No change to the CLI's own code. The floors are raised: `@certen.io/proof-verify` `^0.3.1` and `@certen.io/sdk` `^0.14.1`, so `certen proof verify`, `send`, `watch` and `receipt` verify a transaction initiated by a separate, non-voting initiator (rules v16 evidence 2.1) instead of reporting its initiator role as declared. Needs the `@certen.io/sdk` of the same release.
+
 ## 0.15.0 — evidence 2.1 verification, the authority pin, the gas drip reason, and waits that fit a proof cycle (2026-11-06)
 
 Needs the `@certen.io/sdk` of the same release.

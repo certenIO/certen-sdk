@@ -1,5 +1,9 @@
 # Changelog — @certen.io/sdk
 
+## 0.14.1 — requires the verifier that reads the initiating-signature member (2026-11-13)
+
+No change to the SDK's own code. The floor of `@certen.io/proof-verify` is raised to `^0.3.1` so a fresh install cannot keep 0.3.0 in the tree: `verifyEvidence` (and `./verify`) judge evidence 2.1 with it, and 0.3.0 ignores the member `initiatingSignature` that rules v16 of the validators add, so for a transaction initiated by a separate, non-voting initiator it reports the role as declared (`g1_initiator_signature_not_carried`) and does not verify S3. 0.3.1 proves the member or refuses the document by name.
+
 ## 0.14.0 — evidence 2.1 through `verifyEvidence`, body-less POSTs, and proof-cycle timing that matches the gateway (2026-11-06)
 
 Needs `@certen.io/proof-verify` with the 2.1 layer report (same release).

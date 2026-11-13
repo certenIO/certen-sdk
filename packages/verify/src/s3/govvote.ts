@@ -551,6 +551,22 @@ function blacklisted(p: KeyPage, typ: number): boolean {
   return bit !== undefined && p.isBlacklisted(bit);
 }
 
+/**
+ * KeyHeldDuring (govvote model.go): how many states of a page - from its certified timeline - at signer version v during block held keyHash (a key hash as the page
+ * stores it) and did not blacklist a transaction of type typ, and how many states at v there were (candidates is 0 when the page did not hold version v during the
+ * block). It is the one rule of "the page could have accepted this key's signature" that the vote model (keyHolding) and the initiating-signature check of evidence 2.1
+ * (roles.ts carriedInitiatorPages, DAX-1G) both apply, so the two cannot disagree on it.
+ */
+export function keyHeldDuring(tl: Timeline, txType: number, version: bigint, block: number, keyHash: Uint8Array): { holding: number; candidates: number } {
+  const cands = ofVersion(tl.candidatesDuring(block), version);
+  let holding = 0;
+  for (const c of cands) {
+    if (blacklisted(c, txType)) continue;
+    if (c.entryByKeyHash(keyHash)) holding++;
+  }
+  return { holding, candidates: cands.length };
+}
+
 function decodeHash(s: string): Uint8Array {
   const t = s.toLowerCase().replace(/^0x/, '');
   if (t.length % 2 !== 0 || !/^[0-9a-f]*$/.test(t) || t.length === 0 || t.length > 64) throw new Error(`key hash ${JSON.stringify(s)} is not a hash`);
@@ -713,11 +729,7 @@ class PageEvaluation {
     } catch (e) {
       throw new VoteUnevaluable(this.page, `signature ${short(s.id)}: ${(e as Error).message}`);
     }
-    let holding = 0;
-    for (const c of cands) {
-      if (blacklisted(c, this.m.facts.txType)) continue;
-      if (c.entryByKeyHash(kh)) holding++;
-    }
+    const { holding } = keyHeldDuring(this.tl, this.m.facts.txType, v, s.block, kh);
     if (holding === 0) {
       throw new VoteUnevaluable(
         this.page,

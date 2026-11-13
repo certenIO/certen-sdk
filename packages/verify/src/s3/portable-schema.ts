@@ -66,6 +66,7 @@ const EVIDENCE: StructDef = [
   f('Transaction', S),
   f('Links', RAW),
   f('GenesisLink', RAW),
+  f('InitiatingSignature', RAW),
   f('Check', { struct: CHECK }),
 ];
 const GENESIS: StructDef = [

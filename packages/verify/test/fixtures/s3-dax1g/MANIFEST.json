@@ -1,0 +1,139 @@
+{
+ "format": "certen:s3-vectors-manifest:v1",
+ "validatorCommit": "54e82d20b2abeeac3bc994641246b33312a05ce1",
+ "suites": [
+  {
+   "name": "xpartition7",
+   "files": [
+    {
+     "name": ".gitattributes",
+     "sha256": "e60522a3d7a932840f0a1b4c45f651d1ad7dd55d7d999e628231a17075cbd18f",
+     "bytes": 113
+    },
+    {
+     "name": "MANIFEST.sha256",
+     "sha256": "e61c9dc035475207219c05bbb77ac3ffe4ab2f469264622e9d88513b242c9989",
+     "bytes": 80
+    },
+    {
+     "name": "initiator-delegator-not-a-proven-page.json",
+     "sha256": "a88b64dbdb8c8be64907510ba216acc6d6a9584fd049de327df5951f2c7203c6",
+     "bytes": 33642
+    },
+    {
+     "name": "initiator-key-not-held.json",
+     "sha256": "c7517aefe0267e2119d7bfe57a33ace3e9049d2b5bc4e3b6d16c04b7d72fd59d",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-member-absent.json",
+     "sha256": "1e313e813dbc8fe73e58cbd09f158ba3c42db418b94fd0a8e2300ed35e2fb008",
+     "bytes": 31519
+    },
+    {
+     "name": "initiator-member-arrival-altered.json",
+     "sha256": "16a29c4b48c6f82e2a771bcae8fb5d8a69f4ea0bbf9421b65bb1aff9e5c639dc",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-member-header-names-no-initiator.json",
+     "sha256": "543050f2dd1ebc068c4c96584b6a93ba1a2f3764f82f0e1b883fba9c1fdf60b4",
+     "bytes": 33502
+    },
+    {
+     "name": "initiator-member-in-20-document.json",
+     "sha256": "f22a9b7f5ad427a26a2ced977909d6bf1648ca09add33e59ce554427d9068053",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-member-is-an-authority-signature.json",
+     "sha256": "cee0dbb1c2702d59098121cf5f89b7b3ba329002b3dd40d25e30cc4eadff16ee",
+     "bytes": 33338
+    },
+    {
+     "name": "initiator-member-no-arrival-proof.json",
+     "sha256": "4653cc15782e56a0b07905199b9e3b78ece62d9c867197ff8eda9dec330abbdb",
+     "bytes": 32669
+    },
+    {
+     "name": "initiator-member-no-history.json",
+     "sha256": "4c189c349f821850b2a5f61b3f447c30b1f16d0a9bae02cfd27b3e5fc24988e7",
+     "bytes": 33268
+    },
+    {
+     "name": "initiator-member-not-the-initiator.json",
+     "sha256": "311dc6054464944370029e6089af99d621e0b8ddca1aaecb93412f5bf9961099",
+     "bytes": 33872
+    },
+    {
+     "name": "initiator-member-page-records-no-role.json",
+     "sha256": "55bb1a76aaf69fc1cc281d649382f5195bc1a5131e19f5213bd901a63cb866df",
+     "bytes": 33549
+    },
+    {
+     "name": "initiator-member-receipt-altered.json",
+     "sha256": "182bd207215180d4781f020d62ada40adc21ed97da248d0a795ca79e4ef9d6e3",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-member-without-transaction.json",
+     "sha256": "c1c5da8e64391c5fdd863ae3521954b788f5676f51947e3f687e7b38913ba98f",
+     "bytes": 33345
+    },
+    {
+     "name": "initiator-nonvoting-carried.json",
+     "sha256": "a603cacb9e1e084dcbafeb2817156ad6864f81b94971c2b0af858b4a9cb4d797",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-nonvoting-delegated-carried.json",
+     "sha256": "3e4405f82c6be502b411ab84293d71c58654037bf5093700eaf0364328c957b8",
+     "bytes": 33657
+    },
+    {
+     "name": "initiator-nonvoting-key-removed-after-arrival.json",
+     "sha256": "4256db82111165ba7ae7b3c3ad8a095eca2fd800db20536596d7e1ae630045d1",
+     "bytes": 33912
+    },
+    {
+     "name": "initiator-page-blacklists-the-transaction-type.json",
+     "sha256": "d998fbff85dceac3c7e69b43392d80254d39f68e93652f039a4ad571f3b3d333",
+     "bytes": 33769
+    },
+    {
+     "name": "initiator-signature-other-page.json",
+     "sha256": "80bd11d26ba70a461a14457fe92a79c1c44d6858aab11ad979fa7d2d7e13c61e",
+     "bytes": 33569
+    },
+    {
+     "name": "initiator-signature-other-transaction.json",
+     "sha256": "082ab566c173cc326faa66aa710943b0748558251051a0983590ad3f3c538b37",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-signature-recorded-on-another-page.json",
+     "sha256": "19ad681192d08dcf9c7b4d47c39318831399329bdbf27393981ee3ea00f68033",
+     "bytes": 33726
+    },
+    {
+     "name": "initiator-signature-signs-another-transaction.json",
+     "sha256": "3d0a690182a99883b526c769e328056354a25a3c72baacad756b1190067ec9c1",
+     "bytes": 33568
+    },
+    {
+     "name": "initiator-signature-tampered.json",
+     "sha256": "ba733a5eaa1ae3f84201afe386ae5f901eef46460de10dac6f648d5fb0f90dec",
+     "bytes": 33568
+    },
+    {
+     "name": "manifest.json",
+     "sha256": "1df078894a4c61db0b4e134e8f315555099fcb41326c100d40c1d524b16b9dd8",
+     "bytes": 22107
+    }
+   ],
+   "manifestSha256": "1df078894a4c61db0b4e134e8f315555099fcb41326c100d40c1d524b16b9dd8"
+  }
+ ],
+ "goldens": [],
+ "manifestHash": "210e39e6349414f25dd96dfd397d24a302d1b8ef19cd98d75106bdb82b12ceee"
+}

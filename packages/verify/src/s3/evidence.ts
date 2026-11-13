@@ -134,6 +134,12 @@ export interface Evidence {
    */
   links: Rcpt[];
   genesisLink?: Rcpt;
+  /**
+   * Evidence 2.1 only (DAX-1G, rules v16): the signature that initiated the transaction when no signature of a vote's cause chain is it - a separate, non-voting
+   * initiator. It is the shape of a vote's hop (page, message, signature, block, receipt, arrival; the arrival is required here). Read only from a document whose
+   * version is 2.1; a 2.0 document ignores the member. undefined: the document carries none.
+   */
+  initiatingSignature?: Hop;
   check: {
     majors: number;
     hops: unknown[];
@@ -301,7 +307,7 @@ export interface Imported {
  * held.refusal and the account left out: the 2.0 verifier reports its stages in order and the set check is the last of them (portable20.ts).
  */
 export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: Error }): Evidence {
-  const e = struct(doc.evidence, ['version', 'account', 'txHash', 'receipt', 'majors', 'certify', 'anchor', 'pages', 'anchors', 'votes', 'transaction', 'links', 'genesisLink', 'check'], 'PortableEvidence');
+  const e = struct(doc.evidence, ['version', 'account', 'txHash', 'receipt', 'majors', 'certify', 'anchor', 'pages', 'anchors', 'votes', 'transaction', 'links', 'genesisLink', 'initiatingSignature', 'check'], 'PortableEvidence');
   const anchorS = struct(e.anchor, ['message', 'receipt'], 'PortableEvidence.anchor');
   if (anchorS.message === undefined) throw new JsonError('anchor message: unexpected end of JSON input'); // an absent json.RawMessage is not JSON at all
   const ev: Evidence = {
@@ -348,6 +354,15 @@ export function importEvidence(doc: Record<string, unknown>, held?: { refusal?: 
       ev.links = e.links.map((l, i) => importReceipt(l, `link ${i}`));
     }
     if (e.genesisLink !== undefined && e.genesisLink !== null) ev.genesisLink = importReceipt(e.genesisLink, 'genesis link');
+    // portable.go Import: the initiating-signature member is one PortableHop (a JSON null: none). It is a json.RawMessage in Go, so what is read is the LAST
+    // occurrence of the key (portable-schema.ts) and a value that is not a hop object is a plain refusal of the document.
+    if (e.initiatingSignature !== undefined && e.initiatingSignature !== null) {
+      try {
+        ev.initiatingSignature = importHop(e.initiatingSignature, 'initiatingSignature');
+      } catch (err) {
+        throw wrap(err, 'initiating signature');
+      }
+    }
   }
   const hops = (list(c.hops, 'check.hops') ?? []).map((r, i) => minorRootFromJson(r, `set check hop ${i}`));
   ev.check.hops = hops.map((m) => m.canonical);
