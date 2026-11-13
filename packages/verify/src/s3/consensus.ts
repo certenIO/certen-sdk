@@ -80,6 +80,8 @@ export const EVIDENCE: StructDef = [
   f('Anchors', 'anchors', { map: { struct: PARTITION_ANCHOR } }, true),
   f('Votes', 'votes', { list: { struct: VOTE } }, true),
   f('Transaction', 'transaction', S, true),
+  f('Links', 'links', { list: S }, true),
+  f('GenesisLink', 'genesisLink', S, true),
   f('Check', 'check', { struct: SET_CHECK }),
 ];
 /** EvidenceV14: Evidence as the rules v14 head (d20f693) declared it: the members a v14 decode kept, with v14's tags. */
