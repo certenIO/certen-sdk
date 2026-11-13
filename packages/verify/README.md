@@ -90,8 +90,8 @@ version during the arrival block held the key and did not blacklist the transact
 member verifies exactly as before: a page that records the role is listed as declared and the report says `g1_initiator_signature_not_carried`, which the binding refuses.
 What the member does not prove: that each delegation of a delegated initiating signature was admitted by the executor when the signature arrived. The member is read from
 a document that claims 2.1 only. In the validators' rules v16 (not in force until its version-2 activation is accepted on chain) it is read from the height after that
-activation; `judgeProofV2` takes that answer as `memberInForce` and, absent or false, judges a 2.1 document as the rules v15 binary did, with the member cleared
-(`withoutInitiatingSignature`).
+activation; `judgeProofV2` takes that answer as the optional input `memberInForce` and, absent or false, judges a 2.1 document as the rules v15 binary did, with the member
+cleared.
 
 The consensus-side pieces are here too, each reaching the validator's verdict: `bindProofV21` (the binding of the report to the intent's governing facts,
 `governingFactsFromVoteEvidence`), `govRootV4FromPortable` / `govRootV4FromHashes` (the cross-partition govRoot: pages root, votes root, `encodeVoteV4`, G1 under
