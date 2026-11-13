@@ -1,5 +1,22 @@
 # Changelog — @certen.io/proof-verify
 
+## 0.3.1 — the initiating signature of a non-voting initiator (2026-11-13)
+
+Additive verification, no API break: a document that does not carry the new member verifies exactly as before (every committed fixture and verdict is unchanged).
+
+### Added
+- **Evidence 2.1 members: `initiatingSignature`.** A transaction can be initiated by a page that is not an authority and does not vote (a separate identity that signs first and pays, the authorities voting afterwards: the transaction-controls `*-erp` pattern). Its signature is in no vote's cause chain, so rules v16 of the validators add it to evidence 2.1 as an optional member (page, message, signature, block, receipt, arrival; the page's certified history rides in its page state). `verifyPortable21` proves it completely or refuses the document by name: the page is a proven page, the signature is the one the transaction header names as its initiator, it is the message its chain entry holds, it arrived in the block the signature-index chain gives, it signs this transaction with a key type the executor version in force admits, it was made from the page it is recorded on, and a state of the page at the signer version during the arrival block held the key and did not blacklist the type. `initiator-signer` is then a PROVEN role of the payer and of every delegator of the signature; there is no "carried but partly unproven" state. A document without the member keeps the old verdict: the role is declared and the report says `g1_initiator_signature_not_carried`.
+- New named states: `g1_initiator_key_not_held` (no state of the page held the key, or the page blacklisted the type) and `g1_history_unavailable` (the member is carried without its page's certified history; the validator has had this name since its assembler, the table here lacked it).
+- `checkClosureBudgetInitiating` and `INITIATING_SIGNATURE_PROOF_BYTES` (6,000): the capture-time budget counts the captured hop and the proof the assembler adds to it; the size of a document counts the member (`evidenceJson`).
+- `withoutInitiatingSignature` and the input `memberInForce` of `judgeProofV2`: before the member's activation (rules v16, a version-2 activation accepted on chain) a 2.1 document is judged as the rules v15 binary judged it, with the member cleared; absent or false is that. `unmarshalCertifiedEvidence` and `decodeEvidenceFull` keep the member of a document that claims 2.1 and drop it from one that claims 2.0.
+- Checked against the validator's new frozen suite `xpartition7` (22 documents, 4 verified and 18 refused by name, commit 54e82d20 of `pl/dax-1-g42-validator`, copied byte for byte and pinned by hash): the named state with the partition and block, or the report with every proven and declared role, is Go's on all of them; 107 tests and a 35-mutation sweep of the new logic.
+
+### Fixed
+- The certificate evidence form of `unmarshalCertifiedEvidence` / `decodeEvidenceFull` / `marshalEvidence` lacked `links` and `genesisLink` (evidence 2.1 members since RB9-F5); a certificate document that carried them was decoded without them.
+
+### Release order
+Verifiers first: a validator fleet that has activated rules v16 emits the member, and a verifier older than this release ignores it. Release this package before the validators' v16 activation and before any release that raises its floor to `^0.3.1`.
+
 ## 0.3.0 — verification of evidence 2.1, and the governance pin a signer accepts (2026-11-06)
 
 Evidence 2.1 is what the validators have emitted since the G1 activation, and `verifyProofDocument` accepted 2.0 only: every proof the live gateway served came back "failed at trust_base: not a v2 Accumulate proof" through `certen proof verify`, the SDK's `verifyEvidence` and the MCP tool. `verifyPortableAny` already verified 2.1; the layer report did not.
