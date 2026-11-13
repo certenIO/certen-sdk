@@ -462,9 +462,12 @@ function deriveRoles(ev: Evidence, byURL: Map<string, ProvenAcct>, anchors: Map<
   // A partition's system ledger proven at the partition's block carries the executor version in force there.
   for (const pa of byURL.values()) if (isOwnLedger(pa.acct, pa.anchor)) add(accountUrl(pa.acct), Role.SystemLedger);
 
-  // (f) The initiator's pages, from the initiating signature when the evidence carries it.
+  // (f) The initiator's pages, from the initiating signature when the evidence carries it (roles.ts).
+  if (!txn && ev.initiatingSignature) {
+    throw refusal21(State.TransactionMismatch, x.id, x.block, 'the evidence carries an initiating signature but no transaction, so what initiated it is not judged');
+  }
   if (txn) {
-    const { pages, found } = initiatorPages(ev, txn, byURL, network);
+    const { pages, found } = initiatorPages(ev, txn, byURL, tl, x, network);
     if (found) {
       dr.initiator = true;
       for (const ip of pages) {

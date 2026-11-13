@@ -82,6 +82,7 @@ export const EVIDENCE: StructDef = [
   f('Transaction', 'transaction', S, true),
   f('Links', 'links', { list: S }, true),
   f('GenesisLink', 'genesisLink', S, true),
+  f('InitiatingSignature', 'initiatingSignature', { ptr: VOTE_HOP }, true),
   f('Check', 'check', { struct: SET_CHECK }),
 ];
 /** EvidenceV14: Evidence as the rules v14 head (d20f693) declared it: the members a v14 decode kept, with v14's tags. */
@@ -159,6 +160,15 @@ export function evidence20View(ev: EvidenceVal | null): EvidenceVal | null {
   return out;
 }
 
+/**
+ * withoutInitiatingSignature is a 2.1 document as the rules v15 binary judged it: the initiating-signature member (DAX-1G), which v15 did not know, cleared (intent_certificate.go).
+ * The document is copied, never edited (the certificate keeps its member); one that carries none is returned as it is.
+ */
+export function withoutInitiatingSignature(ev: EvidenceVal): EvidenceVal {
+  if (ev.InitiatingSignature === null || ev.InitiatingSignature === undefined) return ev;
+  return { ...ev, InitiatingSignature: null };
+}
+
 /** json.Marshal(ev). */
 export function marshalEvidence(ev: EvidenceVal | null): string {
   return ev === null ? 'null' : marshalVal(EVIDENCE_SCH, ev);
@@ -220,6 +230,12 @@ export interface JudgeInputs<R extends { accumulateSetRoot: string }> {
   proofV2: EvidenceVal | null;
   /** Whether the cross-partition activation is in force for the block (G1CrossPartitionRequired). */
   activationRequired: boolean;
+  /**
+   * Whether the initiating-signature member is in force for the block (rules v16, DAX-1G): a version-2 activation was accepted below the block's height
+   * (G1ActivationRecord.MemberInForce). Absent or false, a document that claims 2.1 is judged as the rules v15 binary judged it, with the member cleared, so a staggered
+   * deploy never decides one block two ways.
+   */
+  memberInForce?: boolean;
   /** The real verifier of the document's version against the chain's spine; it receives the document it must judge. */
   verify: (doc: EvidenceVal) => R;
   /** The set root the L4 leg was verified against. */
@@ -234,7 +250,7 @@ export interface JudgeInputs<R extends { accumulateSetRoot: string }> {
  *
  *   1. the evidence's version against the activation in force: 2.1 before it, or 2.0 after it, is refused by name;
  *   2. the document, by the real verifier of its version against the chain's spine (a document that claims 2.0 is judged on its
- *      evidence-2.0 view, exactly what v14 decoded);
+ *      evidence-2.0 view, exactly what v14 decoded; a document that claims 2.1 before the member's activation is judged without the member);
  *   3. one validator set: the set root the spine derived must be the one the L4 leg was verified against;
  *   4. the binding and the root together.
  */
@@ -247,8 +263,9 @@ export function judgeProofV2<R extends { accumulateSetRoot: string }>(inn: Judge
   const is21 = version === '2.1';
   if (is21 && !inn.activationRequired) return fail('ErrIntentProofV21NotInForce');
   if (!is21 && inn.activationRequired) return fail('ErrIntentProofV21Missing', ` (proof version ${JSON.stringify(version)})`);
-  // A document that claims 2.0 and reaches here is judged with no activation in force: as v14 judged it, on the members v14's decode kept.
-  const doc = is21 ? inn.proofV2 : (evidence20View(inn.proofV2) as EvidenceVal);
+  // A document that claims 2.0 and reaches here is judged with no activation in force: as v14 judged it, on the members v14's decode kept. A document that claims 2.1
+  // and reaches here is judged before the member's activation (rules v16) as v15 judged it: with the member, a key v15's decode ignored, cleared.
+  const doc = is21 ? (inn.memberInForce === true ? inn.proofV2 : withoutInitiatingSignature(inn.proofV2)) : (evidence20View(inn.proofV2) as EvidenceVal);
   let rep: R;
   try {
     rep = inn.verify(doc);

@@ -24,7 +24,7 @@ export { hasExecutorOverride, executorOverrideTypes, executorFloorAt, kermitExec
 export { routePartition } from './routing.js';
 export { receiptPositions } from './timeline.js';
 export { CertifyState, CertifyCode, CERTIFY_FIELDS, CERTIFY_DETAILS, CERTIFY_SIDE, CHECKPOINT_LAG, checkCheckpointLag, checkEvidenceCheckpointLags, decodeReceiptBin, receiptDecodes, recordDecodes, recordHasRootProof, rootChainLeafIndex, UpdateWindow } from './certify.js';
-export { CERTIFICATE_RESERVE, CERTIFICATE_RESERVE_20, FIXED_EVIDENCE_BYTES, FIXED_EVIDENCE_BYTES_20, MAX_EVIDENCE_BYTES, MAX_EVIDENCE_BYTES_20, checkAssembledBudget, checkCertificateFits, checkClosureBudget, checkUpdateWindows, maxUpdateWindows } from './budget.js';
+export { CERTIFICATE_RESERVE, CERTIFICATE_RESERVE_20, FIXED_EVIDENCE_BYTES, FIXED_EVIDENCE_BYTES_20, MAX_EVIDENCE_BYTES, MAX_EVIDENCE_BYTES_20, INITIATING_SIGNATURE_PROOF_BYTES, checkAssembledBudget, checkCertificateFits, checkClosureBudget, checkClosureBudgetInitiating, checkUpdateWindows, maxUpdateWindows } from './budget.js';
 
 /**
  * VerifyPortable (portable.go) from the document's TEXT: json.Unmarshal into Portable (every member the type it has in Go: whole-number literals for
@@ -68,5 +68,5 @@ export { proofV2Root } from './proofroot.js';
 export type { ProofRoot, ProofRootInputs } from './proofroot.js';
 export type { GoverningFacts, G0Result, G1Result, VoteEvidenceView } from './bind-v21.js';
 export { decodeVoteEvidence } from './voteevidence.js';
-export { unmarshalCertifiedEvidence, decodeEvidenceFull, evidence20View, marshalEvidence, judgeProofV2, IntentProofError, BindError } from './consensus.js';
+export { unmarshalCertifiedEvidence, decodeEvidenceFull, evidence20View, withoutInitiatingSignature, marshalEvidence, judgeProofV2, IntentProofError, BindError } from './consensus.js';
 export type { EvidenceVal, JudgeInputs } from './consensus.js';

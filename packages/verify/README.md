@@ -78,6 +78,21 @@ partition and block it was judged at (`NamedState`, `State`): `g1_page_block_mis
 assumed: the executor version at a block comes from the pinned activation table (`kermitExecutorActivations`, a trust input published with the proof), the routing table is
 proven or its absence is named, and an arrival is the block of the page's own signature-index chain.
 
+A transaction can be initiated by a page that is not an authority and does not vote (a separate identity that signs first and pays, while the authorities vote
+afterwards). Its signature is in no vote's cause chain, so the document carries it as the optional member `initiatingSignature`: the signature, the receipt that places it in
+its page's signature chain, the signature-index entries that fix the block it arrived in, and the page's certified history. The verifier proves the member completely or
+refuses the document by name, never a partial answer: the page is a proven page (`g1_initiator_page_unproven`), the transaction names an initiator and this signature is the
+one it names (`g1_role_mismatch`), the signature decodes, is not an authority signature and is the message its chain entry holds (`g1_signature_invalid`), it arrived in the
+block the signature-index chain gives (`g1_arrival_unproven`, `g1_block_before_signature`), it signs this transaction with a key type the executor version in force admits
+(`g1_signature_invalid`, `g1_executor_version_unproven`, `g1_delegation_depth_exceeded`), it was made from the page it is recorded on, and a state of the page at the signer
+version during the arrival block held the key and did not blacklist the transaction's type (`g1_history_unavailable` when the history is not carried,
+`g1_initiator_key_not_held` when no state held it). `initiator-signer` is then a PROVEN role of the payer and of every delegator of the signature. A document without the
+member verifies exactly as before: a page that records the role is listed as declared and the report says `g1_initiator_signature_not_carried`, which the binding refuses.
+What the member does not prove: that each delegation of a delegated initiating signature was admitted by the executor when the signature arrived. The member is read from
+a document that claims 2.1 only. In the validators' rules v16 (not in force until its version-2 activation is accepted on chain) it is read from the height after that
+activation; `judgeProofV2` takes that answer as `memberInForce` and, absent or false, judges a 2.1 document as the rules v15 binary did, with the member cleared
+(`withoutInitiatingSignature`).
+
 The consensus-side pieces are here too, each reaching the validator's verdict: `bindProofV21` (the binding of the report to the intent's governing facts,
 `governingFactsFromVoteEvidence`), `govRootV4FromPortable` / `govRootV4FromHashes` (the cross-partition govRoot: pages root, votes root, `encodeVoteV4`, G1 under
 `certen:g1:v4`, G2 under `certen:g2:v4`, the root under `certen:govroot:v4`), `proofV2Root`, `judgeProofV2` with the decode of a certificate's proof v2
@@ -86,7 +101,8 @@ The consensus-side pieces are here too, each reaching the validator's verdict: `
 `test/fixtures/s3` holds the 100 conformance documents of the validator's seven `xpartition` suites byte for byte (manifest hash pinned), the committed govRoot v4 golden,
 the real Kermit document, and corpora the validator's own functions wrote - 1,257 mutations of the documents, 556 mutations of the intent scenarios and the 50 named cases of the binding tests, 433
 mutations of the vote evidence, 4,898 mutations and 73 more texts of a certificate's proof v2, 324 vote encodings, the pinned tables (284 probes, 1,024 transaction types),
-1,408 routes and 112 `judgeProofV2` scenarios - from the programs in `test/fixtures/s3/gen`; this package must agree with Go on every one.
+1,408 routes and 112 `judgeProofV2` scenarios - from the programs in `test/fixtures/s3/gen`; this package must agree with Go on every one. `test/fixtures/s3-dax1g` holds the 22
+documents of the validator's `xpartition7` suite (the initiating-signature member: 4 verified, 18 refused by name) byte for byte, pinned by hash.
 
 ## What it checks
 

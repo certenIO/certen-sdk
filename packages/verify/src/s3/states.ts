@@ -1,6 +1,6 @@
 /**
  * The named states and refusals of evidence 2.1 (validator pkg/proof/v2: crosspartition.go, xverify.go, xtimeline.go, xroles.go,
- * xexecutor.go; design docs/proof/G1_CROSS_PARTITION.md D6). A verifier that cannot establish a fact answers with a NAMED STATE that
+ * xexecutor.go, xassemble.go; design docs/proof/G1_CROSS_PARTITION.md D6). A verifier that cannot establish a fact answers with a NAMED STATE that
  * carries the partition and the block it judged at - never a weaker answer shaped like the strong one. A refusal that is not a named
  * state is a plain error (a malformed document, a hash that does not recompute), exactly as in Go.
  */
@@ -68,6 +68,8 @@ export const State = {
   DelegationDepthExceeded: 'g1_delegation_depth_exceeded',
   DelegateEntryAbsent: 'g1_delegate_entry_absent',
   InitiatorPageUnproven: 'g1_initiator_page_unproven',
+  /** DAX-1G: the carried initiating signature was made with a key no state of its page held (or the page blacklisted the type) at the signature's version during its arrival block. */
+  InitiatorKeyNotHeld: 'g1_initiator_key_not_held',
   CertifiedPageUnproven: 'g1_certified_page_unproven',
   ExecutorOverrideUnsupported: 'g1_executor_override_unsupported',
   ClosureExceedsBudget: 'g1_closure_exceeds_budget',
@@ -95,6 +97,8 @@ export const State = {
   SignatureInvalid: 'g1_signature_invalid',
   ExecutorVersionUnproven: 'g1_executor_version_unproven',
   InitiatorSignatureNotCarried: 'g1_initiator_signature_not_carried',
+  /** xassemble.go StateHistoryUnavailable: a page's history is not carried, so a signature recorded on it cannot be judged against the page as it stood (DAX-1G: the initiating signature). */
+  HistoryUnavailable: 'g1_history_unavailable',
   Evidence21Required: 'g1_evidence_21_required',
 } as const;
 

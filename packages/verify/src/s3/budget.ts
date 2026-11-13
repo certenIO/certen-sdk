@@ -288,6 +288,7 @@ export function evidenceJson(ev: Evidence): string {
     opt('transaction', ev.transaction !== '' ? strJson(ev.transaction) : undefined),
     opt('links', ev.links.length > 0 ? arr(ev.links.map((l) => hexJson(l.bin))) : undefined),
     opt('genesisLink', ev.genesisLink ? hexJson(ev.genesisLink.bin) : undefined),
+    opt('initiatingSignature', ev.initiatingSignature ? hopJson(ev.initiatingSignature) : undefined),
     member(
       'check',
       obj([
@@ -326,6 +327,19 @@ export function checkEvidenceBudget(ev: Evidence, x: XAnchor): void {
  * reserve; nothing else is checked); evidence 2.1 with the anchored form's constants, and the whole certificate they imply must fit the path limit.
  */
 export function checkClosureBudget(version: string, pages: PageState[], votes: Vote[], partition: string, block: number): void {
+  checkClosureBudgetInitiating(version, pages, votes, undefined, partition, block);
+}
+
+/**
+ * InitiatingSignatureProofBytes is what the capture adds to the budget for the receipt and the arrival proof (three receipts of a chain of up to 2^24 entries, two index
+ * entries) the assembler builds for a captured initiating signature (the capture carries neither): 3 x 25 steps x 66 hex characters, 2 index entries of 64 characters, with the
+ * JSON around them, rounded up. The assembled document is measured exactly (checkEvidenceBudget, checkAssembledBudget); this keeps a closure that fits only without the
+ * member from being captured (DAX-1G).
+ */
+export const INITIATING_SIGNATURE_PROOF_BYTES = 6_000;
+
+/** CheckClosureBudgetInitiating is checkClosureBudget for a capture that carries an initiating signature (DAX-1G): the captured hop and the proof the assembler adds to it count with the votes. No initiating signature is checkClosureBudget exactly. */
+export function checkClosureBudgetInitiating(version: string, pages: PageState[], votes: Vote[], initiating: Hop | undefined, partition: string, block: number): void {
   let fixed: number;
   let limit: number;
   if (version === '2.0') [fixed, limit] = [FIXED_EVIDENCE_BYTES_20, MAX_EVIDENCE_BYTES_20];
@@ -334,6 +348,7 @@ export function checkClosureBudget(version: string, pages: PageState[], votes: V
   let size = fixed;
   for (const p of pages) size += utf8Length(pageJson(p));
   size += utf8Length(votes.length === 0 ? 'null' : arr(votes.map(voteJson)));
+  if (initiating) size += utf8Length(hopJson(initiating)) + INITIATING_SIGNATURE_PROOF_BYTES;
   if (size > limit) {
     throw refusal21(
       State.ClosureExceedsBudget,
