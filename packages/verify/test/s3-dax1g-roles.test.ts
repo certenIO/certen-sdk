@@ -15,7 +15,7 @@ import { metadataHash } from '../src/sigtypes/verify.js';
  *
  * The depth check cannot be reached through a whole document: a signature with 21 delegators is a different message, so its membership in the page's signature
  * chain would have to be re-proven. The function is run directly, with the member's arrival derivation replaced by the block the member claims (this is the ONLY
- * thing stubbed: steps 1 to 5 of the function, the message hash, the did-initiate rule and the govsig verification itself are the real ones), on the Go-written
+ * thing replaced: steps 1 to 5 of the function, the message hash, the did-initiate rule and the govsig verification itself are the real ones), on the Go-written
  * adversarial vector ed25519/adversarial/delegated-21 (a signature of 21 nested delegations) with the transaction's initiator set to that signature's metadata hash
  * so that it IS the initiating signature.
  */
