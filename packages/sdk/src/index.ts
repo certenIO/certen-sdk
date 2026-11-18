@@ -19,3 +19,5 @@ export {
 } from './signing-check.js';
 export type { SigningSummary, ExpectedLeg, ExpectedOperation, Expectation } from './signing-check.js';
 export type { BeforeSign } from './resources/execute.js';
+export { agentEnrollmentState, agentAuthorityOperation, isUnderAdi } from './agent-enrollment.js';
+export type { AgentEnrollmentFacts, AgentEnrollmentState, AgentEnrollmentStep, AgentEnrollmentVerdict, AuthorityEntry, SignedDocumentFacts } from './agent-enrollment.js';

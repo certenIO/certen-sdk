@@ -27,6 +27,7 @@ import { registerIdentityCommands } from './commands/identity.js';
 import { registerTransactionCommands } from './commands/transaction.js';
 import { registerPendingCommands } from './commands/pending.js';
 import { registerGovernanceCommands } from './commands/governance.js';
+import { registerAgentCommands } from './commands/agent.js';
 import { registerPortfolioCommands } from './commands/portfolio.js';
 import { registerAdminCommands } from './commands/admin.js';
 import { registerBillingCommands } from './commands/billing.js';
@@ -87,6 +88,7 @@ export function buildProgram(): Command {
   registerProofCommands(program);
   registerPendingCommands(program);
   registerGovernanceCommands(program);
+  registerAgentCommands(program);
   registerPortfolioCommands(program);
   registerBillingCommands(program);
   registerCreditsCommands(program);

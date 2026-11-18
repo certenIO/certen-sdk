@@ -28,7 +28,7 @@ async function getClient(): Promise<CertenClient> {
  * what it is resolved to. A signing key is NOT defaulted from context: without `--sign-with` this is the external-signer mode,
  * and signing there on a guess would start signing for people who rely on that.
  */
-async function submitGovernance(
+export async function submitGovernance(
   build: (adiUrl: string) => Record<string, unknown>,
   opts: { identity?: string; signWith?: string; signerKeyPage?: string; yes?: boolean; pinnedAuthority?: string[] },
 ): Promise<void> {
