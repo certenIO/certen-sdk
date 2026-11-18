@@ -11,7 +11,7 @@ import { AddressInfo } from 'node:net';
 /**
  * AGT-2 WP1, standard fact F9: `certen agent add-authority` never signs, and never even calls the gateway, without an explicit
  * `--sign-with` key, whatever --json, --yes or a non-interactive pipe say. `enroll-status` signs nothing and reports the state.
- * FICTIONAL parties; the gateway is a local stub that records every request.
+ * FICTIONAL parties; the gateway is a local recording server that records every request.
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'dist', 'index.js');
@@ -19,7 +19,7 @@ const run = promisify(execFile);
 const AGENT = 'acc://agent-7.harbor-mfg.acme';
 const BOOK = 'acc://harbor-mfg.acme/book';
 
-async function stub() {
+async function recordingGateway() {
   const seen: string[] = [];
   const server = http.createServer((req, res) => { seen.push(`${req.method} ${req.url}`); res.writeHead(200, { 'content-type': 'application/json' }).end('{}'); });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
@@ -41,7 +41,7 @@ async function cli(args: string[], url: string) {
 describe('certen agent add-authority signs only with an explicit --sign-with (F9)', () => {
   for (const extra of [[], ['--json'], ['--yes'], ['--json', '--yes']]) {
     it(`without --sign-with, ${extra.join(' ') || 'plain'}: exit 2, SIGN_WITH_REQUIRED, no request reaches the gateway (even with a context key set)`, async () => {
-      const s = await stub();
+      const s = await recordingGateway();
       try {
         const r = await cli(['agent', 'add-authority', '--identity', AGENT, '--principal-book', BOOK, '--account', 'identity', ...extra], s.url);
         expect(r.code).toBe(2);
@@ -51,7 +51,7 @@ describe('certen agent add-authority signs only with an explicit --sign-with (F9
     }, 60000);
   }
   it('a principal book under the agent itself is refused before any request', async () => {
-    const s = await stub();
+    const s = await recordingGateway();
     try {
       const r = await cli(['agent', 'add-authority', '--identity', AGENT, '--principal-book', `${AGENT}/book`, '--account', 'book', '--sign-with', 'k', '--json'], s.url);
       expect(r.code).toBe(2);
@@ -71,7 +71,7 @@ describe('certen agent enroll-status', () => {
       pendingAuthorityAdds: { adi: 'ab'.repeat(32) }, registryResolve: { ok: false, reason: 'not_registered' },
       grant: { signerBook: null, accountAuthorities: [] }, mandate: { signerBook: null, accountAuthorities: [] },
     }));
-    const s = await stub();
+    const s = await recordingGateway();
     try {
       const r = await cli(['agent', 'enroll-status', '--facts', facts, '--json', '--require-enrolled'], s.url);
       expect(r.code).toBe(1);
