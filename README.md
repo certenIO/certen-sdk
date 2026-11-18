@@ -79,7 +79,7 @@ npm test             # every package, one run — no network, no key
 npm run typecheck
 ```
 
-The suite today: <!-- test-counts:start -->42209 tests in 461 files (sdk 1061, cli 1469, mcp 359, verify 39320), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
+The suite today: <!-- test-counts:start -->42215 tests in 461 files (sdk 1063, cli 1473, mcp 359, verify 39320), 0 skipped<!-- test-counts:end --> (measured by `npm run test:counts`; `npm run test:counts:write` refreshes this line, and CI fails when it is stale).
 
 ### On Windows, trust the summary over npm's exit code
 

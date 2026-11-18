@@ -56,9 +56,21 @@ export async function revokeGrant(client: CertenClient, a: { principal: string; 
 }
 
 /** The governance operation that removes the agent's key, as the gateway names it. */
-export function agentKeyRemoval(keyHash: string): { type: 'remove_key'; public_key_hash: string } {
-  if (typeof keyHash !== 'string' || !/^[0-9a-f]{64}$/.test(keyHash.replace(/^0x/, '').toLowerCase())) refuse('the agent key hash must be 64 hex characters');
-  return { type: 'remove_key', public_key_hash: keyHash.replace(/^0x/, '').toLowerCase() };
+const hash64 = (h: unknown, what: string): string => {
+  if (typeof h !== 'string' || !/^[0-9a-f]{64}$/.test(h.replace(/^0x/, '').toLowerCase())) refuse(`${what} must be 64 hex characters`);
+  return (h as string).replace(/^0x/, '').toLowerCase();
+};
+
+/**
+ * The key half of a revocation (AGT-F32): ONE updateKeyPage that ADDS the owner-held revocation key and then REMOVES the agent's key.
+ * Accumulate refuses to delete the last key of a book's page 1 (internal/core/execute/v2/chain/update_key_page.go:248), so a remove
+ * alone fails on chain for a one-key agent page; with the owner's key added first the page stays usable.
+ */
+export function agentKeyRemoval(keyHash: string, revocationKeyHash: string): Array<{ type: 'add_key' | 'remove_key'; public_key_hash: string }> {
+  const agent = hash64(keyHash, 'the agent key hash');
+  const owner = hash64(revocationKeyHash, 'the owner-held revocation key hash');
+  if (agent === owner) refuse('the revocation key must not be the agent key');
+  return [{ type: 'add_key', public_key_hash: owner }, { type: 'remove_key', public_key_hash: agent }];
 }
 
 export interface RevokeKeyResult { governanceOperationId: string; txHash?: string; agentPage: string; seat: string; reason: string; exposureWindow: string }
@@ -67,14 +79,14 @@ export interface RevokeKeyResult { governanceOperationId: string; txHash?: strin
  * Remove the agent's key from the agent's key page, signed by the OWNER's page. The signing data is rebuilt and must be exactly an
  * updateKeyPage of the agent's page removing exactly that key, signed by the owner's key on the owner's page; nothing is signed otherwise.
  */
-export async function revokeAgentKey(client: CertenClient, a: { principal: string; page: string; agentPage: string; keyHash: string; signer: PrincipalSigner; seat: string; reason: string }): Promise<RevokeKeyResult> {
+export async function revokeAgentKey(client: CertenClient, a: { principal: string; page: string; agentPage: string; keyHash: string; revocationKeyHash: string; signer: PrincipalSigner; seat: string; reason: string }): Promise<RevokeKeyResult> {
   const who = act(a);
   const agentPage = typeof a.agentPage === 'string' ? a.agentPage.toLowerCase() : '';
   if (!PAGE.test(agentPage)) refuse('the agent key page must be a key page URL');
-  const op = agentKeyRemoval(a.keyHash);
-  const created = await client.governance.create({ identity: a.principal, operations: [op], keyPageUrl: agentPage, signerKeyPage: a.page, signerPublicKey: a.signer.publicKey });
+  const ops = agentKeyRemoval(a.keyHash, a.revocationKeyHash);
+  const created = await client.governance.create({ identity: a.principal, operations: ops, keyPageUrl: agentPage, signerKeyPage: a.page, signerPublicKey: a.signer.publicKey });
   if (created.signing_mode !== 'provider' && created.signing_data) {
-    await checkGovernanceSigning(created.signing_data, { adiUrl: agentPage.split('/').slice(0, 3).join('/'), operations: [op], signerPublicKey: a.signer.publicKey, signerKeyPage: a.page });
+    await checkGovernanceSigning(created.signing_data, { adiUrl: agentPage.split('/').slice(0, 3).join('/'), operations: ops, signerPublicKey: a.signer.publicKey, signerKeyPage: a.page });
     const hash = String((created.signing_data as { hash_to_sign?: unknown }).hash_to_sign ?? '');
     const submitted = await client.governance.submitSignature(created.governance_op_id, { signature: a.signer.sign(hash), publicKey: a.signer.publicKey });
     const tx = (submitted as { tx_hash?: string }).tx_hash;

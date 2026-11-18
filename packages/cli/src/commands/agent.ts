@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
-import { cancelByRejectVote, replaceAgent, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT } from '@certen.io/sdk';
+import { agentBookDisableOperation, cancelByRejectVote, replaceAgent, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT } from '@certen.io/sdk';
 import { CertenClient, CertenError, agentEnrollmentState, agentAuthorityOperation, buildPrincipalEntry, writePrincipalEntry, type AgentEnrollmentFacts, type PrincipalEntryKind } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { confirmBeforeSigning } from '../card.js';
@@ -143,10 +143,11 @@ export function registerAgentCommands(program: Command): void {
     .requiredOption('--grant <file>', 'JSON file of the Grant head being revoked')
     .option('--agent-page <url>', "The agent's key page whose key the owner removes")
     .option('--agent-key-hash <hex>', "sha256 of the agent's key on that page")
+    .option('--revocation-key-hash <hex>', 'sha256 of an OWNER-held key added to the agent page in the same transaction (Accumulate refuses to delete the last key of page 1)')
     .option('--signer-key-page <url>', "The principal's page that signs (default <identity>/book/1)"))
-    .action(async (opts: { identity: string; grant: string; agentPage?: string; agentKeyHash?: string; signerKeyPage?: string; seat: string; reason: string; signWith?: string; yes?: boolean }) => {
+    .action(async (opts: { identity: string; grant: string; agentPage?: string; agentKeyHash?: string; revocationKeyHash?: string; signerKeyPage?: string; seat: string; reason: string; signWith?: string; yes?: boolean }) => {
       needKey('revoke', opts.signWith);
-      if (Boolean(opts.agentPage) !== Boolean(opts.agentKeyHash)) throw new UsageError('--agent-page and --agent-key-hash go together', 'INTERVENTION_MALFORMED');
+      if (Boolean(opts.agentPage) !== Boolean(opts.agentKeyHash) || Boolean(opts.agentPage) !== Boolean(opts.revocationKeyHash)) throw new UsageError('--agent-page, --agent-key-hash and --revocation-key-hash go together', 'INTERVENTION_MALFORMED');
       const head = readDoc(opts.grant, 'Grant');
       const principal = opts.identity.toLowerCase().replace(/\/+$/, '');
       const page = (opts.signerKeyPage ?? `${principal}/book/1`).toLowerCase();
@@ -155,8 +156,24 @@ export function registerAgentCommands(program: Command): void {
       const client = await clientNow();
       const sign = { publicKey: signer.publicKey, sign: (h: string) => signer.sign(h) };
       const grant = await revokeGrant(client, { principal, page, head, signer: sign, seat: opts.seat, reason: opts.reason }).catch(asUsage);
-      const key = opts.agentPage ? await revokeAgentKey(client, { principal, page, agentPage: opts.agentPage, keyHash: opts.agentKeyHash!, signer: sign, seat: opts.seat, reason: opts.reason }).catch(asUsage) : null;
+      const key = opts.agentPage ? await revokeAgentKey(client, { principal, page, agentPage: opts.agentPage, keyHash: opts.agentKeyHash!, revocationKeyHash: opts.revocationKeyHash!, signer: sign, seat: opts.seat, reason: opts.reason }).catch(asUsage) : null;
       printOutput({ grant: { account: grant.entry.account, payloadHash: grant.entry.hash, writeTx: grant.writeTx ?? null }, key: key ? { agentPage: key.agentPage, txHash: key.txHash ?? null } : null, seat: opts.seat, reason: opts.reason, exposureWindow: EXPOSURE_WINDOW_STATEMENT });
+    });
+
+  // AGT-F28: the enrollment step that disables the agent's OWN book as an authority of its key book (the agent proposes, the principal
+  // co-signs the pending transaction: UpdateAccountAuth needs every authority's vote). Signs only with --sign-with.
+  agent
+    .command('disable-book')
+    .description("The agent proposes disabling its own book as an authority of its key book, so key-page changes need the principal alone (signs only with --sign-with)")
+    .requiredOption('--identity <adi>', 'The agent ADI')
+    .option('--sign-with <key>', "REQUIRED: the local key on the agent's page")
+    .option('--signer-key-page <url>', "Sign with a specific page of the agent's book")
+    .option('--yes', 'Say yes to the confirmation in advance; it never replaces --sign-with')
+    .action(async (opts: { identity: string; signWith?: string; signerKeyPage?: string; yes?: boolean }) => {
+      if (!opts.signWith) throw new UsageError('agent disable-book signs only with an explicit --sign-with <key>; no context or default key is used (sign_with_required)', 'SIGN_WITH_REQUIRED');
+      let operation: Record<string, string>;
+      try { operation = agentBookDisableOperation(opts.identity.toLowerCase().replace(/\/+$/, '')); } catch { throw new UsageError('the agent ADI is malformed', 'AGENT_AUTHORITY_MALFORMED'); }
+      await submitGovernance(() => operation, { identity: opts.identity, signWith: opts.signWith, signerKeyPage: opts.signerKeyPage, yes: opts.yes });
     });
 
   intervention(agent

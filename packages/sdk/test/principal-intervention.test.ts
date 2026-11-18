@@ -8,9 +8,28 @@ import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
-import { CertenClient, ed25519Signer, coreVerdict, cancelByRejectVote, replaceAgent, revocationOf, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT } from '../src/index.js';
+import { CertenClient, ed25519Signer, coreVerdict, agentKeyRemoval, cancelByRejectVote, replaceAgent, revocationOf, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT } from '../src/index.js';
 import { hashGrant } from '../src/core/hashes.js';
 import { honestCosign, honestGovernance } from './helpers/honest-gateway.js';
+import { reconstructSigning } from '@certen.io/proof-verify';
+
+/** An honest answer for an updateKeyPage on the agent's page carrying exactly `operation` (hashed honestly: only the content check can catch a change). */
+function keyPageAnswer(e: { body: any }, operation: unknown[]) {
+  const metadata = { type: 'ed25519', public_key: e.body.signer_public_key, signer: e.body.signer_key_page, signer_version: 1, timestamp_us: 1790000000000000 };
+  const transaction = { header: { principal: e.body.key_page_url }, body: { type: 'updateKeyPage', operation } };
+  const r = reconstructSigning(transaction, metadata);
+  return { status: 201, body: { governance_op_id: 'gov-kp', status: 'pending_signature', signing_data: { transaction_hash: r.transactionHash, hash_to_sign: r.hashToSign, transaction: { ...transaction, header: { ...transaction.header, initiator: r.signatureMetadataHash } }, signature_metadata: metadata } } };
+}
+
+/**
+ * A MODEL of Accumulate's readiness rule (v1.4.6 internal/core/execute/v2/block/transaction.go:207-224): a transaction is ready only when
+ * every authority of its principal has voted, a DISABLED authority skipped unless the transaction type requires authorization
+ * (protocol/access_control.go:10-16: UpdateAccountAuth). Not Accumulate itself: it shows what the source lines say for these cases.
+ */
+function ready(authorities: Array<{ url: string; disabled: boolean }>, voted: string[], txType: 'updateKeyPage' | 'updateAccountAuth'): boolean {
+  const ignoreDisabled = txType === 'updateAccountAuth';
+  return authorities.every((a) => (a.disabled && !ignoreDisabled) || voted.includes(a.url));
+}
 import golden from './fixtures/certen-vectors/principal-entries.golden.json' with { type: 'json' };
 
 interface Req { method: string; path: string; body?: any }
@@ -57,27 +76,46 @@ describe('revoke: the Grant superseded with an empty validity', () => {
 });
 
 describe('revoke: the owner removes the agent\'s key (the existing governance remove_key, signed by the owner\'s page)', () => {
-  it('the op is exactly remove_key on the agent\'s page, with the owner\'s page and key as signer; the rebuilt transaction is checked', async () => {
+  it('AGT-F32: the op is exactly [add the owner-held revocation key, remove the agent key] on the agent\'s page, signed by the owner\'s page; the rebuilt transaction is checked', async () => {
     const key = ed25519Signer();
     const gw = await gateway((e) => e.path === '/v1/governance'
-      ? honestGovernance(e.body.operations[0], AGENT, { publicKey: e.body.signer_public_key, keyPage: e.body.signer_key_page })
+      ? keyPageAnswer(e, [{ type: 'add', entry: { keyHash: 'e'.repeat(64) } }, { type: 'remove', entry: { keyHash: 'c'.repeat(64) } }])
       : { body: { status: 'pending_signatures', tx_hash: 'tx-rm' } });
     try {
-      const r = await revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), signer: key, ...WHO });
+      const r = await revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), revocationKeyHash: 'e'.repeat(64), signer: key, ...WHO });
       const create = gw.seen.find((e) => e.path === '/v1/governance')!;
-      expect(create.body).toEqual({ identity: PRINCIPAL, operations: [{ type: 'remove_key', public_key_hash: 'c'.repeat(64) }], key_page_url: AGENT_PAGE, signer_key_page: PAGE, signer_public_key: key.publicKey });
+      expect(create.body).toEqual({ identity: PRINCIPAL, operations: [{ type: 'add_key', public_key_hash: 'e'.repeat(64) }, { type: 'remove_key', public_key_hash: 'c'.repeat(64) }], key_page_url: AGENT_PAGE, signer_key_page: PAGE, signer_public_key: key.publicKey });
       expect(signatures(gw.seen)).toHaveLength(1);
       expect(r).toMatchObject({ agentPage: AGENT_PAGE, txHash: 'tx-rm', exposureWindow: EXPOSURE_WINDOW_STATEMENT });
     } finally { gw.close(); }
   });
-  it('a gateway that returns another operation (an add) gets no signature', async () => {
-    const gw = await gateway((e) => e.path === '/v1/governance'
-      ? honestGovernance({ type: 'add_key', public_key_hash: 'd'.repeat(64) }, AGENT, { publicKey: e.body.signer_public_key, keyPage: e.body.signer_key_page })
-      : { body: {} });
+  it('a gateway that returns the remove alone, or the two in the other order, gets no signature; the revocation key must differ from the agent key', async () => {
+    for (const ops of [[{ type: 'remove', entry: { keyHash: 'c'.repeat(64) } }], [{ type: 'remove', entry: { keyHash: 'c'.repeat(64) } }, { type: 'add', entry: { keyHash: 'e'.repeat(64) } }]]) {
+      const gw = await gateway((e) => e.path === '/v1/governance' ? keyPageAnswer(e, ops) : { body: {} });
+      try {
+        await expect(revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), revocationKeyHash: 'e'.repeat(64), signer: ed25519Signer(), ...WHO })).rejects.toMatchObject({ code: 'SIGNING_DATA_MISMATCH' });
+        expect(signatures(gw.seen)).toHaveLength(0);
+      } finally { gw.close(); }
+    }
+    expect(() => agentKeyRemoval('c'.repeat(64), 'c'.repeat(64))).toThrow(expect.objectContaining({ code: 'INTERVENTION_MALFORMED' }));
+    const gw = await gateway(() => ({ body: {} }));
     try {
-      await expect(revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), signer: ed25519Signer(), ...WHO })).rejects.toMatchObject({ code: 'SIGNING_DATA_MISMATCH' });
       expect(signatures(gw.seen)).toHaveLength(0);
     } finally { gw.close(); }
+  });
+});
+
+describe('AGT-F28: the owner alone completes the revocation once the agent\'s book is disabled (a model of transaction.go:207-224)', () => {
+  const OWNER_BOOK = `${PRINCIPAL}/book`;
+  const AGENT_BOOK = `${AGENT}/book`;
+  it('before the disable the owner\'s updateKeyPage waits for the agent; after it the owner alone is enough; the agent alone never is; changing the authority set needs both', () => {
+    const before = [{ url: AGENT_BOOK, disabled: false }, { url: OWNER_BOOK, disabled: false }];
+    const after = [{ url: AGENT_BOOK, disabled: true }, { url: OWNER_BOOK, disabled: false }];
+    expect(ready(before, [OWNER_BOOK], 'updateKeyPage')).toBe(false); // the agent could block its own revocation
+    expect(ready(after, [OWNER_BOOK], 'updateKeyPage')).toBe(true);
+    expect(ready(after, [AGENT_BOOK], 'updateKeyPage')).toBe(false);
+    expect(ready(after, [OWNER_BOOK], 'updateAccountAuth')).toBe(false); // re-enabling, or any authority change, needs both books
+    expect(ready(after, [OWNER_BOOK, AGENT_BOOK], 'updateAccountAuth')).toBe(true);
   });
 });
 
@@ -126,7 +164,7 @@ describe('replace, and the person-held act', () => {
     const gw = await gateway(() => ({ body: {} }));
     const noKey = { publicKey: '1f'.repeat(32), sign: () => { throw new Error('a key was used'); } };
     try {
-      await expect(revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), signer: noKey, seat: 'supervisor', reason: WHO.reason })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
+      await expect(revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), revocationKeyHash: 'e'.repeat(64), signer: noKey, seat: 'supervisor', reason: WHO.reason })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
       await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, txHash: 'ab'.repeat(32), signerUrl: PAGE, signer: noKey, seat: WHO.seat, reason: 'short' })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
       await expect(revokeGrant(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, head: grant, signer: noKey, seat: WHO.seat, reason: '' })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
       expect(gw.seen).toEqual([]);
