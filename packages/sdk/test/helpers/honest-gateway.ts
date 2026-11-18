@@ -72,6 +72,9 @@ export function honestGovernance(
     case 'set_threshold': body = { type: 'updateKeyPage', operation: [{ type: 'setThreshold', threshold: Number(op.threshold) }] }; break;
     case 'add_authority': principal = op.account_url ?? adiUrl; body = { type: 'updateAccountAuth', operations: [{ type: 'addAuthority', authority: op.authority_url }] }; break;
     case 'remove_authority': principal = op.account_url ?? adiUrl; body = { type: 'updateAccountAuth', operations: [{ type: 'removeAuthority', authority: op.authority_url }] }; break;
+    // AGT-2: the identity's own data account (authority: its own book alone) and its own data entry, bytes unchanged
+    case 'create_data_account': principal = adiUrl; body = { type: 'createDataAccount', url: op.account_url, authorities: [`${adiUrl}/book`] }; break;
+    case 'write_data': principal = op.account_url; body = { type: 'writeData', entry: { type: 'doubleHash', data: op.entries } }; break;
     default: throw new Error(`honestGovernance: no recipe for ${op.type}`);
   }
   const metadata = { type: 'ed25519', public_key: opts.publicKey ?? '11'.repeat(32), signer: opts.keyPage ?? `${adiUrl}/book/1`, signer_version: 1, timestamp_us: 1790000000000000 };

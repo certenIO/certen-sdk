@@ -4,3 +4,7 @@
 *.gz binary
 *.png binary
 *.jpg binary
+# The SDK copy of the CERTEN core profiles is pinned byte for byte (packages/sdk/scripts/sync-core.mjs, src/core/PIN.json): no checkout may rewrite it.
+packages/sdk/src/core/*.ts -text
+packages/sdk/src/core/PIN.json -text
+packages/sdk/src/agent/mandate.ts -text
