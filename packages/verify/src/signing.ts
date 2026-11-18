@@ -85,6 +85,8 @@ export type ExpectedOperation =
   | { type: 'set_threshold'; threshold: number | string }
   | { type: 'add_delegate' | 'remove_delegate'; delegate_url: string }
   | { type: 'add_authority' | 'remove_authority'; authority_url: string }
+  /** AGT-3: disable an authority of an account (UpdateAccountAuth `disable`) */
+  | { type: 'disable_authority'; authority_url: string }
   | { type: 'create_key_page'; public_key_hash: string }
   /** AGT-2: the identity's own data account, whose authority set must be exactly `authorities` (the identity's own book) */
   | { type: 'create_data_account'; account_url: string; authorities: string[] }
@@ -425,6 +427,7 @@ function accumulateOperation(op: ExpectedOperation): { body: string; key: string
     case 'remove_delegate': return { body: 'updateKeyPage', key: 'operation', value: { type: 'remove', entry: { delegate: op.delegate_url } } };
     case 'add_authority': return { body: 'updateAccountAuth', key: 'operations', value: { type: 'addAuthority', authority: op.authority_url } };
     case 'remove_authority': return { body: 'updateAccountAuth', key: 'operations', value: { type: 'removeAuthority', authority: op.authority_url } };
+    case 'disable_authority': return { body: 'updateAccountAuth', key: 'operations', value: { type: 'disable', authority: op.authority_url } };
     case 'create_key_page': return { body: 'createKeyPage', key: 'keys', value: { keyHash: norm(op.public_key_hash) } };
     default: throw new AbiUnsupported(`signing: the governance operation ${JSON.stringify((op as { type?: unknown }).type)} has no verifier, so what it changes cannot be checked`);
   }

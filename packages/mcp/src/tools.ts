@@ -1,3 +1,4 @@
+import { EXPOSURE_WINDOW_STATEMENT } from '@certen.io/sdk';
 import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, WEBHOOK_DELIVERY_STATUSES, type SigningSummary } from '@certen.io/sdk';
 import type { CertenClient, WebhookDeliveryStatus } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
@@ -1481,6 +1482,46 @@ const WRITE_TOOLS: ToolDef[] = [
         vote: vote as 'approve' | 'reject' | 'abstain',
       }));
       return { ...(created as unknown as Record<string, unknown>), ...signing };
+    },
+  },
+  {
+    name: 'certen_agent_cancel_by_reject_vote',
+    tier: 'write',
+    mutates: true,
+    destructive: false,
+    idempotent: false,
+    endpoint: 'POST /v1/sign',
+    description:
+      'Cancel by reject vote (AGT-3): open a REJECT sign request on a PENDING Accumulate transaction, for a required authority, as a '
+      + 'person-held act with a named seat (seat:<name>) and a reason of at least 10 characters. Returns signing data to be signed '
+      + 'elsewhere, rebuilt and matched to that transaction, the reject vote and the signer. '
+      + `${EXPOSURE_WINDOW_STATEMENT} A reject is a verdict only when the book can no longer reach its threshold.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        txHash: str('The pending Accumulate transaction: 64-hex hash, 0x-prefixed, or acc://<hash>@<account> TxID'),
+        identity: str('Identity ADI the vote is cast as, e.g. acc://org.acme'),
+        signerUrl: str('The required authority\'s key page that votes'),
+        publicKey: str('Public key that will sign, 64-char hex'),
+        seat: str('The named seat that acts, seat:<name>'),
+        reason: str('Why, at least 10 characters'),
+        confirm: CONFIRM,
+      },
+      required: ['txHash', 'identity', 'signerUrl', 'publicKey', 'seat', 'reason', 'confirm'],
+      additionalProperties: false,
+    },
+    run: async (c, a) => {
+      const seat = s(a, 'seat');
+      const reason = s(a, 'reason').trim();
+      if (!/^seat:[a-z0-9][a-z0-9._-]{0,62}$/.test(seat)) throw new CertenError('certen: a named seat is required (seat:<name>)', 0, 'INTERVENTION_MALFORMED');
+      if (reason.length < 10) throw new CertenError('certen: a reason of at least 10 characters is required', 0, 'INTERVENTION_MALFORMED');
+      const target = resolveSignTarget(s(a, 'txHash'));
+      if (target.type !== 'pending_tx') throw new CertenError('certen: txHash must be a pending transaction hash or TxID, not an inbox id', 0, 'INTERVENTION_MALFORMED');
+      const created = await c.sign.create({ type: 'pending_tx', targetId: target.targetId, identity: s(a, 'identity'), signerUrl: s(a, 'signerUrl'), publicKey: s(a, 'publicKey'), vote: 'reject' });
+      const signing = await signingFor(created as never, () => checkCosigning((created as unknown as { signing_data?: unknown }).signing_data, {
+        transactionHash: target.targetId, signerPublicKey: s(a, 'publicKey'), signerKeyPage: s(a, 'signerUrl'), vote: 'reject',
+      }));
+      return { ...(created as unknown as Record<string, unknown>), ...signing, vote: 'reject', seat, reason, exposure_window: EXPOSURE_WINDOW_STATEMENT };
     },
   },
   {

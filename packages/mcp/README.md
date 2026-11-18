@@ -52,7 +52,7 @@ are what enforce.
 
 Every tool also declares an **`outputSchema`** and returns **`structuredContent`** that conforms to it, alongside the JSON text. Most
 schemas are generated from the gateway's own response schemas (`npm run agentgen`; CI fails if they are stale); the ten tools that
-build their own result have schemas written beside the server code, and a test runs all 55 tools and validates what each returns. A
+build their own result have schemas written beside the server code, and a test runs all 56 tools and validates what each returns. A
 `confirmation_required` stop and any failure are returned with `isError: true` and no `structuredContent`.
 
 ## It also serves the documentation
@@ -79,7 +79,7 @@ with "please don't call this" in its description can be called by all three.
 
 ```bash
 certen-mcp                              # 38 read tools
-CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 55 tools
+CERTEN_MCP_ALLOW_WRITES=1 certen-mcp    # 56 tools
 ```
 
 Every tool that changes something additionally requires `confirm: true`. Called without it, the tool

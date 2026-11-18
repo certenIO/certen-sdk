@@ -48,13 +48,15 @@ export type AgentEnrollmentState =
   | 'enrollment_owner_not_on_keybook'
   | 'enrollment_subject_unproven'
   | 'enrollment_subject_mismatch'
+  | 'enrollment_agent_book_not_disabled_on_keybook'
+  | 'enrollment_disable_pending'
   | 'grant_not_signed_by_principal'
   | 'grant_authority_includes_agent'
   | 'mandate_not_signed_by_principal'
   | 'mandate_authority_includes_agent';
 
 export interface AgentEnrollmentStep {
-  step: 'add_authority' | 'accept_authority' | 'register_subject' | 'issue_grant' | 'issue_mandate';
+  step: 'add_authority' | 'accept_authority' | 'disable_agent_book' | 'accept_disable' | 'register_subject' | 'issue_grant' | 'issue_mandate';
   /** who must sign this step */
   signer: 'agent' | 'principal';
   account?: 'identity' | 'book';
@@ -110,6 +112,15 @@ export function agentEnrollmentState(f: AgentEnrollmentFacts): AgentEnrollmentVe
       ? no('enrollment_acceptance_pending', { step: 'accept_authority', signer: 'principal', account: 'book', pendingTx: f.pendingAuthorityAdds.keyBook })
       : no('enrollment_owner_not_on_keybook', { step: 'add_authority', signer: 'agent', account: 'book' });
   }
+  // AGT-F28: the agent's own book DISABLED on its key book, so a key-page change (the owner's revocation) needs the principal alone.
+  // Accumulate v1.4.6: readiness counts enabled authorities only (internal/core/execute/v2/block/transaction.go:207-224); the disable is
+  // UpdateAccountAuth `disable` {authority} (protocol/types_gen.go:334), which needs both books' votes (protocol/access_control.go:13).
+  if (f.keyBookAuthorities.some((a) => a.disabled === false && isUnderAdi(a.url, f.agentAdi))) {
+    const pend = (f.pendingAuthorityAdds as { disableAgentBook?: string }).disableAgentBook;
+    return pend
+      ? no('enrollment_disable_pending', { step: 'accept_disable', signer: 'principal', account: 'book', pendingTx: pend })
+      : no('enrollment_agent_book_not_disabled_on_keybook', { step: 'disable_agent_book', signer: 'agent', account: 'book' });
+  }
   const r = f.registryResolve;
   if (r.ok !== true) return no('enrollment_subject_unproven', { step: 'register_subject', signer: 'principal' }, r.reason);
   if (r.subject.adi !== f.agentAdi || r.subject.type !== 'agent') return no('enrollment_subject_mismatch', null);
@@ -124,6 +135,15 @@ export function agentEnrollmentState(f: AgentEnrollmentFacts): AgentEnrollmentVe
  * The governance operation for an `add_authority` step, in the gateway's governance shape (types.ts: add_authority with
  * `authority_url`, and `account_url` for the key book). Only the agent-side step has an operation: the acceptance is the
  * principal's signature on the pending transaction, never an operation the agent can submit.
+ */
+export function agentBookDisableOperation(agentAdi: string): Record<string, string> {
+  if (!ACC.test(agentAdi) || agentAdi.split('/').length !== 3) throw new Error('agent_authority_operation_malformed');
+  return { type: 'disable_authority', authority_url: `${agentAdi}/book`, account_url: `${agentAdi}/book` };
+}
+
+/**
+ * The governance operation for an `add_authority` step (above: the `disable_agent_book` step's operation, which the agent submits and the
+ * principal co-signs; UpdateAccountAuth needs every authority's vote).
  */
 export function agentAuthorityOperation(f: Pick<AgentEnrollmentFacts, 'agentAdi' | 'principalBook'>, account: 'identity' | 'book'): Record<string, string> {
   if (!ACC.test(f.agentAdi) || !ACC.test(f.principalBook) || isUnderAdi(f.principalBook, f.agentAdi)) throw new Error('agent_authority_operation_malformed');
