@@ -82,3 +82,33 @@ describe('certen agent enroll-status', () => {
     } finally { await s.close(); }
   }, 60000);
 });
+
+describe('the principal\'s writes (register, issue-grant, issue-mandate) sign only with an explicit --sign-with (F9)', () => {
+  const PRINCIPAL = 'acc://harbor-mfg.acme';
+  const doc = (o: unknown) => { const d = mkdtempSync(join(tmpdir(), 'certen-doc-')); const f = join(d, 'doc.json'); writeFileSync(f, JSON.stringify(o)); return f; };
+  const mandate = { schema: 'certen.mandate/v1', mandateId: 'md-1', version: 1, priorHash: null, principal: { adi: PRINCIPAL, keyBook: `${PRINCIPAL}/book` }, agent: { adi: AGENT } };
+  for (const cmd of ['register', 'issue-grant', 'issue-mandate']) {
+    for (const extra of [[], ['--json'], ['--yes'], ['--json', '--yes']]) {
+      it(`${cmd} without --sign-with, ${extra.join(' ') || 'plain'}: exit 2, SIGN_WITH_REQUIRED, nothing read, no request (a context key in the environment is set)`, async () => {
+        const s = await recordingGateway();
+        try {
+          const r = await cli(['agent', cmd, '--identity', PRINCIPAL, '--document', join(tmpdir(), 'does-not-exist.json'), ...extra], s.url);
+          expect(r.code).toBe(2);
+          expect(r.out).toContain('SIGN_WITH_REQUIRED');
+          expect(r.out).not.toContain('PRINCIPAL_DOCUMENT_UNREADABLE');
+          expect(s.seen).toEqual([]);
+        } finally { await s.close(); }
+      }, 60000);
+    }
+  }
+  it('an unreadable document, and a mandate that names another principal book, are refused before any key or request', async () => {
+    const s = await recordingGateway();
+    try {
+      const a = await cli(['agent', 'issue-mandate', '--identity', PRINCIPAL, '--document', join(tmpdir(), 'does-not-exist.json'), '--sign-with', 'k', '--json'], s.url);
+      expect([a.code, a.out.includes('PRINCIPAL_DOCUMENT_UNREADABLE')]).toEqual([2, true]);
+      const b = await cli(['agent', 'issue-mandate', '--identity', PRINCIPAL, '--document', doc({ ...mandate, principal: { adi: PRINCIPAL, keyBook: `${PRINCIPAL}/clerks` } }), '--sign-with', 'k', '--json'], s.url);
+      expect([b.code, b.out.includes('PRINCIPAL_ENTRY_NOT_PRINCIPALS')]).toEqual([2, true]);
+      expect(s.seen).toEqual([]);
+    } finally { await s.close(); }
+  }, 60000);
+});

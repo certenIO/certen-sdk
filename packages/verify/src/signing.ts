@@ -85,7 +85,11 @@ export type ExpectedOperation =
   | { type: 'set_threshold'; threshold: number | string }
   | { type: 'add_delegate' | 'remove_delegate'; delegate_url: string }
   | { type: 'add_authority' | 'remove_authority'; authority_url: string }
-  | { type: 'create_key_page'; public_key_hash: string };
+  | { type: 'create_key_page'; public_key_hash: string }
+  /** AGT-2: the identity's own data account, whose authority set must be exactly `authorities` (the identity's own book) */
+  | { type: 'create_data_account'; account_url: string; authorities: string[] }
+  /** AGT-2: ONE data entry whose elements must be exactly these bytes (hex) */
+  | { type: 'write_data'; account_url: string; entries: string[] };
 
 export interface Expectation {
   /** The intent the transaction must be for (blob `intent_id`). */
@@ -281,12 +285,47 @@ export function verifySigningData(signingData: unknown, expect: Expectation = {}
   };
 
   let summary: Omit<SigningSummary, 'text'>;
-  if (body.type === 'writeData') {
+  const dataOp = expect.governance?.find((o) => o.type === 'create_data_account' || o.type === 'write_data');
+  if (dataOp !== undefined) {
+    if (expect.governance!.length !== 1) throw new SigningDataMismatch('governance', 'one data operation', `${expect.governance!.length} operations`);
+    summary = { kind: dataOp.type === 'create_data_account' ? 'data account creation' : 'data entry', ...base, intentId: undefined, legs: [], ...checkDataOperation(principal, header, body, dataOp as DataOperation), pinnedAuthorities: [] };
+  } else if (body.type === 'writeData') {
     summary = { kind: 'cross-chain intent', ...base, ...checkIntent(base.principal, base.memo, body, expect), operations: [], pinnedAuthorities: [] };
   } else {
     summary = { kind: String(body.type), ...base, intentId: undefined, legs: [], ...checkGovernance(principal, body, expect) };
   }
   return { ...summary, text: describe(summary) };
+}
+
+// ── AGT-2: the identity's own data account and data entry ─────────────────────────────────────────────
+
+type DataOperation = Extract<ExpectedOperation, { type: 'create_data_account' | 'write_data' }>;
+
+/**
+ * A createDataAccount must create exactly the account asked for, principal its ADI, with EXACTLY the authorities asked for (nothing
+ * added, nothing missing, in order) and no additional header authorities; a writeData must write exactly the bytes asked for, as ONE
+ * doubleHash entry, to the account asked for. Anything else is refused before a signature exists.
+ */
+function checkDataOperation(principal: string, header: Rec, body: Rec, op: DataOperation): { operations: unknown[] } {
+  const account = lc(op.account_url.replace(/\/+$/, ''));
+  if (optList(header.authorities, 'transaction.header.authorities').length !== 0) throw new SigningDataMismatch('transaction.header.authorities', [], header.authorities, 'a data operation adds no authority to the transaction');
+  if (op.type === 'create_data_account') {
+    mustEqual('transaction.body.type', 'createDataAccount', body.type);
+    if (!sameUrl(principal, adiOf(account))) throw new SigningDataMismatch('transaction.header.principal', adiOf(account), principal, 'a data account is created by its own ADI');
+    if (!sameUrl(str(body.url, 'transaction.body.url'), account)) throw new SigningDataMismatch('transaction.body.url', account, body.url);
+    const got = optList(body.authorities, 'transaction.body.authorities').map((a) => lc(String(a).replace(/\/+$/, '')));
+    const want = op.authorities.map((a) => lc(a.replace(/\/+$/, '')));
+    if (JSON.stringify(got) !== JSON.stringify(want)) throw new SigningDataMismatch('transaction.body.authorities', want, got, 'the account would be held by other authorities than the ones asked for');
+    return { operations: [{ type: 'createDataAccount', url: account, authorities: got }] };
+  }
+  mustEqual('transaction.body.type', 'writeData', body.type);
+  if (!sameUrl(principal, account)) throw new SigningDataMismatch('transaction.header.principal', account, principal, 'the entry would be written to another account');
+  const entry = rec(body.entry, 'transaction.body.entry');
+  if (entry.type !== 'doubleHash') throw new SigningDataMismatch('transaction.body.entry.type', 'doubleHash', entry.type);
+  const got = list(entry.data, 'transaction.body.entry.data').map((h, i) => toHex(hexBytes(h, `transaction.body.entry.data[${i}]`)));
+  const want = op.entries.map((h) => lc(h.replace(/^0x/, '')));
+  if (JSON.stringify(got) !== JSON.stringify(want)) throw new SigningDataMismatch('transaction.body.entry.data', want, got, 'the entry is not the bytes asked for');
+  return { operations: [{ type: 'writeData', account, elements: got.length, bytes: got.reduce((n, h) => n + h.length / 2, 0) }] };
 }
 
 // ── a CERTEN intent: writeData with four JSON blobs ─────────────────────────────────────────────────

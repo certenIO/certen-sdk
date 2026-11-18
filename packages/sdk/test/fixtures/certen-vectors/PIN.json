@@ -1,0 +1,17 @@
+{
+  "repo": "transaction-controls",
+  "branch": "pl/agt-2-agent-build",
+  "commit": "fdf7632f8decd115a1ee573b706bd2be500d4e77",
+  "sources": {
+    "hash-goldens.json": "docs/core/vectors/hash-goldens.json",
+    "agent-mandate.json": "docs/agentic/vectors/agent-mandate.json",
+    "agent-grant.json": "docs/agentic/vectors/agent-grant.json",
+    "principal-entries.golden.json": "generated at the commit by the tcl encoders (core encodeGrantEntry, encodeRegistrationEntry; agent encodeMandateEntry)"
+  },
+  "files": {
+    "hash-goldens.json": "dd8a9fb3fdf002bc02f6942c48b552258a883a4497c5bef2082acfe948329ac7",
+    "agent-mandate.json": "4831f2c8b2edfffc91b5300e07fa59f1ab1b46a7c77383f590860fda60fdbb44",
+    "agent-grant.json": "153cb76b7fb1c694ee554f5bd655bf54aeb459b7b733db456c847b79cb6f1d67",
+    "principal-entries.golden.json": "6d369a0ec05debd087997943ce9373d55ff9f706f5ce4d5f3b31e10e44418907"
+  }
+}

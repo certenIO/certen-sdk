@@ -269,6 +269,13 @@ const STEPS: Record<string, Step> = {
   // add-authority signs only with an explicit --sign-with key: list the keys there are
   SIGN_WITH_REQUIRED: 'certen keys list',
   AGENT_AUTHORITY_MALFORMED: help,
+  // ── the principal's entries (AGT-2): registration, Grant, mandate ──
+  // the document file could not be read as JSON, or it is not a document this command can write: the command's own help says what it takes
+  PRINCIPAL_DOCUMENT_UNREADABLE: help,
+  PRINCIPAL_ENTRY_MALFORMED: help,
+  // the document names another principal book than the signing page's, or the page is not the principal's: name the principal's own page
+  PRINCIPAL_ENTRY_NOT_PRINCIPALS: help,
+  PRINCIPAL_PAGE_INVALID: help,
   // ── webhooks ──
   // A signature that does not hold is a finding, not a mistake in how the command was typed. For a captured delivery the next question is whether
   // the secret is the right one (`check-delivery` asks the gateway what it signed); for `check-delivery` itself it is which endpoint the secret belongs to.
