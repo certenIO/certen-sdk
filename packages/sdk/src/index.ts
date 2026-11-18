@@ -20,6 +20,6 @@ export {
 export type { SigningSummary, ExpectedLeg, ExpectedOperation, Expectation } from './signing-check.js';
 export type { BeforeSign } from './resources/execute.js';
 export { agentEnrollmentState, agentAuthorityOperation, isUnderAdi } from './agent-enrollment.js';
-export { buildPrincipalEntry, canonicalJson, entryHash, entryTag, envelopeDigestHex, issueGrant, issueMandate, registerAgent, taggedPreimage, writePrincipalEntry, ENTRY_TAGS, PRINCIPAL_ACCOUNTS, PRINCIPAL_ENTRY_MALFORMED, PRINCIPAL_ENTRY_NOT_PRINCIPALS, PRINCIPAL_PAGE_INVALID, PRINCIPAL_WRITE_UNSIGNED } from './principal-entries.js';
+export { buildPrincipalEntry, canonicalJson, coreVerdict, PRINCIPAL_ENTRY_REFUSED_BY_CORE, entryHash, entryTag, envelopeDigestHex, issueGrant, issueMandate, registerAgent, taggedPreimage, writePrincipalEntry, ENTRY_TAGS, PRINCIPAL_ACCOUNTS, PRINCIPAL_ENTRY_MALFORMED, PRINCIPAL_ENTRY_NOT_PRINCIPALS, PRINCIPAL_PAGE_INVALID, PRINCIPAL_WRITE_UNSIGNED } from './principal-entries.js';
 export type { PrincipalEntry, PrincipalEntryKind, PrincipalSigner, PrincipalWriteResult } from './principal-entries.js';
 export type { AgentEnrollmentFacts, AgentEnrollmentState, AgentEnrollmentStep, AgentEnrollmentVerdict, AuthorityEntry, SignedDocumentFacts } from './agent-enrollment.js';

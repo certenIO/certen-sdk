@@ -94,6 +94,7 @@ export function registerAgentCommands(program: Command): void {
         if (e instanceof CertenError) {
           if (e.code === 'PRINCIPAL_ENTRY_NOT_PRINCIPALS') throw new UsageError(e.message, 'PRINCIPAL_ENTRY_NOT_PRINCIPALS');
           if (e.code === 'PRINCIPAL_PAGE_INVALID') throw new UsageError(e.message, 'PRINCIPAL_PAGE_INVALID');
+          if (e.code === 'PRINCIPAL_ENTRY_REFUSED_BY_CORE') throw new UsageError(e.message, 'PRINCIPAL_ENTRY_REFUSED_BY_CORE');
           throw new UsageError(e.message, 'PRINCIPAL_ENTRY_MALFORMED');
         }
         throw e;

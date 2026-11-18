@@ -10,16 +10,20 @@
  * lp(canonical text)) and a key signs SHA-256(lp("certen:envelope-sig:v1") || lp(tag) || lp(hash bytes) || lp(page)), lp = 4-byte
  * big-endian length then the bytes. The cross-repo vector test (test/principal-entries.vectors.test.ts) holds these to the tcl vectors.
  *
- * What this module does NOT have: the core's document profiles (validateGrant, validateRegistration, mandateShape). It checks that a
- * document is JSON this canonical form can carry (strings, safe integers, booleans, null, arrays, plain objects; no lone surrogate),
- * names the schema, and is the principal's own (its principal / grantor book is the signing book); the full profile is judged by every
- * reader of the entry (the Console refuses an entry the core does not accept).
+ * Before anything is signed or sent, every document is judged by the CORE's own profile functions (AGT-F25): validateGrant,
+ * validateRegistration and the mandate shape (mandateShape), byte-pinned copies of transaction-controls in src/core and src/agent
+ * (scripts/sync-core.mjs, src/core/PIN.json; src/agent/core.ts is this package's own unpinned shim). A refusal is
+ * PRINCIPAL_ENTRY_REFUSED_BY_CORE with the core's reason; nothing of the profile is re-implemented here.
  */
 import { CertenError } from './errors.js';
 import { bytesToHex, concatBytes, hexToBytes, utf8 } from './bytes.js';
 import { sha256 } from './sha256.js';
 import { checkGovernanceSigning } from './signing-check.js';
 import type { CertenClient } from './client.js';
+import { parseGrantTextUnhashed, validateGrant } from './core/grant-profile.js';
+import { parseRegistrationTextUnhashed, validateRegistration } from './core/registry-profile.js';
+import { canonicalize } from './core/jcs.js';
+import { mandateShape } from './agent/mandate.js';
 
 export const ENTRY_TAGS = {
   grant: 'certen:grant:v1',
@@ -43,6 +47,8 @@ export const PRINCIPAL_ENTRY_MALFORMED = 'PRINCIPAL_ENTRY_MALFORMED';
 export const PRINCIPAL_ENTRY_NOT_PRINCIPALS = 'PRINCIPAL_ENTRY_NOT_PRINCIPALS';
 export const PRINCIPAL_PAGE_INVALID = 'PRINCIPAL_PAGE_INVALID';
 export const PRINCIPAL_WRITE_UNSIGNED = 'PRINCIPAL_WRITE_UNSIGNED';
+/** The core's profile function refused the document; `details` carries the core's {reason, detail}. */
+export const PRINCIPAL_ENTRY_REFUSED_BY_CORE = 'PRINCIPAL_ENTRY_REFUSED_BY_CORE';
 const refuse = (code: string, message: string): never => { throw new CertenError(message, 0, code); };
 
 // ── RFC 8785 canonical JSON (the subset the core's documents use) ─────────────────────────────────────────
@@ -159,6 +165,9 @@ export function buildPrincipalEntry(a: { kind: PrincipalEntryKind; principal: st
   if (!SCHEMAS[kind].includes(String(d.schema))) refuse(PRINCIPAL_ENTRY_MALFORMED, `a ${kind} entry must carry schema ${SCHEMAS[kind].join(' or ')}`);
   if (principalBookOf(kind, d) !== book) refuse(PRINCIPAL_ENTRY_NOT_PRINCIPALS, `the ${kind} names another principal book than ${book}, the book of the signing page`);
   if (kind === 'registration' && d.type !== 'agent') refuse(PRINCIPAL_ENTRY_MALFORMED, 'an agent registration carries subject type agent');
+  // The core's own judgement of the document, before any key is used or anything is sent (AGT-F25).
+  const core = coreVerdict(kind, d);
+  if (core !== null) throw new CertenError(`the core refuses this ${kind}: ${core.reason}${core.detail ? ` (${core.detail})` : ''}`, 0, PRINCIPAL_ENTRY_REFUSED_BY_CORE, { details: core });
   if (!/^[0-9a-f]{64}$/.test(String(a.signer?.publicKey ?? ''))) refuse(PRINCIPAL_ENTRY_MALFORMED, 'the signer\'s public key must be 32 bytes of lowercase hex (ed25519)');
   const text = canonicalJson(d);
   const tag = entryTag(kind, d);
@@ -167,6 +176,30 @@ export function buildPrincipalEntry(a: { kind: PrincipalEntryKind; principal: st
   if (!/^[0-9a-f]{128}$/.test(signature)) refuse(PRINCIPAL_WRITE_UNSIGNED, 'the signer returned no 64-byte signature');
   const envelope = canonicalJson({ payloadTag: tag, payloadHash: hash, signatures: [{ alg: 'ed25519', page, publicKey: a.signer.publicKey, signature }] });
   return { kind, account: `${adi}/${PRINCIPAL_ACCOUNTS[kind]}`, tag, hash, texts: [text, envelope], elements: [bytesToHex(utf8(text)), bytesToHex(utf8(envelope))] };
+}
+
+/** The core profile verdict of a document: null when the core accepts it, else the core's reason and detail. Never throws. */
+export function coreVerdict(kind: PrincipalEntryKind, document: unknown): { reason: string; detail?: string } | null {
+  try {
+    // A Grant or registration is judged as the core judges it AND as every reader will read the entry: the profile, then the canonical
+    // text the entry carries through the core's own text parse (its size bound and number rules live there).
+    if (kind === 'grant') {
+      const v = validateGrant(document);
+      if (!v.ok) return { reason: v.reason, ...(v.detail ? { detail: v.detail } : {}) };
+      const t = parseGrantTextUnhashed(canonicalize(document));
+      return t.ok ? null : { reason: t.reason, ...(t.detail ? { detail: t.detail } : {}) };
+    }
+    if (kind === 'registration') {
+      const v = validateRegistration(document);
+      if (!v.ok) return { reason: v.reason, ...(v.detail ? { detail: v.detail } : {}) };
+      const t = parseRegistrationTextUnhashed(canonicalize(document));
+      return t.ok ? null : { reason: t.reason, ...(t.detail ? { detail: t.detail } : {}) };
+    }
+    const shape = mandateShape(document);
+    return shape === null ? null : { reason: 'mandate_malformed', detail: shape };
+  } catch (e) {
+    return { reason: 'core_check_failed', detail: e instanceof Error ? e.message.slice(0, 120) : 'non-error throw' };
+  }
 }
 
 // ── writing it through the gateway ────────────────────────────────────────────────────────────────────────

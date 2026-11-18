@@ -1,0 +1,31 @@
+{
+  "repo": "transaction-controls",
+  "branch": "pl/agt-2-agent-build",
+  "commit": "fdf7632f8decd115a1ee573b706bd2be500d4e77",
+  "files": {
+    "src/core/bytes.ts": {
+      "source": "packages/core/src/bytes.ts",
+      "sha256": "a6e87147398be7fab345727dbef4f4cb1b953972dff446ccbe14d3caef61d7d7"
+    },
+    "src/core/jcs.ts": {
+      "source": "packages/core/src/jcs.ts",
+      "sha256": "d6f72cf0a5fa086d589bb2a193fe6640475730b70f650110916bfffdf1fb3993"
+    },
+    "src/core/grant-profile.ts": {
+      "source": "packages/core/src/grant-profile.ts",
+      "sha256": "29b21d8f6773a10fb182e8ca796c76e13e356263140614b2205fe4f065ac90e0"
+    },
+    "src/core/registry-profile.ts": {
+      "source": "packages/core/src/registry-profile.ts",
+      "sha256": "7ac59237c6e4181404ae7703115c14e7216b944a2ba96cc07fe4d1ee975ce1ec"
+    },
+    "src/core/hashes.ts": {
+      "source": "packages/core/src/hashes.ts",
+      "sha256": "4c498d8569659b3a47a91b86ef34322163f0f11226dcb1ecb90b6e9eef1a63cd"
+    },
+    "src/agent/mandate.ts": {
+      "source": "packages/agent/src/mandate.ts",
+      "sha256": "7c578d4ae76bd7b1d2ede760dcf6988ebedaa40b9aa09e328af2625326aed7d6"
+    }
+  }
+}

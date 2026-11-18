@@ -112,3 +112,18 @@ describe('the principal\'s writes (register, issue-grant, issue-mandate) sign on
     } finally { await s.close(); }
   }, 60000);
 });
+
+describe('AGT-F25: a document the core refuses is refused by the CLI before any key or request', () => {
+  it('issue-mandate with a mandate the core\'s shape check refuses: exit 2, PRINCIPAL_ENTRY_REFUSED_BY_CORE, no request', async () => {
+    const PRINCIPAL = 'acc://harbor-mfg.acme';
+    const d = mkdtempSync(join(tmpdir(), 'certen-doc-'));
+    const f = join(d, 'mandate.json');
+    writeFileSync(f, JSON.stringify({ schema: 'certen.mandate/v1', mandateId: 'md-1', version: 1, priorHash: null, principal: { adi: PRINCIPAL, keyBook: `${PRINCIPAL}/book` }, agent: { adi: AGENT } }));
+    const s = await recordingGateway();
+    try {
+      const r = await cli(['agent', 'issue-mandate', '--identity', PRINCIPAL, '--document', f, '--sign-with', 'k', '--json'], s.url);
+      expect([r.code, r.out.includes('PRINCIPAL_ENTRY_REFUSED_BY_CORE')]).toEqual([2, true]);
+      expect(s.seen).toEqual([]);
+    } finally { await s.close(); }
+  }, 60000);
+});

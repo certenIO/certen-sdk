@@ -144,6 +144,6 @@ describe('refused before anything is sent or signed', () => {
     expect(() => buildPrincipalEntry({ kind: 'mandate', principal: PRINCIPAL, page: `${PRINCIPAL}/clerks/1`, document: mandate, signer })).toThrow(expect.objectContaining({ code: 'PRINCIPAL_ENTRY_NOT_PRINCIPALS' }));
     expect(() => buildPrincipalEntry({ kind: 'grant', principal: PRINCIPAL, page: PAGE, document: { ...grant, schema: 'certen.grant/v9' }, signer })).toThrow(expect.objectContaining({ code: 'PRINCIPAL_ENTRY_MALFORMED' }));
     expect(() => buildPrincipalEntry({ kind: 'registration', principal: PRINCIPAL, page: PAGE, document: { ...registration, type: 'person' }, signer })).toThrow(expect.objectContaining({ code: 'PRINCIPAL_ENTRY_MALFORMED' }));
-    expect(() => buildPrincipalEntry({ kind: 'mandate', principal: PRINCIPAL, page: PAGE, document: { ...mandate, issuedAt: 1.5 }, signer })).toThrow(expect.objectContaining({ code: 'PRINCIPAL_ENTRY_MALFORMED' }));
+    expect(() => buildPrincipalEntry({ kind: 'mandate', principal: PRINCIPAL, page: PAGE, document: { ...mandate, issuedAt: 1.5 }, signer })).toThrow(expect.objectContaining({ code: 'PRINCIPAL_ENTRY_REFUSED_BY_CORE' }));
   });
 });
