@@ -28,6 +28,7 @@ export const CUSTOM_TOOLS = [
   'certen_readiness',              // client.readiness(): ordered checks from five reads and an Accumulate node
   'certen_receipt',                // buildReceipt(): the intent, its proof verified here, and the effect, as one record
   'certen_whoami',                 // a reduced view of the balance
+  'certen_agent_cancel_by_reject_vote', // AGT-3: the sign request plus the seat, reason and exposure-window statement
 ];
 
 /** What `intentOutcome()` returns (packages/sdk/src/intent-states.ts); pinned by a test that feeds it every status. */

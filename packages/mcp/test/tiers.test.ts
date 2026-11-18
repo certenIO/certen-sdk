@@ -187,7 +187,7 @@ describe('tool invariants', () => {
     // on an origin the operator allows: also share-origin.test.ts.) Add a tool that takes another and this fails until it is argued here.
     const urlish = /url|uri|endpoint|rpc|host|^link$/i;
     const found = ALL_TOOLS.flatMap((t) => Object.keys(t.inputSchema.properties).filter((p) => urlish.test(p)).map((p) => `${t.name}.${p}`)).sort();
-    expect(found).toEqual(['certen_identity_update.webhookUrl', 'certen_proof_open_shared.link', 'certen_sign_create.signerUrl']);
+    expect(found).toEqual(['certen_agent_cancel_by_reject_vote.signerUrl', 'certen_identity_update.webhookUrl', 'certen_proof_open_shared.link', 'certen_sign_create.signerUrl']);
   });
 
   it('the agent tools say what they cannot establish, because a client reads the description to decide what to trust', () => {

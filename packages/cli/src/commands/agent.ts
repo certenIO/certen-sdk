@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
+import { cancelByRejectVote, replaceAgent, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT } from '@certen.io/sdk';
 import { CertenClient, CertenError, agentEnrollmentState, agentAuthorityOperation, buildPrincipalEntry, writePrincipalEntry, type AgentEnrollmentFacts, type PrincipalEntryKind } from '@certen.io/sdk';
 import { getApiKey, getApiUrl } from '../config.js';
 import { confirmBeforeSigning } from '../card.js';
@@ -112,4 +113,81 @@ export function registerAgentCommands(program: Command): void {
   principalCommand('register', 'registration', 'registers its agent in its registry (certen-subjects, subject type agent)');
   principalCommand('issue-grant', 'grant', "issues the agent's Grant (certen-grants)");
   principalCommand('issue-mandate', 'mandate', "signs the agent's mandate (certen-mandates)");
+
+  // ── AGT-3: revoke, cancel by reject vote, replace (the principal's person-held acts; docs/agentic/INTERVENTION.md) ──
+  // Each signs ONLY with an explicit --sign-with key (F9) and prints the exposure-window truth (DEC-2): before final approval a required
+  // authority's reject vote or key removal stops the action; after certification exposure is limited to the exact approved action inside
+  // its window; there is no on-chain cancel.
+  const exposure = `Exposure window: ${EXPOSURE_WINDOW_STATEMENT}`;
+  const intervention = (cmd: Command) => cmd
+    .requiredOption('--seat <seat>', 'The named seat that acts, e.g. seat:harbor-supervisor')
+    .requiredOption('--reason <text>', 'Why, in at least 10 characters')
+    .option('--sign-with <key>', "REQUIRED: the local key that signs (the principal's, or for cancel the required authority's)")
+    .option('--yes', 'Say yes to the confirmation in advance; it never replaces --sign-with');
+  const needKey = (name: string, signWith: string | undefined) => {
+    if (!signWith) throw new UsageError(`agent ${name} signs only with an explicit --sign-with <key>; no context, environment or default key is used (sign_with_required). ${exposure}`, 'SIGN_WITH_REQUIRED');
+  };
+  const readDoc = (file: string, what: string): unknown => {
+    try { return JSON.parse(readFileSync(file, 'utf8')); } catch (e) { throw new UsageError(`the ${what} is unreadable: ${(e as Error).message}`, 'PRINCIPAL_DOCUMENT_UNREADABLE'); }
+  };
+  const asUsage = (e: unknown): never => {
+    if (e instanceof CertenError && e.code === 'INTERVENTION_MALFORMED') throw new UsageError(e.message, 'INTERVENTION_MALFORMED');
+    throw e;
+  };
+  const clientNow = async () => new CertenClient({ apiKey: await getApiKey(), baseUrl: getApiUrl() });
+
+  intervention(agent
+    .command('revoke')
+    .description(`Revoke an agent: supersede its Grant with an empty validity and, with --agent-page, remove its key with the owner's page (signs only with --sign-with). ${EXPOSURE_WINDOW_STATEMENT}`)
+    .requiredOption('--identity <adi>', 'The PRINCIPAL ADI')
+    .requiredOption('--grant <file>', 'JSON file of the Grant head being revoked')
+    .option('--agent-page <url>', "The agent's key page whose key the owner removes")
+    .option('--agent-key-hash <hex>', "sha256 of the agent's key on that page")
+    .option('--signer-key-page <url>', "The principal's page that signs (default <identity>/book/1)"))
+    .action(async (opts: { identity: string; grant: string; agentPage?: string; agentKeyHash?: string; signerKeyPage?: string; seat: string; reason: string; signWith?: string; yes?: boolean }) => {
+      needKey('revoke', opts.signWith);
+      if (Boolean(opts.agentPage) !== Boolean(opts.agentKeyHash)) throw new UsageError('--agent-page and --agent-key-hash go together', 'INTERVENTION_MALFORMED');
+      const head = readDoc(opts.grant, 'Grant');
+      const principal = opts.identity.toLowerCase().replace(/\/+$/, '');
+      const page = (opts.signerKeyPage ?? `${principal}/book/1`).toLowerCase();
+      const signer = await resolveSigner(opts.signWith!);
+      await confirmBeforeSigning({ headline: `Revoke the agent Grant of ${principal}`, rows: [['seat', opts.seat], ['reason', opts.reason], ['exposure', EXPOSURE_WINDOW_STATEMENT]], keyName: opts.signWith } as never, { yes: opts.yes });
+      const client = await clientNow();
+      const sign = { publicKey: signer.publicKey, sign: (h: string) => signer.sign(h) };
+      const grant = await revokeGrant(client, { principal, page, head, signer: sign, seat: opts.seat, reason: opts.reason }).catch(asUsage);
+      const key = opts.agentPage ? await revokeAgentKey(client, { principal, page, agentPage: opts.agentPage, keyHash: opts.agentKeyHash!, signer: sign, seat: opts.seat, reason: opts.reason }).catch(asUsage) : null;
+      printOutput({ grant: { account: grant.entry.account, payloadHash: grant.entry.hash, writeTx: grant.writeTx ?? null }, key: key ? { agentPage: key.agentPage, txHash: key.txHash ?? null } : null, seat: opts.seat, reason: opts.reason, exposureWindow: EXPOSURE_WINDOW_STATEMENT });
+    });
+
+  intervention(agent
+    .command('cancel <tx>')
+    .description(`Cancel a pending transaction by a REJECT vote of a required authority (signs only with --sign-with). ${EXPOSURE_WINDOW_STATEMENT}`)
+    .requiredOption('--identity <adi>', 'The identity the vote is cast as')
+    .requiredOption('--signer-url <url>', "The required authority's key page that votes"))
+    .action(async (tx: string, opts: { identity: string; signerUrl: string; seat: string; reason: string; signWith?: string; yes?: boolean }) => {
+      needKey('cancel', opts.signWith);
+      const signer = await resolveSigner(opts.signWith!);
+      await confirmBeforeSigning({ headline: `Cast a REJECT vote on pending transaction ${tx}`, rows: [['seat', opts.seat], ['reason', opts.reason], ['exposure', EXPOSURE_WINDOW_STATEMENT]], keyName: opts.signWith } as never, { yes: opts.yes });
+      const r = await cancelByRejectVote(await clientNow(), { identity: opts.identity, txHash: tx, signerUrl: opts.signerUrl, signer: { publicKey: signer.publicKey, sign: (h: string) => signer.sign(h) }, seat: opts.seat, reason: opts.reason }).catch(asUsage);
+      printOutput(r as unknown as Record<string, unknown>);
+    });
+
+  intervention(agent
+    .command('replace')
+    .description(`Replace an agent: retire its registration, register the new agent and issue its own Grant (signs only with --sign-with). ${EXPOSURE_WINDOW_STATEMENT}`)
+    .requiredOption('--identity <adi>', 'The PRINCIPAL ADI')
+    .requiredOption('--retire <file>', "JSON file of the old agent's next registration version, status retired")
+    .requiredOption('--register <file>', 'JSON file of the new agent registration')
+    .requiredOption('--grant <file>', "JSON file of the new agent's Grant")
+    .option('--signer-key-page <url>', "The principal's page that signs (default <identity>/book/1)"))
+    .action(async (opts: { identity: string; retire: string; register: string; grant: string; signerKeyPage?: string; seat: string; reason: string; signWith?: string; yes?: boolean }) => {
+      needKey('replace', opts.signWith);
+      const [retiredRegistration, newRegistration, newGrant] = [readDoc(opts.retire, 'retired registration'), readDoc(opts.register, 'new registration'), readDoc(opts.grant, 'new Grant')];
+      const principal = opts.identity.toLowerCase().replace(/\/+$/, '');
+      const page = (opts.signerKeyPage ?? `${principal}/book/1`).toLowerCase();
+      const signer = await resolveSigner(opts.signWith!);
+      await confirmBeforeSigning({ headline: `Replace an agent of ${principal}`, rows: [['seat', opts.seat], ['reason', opts.reason], ['exposure', EXPOSURE_WINDOW_STATEMENT]], keyName: opts.signWith } as never, { yes: opts.yes });
+      const r = await replaceAgent(await clientNow(), { principal, page, signer: { publicKey: signer.publicKey, sign: (h: string) => signer.sign(h) }, retiredRegistration, newRegistration, newGrant, seat: opts.seat, reason: opts.reason }).catch(asUsage);
+      printOutput({ retired: r.retired.entry.hash, registered: r.registered.entry.hash, grant: r.grant.entry.hash, seat: r.seat, reason: r.reason, exposureWindow: r.exposureWindow });
+    });
 }
