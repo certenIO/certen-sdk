@@ -261,6 +261,14 @@ const STEPS: Record<string, Step> = {
   DRIP_DECLINED: (c) => `certen gas --chain ${chainOf(c.details)} --wait`,
   DRIP_RECIPIENT_REJECTS: (c) => `certen gas --chain ${chainOf(c.details)}`,
 
+  // ── an agent's enrollment (AGT-2) ──
+  // the facts come from the gateway: whether it is reachable is what doctor answers
+  AGENT_FACTS_UNREADABLE: 'certen doctor',
+  // not enrolled: the principal adds its book as the agent's authority, signing with its own explicit key
+  AGENT_NOT_ENROLLED: 'certen agent add-authority --help',
+  // add-authority signs only with an explicit --sign-with key: list the keys there are
+  SIGN_WITH_REQUIRED: 'certen keys list',
+  AGENT_AUTHORITY_MALFORMED: help,
   // ── webhooks ──
   // A signature that does not hold is a finding, not a mistake in how the command was typed. For a captured delivery the next question is whether
   // the secret is the right one (`check-delivery` asks the gateway what it signed); for `check-delivery` itself it is which endpoint the secret belongs to.
