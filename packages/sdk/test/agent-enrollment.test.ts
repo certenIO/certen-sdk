@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { agentEnrollmentState, agentAuthorityOperation, isUnderAdi, type AgentEnrollmentFacts } from '../src/index.js';
+import { agentEnrollmentState, agentBookDisableOperation, agentAuthorityOperation, isUnderAdi, type AgentEnrollmentFacts } from '../src/index.js';
 
 /**
  * AGT-2 WP1: agent enrollment state (transaction-controls docs/agentic/AGENT-IDENTITY.md section 3). FICTIONAL parties.
@@ -10,13 +10,20 @@ const AGENT = 'acc://agent-7.harbor-mfg.acme';
 const PRINCIPAL = 'acc://harbor-mfg.acme';
 const BOOK = `${PRINCIPAL}/book`;
 const both = [{ url: `${AGENT}/book`, disabled: false }, { url: BOOK, disabled: false }];
+/** AGT-F28: the agent's own book DISABLED on its key book, the principal's book enabled */
+const keyBookDone = [{ url: `${AGENT}/book`, disabled: true }, { url: BOOK, disabled: false }];
 const doc = { signerBook: BOOK, accountAuthorities: [{ url: BOOK, disabled: false }] };
 const full = (over: Partial<AgentEnrollmentFacts> = {}): AgentEnrollmentFacts => ({
-  agentAdi: AGENT, principalAdi: PRINCIPAL, principalBook: BOOK, adiAuthorities: both, keyBookAuthorities: both,
+  agentAdi: AGENT, principalAdi: PRINCIPAL, principalBook: BOOK, adiAuthorities: both, keyBookAuthorities: keyBookDone,
   pendingAuthorityAdds: {}, registryResolve: { ok: true, subject: { adi: AGENT, type: 'agent' } }, grant: doc, mandate: doc, ...over,
 });
 
 describe('agent enrollment state', () => {
+  it('AGT-F28: the agent\'s own book still enabled on its key book is NOT enrolled; the agent proposes the disable, then the principal co-signs it', () => {
+    expect(agentEnrollmentState(full({ keyBookAuthorities: both }))).toMatchObject({ enrolled: false, state: 'enrollment_agent_book_not_disabled_on_keybook', next: { step: 'disable_agent_book', signer: 'agent', account: 'book' } });
+    expect(agentEnrollmentState(full({ keyBookAuthorities: both, pendingAuthorityAdds: { disableAgentBook: 'ef'.repeat(32) } as never }))).toMatchObject({ enrolled: false, state: 'enrollment_disable_pending', next: { step: 'accept_disable', signer: 'principal', pendingTx: 'ef'.repeat(32) } });
+    expect(agentBookDisableOperation(AGENT)).toEqual({ type: 'disable_authority', authority_url: `${AGENT}/book`, account_url: `${AGENT}/book` });
+  });
   it('every step holds: enrolled, nothing next', () => {
     expect(agentEnrollmentState(full())).toEqual({ enrolled: true, state: 'enrolled', next: null });
   });

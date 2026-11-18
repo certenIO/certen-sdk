@@ -373,6 +373,21 @@ export const CUSTOM_OUTPUT_SCHEMAS: Readonly<Record<string, Schema>> = {
   },
 
   // A reduced view of the balance; the money fields take their types from the gateway's balance schema.
+  /** AGT-3: the sign-request answer of a REJECT vote, plus the person-held act and the exposure-window truth (closed at the top level). */
+  certen_agent_cancel_by_reject_vote: {
+    type: 'object',
+    properties: {
+      ...((GENERATED_OUTPUT_SCHEMAS.certen_sign_create as { properties?: Record<string, Schema> }).properties ?? {}),
+      signing: { type: 'object', additionalProperties: true },
+      signing_check: { type: 'object', additionalProperties: true },
+      vote: { type: 'string', enum: ['reject'] },
+      seat: str,
+      reason: str,
+      exposure_window: { type: 'string', const: 'Before final approval, a required authority\'s reject vote or key removal stops the action. After certification, exposure is limited to the exact approved action inside its window. No on-chain cancel.' },
+    },
+    required: ['vote', 'seat', 'reason', 'exposure_window'],
+    additionalProperties: false,
+  },
   certen_whoami: {
     type: 'object',
     properties: {

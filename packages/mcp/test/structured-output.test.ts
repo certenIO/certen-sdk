@@ -42,6 +42,10 @@ function argsFor(tool: ToolDef): Record<string, unknown> {
   for (const name of (tool.inputSchema.required ?? []) as string[]) {
     const p = props[name] ?? {};
     if (name === 'confirm') out[name] = true;
+    else if (name === 'seat') out[name] = 'seat:harbor-supervisor';
+    else if (name === 'reason') out[name] = 'Agent compromised in the lab drill.';
+    else if (name === 'txHash') out[name] = HEX64;
+    else if (name === 'signerUrl') out[name] = 'acc://harbor-mfg.acme/officers/1';
     else if (name === 'chain') out[name] = 'base-sepolia';
     else if (name === 'intent') out[name] = { legs: [{ chain: 'base-sepolia', toAddress: `0x${'22'.repeat(20)}`, amount: '0' }] };
     else if (name === 'link') out[name] = `${baseUrl}/v1/proof/shared/token123`;
@@ -65,7 +69,7 @@ const handlersFor = () => createHandlers({ env: { CERTEN_API_KEY: 'k', CERTEN_AP
 
 describe('every tool declares an outputSchema', () => {
   it('has one for each of the tools, generated for most and written for the rest', () => {
-    expect(ALL_TOOLS.length).toBe(55);
+    expect(ALL_TOOLS.length).toBe(56);
     for (const t of ALL_TOOLS) expect(outputSchemaFor(t.name), t.name).toBeDefined();
     expect(Object.keys(GENERATED_OUTPUT_SCHEMAS).length + Object.keys(CUSTOM_OUTPUT_SCHEMAS).length).toBe(ALL_TOOLS.length);
     expect(Object.keys(CUSTOM_OUTPUT_SCHEMAS).sort()).toEqual([...CUSTOM_TOOLS].sort());

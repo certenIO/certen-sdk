@@ -24,6 +24,7 @@ const MUTATING: Record<string, { destructive: boolean; idempotent: boolean; why:
   certen_transaction_open: { destructive: false, idempotent: false, why: 'opens an intent that can move value' },
   certen_transaction_submit_signature: { destructive: true, idempotent: false, why: 'the point of no return: executes on chain' },
   certen_sign_create: { destructive: false, idempotent: false, why: 'creates a signing request' },
+  certen_agent_cancel_by_reject_vote: { destructive: false, idempotent: false, why: 'creates a REJECT signing request; the vote is cast only when its signature is submitted' },
   certen_sign_submit_signature: { destructive: true, idempotent: false, why: 'casts a vote that can execute' },
   certen_governance_submit_signature: { destructive: true, idempotent: false, why: 'signs a governance operation' },
   certen_admin_rotate_api_key: { destructive: true, idempotent: false, why: 'invalidates the old key' },

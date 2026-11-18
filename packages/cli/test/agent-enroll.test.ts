@@ -127,3 +127,39 @@ describe('AGT-F25: a document the core refuses is refused by the CLI before any 
     } finally { await s.close(); }
   }, 60000);
 });
+
+describe('AGT-3 A5: revoke, cancel and replace never sign without an explicit --sign-with (plain, --json, --yes, a key in the environment)', () => {
+  const PRINCIPAL = 'acc://harbor-mfg.acme';
+  const missing = join(tmpdir(), 'does-not-exist.json');
+  const SEAT = ['--seat', 'seat:harbor-supervisor', '--reason', 'Agent compromised in the lab drill.'];
+  const commands: Array<[string, string[]]> = [
+    ['revoke', ['agent', 'revoke', '--identity', PRINCIPAL, '--grant', missing, ...SEAT]],
+    ['cancel', ['agent', 'cancel', 'ab'.repeat(32), '--identity', PRINCIPAL, '--signer-url', `${PRINCIPAL}/officers/1`, ...SEAT]],
+    ['replace', ['agent', 'replace', '--identity', PRINCIPAL, '--retire', missing, '--register', missing, '--grant', missing, ...SEAT]],
+  ];
+  for (const extra of [[], ['--json'], ['--yes'], ['--json', '--yes']]) {
+    it(`disable-book (AGT-F28) without --sign-with, ${extra.join(' ') || 'plain'}: exit 2, SIGN_WITH_REQUIRED, no request`, async () => {
+      const s = await recordingGateway();
+      try {
+        const r = await cli(['agent', 'disable-book', '--identity', AGENT, ...extra], s.url);
+        expect([r.code, r.out.includes('SIGN_WITH_REQUIRED')]).toEqual([2, true]);
+        expect(s.seen).toEqual([]);
+      } finally { await s.close(); }
+    }, 60000);
+  }
+  for (const [name, args] of commands) {
+    for (const extra of [[], ['--json'], ['--yes'], ['--json', '--yes']]) {
+      it(`${name} without --sign-with, ${extra.join(' ') || 'plain'}: exit 2, SIGN_WITH_REQUIRED with the exposure-window statement, nothing read, no request`, async () => {
+        const s = await recordingGateway();
+        try {
+          const r = await cli([...args, ...extra], s.url);
+          expect(r.code).toBe(2);
+          expect(r.out).toContain('SIGN_WITH_REQUIRED');
+          expect(r.out).toContain('No on-chain cancel');
+          expect(r.out).not.toContain('PRINCIPAL_DOCUMENT_UNREADABLE');
+          expect(s.seen).toEqual([]);
+        } finally { await s.close(); }
+      }, 60000);
+    }
+  }
+});
