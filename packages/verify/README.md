@@ -104,6 +104,21 @@ mutations of the vote evidence, 4,898 mutations and 73 more texts of a certifica
 1,408 routes and 112 `judgeProofV2` scenarios - from the programs in `test/fixtures/s3/gen`; this package must agree with Go on every one. `test/fixtures/s3-dax1g` holds the 22
 documents of the validator's `xpartition7` suite (the initiating-signature member: 4 verified, 18 refused by name) byte for byte, pinned by hash.
 
+## Agent-payment evidence packs
+
+```js
+import { verifyAgentPack } from '@certen.io/proof-verify';
+
+const v = verifyAgentPack({ pack, grant, log });   // never throws; { ok: false, reason, element } names what failed
+```
+
+A `certen.agent-evidence/v1` pack is the record of one payment an AI agent made under its principal's mandate: the core C5 record,
+the mandate, the decoded request, the decision, the two-officer exception when the payment was above the agent's cap, and the
+approval-to-relay timing. `verifyAgentPack` recomputes every hash from the documents the pack carries and checks them against the
+hash-chained decision log, with no CERTEN code and no network. It does not establish, and lists by name in `notVerified`: that the
+officer list is the officers book on chain, the relay clock, the officers' signatures on the Accumulate transaction and settlement;
+check those with the proof itself (`verifyProofDocument`) and a chain reader.
+
 ## What it checks
 
 1. **The trust base.** The genesis network definition and globals are bound to the pinned incarnation identity:
