@@ -1,6 +1,6 @@
 # Changelog — @certen.io/proof-verify
 
-## Unreleased — the offline check of an agent-payment evidence pack
+## 0.4.0 — the offline check of an agent-payment evidence pack (unreleased; tag verify-v0.4.0 publishes it)
 
 Additive, no API break: every name the entry exported before keeps its value (the entry test pins the old list and the eight new names).
 
