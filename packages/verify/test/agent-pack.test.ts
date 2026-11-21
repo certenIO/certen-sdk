@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { verifyAgentPack, mandateHashOf, exceptionHashOf, AGENT_PACK_NOT_VERIFIED } from '../src/index.js';
 
 /**
- * The specification's vectors: transaction-controls docs/agentic/vectors/agent-evidence.json (AGT-4, pl/agt-4-exceptions-evidence b5491a3),
- * pinned by sha256. Every case must give the specification's own verdict and reason; then mutations the vectors do not cover.
+ * The specification's vectors: transaction-controls docs/agentic/vectors/agent-evidence.json (pl/agt-7-destination-required dbf3195: ae-01..ae-24 of
+ * AGT-4 pl/agt-4-exceptions-evidence b5491a3 unchanged, ae-25..ae-28 appended by AGT-F116), pinned by sha256. Every case must give the specification's own verdict and reason; then mutations the vectors do not cover.
  */
 const FILE = new URL('./fixtures/agent-pack/agent-evidence.json', import.meta.url);
 const bytes = readFileSync(FILE);
@@ -15,14 +15,18 @@ const clone = (o: unknown): any => JSON.parse(JSON.stringify(o));
 
 describe('agent-pack: the specification vectors', () => {
   it('is the pinned copy', () => {
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe('b4b08a3c2c4ef1621862d52e5a81a376395a1f66d30dffaef7e513a6a6517fa3');
-    expect(V.cases.length).toBe(24);
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('0fd5fa4a7842ae8cdd460af9d2c6e5579c0d01997976d9a23fd9be08a918830e');
+    expect(V.cases.length).toBe(28);
+    expect(V.cases.map((c) => c.id)).toEqual(Array.from({ length: 28 }, (_, k) => `ae-${String(k + 1).padStart(2, '0')}`));
   });
   for (const c of V.cases) {
     it(`${c.id} ${c.title}`, () => {
       const r = verifyAgentPack(clone(c.input));
       expect(r.ok).toBe(c.expect.ok);
-      if (!r.ok) expect(r.reason).toBe(c.expect.reason);
+      if (!r.ok) {
+        expect(r.reason).toBe(c.expect.reason);
+        if (c.expect.reason === 'agent_evidence_destination_missing') expect(r.element).toBe('record.outcome.destinationTx');
+      }
       else {
         expect(r.exception?.hash).toBe(c.expect.exception?.hash);
         expect(r.exception?.officers).toEqual(c.expect.exception?.officers);
@@ -94,6 +98,19 @@ describe('agent-pack: mutations beyond the vectors', () => {
     e.hash = e.hash.slice(0, -1) + (e.hash.endsWith('0') ? '1' : '0');
     const r = verifyAgentPack(i);
     expect(r.ok === false && r.reason).toBe('agent_evidence_record_invalid');
+  });
+  it('AGT-F116: an executed outcome must name a 0x + 64 lower-hex destinationTx; a failed one may name none', () => {
+    const ae25 = V.cases.find((c) => c.id === 'ae-25')!;
+    for (const d of [undefined, '']) {
+      const i = clone(ae25.input);
+      if (d !== undefined) i.pack.record.outcome.destinationTx = d;
+      const r = verifyAgentPack(i);
+      expect(r.ok === false && [r.reason, r.element]).toEqual(['agent_evidence_destination_missing', 'record.outcome.destinationTx']);
+    }
+    // the executed base pack with its destination verifies; the failed ae-28 pack without one verifies
+    expect(verifyAgentPack(base()).ok).toBe(true);
+    const f = verifyAgentPack(clone(V.cases.find((c) => c.id === 'ae-28')!.input));
+    expect(f.ok && f.outcome).toEqual({ status: 'failed', destinationTx: '' });
   });
   it('unreadable input is refused, never accepted', () => {
     for (const b of [null, undefined, 7, {}, { pack: {} }, { pack: base().pack, grant: null, log: { entries: [] } }]) expect(verifyAgentPack(b).ok).toBe(false);

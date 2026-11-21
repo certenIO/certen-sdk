@@ -1,6 +1,14 @@
 # Changelog — @certen.io/proof-verify
 
-## 0.4.0 — the offline check of an agent-payment evidence pack (unreleased; tag verify-v0.4.0 publishes it)
+## 0.4.1 — an executed agent pack must name its destination transaction (unreleased; tag verify-v0.4.1 publishes it)
+
+No API change. `verifyAgentPack` is raised to the specification (transaction-controls docs/agentic/EVIDENCE-AGT.md section 1, finding AGT-F116).
+
+### Changed
+- A pack whose `record.outcome.status` is `executed` must carry `record.outcome.destinationTx` as `0x` + 64 lower-hex (the Base Sepolia transaction); absent, `""` or any other value is refused `agent_evidence_destination_missing`, element `record.outcome.destinationTx`. 0.4.0 accepted such a pack. Refused, failed and expired outcomes may still carry none; the core C5 record check is unchanged.
+- Judged by the specification's vectors ae-01..ae-28 (ae-25..ae-28 appended by AGT-F116; the fixture is re-copied byte for byte and re-pinned by sha256, ae-01..ae-24 unchanged).
+
+## 0.4.0 — the offline check of an agent-payment evidence pack (tag verify-v0.4.0)
 
 Additive, no API break: every name the entry exported before keeps its value (the entry test pins the old list and the eight new names).
 
