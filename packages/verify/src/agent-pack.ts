@@ -4,7 +4,7 @@
  * Written from the transaction-controls specifications docs/agentic/EVIDENCE-AGT.md (sections 2 and 6), EXCEPTIONS.md (section 7),
  * AGENT-GRANT.md (section 3, mandateHash), docs/core/EVIDENCE.md (the C5 record) and DECISION.md (sections 2, 3, 7 and 9: request,
  * decision, exception and decision-log hashes). It imports no CERTEN code: a stranger holding only this package and a pack can check it.
- * Judged by the specification's vectors agent-evidence.json ae-01..ae-24 (test/agent-pack.test.ts).
+ * Judged by the specification's vectors agent-evidence.json ae-01..ae-28 (test/agent-pack.test.ts).
  *
  * Input: `{ pack, grant, log: { logId, entries }, agentIntentHash? }`. Pure; every refusal names its reason and the element. What an
  * offline check cannot establish is listed by name in `notVerified`.
@@ -322,6 +322,8 @@ export function verifyAgentPack(input: unknown): AgentPackVerdict {
     const core = checkRecord(rec, grant, input.log.logId, entries, pack.request, pack.decision);
     if (!core.ok) return bad('agent_evidence_record_invalid', 'record', core.reason);
     const requestHash = core.requestHash;
+    // the outcome: an EXECUTED payment names its Base Sepolia transaction, 0x + 64 lower-hex (EVIDENCE-AGT section 1, AGT-F116); other statuses may carry none
+    if (rec.outcome.status === 'executed' && !isHash(rec.outcome.destinationTx)) return bad('agent_evidence_destination_missing', 'record.outcome.destinationTx', 'an executed outcome must name its destination transaction');
     if (m.grant.hash !== rec.grant.hash || m.grant.version !== rec.grant.version) return bad('agent_evidence_mandate_grant_mismatch', 'mandate');
     const es = entries as Obj[];
 
