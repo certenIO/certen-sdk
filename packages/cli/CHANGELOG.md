@@ -1,5 +1,13 @@
 # Changelog — @certen.io/cli
 
+## 0.16.0 — `certen agent`: enrollment, revoke, cancel by reject vote and replace (2026-11-21)
+
+Needs `@certen.io/sdk` `^0.15.0` and `@certen.io/proof-verify` `^0.4.1` (the same release).
+
+### Added
+- **`certen agent add-authority`, `disable-book`, `enroll-status`** — enroll an agent under its principal; each enrollment error code names its next command. Nothing signs unless `--sign-with` names a key.
+- **`certen agent revoke`, `cancel <tx>`, `replace`** — revoke an agent (Grant ended, key replaced), cancel a pending intent by a reject vote, replace the agent; every revocation message carries the exposure-window statement.
+
 ## 0.15.1 — requires the verifier that reads the initiating-signature member (2026-11-13)
 
 No change to the CLI's own code. The floors are raised: `@certen.io/proof-verify` `^0.3.1` and `@certen.io/sdk` `^0.14.1`, so `certen proof verify`, `send`, `watch` and `receipt` verify a transaction initiated by a separate, non-voting initiator (rules v16 evidence 2.1) instead of reporting its initiator role as declared. Needs the `@certen.io/sdk` of the same release.
