@@ -1,5 +1,12 @@
 # Changelog — @certen.io/mcp
 
+## 0.10.0 — cancel an agent's pending intent by reject vote (2026-11-21)
+
+Needs `@certen.io/sdk` `^0.15.0` and `@certen.io/proof-verify` `^0.4.1` (the same release).
+
+### Added
+- **`certen_agent_cancel_by_reject_vote`** — a required authority cancels a pending agent intent by casting a reject vote (sign what you see; nothing signs without an explicit key). Counted in the MCP interop checks.
+
 ## 0.9.1 — requires the verifier that reads the initiating-signature member (2026-11-13)
 
 No change to the MCP server's own code. The floors are raised: `@certen.io/proof-verify` `^0.3.1` and `@certen.io/sdk` `^0.14.1`, so `certen_proof_verify` and `certen_receipt` verify a transaction initiated by a separate, non-voting initiator (rules v16 evidence 2.1) instead of reporting its initiator role as declared. Needs the `@certen.io/sdk` of the same release.

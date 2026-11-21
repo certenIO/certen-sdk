@@ -1,5 +1,14 @@
 # Changelog — @certen.io/sdk
 
+## 0.15.0 — a principal's agent: enrollment, Grant, mandate, revoke, cancel by reject vote and replace (2026-11-21)
+
+Requires `@certen.io/proof-verify` `^0.4.1` (an executed agent payment's evidence pack must name its destination transaction).
+
+### Added
+- **Agent enrollment state** — `agentEnrollmentState`, `agentAuthorityOperation`, `agentBookDisableOperation`, `isUnderAdi`: the steps that put the principal's book on the agent's ADI and key book as a required authority and disable the agent's own book, judged from the chain.
+- **Principal entries** — `registerAgent`, `issueGrant`, `issueMandate` (and `buildPrincipalEntry`, `writePrincipalEntry`, `entryHash`, `entryTag`, `envelopeDigestHex`, `canonicalJson`, `coreVerdict`): the principal registers its agent, issues the Grant and signs the mandate through the gateway's data operations, each judged with pinned copies of the core profile functions before anything is signed (`PRINCIPAL_ENTRY_REFUSED_BY_CORE`).
+- **Intervention** — `revokeGrant`, `revokeAgentKey`, `agentKeyRemoval`, `revocationOf`, `cancelByRejectVote`, `replaceAgent`: revoke (the Grant superseded with ended validity, the agent's key replaced by the owner's), cancel a pending intent by a required authority's reject vote, and replace the agent under the same Grant lineage. `EXPOSURE_WINDOW_STATEMENT` is the sentence every revocation surface carries: a payment already certified before a revocation can still execute inside its window.
+
 ## 0.14.1 — requires the verifier that reads the initiating-signature member (2026-11-13)
 
 No change to the SDK's own code. The floor of `@certen.io/proof-verify` is raised to `^0.3.1` so a fresh install cannot keep 0.3.0 in the tree: `verifyEvidence` (and `./verify`) judge evidence 2.1 with it, and 0.3.0 ignores the member `initiatingSignature` that rules v16 of the validators add, so for a transaction initiated by a separate, non-voting initiator it reports the role as declared (`g1_initiator_signature_not_carried`) and does not verify S3. 0.3.1 proves the member or refuses the document by name.
