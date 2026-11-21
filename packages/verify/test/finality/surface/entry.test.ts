@@ -38,12 +38,22 @@ const docFor = (name: string): unknown => {
   return doc;
 };
 
+/** the names the agent-pack module (src/agent-pack.ts) adds to the entry */
+const AGENT_PACK_NAMES = ['verifyAgentPack', 'mandateHashOf', 'exceptionHashOf', 'requestHashOf', 'agentPackCanonical', 'AGENT_PACK_SCHEMA', 'AGENT_PACK_NOT_VERIFIED', 'DEC2_DEFAULT_WINDOW_SECONDS'];
+
 describe('the public entry', () => {
   it('adds exactly the names `finality` and `identity` (the S8 contract-identity namespace) to the 171 names it exported at the base commit', () => {
     expect(captured.exports.length).toBe(171);
     expect(captured.exports).not.toContain('finality');
     expect(captured.exports).not.toContain('identity');
-    expect(Object.keys(entry).sort()).toEqual([...captured.exports, 'finality', 'identity'].sort());
+    expect(Object.keys(entry).sort()).toEqual([...captured.exports, 'finality', 'identity', ...AGENT_PACK_NAMES].sort());
+  });
+
+  it('adds exactly the agent-pack names (AGT-7: the offline check of an agent-payment evidence pack) and nothing else', () => {
+    for (const name of AGENT_PACK_NAMES) expect(captured.exports, name).not.toContain(name);
+    expect(typeof entry.verifyAgentPack).toBe('function');
+    expect(entry.AGENT_PACK_SCHEMA).toBe('certen.agent-evidence/v1');
+    expect(entry.DEC2_DEFAULT_WINDOW_SECONDS).toBe(5400);
   });
 
   it('exposes the finality barrel as one namespace, with registerAllKinds and embeddedPins reachable through it', () => {

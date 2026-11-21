@@ -1,5 +1,14 @@
 # Changelog — @certen.io/proof-verify
 
+## 0.4.0 — the offline check of an agent-payment evidence pack (unreleased; tag verify-v0.4.0 publishes it)
+
+Additive, no API break: every name the entry exported before keeps its value (the entry test pins the old list and the eight new names).
+
+### Added
+- **`verifyAgentPack({ pack, grant, log, agentIntentHash? })`**: checks a `certen.agent-evidence/v1` pack (the C5 record of an agent payment, transaction-controls docs/agentic/EVIDENCE-AGT.md) offline, with no CERTEN code: every element present; the record's instruction is the principal's mandate (`mandateHash`), never the agent's own stated intent; the core C5 record against the Grant document, the decoded request, the decision record and the hash-chained decision log; the mandate bound to the record's Grant version; above the Grant's per-payment limit an exception that hashes, fits the vendor-payment profile (two DISTINCT named officers, per-payment lift only, not outliving the Grant, never the agent), covers the request, was valid at the approval, matches the officers' first approving votes and was consumed exactly once by this request after them; and the approval-to-relay timing against the logged decision and outcome with the DEC-2 default window (5400 s). Every refusal names its reason and the element; `notVerified` names what an offline check cannot establish (that the officer list is the chain's officers book, the relay clock, the officers' on-chain signatures, settlement, Grant head and policy content).
+- `mandateHashOf`, `exceptionHashOf`, `requestHashOf`, `agentPackCanonical` (RFC 8785), `AGENT_PACK_SCHEMA`, `AGENT_PACK_NOT_VERIFIED`, `DEC2_DEFAULT_WINDOW_SECONDS`.
+- Judged by the specification's vectors `agent-evidence.json` ae-01..ae-24 (copied byte for byte, pinned by sha256): every verdict and reason is the specification's; plus mutations the vectors do not cover (a second consumption, one officer with two keys, a relay at the window end, an extra lift or threshold one re-hashed, an unknown element, one changed hex digit in the log, unreadable input).
+
 ## 0.3.1 — the initiating signature of a non-voting initiator (2026-11-13)
 
 Additive verification, no API break: a document that does not carry the new member verifies exactly as before (every committed fixture and verdict is unchanged).

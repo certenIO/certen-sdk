@@ -21,6 +21,8 @@ export type { Layer, LayerVerdict, Overall, Verification, VerifyOptions } from '
 export { verifySigningData, reconstructSigning, SigningDataMismatch, SigningDataAbsent, SIGNING_DATA_MISMATCH, SIGNING_DATA_ABSENT } from './signing.js';
 export type { SigningData, SigningSummary, SummaryLeg, Expectation, ExpectedLeg, ExpectedEvent, ExpectedOperation, Reconstruction } from './signing.js';
 export { encodeCall, parseSignature, AbiUnsupported } from './abi.js';
+export { verifyAgentPack, mandateHashOf, exceptionHashOf, requestHashOf, jcs as agentPackCanonical, AGENT_PACK_SCHEMA, AGENT_PACK_NOT_VERIFIED, DEC2_DEFAULT_WINDOW_SECONDS } from './agent-pack.js';
+export type { AgentPackVerdict } from './agent-pack.js';
 export * from './sigtypes/index.js';
 export * from './s3/index.js';
 export * from './s6/index.js';
