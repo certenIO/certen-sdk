@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { readFileSync } from 'node:fs';
-import { CertenClient, ed25519Signer, coreVerdict, agentKeyRemoval, cancelByRejectVote, replaceAgent, revocationOf, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT } from '../src/index.js';
+import { CertenClient, ed25519Signer, coreVerdict, agentKeyRemoval, cancelByRejectVote, replaceAgent, revocationOf, revokeAgentKey, revokeGrant, revokeSeatRecord, EXPOSURE_WINDOW_STATEMENT, SEAT_RECORD_ROUTE, SEAT_RECORD_STATEMENT } from '../src/index.js';
 import { hashGrant } from '../src/core/hashes.js';
 import { honestCosign, honestGovernance } from './helpers/honest-gateway.js';
 import { reconstructSigning } from '@certen.io/proof-verify';
@@ -126,7 +126,7 @@ describe('cancel by reject vote', () => {
     const key = ed25519Signer();
     const gw = await gateway((e) => e.path === '/v1/sign' ? honestCosign(real, { publicKey: key.publicKey, signer: officer, vote: 'reject' }) : { body: { status: 'submitted' } });
     try {
-      const r = await cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, txHash: real.txid, signerUrl: officer, signer: key, ...WHO });
+      const r = await cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, subject: AGENT, txHash: real.txid, signerUrl: officer, signer: key, ...WHO });
       expect(gw.seen[0]!.body).toMatchObject({ type: 'pending_tx', vote: 'reject' });
       expect(JSON.stringify(gw.seen[0]!.body)).toContain(key.publicKey);
       expect(signatures(gw.seen)).toHaveLength(1);
@@ -137,7 +137,7 @@ describe('cancel by reject vote', () => {
     const key = ed25519Signer();
     const gw = await gateway((e) => e.path === '/v1/sign' ? honestCosign(real, { publicKey: key.publicKey, signer: officer }) : { body: {} });
     try {
-      await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, txHash: real.txid, signerUrl: officer, signer: key, ...WHO })).rejects.toMatchObject({ code: 'SIGNING_DATA_MISMATCH' });
+      await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, subject: AGENT, txHash: real.txid, signerUrl: officer, signer: key, ...WHO })).rejects.toMatchObject({ code: 'SIGNING_DATA_MISMATCH' });
       expect(signatures(gw.seen)).toHaveLength(0);
     } finally { gw.close(); }
   });
@@ -165,9 +165,145 @@ describe('replace, and the person-held act', () => {
     const noKey = { publicKey: '1f'.repeat(32), sign: () => { throw new Error('a key was used'); } };
     try {
       await expect(revokeAgentKey(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: 'c'.repeat(64), revocationKeyHash: 'e'.repeat(64), signer: noKey, seat: 'supervisor', reason: WHO.reason })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
-      await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, txHash: 'ab'.repeat(32), signerUrl: PAGE, signer: noKey, seat: WHO.seat, reason: 'short' })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
+      await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, subject: AGENT, txHash: 'ab'.repeat(32), signerUrl: PAGE, signer: noKey, seat: WHO.seat, reason: 'short' })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
       await expect(revokeGrant(clientFor(gw.url), { principal: PRINCIPAL, page: PAGE, head: grant, signer: noKey, seat: WHO.seat, reason: '' })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
       expect(gw.seen).toEqual([]);
+    } finally { gw.close(); }
+  });
+});
+
+/**
+ * AGT-F135 (design section 5): every intervention result carries `seatRecord`, exactly the form the Console's POST /agents/interventions
+ * takes (act, subject, seat, reason, txHash, keyTxHash on a revoke, replacedBy on a replace), with `recordedAtSeat: false` and the sentence
+ * that the act is in the seat's decision log only once the named person submits it there. A hash the result does not have is ABSENT with a
+ * named reason, never invented.
+ */
+describe('AGT-F135: the seat record each intervention hands to the named person', () => {
+  const H = (c: string) => c.repeat(64);
+  const writeGateway = (writeTx: string | undefined, provider = false) => gateway((e) => {
+    if (e.path === '/v1/governance') {
+      if (e.body.operations[0].type === 'create_data_account') return { status: 409, body: { error: 'exists', code: 'DATA_ACCOUNT_EXISTS' } };
+      if (provider) return { status: 201, body: { governance_op_id: 'gov-p', status: 'submitted', signing_mode: 'provider', ...(writeTx ? { tx_hash: writeTx } : {}) } };
+      return honestGovernance(e.body.operations[0], PRINCIPAL, { publicKey: e.body.signer_public_key, keyPage: e.body.signer_key_page });
+    }
+    return { body: { status: 'completed', ...(writeTx ? { tx_hash: writeTx } : {}) } };
+  });
+  const keyGateway = (txHash: string | undefined) => gateway((e) => e.path === '/v1/governance'
+    ? keyPageAnswer(e, [{ type: 'add', entry: { keyHash: H('e') } }, { type: 'remove', entry: { keyHash: H('c') } }])
+    : { body: { status: 'delivered', ...(txHash ? { tx_hash: txHash } : {}) } });
+  const keyArgs = (signer = ed25519Signer()) => ({ principal: PRINCIPAL, page: PAGE, agentPage: AGENT_PAGE, keyHash: H('c'), revocationKeyHash: H('e'), signer, ...WHO });
+  const revokeArgs = () => ({ principal: PRINCIPAL, page: PAGE, head: grant, issuedAt: 1793060000, signer: ed25519Signer(), ...WHO });
+
+  it('the statement names the route and the person, and says the SDK has not recorded the act', () => {
+    expect(SEAT_RECORD_ROUTE).toBe('POST /agents/interventions');
+    expect(SEAT_RECORD_STATEMENT).toContain('only when the named person submits seatRecord at the seat (POST /agents/interventions)');
+  });
+
+  it('revokeGrant: act revoke, subject = the Grant\'s agent, txHash = the Grant write (64 hex, lower case, no 0x); not recorded at the seat', async () => {
+    const gw = await writeGateway('0x' + H('A'));
+    try {
+      const r = await revokeGrant(clientFor(gw.url), revokeArgs());
+      expect(r.seatRecord).toEqual({ act: 'revoke', subject: AGENT, seat: WHO.seat, reason: WHO.reason, txHash: H('a') });
+      expect(r.recordedAtSeat).toBe(false);
+      expect(r.seatRecordStatement).toBe(SEAT_RECORD_STATEMENT);
+    } finally { gw.close(); }
+  });
+
+  it('revokeGrant in provider signing mode with no hash yet: txHash ABSENT, named provider_signing_pending (never a placeholder)', async () => {
+    const gw = await writeGateway(undefined, true);
+    try {
+      const r = await revokeGrant(clientFor(gw.url), revokeArgs());
+      expect(r.writeSignedBy).toBe('provider');
+      expect('txHash' in r.seatRecord).toBe(false);
+      expect(r.seatRecord.absent).toEqual([{ field: 'txHash', code: 'provider_signing_pending', detail: expect.stringContaining('gov-p') }]);
+    } finally { gw.close(); }
+  });
+
+  it('a gateway hash that is not a transaction hash is ABSENT as tx_hash_unreadable, the value named; none returned is gateway_returned_none', async () => {
+    for (const [tx, code] of [['tx-rev', 'tx_hash_unreadable'], [undefined, 'gateway_returned_none']] as const) {
+      const gw = await writeGateway(tx);
+      try {
+        const r = await revokeGrant(clientFor(gw.url), revokeArgs());
+        expect(r.writeSignedBy).toBe('principal');
+        expect('txHash' in r.seatRecord).toBe(false);
+        expect(r.seatRecord.absent).toEqual([{ field: 'txHash', code, detail: tx ? expect.stringContaining(tx) : expect.any(String) }]);
+      } finally { gw.close(); }
+    }
+  });
+
+  it('revokeAgentKey: act revoke, subject = the agent page\'s ADI, keyTxHash = the key operation (a TxID read to its hash); txHash ABSENT: the Grant write is not in this call', async () => {
+    const gw = await keyGateway(`acc://${H('b')}@agent-7.harbor-mfg.acme/book/1`);
+    try {
+      const r = await revokeAgentKey(clientFor(gw.url), keyArgs());
+      expect(r.seatRecord).toEqual({ act: 'revoke', subject: AGENT, seat: WHO.seat, reason: WHO.reason, keyTxHash: H('b'), absent: [{ field: 'txHash', code: 'grant_write_not_in_this_call', detail: expect.stringContaining('revokeSeatRecord') }] });
+      expect([r.recordedAtSeat, r.seatRecordStatement]).toEqual([false, SEAT_RECORD_STATEMENT]);
+    } finally { gw.close(); }
+  });
+
+  it('revokeAgentKey with no key hash returned: keyTxHash ABSENT too, by name', async () => {
+    const gw = await keyGateway(undefined);
+    try {
+      const r = await revokeAgentKey(clientFor(gw.url), keyArgs());
+      expect('keyTxHash' in r.seatRecord).toBe(false);
+      expect(r.seatRecord.absent!.map((x) => [x.field, x.code])).toEqual([['txHash', 'grant_write_not_in_this_call'], ['keyTxHash', 'gateway_returned_none']]);
+    } finally { gw.close(); }
+  });
+
+  it('revokeSeatRecord joins the Grant write and the key operation into ONE record (txHash + keyTxHash), the form the Console takes', async () => {
+    const g = await writeGateway(H('a'));
+    const k = await keyGateway(H('b'));
+    try {
+      const grantResult = await revokeGrant(clientFor(g.url), revokeArgs());
+      const keyResult = await revokeAgentKey(clientFor(k.url), keyArgs());
+      expect(revokeSeatRecord(grantResult, keyResult)).toEqual({ seatRecord: { act: 'revoke', subject: AGENT, seat: WHO.seat, reason: WHO.reason, txHash: H('a'), keyTxHash: H('b') }, recordedAtSeat: false, seatRecordStatement: SEAT_RECORD_STATEMENT });
+    } finally { g.close(); k.close(); }
+  });
+
+  it('revokeSeatRecord carries each half\'s absence, and refuses halves of another agent, seat or reason, or swapped halves', async () => {
+    const g = await writeGateway(undefined, true);
+    const k = await keyGateway(H('b'));
+    try {
+      const grantResult = await revokeGrant(clientFor(g.url), revokeArgs());
+      const keyResult = await revokeAgentKey(clientFor(k.url), keyArgs());
+      expect(revokeSeatRecord(grantResult, keyResult).seatRecord).toEqual({ act: 'revoke', subject: AGENT, seat: WHO.seat, reason: WHO.reason, keyTxHash: H('b'), absent: [{ field: 'txHash', code: 'provider_signing_pending', detail: expect.any(String) }] });
+      for (const change of [{ subject: 'acc://agent-8.harbor-mfg.acme' }, { seat: 'seat:other' }, { reason: 'Another reason entirely, not this one.' }]) {
+        expect(() => revokeSeatRecord(grantResult, { ...keyResult, seatRecord: { ...keyResult.seatRecord, ...change } })).toThrow(expect.objectContaining({ code: 'INTERVENTION_MALFORMED' }));
+      }
+      expect(() => revokeSeatRecord(keyResult as never, grantResult as never)).toThrow(expect.objectContaining({ code: 'INTERVENTION_MALFORMED' }));
+    } finally { g.close(); k.close(); }
+  });
+
+  it('cancelByRejectVote: act reject, subject = the named agent ADI (required), txHash = the pending transaction', async () => {
+    const real = JSON.parse(readFileSync(new URL('../../verify/test/fixtures/signing-vectors.json', import.meta.url), 'utf8')).vectors.find((v: any) => v.label === 'four-leg');
+    const officer = `${PRINCIPAL}/officers/1`;
+    const key = ed25519Signer();
+    const gw = await gateway((e) => e.path === '/v1/sign' ? honestCosign(real, { publicKey: key.publicKey, signer: officer, vote: 'reject' }) : { body: { status: 'submitted' } });
+    try {
+      const r = await cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, subject: 'acc://Agent-7.Harbor-Mfg.acme', txHash: real.txid, signerUrl: officer, signer: key, ...WHO });
+      expect(r.seatRecord).toEqual({ act: 'reject', subject: AGENT, seat: WHO.seat, reason: WHO.reason, txHash: String(real.txid).match(/[0-9a-f]{64}/)![0] });
+      expect([r.recordedAtSeat, r.seatRecordStatement]).toEqual([false, SEAT_RECORD_STATEMENT]);
+      const before = gw.seen.length;
+      await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, txHash: real.txid, signerUrl: officer, signer: key, ...WHO } as never)).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
+      await expect(cancelByRejectVote(clientFor(gw.url), { identity: PRINCIPAL, subject: `${AGENT}/book/1`, txHash: real.txid, signerUrl: officer, signer: key, ...WHO })).rejects.toMatchObject({ code: 'INTERVENTION_MALFORMED' });
+      expect(gw.seen.length).toBe(before);
+    } finally { gw.close(); }
+  });
+
+  it('replaceAgent: act replace, subject = the retired agent, txHash = the retirement\'s write, replacedBy = the new agent', async () => {
+    const NEW = 'acc://agent-8.harbor-mfg.acme';
+    let n = 0;
+    const gw = await gateway((e) => e.path === '/v1/governance'
+      ? (e.body.operations[0].type === 'create_data_account' ? { status: 409, body: { error: 'exists', code: 'DATA_ACCOUNT_EXISTS' } } : honestGovernance(e.body.operations[0], PRINCIPAL, { publicKey: e.body.signer_public_key, keyPage: e.body.signer_key_page }))
+      : { body: { status: 'completed', tx_hash: H(['d', 'e', 'f'][n++]!) } });
+    try {
+      const r = await replaceAgent(clientFor(gw.url), {
+        principal: PRINCIPAL, page: PAGE, signer: ed25519Signer(), ...WHO,
+        retiredRegistration: { ...registration, status: 'retired' },
+        newRegistration: { ...registration, adi: NEW },
+        newGrant: { ...grant, grantId: 'agent8-vendor-pay', subject: { type: 'agent', adi: NEW } },
+      });
+      expect(r.seatRecord).toEqual({ act: 'replace', subject: AGENT, seat: WHO.seat, reason: WHO.reason, txHash: H('d'), replacedBy: NEW });
+      expect([r.recordedAtSeat, r.seatRecordStatement]).toEqual([false, SEAT_RECORD_STATEMENT]);
     } finally { gw.close(); }
   });
 });

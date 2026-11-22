@@ -198,6 +198,16 @@ The admin read tools sit in the write tier because they enumerate credentials an
 same door as rotating them — but they do not ask for confirmation, because there is nothing to
 confirm about a list, and demanding it for reads trains a model to pass `confirm:true` reflexively.
 
+### Cancel an agent's pending transaction by reject vote
+
+**`certen_agent_cancel_by_reject_vote { txHash, identity, subject, signerUrl, publicKey, seat, reason, confirm }`** (write tier) opens a
+REJECT sign request on a pending Accumulate transaction for a required authority, as a person-held act: a named seat (`seat:<name>`), a
+reason of at least 10 characters, and `subject`, the agent whose transaction it cancels. It signs nothing: it returns the signing data,
+rebuilt and matched to that transaction, the reject vote and the signer, to be signed elsewhere. It also returns `seatRecord` (the SDK's
+`openRejectVote`, the same record `cancelByRejectVote` returns), `recordedAtSeat: false` and `seatRecordStatement`: the act is recorded in
+the seat's decision log only when the named person submits `seatRecord` at the seat (`POST /agents/interventions`) in a person session.
+This server holds no person session and records nothing there.
+
 ## Resources
 
 The server serves this repo's documentation over the protocol, so a client gets CERTEN's semantics

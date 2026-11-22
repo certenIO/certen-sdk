@@ -134,7 +134,7 @@ describe('AGT-3 A5: revoke, cancel and replace never sign without an explicit --
   const SEAT = ['--seat', 'seat:harbor-supervisor', '--reason', 'Agent compromised in the lab drill.'];
   const commands: Array<[string, string[]]> = [
     ['revoke', ['agent', 'revoke', '--identity', PRINCIPAL, '--grant', missing, ...SEAT]],
-    ['cancel', ['agent', 'cancel', 'ab'.repeat(32), '--identity', PRINCIPAL, '--signer-url', `${PRINCIPAL}/officers/1`, ...SEAT]],
+    ['cancel', ['agent', 'cancel', 'ab'.repeat(32), '--identity', PRINCIPAL, '--subject', AGENT, '--signer-url', `${PRINCIPAL}/officers/1`, ...SEAT]],
     ['replace', ['agent', 'replace', '--identity', PRINCIPAL, '--retire', missing, '--register', missing, '--grant', missing, ...SEAT]],
   ];
   for (const extra of [[], ['--json'], ['--yes'], ['--json', '--yes']]) {
@@ -147,6 +147,15 @@ describe('AGT-3 A5: revoke, cancel and replace never sign without an explicit --
       } finally { await s.close(); }
     }, 60000);
   }
+  it('AGT-F135: cancel names the agent it cancels for (--subject, the seat record\'s subject): without it, exit 2 naming --subject, no request', async () => {
+    const s = await recordingGateway();
+    try {
+      const r = await cli(['agent', 'cancel', 'ab'.repeat(32), '--identity', PRINCIPAL, '--signer-url', `${PRINCIPAL}/officers/1`, ...SEAT, '--sign-with', 'k'], s.url);
+      expect(r.code).toBe(2);
+      expect(r.out).toContain("required option '--subject <adi>' not specified");
+      expect(s.seen).toEqual([]);
+    } finally { await s.close(); }
+  }, 60000);
   for (const [name, args] of commands) {
     for (const extra of [[], ['--json'], ['--yes'], ['--json', '--yes']]) {
       it(`${name} without --sign-with, ${extra.join(' ') || 'plain'}: exit 2, SIGN_WITH_REQUIRED with the exposure-window statement, nothing read, no request`, async () => {

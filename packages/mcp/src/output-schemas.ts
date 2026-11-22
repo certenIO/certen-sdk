@@ -1,3 +1,4 @@
+import { SEAT_RECORD_STATEMENT } from '@certen.io/sdk';
 import { GENERATED_OUTPUT_SCHEMAS } from './output-schemas.generated.js';
 
 /**
@@ -384,8 +385,23 @@ export const CUSTOM_OUTPUT_SCHEMAS: Readonly<Record<string, Schema>> = {
       seat: str,
       reason: str,
       exposure_window: { type: 'string', const: 'Before final approval, a required authority\'s reject vote or key removal stops the action. After certification, exposure is limited to the exact approved action inside its window. No on-chain cancel.' },
+      // AGT-F135: the form POST /agents/interventions takes (the SDK's SeatRecord); a reject always carries its txHash, the pending transaction
+      seatRecord: {
+        type: 'object',
+        properties: {
+          act: { type: 'string', const: 'reject' },
+          subject: { type: 'string', pattern: '^acc://[a-z0-9][a-z0-9._-]*\\.acme$' },
+          seat: { type: 'string', pattern: '^seat:[a-z0-9][a-z0-9._-]{0,62}$' },
+          reason: { type: 'string', minLength: 10 },
+          txHash: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+        },
+        required: ['act', 'subject', 'seat', 'reason', 'txHash'],
+        additionalProperties: false,
+      },
+      recordedAtSeat: { type: 'boolean', const: false },
+      seatRecordStatement: { type: 'string', const: SEAT_RECORD_STATEMENT },
     },
-    required: ['vote', 'seat', 'reason', 'exposure_window'],
+    required: ['vote', 'seat', 'reason', 'exposure_window', 'seatRecord', 'recordedAtSeat', 'seatRecordStatement'],
     additionalProperties: false,
   },
   certen_whoami: {

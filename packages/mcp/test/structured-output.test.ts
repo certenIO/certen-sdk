@@ -45,6 +45,7 @@ function argsFor(tool: ToolDef): Record<string, unknown> {
     else if (name === 'seat') out[name] = 'seat:harbor-supervisor';
     else if (name === 'reason') out[name] = 'Agent compromised in the lab drill.';
     else if (name === 'txHash') out[name] = HEX64;
+    else if (name === 'subject') out[name] = 'acc://agent-7.harbor-mfg.acme';
     else if (name === 'signerUrl') out[name] = 'acc://harbor-mfg.acme/officers/1';
     else if (name === 'chain') out[name] = 'base-sepolia';
     else if (name === 'intent') out[name] = { legs: [{ chain: 'base-sepolia', toAddress: `0x${'22'.repeat(20)}`, amount: '0' }] };

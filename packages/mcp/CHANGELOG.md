@@ -1,5 +1,22 @@
 # Changelog — @certen.io/mcp
 
+## 0.11.0 — `certen_agent_cancel_by_reject_vote` names the agent and returns the seat's record (unreleased; tag mcp-v0.11.0 publishes it)
+
+Needs `@certen.io/sdk` `^0.16.0` and `@certen.io/proof-verify` `^0.4.3` (the same release).
+
+Finding AGT-F135: a cancel by reject vote is held by a named seat with a reason and recorded in the seat's decision log. 0.10.0 took the
+seat and the reason and only echoed them back.
+
+### Changed
+- **`certen_agent_cancel_by_reject_vote` requires `subject`**, the agent ADI whose pending transaction is rejected (the seat record's
+  subject). A call without it, or with a subject that is not an agent ADI (`acc://<name>.acme`), is refused before any request. The signing
+  page (`signerUrl`) must now be a key page URL, as the SDK requires.
+- **It returns `seatRecord`, `recordedAtSeat: false` and `seatRecordStatement`**: the SDK's seat record, built by the SDK's own
+  `openRejectVote` (the first half of `cancelByRejectVote`: one implementation; the SDK half then signs with a key it holds, this server holds
+  none and returns the checked signing data). `seatRecord` is the form the named person submits at the seat (`POST /agents/interventions`)
+  so the act is recorded in the seat's decision log; this server holds no person session and records nothing there. Its output schema
+  declares the three members.
+
 ## 0.10.0 — cancel an agent's pending intent by reject vote (2026-11-21)
 
 Needs `@certen.io/sdk` `^0.15.0` and `@certen.io/proof-verify` `^0.4.1` (the same release).

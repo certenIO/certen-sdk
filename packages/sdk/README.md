@@ -197,6 +197,26 @@ await agent.governance.requireSigner('acc://owner-policy.acme/book', { account: 
 Resume an existing agent by passing its saved `state` (identity id, ADI, accounts) as the third
 constructor argument. An escrow or any other contract ABI belongs on top of `call()`, not inside.
 
+## A principal's interventions, and the seat's record
+
+`revokeGrant`, `revokeAgentKey`, `cancelByRejectVote` and `replaceAgent` are the principal's acts on its agent, each held by a named
+seat (`seat:<name>`) with a reason of at least 10 characters, and each done on chain by the principal's key. Every result carries
+`seatRecord`: exactly the form the Console's `POST /agents/interventions` takes (`act`, `subject`, `seat`, `reason`, `txHash`, plus
+`keyTxHash` on a revoke and `replacedBy` on a replace; hashes are 64 lower-case hex), with `recordedAtSeat: false` and
+`SEAT_RECORD_STATEMENT`. The act is recorded in the seat's decision log only when the named person submits `seatRecord` at the seat, in a
+person session; the SDK holds no person session and records nothing there, and the Console records only an act it reads on chain.
+
+```ts
+const grant = await revokeGrant(client, { principal, page, head, signer, seat: 'seat:harbor-supervisor', reason });
+const key = await revokeAgentKey(client, { principal, page, agentPage, keyHash, revocationKeyHash, signer, seat: 'seat:harbor-supervisor', reason });
+const { seatRecord } = revokeSeatRecord(grant, key);   // one revoke: txHash = the Grant write, keyTxHash = the key operation
+// the named person submits seatRecord at the seat: POST /agents/interventions
+```
+
+A hash the result does not have is absent from `seatRecord`, and `seatRecord.absent` names it and why
+(`provider_signing_pending`, `gateway_returned_none`, `tx_hash_unreadable`, or for `revokeAgentKey` alone `grant_write_not_in_this_call`);
+the Console refuses a record without `txHash`. `cancelByRejectVote` takes `subject`, the agent whose pending transaction it rejects.
+
 ## Resources
 
 | | |
