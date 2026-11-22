@@ -23,8 +23,11 @@ the seat's decision log. 0.15.0 required the seat and the reason and only echoed
 - **`revokeSeatRecord(grantResult, keyResult)`** joins the two calls of a revoke into the one record the seat takes (`txHash` from the
   Grant write, `keyTxHash` from the key operation, each half's absence carried). Halves of different agents, seats or reasons, or passed
   in the wrong order, are refused (`INTERVENTION_MALFORMED`).
+- **`openRejectVote(client, { identity, subject, txHash, signerUrl, publicKey, seat, reason })`**: the first half of `cancelByRejectVote`
+  (the checks, the REJECT sign request, the seat record; nothing signed), for a caller that holds no key and has the signing data signed
+  elsewhere. `cancelByRejectVote` is built on it, and so is the MCP tool `certen_agent_cancel_by_reject_vote`.
 - `PrincipalWriteResult.writeSignedBy` (`principal` or `provider`): who signed the entry's write.
-- Types `SeatRecord`, `SeatRecordPart`, `SeatRecordAbsence`, `SeatRecordAbsenceCode`, `InterventionAct`.
+- Types `RejectVoteOpened`, `SeatRecord`, `SeatRecordPart`, `SeatRecordAbsence`, `SeatRecordAbsenceCode`, `InterventionAct`.
 
 ### Changed
 - **`cancelByRejectVote` requires `subject`**, the agent ADI whose pending transaction is rejected (the seat record's subject; the

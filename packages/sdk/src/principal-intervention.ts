@@ -26,6 +26,7 @@ import { hashGrant } from './core/hashes.js';
 import { issueGrant, registerAgent, type PrincipalSigner, type PrincipalWriteResult } from './principal-entries.js';
 import type { CertenClient } from './client.js';
 import { resolveSignTarget } from './sign-target.js';
+import type { SignResponse } from './types.js';
 
 /** The revocation model in force (DEC-2), verbatim. Every revoke or cancel result carries it. */
 export const EXPOSURE_WINDOW_STATEMENT =
@@ -210,15 +211,16 @@ export function revokeSeatRecord(grantResult: RevokeGrantResult, keyResult: Revo
   return { seatRecord: record, recordedAtSeat: false, seatRecordStatement: SEAT_RECORD_STATEMENT };
 }
 
-export interface CancelResult extends SeatRecordPart { signRequestId: string; status: string; txHash: string; vote: 'reject'; seat: string; reason: string; exposureWindow: string }
+export interface RejectVoteOpened extends SeatRecordPart { created: SignResponse; txHash: string; seat: string; reason: string }
 
 /**
- * Cancel by reject vote: a required authority's REJECT on the pending transaction. The reject is a verdict only when the book can no
- * longer reach its threshold; then Accumulate rejects the transaction and nothing executes. It stops an action only before final approval.
- * `subject` is the agent ADI whose pending transaction is rejected (the seat record's subject; required). `seatRecord`: act reject, txHash the
- * pending transaction. In provider signing mode the gateway casts the vote; the Console records the act only once it reads the vote on chain.
+ * The first half of a cancel by reject vote, shared by cancelByRejectVote (which then checks and signs with the key it holds) and the MCP tool
+ * certen_agent_cancel_by_reject_vote (which holds no key and returns the signing data to be signed elsewhere): the named seat and reason, the
+ * agent (`subject`), the pending transaction and the signing page are checked, the REJECT sign request is opened for `publicKey`, and the seat
+ * record is built. Nothing is signed here; the caller checks `created.signing_data` against the transaction, the vote and the signer before any
+ * signature exists.
  */
-export async function cancelByRejectVote(client: CertenClient, a: { identity: string; subject: string; txHash: string; signerUrl: string; signer: PrincipalSigner; seat: string; reason: string }): Promise<CancelResult> {
+export async function openRejectVote(client: CertenClient, a: { identity: string; subject: string; txHash: string; signerUrl: string; publicKey: string; seat: string; reason: string }): Promise<RejectVoteOpened> {
   const who = act(a);
   const subject = agentAdi(a.subject, 'the subject (the agent whose pending transaction is rejected)');
   let tx = '';
@@ -229,7 +231,21 @@ export async function cancelByRejectVote(client: CertenClient, a: { identity: st
   if (tx === '') refuse('the pending transaction must be a transaction hash or TxID');
   if (typeof a.signerUrl !== 'string' || !PAGE.test(a.signerUrl.toLowerCase())) refuse('the signing page must be a key page URL');
   const part = seatPart({ act: 'reject', subject, ...who }, [['txHash', { hash: tx }]]);
-  const created = await client.sign.create({ type: 'pending_tx', targetId: tx, identity: a.identity, signerUrl: a.signerUrl, publicKey: a.signer.publicKey, vote: 'reject' });
+  const created = await client.sign.create({ type: 'pending_tx', targetId: tx, identity: a.identity, signerUrl: a.signerUrl, publicKey: a.publicKey, vote: 'reject' });
+  return { created, txHash: tx, ...who, ...part };
+}
+
+export interface CancelResult extends SeatRecordPart { signRequestId: string; status: string; txHash: string; vote: 'reject'; seat: string; reason: string; exposureWindow: string }
+
+/**
+ * Cancel by reject vote: a required authority's REJECT on the pending transaction. The reject is a verdict only when the book can no
+ * longer reach its threshold; then Accumulate rejects the transaction and nothing executes. It stops an action only before final approval.
+ * `subject` is the agent ADI whose pending transaction is rejected (the seat record's subject; required). `seatRecord`: act reject, txHash the
+ * pending transaction. In provider signing mode the gateway casts the vote; the Console records the act only once it reads the vote on chain.
+ */
+export async function cancelByRejectVote(client: CertenClient, a: { identity: string; subject: string; txHash: string; signerUrl: string; signer: PrincipalSigner; seat: string; reason: string }): Promise<CancelResult> {
+  const { created, txHash: tx, seat, reason, ...part } = await openRejectVote(client, { identity: a.identity, subject: a.subject, txHash: a.txHash, signerUrl: a.signerUrl, publicKey: a.signer.publicKey, seat: a.seat, reason: a.reason });
+  const who = { seat, reason };
   if (created.signing_mode === 'provider' || !created.signing_data) {
     return { signRequestId: created.sign_request_id, status: created.status, txHash: tx, vote: 'reject', ...who, exposureWindow: EXPOSURE_WINDOW_STATEMENT, ...part };
   }

@@ -1,4 +1,4 @@
-import { EXPOSURE_WINDOW_STATEMENT } from '@certen.io/sdk';
+import { EXPOSURE_WINDOW_STATEMENT, openRejectVote } from '@certen.io/sdk';
 import { CertenError, CertenSigningDataError, intentOutcome, resolveSignTarget, fetchSharedProof, decodeSharedBundle, checkIntentSigning, checkCosigning, inspectSigningData, WEBHOOK_DELIVERY_STATUSES, type SigningSummary } from '@certen.io/sdk';
 import type { CertenClient, WebhookDeliveryStatus } from '@certen.io/sdk';
 import { assertChainUsable, assertIntentChains, enabledChainReport } from './chains.js';
@@ -1493,35 +1493,37 @@ const WRITE_TOOLS: ToolDef[] = [
     endpoint: 'POST /v1/sign',
     description:
       'Cancel by reject vote (AGT-3): open a REJECT sign request on a PENDING Accumulate transaction, for a required authority, as a '
-      + 'person-held act with a named seat (seat:<name>) and a reason of at least 10 characters. Returns signing data to be signed '
-      + 'elsewhere, rebuilt and matched to that transaction, the reject vote and the signer. '
+      + 'person-held act with a named seat (seat:<name>) and a reason of at least 10 characters, for the agent named by subject. Returns signing '
+      + 'data to be signed elsewhere, rebuilt and matched to that transaction, the reject vote and the signer, and seatRecord: the form the named '
+      + 'person submits at the seat (POST /agents/interventions) so the act is recorded in the seat\'s decision log; this server holds no person '
+      + 'session and records nothing there (recordedAtSeat: false). '
       + `${EXPOSURE_WINDOW_STATEMENT} A reject is a verdict only when the book can no longer reach its threshold.`,
     inputSchema: {
       type: 'object',
       properties: {
         txHash: str('The pending Accumulate transaction: 64-hex hash, 0x-prefixed, or acc://<hash>@<account> TxID'),
         identity: str('Identity ADI the vote is cast as, e.g. acc://org.acme'),
+        subject: str('The agent ADI whose pending transaction is rejected (the seat record\'s subject), e.g. acc://agent-7.org.acme'),
         signerUrl: str('The required authority\'s key page that votes'),
         publicKey: str('Public key that will sign, 64-char hex'),
         seat: str('The named seat that acts, seat:<name>'),
         reason: str('Why, at least 10 characters'),
         confirm: CONFIRM,
       },
-      required: ['txHash', 'identity', 'signerUrl', 'publicKey', 'seat', 'reason', 'confirm'],
+      required: ['txHash', 'identity', 'subject', 'signerUrl', 'publicKey', 'seat', 'reason', 'confirm'],
       additionalProperties: false,
     },
     run: async (c, a) => {
-      const seat = s(a, 'seat');
-      const reason = s(a, 'reason').trim();
-      if (!/^seat:[a-z0-9][a-z0-9._-]{0,62}$/.test(seat)) throw new CertenError('certen: a named seat is required (seat:<name>)', 0, 'INTERVENTION_MALFORMED');
-      if (reason.length < 10) throw new CertenError('certen: a reason of at least 10 characters is required', 0, 'INTERVENTION_MALFORMED');
-      const target = resolveSignTarget(s(a, 'txHash'));
-      if (target.type !== 'pending_tx') throw new CertenError('certen: txHash must be a pending transaction hash or TxID, not an inbox id', 0, 'INTERVENTION_MALFORMED');
-      const created = await c.sign.create({ type: 'pending_tx', targetId: target.targetId, identity: s(a, 'identity'), signerUrl: s(a, 'signerUrl'), publicKey: s(a, 'publicKey'), vote: 'reject' });
-      const signing = await signingFor(created as never, () => checkCosigning((created as unknown as { signing_data?: unknown }).signing_data, {
-        transactionHash: target.targetId, signerPublicKey: s(a, 'publicKey'), signerKeyPage: s(a, 'signerUrl'), vote: 'reject',
+      // The SDK's own first half of cancelByRejectVote (one implementation): seat, reason, subject, transaction and page checked, the REJECT sign
+      // request opened, the seat record built. The SDK half signs with a key it holds; this server holds none and returns the checked signing data.
+      const o = await openRejectVote(c, { identity: s(a, 'identity'), subject: s(a, 'subject'), txHash: s(a, 'txHash'), signerUrl: s(a, 'signerUrl'), publicKey: s(a, 'publicKey'), seat: s(a, 'seat'), reason: s(a, 'reason') });
+      const signing = await signingFor(o.created as never, () => checkCosigning((o.created as unknown as { signing_data?: unknown }).signing_data, {
+        transactionHash: o.txHash, signerPublicKey: s(a, 'publicKey'), signerKeyPage: s(a, 'signerUrl'), vote: 'reject',
       }));
-      return { ...(created as unknown as Record<string, unknown>), ...signing, vote: 'reject', seat, reason, exposure_window: EXPOSURE_WINDOW_STATEMENT };
+      return {
+        ...(o.created as unknown as Record<string, unknown>), ...signing, vote: 'reject', seat: o.seat, reason: o.reason, exposure_window: EXPOSURE_WINDOW_STATEMENT,
+        seatRecord: o.seatRecord, recordedAtSeat: o.recordedAtSeat, seatRecordStatement: o.seatRecordStatement,
+      };
     },
   },
   {
