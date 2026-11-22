@@ -3,7 +3,7 @@
 TypeScript client libraries for the [CERTEN Gateway](https://gateway.kompendium.co/reference) —
 proof-gated cross-chain execution on Accumulate. An npm workspaces monorepo publishing
 `@certen.io/sdk` (v0.15.0), `@certen.io/cli` (v0.16.0), `@certen.io/mcp` (v0.10.0) and
-`@certen.io/proof-verify` (v0.4.1). A release that bumps one of these edits this line;
+`@certen.io/proof-verify` (v0.4.2). A release that bumps one of these edits this line;
 `packages/cli/test/agents-md.test.ts` fails until it does.
 
 > Building **on** CERTEN rather than **on this SDK**? You want `llms.txt` (quickstart + rules) and

@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { verifyAgentPack, mandateHashOf, exceptionHashOf, AGENT_PACK_NOT_VERIFIED } from '../src/index.js';
 
 /**
- * The specification's vectors: transaction-controls docs/agentic/vectors/agent-evidence.json (pl/agt-7-destination-required dbf3195: ae-01..ae-24 of
- * AGT-4 pl/agt-4-exceptions-evidence b5491a3 unchanged, ae-25..ae-28 appended by AGT-F116), pinned by sha256. Every case must give the specification's own verdict and reason; then mutations the vectors do not cover.
+ * The specification's vectors: transaction-controls docs/agentic/vectors/agent-evidence.json (pl/agt-7-last-outcome 03e5fa6: ae-01..ae-24 of
+ * AGT-4 pl/agt-4-exceptions-evidence b5491a3 unchanged, ae-25..ae-28 appended by AGT-F116, ae-29..ae-32 appended by AGT-F125), pinned by sha256. Every case must give the specification's own verdict and reason; then mutations the vectors do not cover.
  */
 const FILE = new URL('./fixtures/agent-pack/agent-evidence.json', import.meta.url);
 const bytes = readFileSync(FILE);
@@ -15,9 +15,9 @@ const clone = (o: unknown): any => JSON.parse(JSON.stringify(o));
 
 describe('agent-pack: the specification vectors', () => {
   it('is the pinned copy', () => {
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe('0fd5fa4a7842ae8cdd460af9d2c6e5579c0d01997976d9a23fd9be08a918830e');
-    expect(V.cases.length).toBe(28);
-    expect(V.cases.map((c) => c.id)).toEqual(Array.from({ length: 28 }, (_, k) => `ae-${String(k + 1).padStart(2, '0')}`));
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('71abc4e5764ac35d16a72fa9086de6464b4178c4c8c050d449f20b131e4d1c42');
+    expect(V.cases.length).toBe(32);
+    expect(V.cases.map((c) => c.id)).toEqual(Array.from({ length: 32 }, (_, k) => `ae-${String(k + 1).padStart(2, '0')}`));
   });
   for (const c of V.cases) {
     it(`${c.id} ${c.title}`, () => {
@@ -26,6 +26,7 @@ describe('agent-pack: the specification vectors', () => {
       if (!r.ok) {
         expect(r.reason).toBe(c.expect.reason);
         if (c.expect.reason === 'agent_evidence_destination_missing') expect(r.element).toBe('record.outcome.destinationTx');
+        if (c.id === 'ae-30') expect(r.element).toBe('timing.relayedAt');
       }
       else {
         expect(r.exception?.hash).toBe(c.expect.exception?.hash);
@@ -114,5 +115,24 @@ describe('agent-pack: mutations beyond the vectors', () => {
   });
   it('unreadable input is refused, never accepted', () => {
     for (const b of [null, undefined, 7, {}, { pack: {} }, { pack: base().pack, grant: null, log: { entries: [] } }]) expect(verifyAgentPack(b).ok).toBe(false);
+  });
+});
+
+describe('agent-pack: the effective decision and outcome are the LAST entries for the request up to the head (EVIDENCE-AGT.md section 6, EV-10, AGT-F125)', () => {
+  // a real gate-run executed pack (FICTIONAL parties): the Console appended a second outcome entry when the destination transaction was found
+  const REAL = JSON.parse(readFileSync(new URL('./fixtures/agent-pack/agt-f125-e1c0535a-executed.json', import.meta.url), 'utf8'));
+  const vec = (id: string) => clone(V.cases.find((c) => c.id === id)!.input);
+
+  it('the real executed pack with two outcome entries verifies', () => {
+    expect(REAL.log.entries.filter((e: { kind: string }) => e.kind === 'outcome.recorded').length).toBe(2);
+    const r = verifyAgentPack(clone(REAL));
+    expect(r).toMatchObject({ ok: true });
+  });
+  it('the relay time is the last outcome entry, never the first: ae-30 is refused at timing.relayedAt', () => {
+    expect(verifyAgentPack(vec('ae-30'))).toMatchObject({ ok: false, reason: 'agent_evidence_timing_mismatch', element: 'timing.relayedAt' });
+  });
+  it('a reissued decision: the pack naming the last verifies, the pack naming the first is refused', () => {
+    expect(verifyAgentPack(vec('ae-31'))).toMatchObject({ ok: true });
+    expect(verifyAgentPack(vec('ae-32')).ok).toBe(false);
   });
 });
