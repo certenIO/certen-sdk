@@ -1,0 +1,4168 @@
+{
+  "set": "decision-log",
+  "version": 1,
+  "description": "The hash-chained decision log: verifier results for intact, edited, deleted, reordered, inserted, truncated and re-chained logs. A chain alone cannot see tail truncation or a full re-chain; a pinned head can.",
+  "cases": [
+    {
+      "id": "dl-01",
+      "title": "an intact log of five entries verifies",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "head": {
+          "seq": 5,
+          "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+        },
+        "pinned": false
+      }
+    },
+    {
+      "id": "dl-02",
+      "title": "an empty log verifies with no head",
+      "covers": [
+        "C5"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": []
+      },
+      "expect": {
+        "ok": true,
+        "head": null
+      }
+    },
+    {
+      "id": "dl-03",
+      "title": "an intact log verifies against its pinned head",
+      "covers": [
+        "C5"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          }
+        ],
+        "expectedHead": {
+          "seq": 5,
+          "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+        }
+      },
+      "expect": {
+        "ok": true,
+        "pinned": true
+      }
+    },
+    {
+      "id": "dl-04",
+      "title": "a log that has grown past the pin verifies (the pin is a lower bound)",
+      "covers": [
+        "C5"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "pause.set",
+            "at": 1793062200,
+            "payload": {
+              "scope": "seat",
+              "id": "seat:harbor-treasury"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xf930a92fa36c083b89bb03df41885d621e9cdf1a9cb75e1c0cef4ea8ff537fc7"
+          }
+        ],
+        "expectedHead": {
+          "seq": 5,
+          "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+        }
+      },
+      "expect": {
+        "ok": true,
+        "pinned": true
+      }
+    },
+    {
+      "id": "dl-05",
+      "title": "an edited payload: the entry hash no longer matches",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "deny",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_entry_hash_mismatch",
+        "seq": 2
+      }
+    },
+    {
+      "id": "dl-06",
+      "title": "a deleted middle entry: sequence gap",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_seq_gap",
+        "seq": 4
+      }
+    },
+    {
+      "id": "dl-07",
+      "title": "two entries swapped: sequence out of order",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_seq_out_of_order",
+        "seq": 3
+      }
+    },
+    {
+      "id": "dl-08",
+      "title": "an entry inserted by copying a neighbour with a changed payload: its hash does not match",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:92c5dc6cf6028f150623756233dc997852fe376d47e94ea5b11d5a25640c8279",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_entry_hash_mismatch"
+      }
+    },
+    {
+      "id": "dl-09",
+      "title": "an unknown entry kind is refused",
+      "covers": [
+        "C5"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "decision.erased",
+            "at": 1793060202,
+            "payload": {},
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0xd32f348a95bc8af41203381182ae5a06ae499088245f826a53661bcab27a5194"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_kind_unknown",
+        "seq": 3
+      }
+    },
+    {
+      "id": "dl-10",
+      "title": "a log of another log id fails at the genesis link",
+      "covers": [
+        "C5"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0xa8c18025bb8ba45dead0367bb87d80332bb3ffa44bd37818ff66b5b4dfc554b6",
+            "hash": "0xf87191466e6ef959ce98c73d7e5586b046f0cc047fb0de9d80a13e3b946101b5"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xf87191466e6ef959ce98c73d7e5586b046f0cc047fb0de9d80a13e3b946101b5",
+            "hash": "0x4c7950054cb883712e3f555cbf79f79770cee0310b775774b32c99f9942821d7"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x4c7950054cb883712e3f555cbf79f79770cee0310b775774b32c99f9942821d7",
+            "hash": "0x32fb98fcb4f8e59b63ee707e17b7c2df1034c351ccd83e7f2d00b60c4429795b"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x32fb98fcb4f8e59b63ee707e17b7c2df1034c351ccd83e7f2d00b60c4429795b",
+            "hash": "0xb3269764bd464c6aac9d4c3da0f65cfec316915d3e096666b69490e776260f9a"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0xb3269764bd464c6aac9d4c3da0f65cfec316915d3e096666b69490e776260f9a",
+            "hash": "0xbd812427710581cb7f0ce0179c149e919a1a7d5aa67b5f4d8252d19008fab7f9"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_genesis_mismatch"
+      }
+    },
+    {
+      "id": "dl-11",
+      "title": "tail truncation without a pin verifies: the chain alone cannot see it",
+      "covers": [
+        "C5",
+        "LIMIT"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "head": {
+          "seq": 3
+        },
+        "pinned": false
+      }
+    },
+    {
+      "id": "dl-12",
+      "title": "tail truncation against a pinned head is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          }
+        ],
+        "expectedHead": {
+          "seq": 5,
+          "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_truncated"
+      }
+    },
+    {
+      "id": "dl-13",
+      "title": "edit plus full re-chain without a pin verifies: the chain alone cannot see it",
+      "covers": [
+        "C5",
+        "LIMIT"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:92c5dc6cf6028f150623756233dc997852fe376d47e94ea5b11d5a25640c8279",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0xc29f08a647c417729501de76178c57610072a7f9f439b33a2bc9f74570d406e4"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0xc29f08a647c417729501de76178c57610072a7f9f439b33a2bc9f74570d406e4",
+            "hash": "0xf50597f9cb9a20aba6b82487514e0feeca33bcd4bbe7467238e73ed31185501a"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xf50597f9cb9a20aba6b82487514e0feeca33bcd4bbe7467238e73ed31185501a",
+            "hash": "0x038ad789e4624c8df2599695ba9a227d58ac4dc7ab844b425f42f452b33c382b"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x038ad789e4624c8df2599695ba9a227d58ac4dc7ab844b425f42f452b33c382b",
+            "hash": "0x84e2ce382701833ea84394f7eabf11683de29a4066b438d144acac279eaff203"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "pinned": false
+      }
+    },
+    {
+      "id": "dl-14",
+      "title": "edit plus full re-chain against a pinned head is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:92c5dc6cf6028f150623756233dc997852fe376d47e94ea5b11d5a25640c8279",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0xc29f08a647c417729501de76178c57610072a7f9f439b33a2bc9f74570d406e4"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0xc29f08a647c417729501de76178c57610072a7f9f439b33a2bc9f74570d406e4",
+            "hash": "0xf50597f9cb9a20aba6b82487514e0feeca33bcd4bbe7467238e73ed31185501a"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xf50597f9cb9a20aba6b82487514e0feeca33bcd4bbe7467238e73ed31185501a",
+            "hash": "0x038ad789e4624c8df2599695ba9a227d58ac4dc7ab844b425f42f452b33c382b"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x038ad789e4624c8df2599695ba9a227d58ac4dc7ab844b425f42f452b33c382b",
+            "hash": "0x84e2ce382701833ea84394f7eabf11683de29a4066b438d144acac279eaff203"
+          }
+        ],
+        "expectedHead": {
+          "seq": 5,
+          "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+        }
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_head_mismatch"
+      }
+    },
+    {
+      "id": "dl-15",
+      "title": "a last entry that carries another entry hash",
+      "covers": [
+        "C5"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_entry_hash_mismatch",
+        "seq": 5
+      }
+    },
+    {
+      "id": "dl-16",
+      "title": "a decision.issued entry without its nonce member is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x67d561ca0491ca835ce551110c84650e08f21ec53bc70cfdb508310cb4dc9aaa"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x67d561ca0491ca835ce551110c84650e08f21ec53bc70cfdb508310cb4dc9aaa",
+            "hash": "0x79fea8a3c3e9107360a62c51d8fbee688b31787826c4937f5755fc76fe3251da"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x79fea8a3c3e9107360a62c51d8fbee688b31787826c4937f5755fc76fe3251da",
+            "hash": "0x6f022b79233343e3ce83a07b4b01bd58a124dbddc179de5ef855c13835722870"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x6f022b79233343e3ce83a07b4b01bd58a124dbddc179de5ef855c13835722870",
+            "hash": "0x472484f5cbcc616066295ae46a8261763b09b7fcbd975494d707b312444d1ea2"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 2
+      }
+    },
+    {
+      "id": "dl-17",
+      "title": "an approval.cast entry whose identity is not a string is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": 5,
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0xd0bbff3ab7037bb24d31aff99fd01598d61fb56d8c76e86e0b415ac6bac8bfd2"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xd0bbff3ab7037bb24d31aff99fd01598d61fb56d8c76e86e0b415ac6bac8bfd2",
+            "hash": "0x73cbf57a23212974cf799878e7cba52576e7eac34ade6284fcb1fa1ffeaa27d3"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x73cbf57a23212974cf799878e7cba52576e7eac34ade6284fcb1fa1ffeaa27d3",
+            "hash": "0x35f31c1490aa30fd9455f8cfae418733e4c7b94a6dcf6a4dc7a7cbabb5b3bfc0"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 3
+      }
+    },
+    {
+      "id": "dl-18",
+      "title": "a decision.issued entry with a null grantHash and a null policyHash is valid (a seat without a Grant requirement)",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": null,
+              "policyHash": null,
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x119c8af8ed5f5442064091f7e77c6629b28b659626eff05344f7f5ee44596b7a"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x119c8af8ed5f5442064091f7e77c6629b28b659626eff05344f7f5ee44596b7a",
+            "hash": "0x68350af8ae28816c55ea498eecd7782fcd4812715bd20b49e47efe12c3a87030"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x68350af8ae28816c55ea498eecd7782fcd4812715bd20b49e47efe12c3a87030",
+            "hash": "0x3a58fc479d7b5957e46f9ff6ffeaac7e7e69fdfcd13c868ef4608666f97692ab"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x3a58fc479d7b5957e46f9ff6ffeaac7e7e69fdfcd13c868ef4608666f97692ab",
+            "hash": "0x16276523b414e3944105e54e74b7f5d703d2ba772209096433e85b6431e694e1"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "pinned": false
+      }
+    },
+    {
+      "id": "dl-19",
+      "title": "a decision.issued entry that lacks the grantHash member altogether is refused: null is a value, absence is not",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x57d64c9a98f3f37efc33c42681537e79f085841cc2262d164fb2186cd6572b3e"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x57d64c9a98f3f37efc33c42681537e79f085841cc2262d164fb2186cd6572b3e",
+            "hash": "0x45c35496058978316712d3f989d55e5e9d372f07e1068d620d2510362f33978f"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x45c35496058978316712d3f989d55e5e9d372f07e1068d620d2510362f33978f",
+            "hash": "0xb2b40ab6ddda8a49df5c1cb1561d091e574b8f440994b3a66c7b6eb40c6bfccd"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0xb2b40ab6ddda8a49df5c1cb1561d091e574b8f440994b3a66c7b6eb40c6bfccd",
+            "hash": "0xbb712b5de498f15b1401dfe8f0b88bdae26be83ecc2a92adb6453c1f2dbd5678"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 2
+      }
+    },
+    {
+      "id": "dl-20",
+      "title": "an approval.cast entry that carries both requestHash and exceptionHash is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve",
+              "exceptionHash": "0x24cf367e0b89928833bee7b251679aa9492287523801ff76672e7b05615a3ece"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x169433fb1e2f3a79c612ea5e6a8464837e612a11b60769ed16bfd4f5bcceb0d4"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x169433fb1e2f3a79c612ea5e6a8464837e612a11b60769ed16bfd4f5bcceb0d4",
+            "hash": "0xfa3a5a77938b8f7a4a24a800986283e684703740f7b76598f5c6c002ed45a20a"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0xfa3a5a77938b8f7a4a24a800986283e684703740f7b76598f5c6c002ed45a20a",
+            "hash": "0x965c1ec991d575d25694bd15c66538670d5b44d4dba112b90f0ab7a49e30893f"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 3
+      }
+    },
+    {
+      "id": "dl-21",
+      "title": "an approval.cast entry for an exception carries exceptionHash instead of requestHash and is valid",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve",
+              "exceptionHash": "0x24cf367e0b89928833bee7b251679aa9492287523801ff76672e7b05615a3ece"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0xf2eb9897b5728f2b904d8764be09ec4aa2df059fdf93c15c2988a5f1c6c71ba9"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xf2eb9897b5728f2b904d8764be09ec4aa2df059fdf93c15c2988a5f1c6c71ba9",
+            "hash": "0x7e340741f9346f57b6b5afb0c271d3731979dfc6854c1d0b1245fc53e7cfeb22"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x7e340741f9346f57b6b5afb0c271d3731979dfc6854c1d0b1245fc53e7cfeb22",
+            "hash": "0x3a8172804b96a18f1900f8b03908d2a446a590472e8314969fdc9c7c9ed9d1d4"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-22",
+      "title": "entry times (at) that go backwards still verify: at is evidence, the sequence is the order",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793064200,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0xbf11669bad00e9adfa9767a56253ddcd03f41dc9a37e8c1689e61d1de0fd2864"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793064100,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xbf11669bad00e9adfa9767a56253ddcd03f41dc9a37e8c1689e61d1de0fd2864",
+            "hash": "0xe83411e38877272fda96459c8f79d6927785f400967ee80d40dcc650d1d6b8b4"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793064000,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0xe83411e38877272fda96459c8f79d6927785f400967ee80d40dcc650d1d6b8b4",
+            "hash": "0xe9e17d2e8a3cb54fe8599a8327cbdd6a212ff4707c0255f9105f1114f6a9648e"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793063900,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0xe9e17d2e8a3cb54fe8599a8327cbdd6a212ff4707c0255f9105f1114f6a9648e",
+            "hash": "0x0c48027aca9fdeada011d405df602ede4ecfa62be9109d5d1d9f392c5e1d1d78"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793063800,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x0c48027aca9fdeada011d405df602ede4ecfa62be9109d5d1d9f392c5e1d1d78",
+            "hash": "0x6ab34669873c1078e5b3e506c20c49779a1ecdf87f6bedaa2c641bbe1c66e0a2"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-23",
+      "title": "an at that is not an integer is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": "5",
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x3d5ee9d13b8e8589c428d8fa6867f904960294955bb0ef0c94fd140e03fadf27"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x3d5ee9d13b8e8589c428d8fa6867f904960294955bb0ef0c94fd140e03fadf27",
+            "hash": "0xb237dced65651720bae41450f63139c4264f8b051f190078ef7e17030d43bec4"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0xb237dced65651720bae41450f63139c4264f8b051f190078ef7e17030d43bec4",
+            "hash": "0x237290dc73a43b1c34e6c0e8f6875d08b2b05a982367b62a07dadb8c1773a3cd"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x237290dc73a43b1c34e6c0e8f6875d08b2b05a982367b62a07dadb8c1773a3cd",
+            "hash": "0x8267a9cfc2261b466a67ad787db6b1e7ca98eade9c7b618c788f1dee33c841a4"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x8267a9cfc2261b466a67ad787db6b1e7ca98eade9c7b618c788f1dee33c841a4",
+            "hash": "0x312d041dbedc42ace49447e4c6d9d5a3abbf9062d5bcb68c65d52bb2fad6152c"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_at_invalid",
+        "seq": 1
+      }
+    },
+    {
+      "id": "dl-24",
+      "title": "members beyond the required ones are allowed in a payload",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3",
+              "note": "extra"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x1e3166f9698ff1cd248003150ea1599eb3efa425457877b0551951191547cde0"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x1e3166f9698ff1cd248003150ea1599eb3efa425457877b0551951191547cde0",
+            "hash": "0x43c428152c8d8fd9255225c531d7a12681bdb35cc6403ee1e6476f4a54fa3326"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-25",
+      "title": "a binding.refused entry with only requestHash, seat and reason is valid",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "binding.refused",
+            "at": 1793062200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "seat": "seat:harbor-treasury",
+              "reason": "decision_expired"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x0ae3c13fa6bc93e1963650650510af06aba3582e09d9b48814fbdf3ca28a5297"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-26",
+      "title": "a binding.refused entry may carry the nonce of the refused decision and the transaction hash",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "binding.refused",
+            "at": 1793062200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "seat": "seat:harbor-treasury",
+              "reason": "decision_expired",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3",
+              "txHash": "0xb295ee095dd605692c81fce786af72a1b9ceaaf188b8ff2618095e5848f7f689"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xae36384e7de3711e43fffa95928c4c022382a92222401b242245212c0d66af65"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-27",
+      "title": "the empty string is a valid nonce and txHash: the request or the decision could not be read, so nothing is attributed",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "binding.refused",
+            "at": 1793062200,
+            "payload": {
+              "requestHash": "",
+              "seat": "seat:harbor-treasury",
+              "reason": "decision_expired",
+              "nonce": "",
+              "txHash": ""
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x062449e03fce518aa627cb0956c930bda8df0b3685599049ae8c6c22400632fa"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-28",
+      "title": "a nonce that is neither empty nor a 32-byte hash is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "binding.refused",
+            "at": 1793062200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "seat": "seat:harbor-treasury",
+              "reason": "decision_expired",
+              "nonce": "0x12"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xdcc998c5ee989139b9fa4d90de3390e8d09e594c2b9b372da4259478839897b9"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-29",
+      "title": "a txHash that is not text is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "binding.refused",
+            "at": 1793062200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "seat": "seat:harbor-treasury",
+              "reason": "decision_expired",
+              "txHash": 5
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x0f7f6024a8cbce0abd4f031c17824654f3ab1e1ad0a2e38c51dd74c54f61b716"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-30",
+      "title": "a binding.refused entry without its seat is refused",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "binding.refused",
+            "at": 1793062200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "reason": "decision_expired"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x25714071f8b54845e3e6cd3b1bdb0b4735f58d11eaaa34bcf4fbc5e5a92a28e2"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-31",
+      "title": "a policy.pinned entry with the members of the pin step is valid, with or without a previous pin",
+      "covers": [
+        "C5",
+        "DE-LOG",
+        "PIN"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "policy.pinned",
+            "at": 1793062200,
+            "payload": {
+              "seat": "seat:harbor-treasury",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "by": "seat:harbor-risk",
+              "reason": "Rule set reviewed by two officers.",
+              "previous": null
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x083e6ced620acc0d14feef860c2e8f56eaac0e3302482e9fed7c0eff92ac5835"
+          },
+          {
+            "seq": 7,
+            "kind": "policy.pinned",
+            "at": 1793062200,
+            "payload": {
+              "seat": "seat:harbor-treasury",
+              "policyHash": "0xe77cde6813c96cd62d8af9435300c62f5927e50b6fd2cda121068e346473c73f",
+              "by": "seat:harbor-risk",
+              "reason": "Rule set reviewed by two officers.",
+              "previous": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192"
+            },
+            "prev": "0x083e6ced620acc0d14feef860c2e8f56eaac0e3302482e9fed7c0eff92ac5835",
+            "hash": "0x76efd4418964cc82a544d964dec9d6a8b19dd00d98d067a92b50bcac7d2a77b1"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-32",
+      "title": "a policy.pinned entry that lacks its previous member is refused: null is a value, absence is not",
+      "covers": [
+        "C5",
+        "DE-LOG",
+        "PIN"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "policy.pinned",
+            "at": 1793062200,
+            "payload": {
+              "seat": "seat:harbor-treasury",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "by": "seat:harbor-risk",
+              "reason": "Rule set reviewed by two officers."
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xe5b7821dbca7c2bc433d671370892792a340e57fbbbe626e1dddf363a1b1c028"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-33",
+      "title": "a policy.pinned entry whose policyHash is not a 32-byte hash is refused",
+      "covers": [
+        "C5",
+        "DE-LOG",
+        "PIN"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "policy.pinned",
+            "at": 1793062200,
+            "payload": {
+              "seat": "seat:harbor-treasury",
+              "policyHash": "rule-set-1",
+              "by": "seat:harbor-risk",
+              "reason": "Rule set reviewed by two officers.",
+              "previous": null
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x3ac99fc48554c60f11234d72fcd388f1732dbcf53cb13951cdb5db4deae1a1dd"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-34",
+      "title": "a kind outside the fifteen is still refused by name",
+      "covers": [
+        "C5",
+        "DE-LOG"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "policy.unpinned",
+            "at": 1793062200,
+            "payload": {
+              "seat": "seat:harbor-treasury"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x6251bf9231d37bc67988b4532c3202eee9cc61075abaed2effecfe405583f9fd"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_kind_unknown",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-35",
+      "title": "an intervention.recorded entry for each act (revoke, replace, cancel by reject vote) with its members is valid",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x501df0d7f1e73c9b923842bfe22e2761345c5401fdbf1d880d4c984c5ae8d04e"
+          },
+          {
+            "seq": 7,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "replace",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent retired; its successor takes the orders.",
+              "txHash": "0x7ed9848e26d063a2375c74677c06578c458cc05e5e560782c2f572f057ea38a9",
+              "replacedBy": "acc://fictional-agent-c.acme"
+            },
+            "prev": "0x501df0d7f1e73c9b923842bfe22e2761345c5401fdbf1d880d4c984c5ae8d04e",
+            "hash": "0x4b62ab6309d7568e82ea752b14f3f9f231382d5b9e450676724e2ba9b513bebc"
+          },
+          {
+            "seq": 8,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "reject",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Payment to an unknown account; cancelled.",
+              "txHash": "0xb295ee095dd605692c81fce786af72a1b9ceaaf188b8ff2618095e5848f7f689",
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a"
+            },
+            "prev": "0x4b62ab6309d7568e82ea752b14f3f9f231382d5b9e450676724e2ba9b513bebc",
+            "hash": "0x4082a84f454763707ef5be1128f81a395c12e61a88a073279401283df8fa49cc"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "pinned": false
+      }
+    },
+    {
+      "id": "dl-36",
+      "title": "members beyond the required ones (grantId, version, keyTxHash) are allowed in an intervention.recorded entry",
+      "covers": [
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb",
+              "grantId": "grant-agent-a",
+              "version": 2,
+              "keyTxHash": "0xd8effcd90227e5eac327e37835967531b895c729e0a1ab4c50a93d894bbbd0b4"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x0092811071a64a1581e8d7cce5ed1a9ab793e10a00f9a8bace23a0fc6ee3a5fe"
+          }
+        ]
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "id": "dl-37",
+      "title": "an intervention.recorded entry without its act member is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xe3e0f7d922850437afd1b0d631a6c5a6c39bebd5574d94be0f0a66c35d567ee6"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-38",
+      "title": "an intervention.recorded entry without its subject member is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xf5f0202087891da0c131454d33789ea9a7a328bc9af4961bd512b8184f7eb058"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-39",
+      "title": "an intervention.recorded entry without its seat member is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xd05fffd26b114e80ae85c5f2cd5809eb7c100a1cbd11dad11104b6310250099d"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-40",
+      "title": "an intervention.recorded entry without its by member is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xef481bbc0b49efd4df834587334991d70838040b10b5354b83924022f8b072d0"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-41",
+      "title": "an intervention.recorded entry without its reason member is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x4755791e4914289ef62e4044342a650351ce62fadd0313c6260d9ead76c38e02"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-42",
+      "title": "an intervention.recorded entry without its txHash member is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator."
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xa180bd355c09ac3d07c5c2df0dd797ac1c9ce56ba0d8e17b0ef5ffde35bc384e"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-43",
+      "title": "an intervention.recorded entry naming an act outside revoke, replace and reject is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "pause",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xc17676d2347cc735c025dd3bfadac75be70510c9889b707acab4831b9e60514c"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-44",
+      "title": "an intervention.recorded entry whose seat is not a named seat (seat:<name>) is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x91eda026b5886f5edc00aae1f475a517b633d6a6987a07951777840c928dbf43"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-45",
+      "title": "an intervention.recorded entry whose reason is shorter than the minimum (ten characters, trimmed) is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "  too short ",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xae29c4bb4e8da42559e8ea1d855fa25024b997959ac6b40b8d56ac68b83c9eb8"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-46",
+      "title": "an intervention.recorded entry with an empty by is refused: a named person records it",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "  ",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0x983bdab5cd529fe3a2590b546383a53e35a278eb7607ee6d4782f3596b32569d"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-47",
+      "title": "an intervention.recorded entry whose subject is not an acc:// URL is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "fictional-agent-a",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "0xd72f92d6538fe0cd19881c60ec10886ca185751c316e07923cc54e0b51a52beb"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xab38c85c636947239eab47723124f6c5397fa4075f32178c42e415edca61bb68"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    },
+    {
+      "id": "dl-48",
+      "title": "an intervention.recorded entry whose txHash is not a 32-byte hash is refused",
+      "covers": [
+        "C4",
+        "C5",
+        "DE-LOG",
+        "DE-109"
+      ],
+      "input": {
+        "logId": "harbor-treasury-seat-1",
+        "entries": [
+          {
+            "seq": 1,
+            "kind": "grant.observed",
+            "at": 1793060100,
+            "payload": {
+              "grantId": "agent7-vendor-pay",
+              "version": 1,
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341"
+            },
+            "prev": "0x4dbf460df1947a23c87b8bc159fbcb88a0465789610ee84bc52e08f28016b696",
+            "hash": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458"
+          },
+          {
+            "seq": 2,
+            "kind": "decision.issued",
+            "at": 1793060200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "grantHash": "0x443a8408f68428bf755e5d1249d5e5dd0abeb6058643d54f3c52881000e1d341",
+              "policyHash": "0xbd3adac682b6322bbb192524272f22e55669c7a0a0ad306ea9d5f2a12c503192",
+              "decision": "approve",
+              "approver": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x6316f5fb7a5b149c9d2c31aa2d6c90f9e911d3a880a93e6a8bf12aad329bc458",
+            "hash": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f"
+          },
+          {
+            "seq": 3,
+            "kind": "approval.cast",
+            "at": 1793060201,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "identity": "key:62c29cb9c9406702e393bc1915d5e239515522e582a82b389f03811c12d1ac8a",
+              "book": "acc://harbor-mfg.acme/treasury",
+              "vote": "approve"
+            },
+            "prev": "0x2b1af1df473bf00f8230247da6483e4ee2e5627927b8029997516b95ceebca4f",
+            "hash": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61"
+          },
+          {
+            "seq": 4,
+            "kind": "decision.consumed",
+            "at": 1793060300,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "nonce": "0x93eefde2f61f5da60a7ded676038a05f5adc65668a55b5d61ca7fe2bebe1c1e3"
+            },
+            "prev": "0x2bf083ecf6b990796d9d08b768575688fbbd4033b19209b264b07b7ec46cbf61",
+            "hash": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84"
+          },
+          {
+            "seq": 5,
+            "kind": "outcome.recorded",
+            "at": 1793061200,
+            "payload": {
+              "requestHash": "0xfa083fce8656908efb4f97844161853abf81aba3d9086be24bf9cfcafe355b4a",
+              "status": "executed",
+              "destinationTx": "0x58731bee2bc4871584988ac63e7f4375b46823b1465690a4a8d12ca462a43f2c"
+            },
+            "prev": "0x62c448a9ea9f0c5bae1c0f6ba4b408205726f30f8d0e99bfcd0e9e4cb7293f84",
+            "hash": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41"
+          },
+          {
+            "seq": 6,
+            "kind": "intervention.recorded",
+            "at": 1793062200,
+            "payload": {
+              "act": "revoke",
+              "subject": "acc://fictional-agent-a.acme",
+              "seat": "seat:harbor-risk",
+              "by": "risk-officer-1",
+              "reason": "Agent key reported lost by its operator.",
+              "txHash": "abababababababababababababababababababababababababababababababab"
+            },
+            "prev": "0x8e5ab65ad0c7ec341a065839bf80950a17c3500a5405a60fc46e7d6e30bbef41",
+            "hash": "0xa31d6e2aacb5096a6271031d07b1d03045def2c2dc0f16b4edebf82a0c1c4119"
+          }
+        ]
+      },
+      "expect": {
+        "ok": false,
+        "reason": "log_payload_invalid",
+        "seq": 6
+      }
+    }
+  ]
+}

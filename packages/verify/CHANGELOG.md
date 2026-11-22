@@ -1,5 +1,14 @@
 # Changelog — @certen.io/proof-verify
 
+## 0.4.3 — the fifteenth decision-log kind, intervention.recorded, and the specification's log refusal order (unreleased; tag verify-v0.4.3 publishes it)
+
+No API change. The decision-log check `verifyAgentPack` applies to a pack's log slice is raised to the specification (transaction-controls docs/core/DECISION.md section 9, finding AGT-F135 / DE-109, transaction-controls pl/agt-7-raise 0fffc72).
+
+### Changed
+- `intervention.recorded` is a known kind (the fifteenth). Its payload must carry the strings `act`, `subject`, `seat`, `by` and `reason` and `txHash` as `0x` + 64 lower-hex; `act` is `revoke`, `replace` or `reject`; `subject` is an `acc://` URL of at most 512 characters whose segments are lowercase (`[a-z0-9][a-z0-9._-]*`); `seat` is `seat:<name>` (`^seat:[a-z0-9][a-z0-9._-]{0,62}$`); `by` is not empty after trimming; `reason` is at least 10 characters after trimming. Further members are allowed. 0.4.2 refused any log holding one as `log_kind_unknown`.
+- The log entries are judged in the specification's order with its names: kind, payload, `at`, genesis, sequence, prev, entry hash. A sequence fault is now `log_seq_gap` or `log_seq_out_of_order` (0.4.2: `log_seq_invalid`); a refused pack still reports it as `log_invalid: <reason> (seq <n>)`.
+- Judged by the specification's decision-log vectors dl-01..dl-48 (copied byte for byte from 0fffc72, pinned by sha256; dl-35..dl-48 are the new kind). Every verdict, reason and seq is the specification's. The two vectors that judge a pinned head (dl-12, dl-14) verify as a chain here, because a pin is judged by the pack's own `logHead` check. The agent-evidence vectors ae-01..ae-32 are unchanged and still pass.
+
 ## 0.4.2 — the effective decision and outcome of an agent pack are the last logged ones (unreleased; tag verify-v0.4.2 publishes it)
 
 No API change. `verifyAgentPack` is raised to the specification (transaction-controls docs/agentic/EVIDENCE-AGT.md section 6 and EVIDENCE.md EV-10, finding AGT-F125). 0.4.1 demanded exactly one approving `decision.issued` and exactly one `outcome.recorded` for the request, so it refused every real executed pack: the Console appends an outcome entry when the outcome changes (the destination transaction found after the relay).

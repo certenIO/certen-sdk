@@ -51,7 +51,10 @@ const GRANT_MEMBERS = ['approvals', 'conditions', 'grantId', 'grantor', 'issuedA
 const REQUEST_KEYS = ['chainId', 'kind', 'source', 'target', 'beneficiary', 'asset', 'amount', 'executionCommitment', 'operationId', 'txHash'];
 const ACTIONS = ['erc20.transfer', 'erc20.approve', 'native.transfer'];
 const ENTRY_KEYS = ['seq', 'kind', 'at', 'payload', 'prev', 'hash'];
-const KINDS = ['decision.issued', 'decision.consumed', 'approval.cast', 'ledger.reserve', 'ledger.settle', 'ledger.release', 'exception.consume', 'pause.set', 'pause.clear', 'recheck.result', 'outcome.recorded', 'grant.observed', 'binding.refused', 'policy.pinned'];
+// DECISION.md section 9: the fifteen kinds (AGT-F135 / DE-109 added intervention.recorded, transaction-controls 0fffc72)
+const KINDS = ['decision.issued', 'decision.consumed', 'approval.cast', 'ledger.reserve', 'ledger.settle', 'ledger.release', 'exception.consume', 'pause.set', 'pause.clear', 'recheck.result', 'outcome.recorded', 'grant.observed', 'binding.refused', 'policy.pinned', 'intervention.recorded'];
+const MIN_REASON = 10;
+const SEAT_NAME = /^seat:[a-z0-9][a-z0-9._-]{0,62}$/;
 const OUTCOMES = ['executed', 'refused', 'failed', 'expired'];
 const MAX_UINT256 = (1n << 256n) - 1n;
 
@@ -128,6 +131,14 @@ function payloadReadable(kind: string, p: Obj): boolean {
   if (kind === 'binding.refused') return strs('requestHash', 'seat', 'reason') && (!has(p, 'nonce') || hashOrEmpty(p.nonce)) && (!has(p, 'txHash') || hashOrEmpty(p.txHash));
   if (kind === 'policy.pinned') return strs('seat', 'by', 'reason') && has(p, 'policyHash') && isHash(p.policyHash) && has(p, 'previous') && (p.previous === null || isHash(p.previous));
   if (kind === 'grant.observed') return strs('grantId', 'grantHash') && isInt(p.version, 1);
+  // AGT-F135 (INTERVENTION.md, DE-109): a revoke, replace or cancel by reject vote, held by a named seat and person with a reason, bound to the Accumulate
+  // transaction that IS the act; members beyond these are allowed (transaction-controls docs/core/vectors/lib/decision.mjs PAYLOAD_RULES)
+  if (kind === 'intervention.recorded') {
+    if (!strs('act', 'subject', 'seat', 'by', 'reason') || !has(p, 'txHash') || !isHash(p.txHash)) return false;
+    const subject = p.subject as string;
+    return ['revoke', 'replace', 'reject'].includes(p.act as string) && subject.length <= 512 && subject.startsWith('acc://') && subject.slice(6).split('/').every((x) => /^[a-z0-9][a-z0-9._-]*$/.test(x))
+      && SEAT_NAME.test(p.seat as string) && (p.by as string).trim().length > 0 && (p.reason as string).trim().length >= MIN_REASON;
+  }
   return true;
 }
 
@@ -138,12 +149,15 @@ function chainProblem(logId: unknown, entries: unknown[]): string | null {
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
     if (!exact(e, ENTRY_KEYS) || !isInt(e.seq, 1) || !isObj(e.payload) || !isHash(e.prev) || !isHash(e.hash) || !isStr(e.kind)) return `log_entry_malformed (entry ${i})`;
-    if (!isInt(e.at, 0)) return `log_at_invalid (seq ${e.seq})`;
+    // the specification's order and names (DECISION.md section 9; transaction-controls docs/core/vectors/lib/decision.mjs verifyLog): kind, payload, at,
+    // genesis, sequence (a gap or out of order), prev, hash
     if (!KINDS.includes(e.kind)) return `log_kind_unknown (seq ${e.seq})`;
-    if (entryHashOf(e) !== e.hash) return `log_entry_hash_mismatch (seq ${e.seq})`;
-    if (e.seq !== i + 1) return `log_seq_invalid (seq ${e.seq})`;
     if (!payloadReadable(e.kind, e.payload)) return `log_payload_invalid (seq ${e.seq})`;
-    if (e.prev !== prev) return i === 0 ? 'log_genesis_mismatch' : `log_prev_mismatch (seq ${e.seq})`;
+    if (!isInt(e.at, 0)) return `log_at_invalid (seq ${e.seq})`;
+    if (i === 0 && e.prev !== prev) return `log_genesis_mismatch (seq ${e.seq})`;
+    if (e.seq !== i + 1) return `${entries.some((x) => isObj(x) && x.seq === i + 1) || e.seq < i + 1 ? 'log_seq_out_of_order' : 'log_seq_gap'} (seq ${e.seq})`;
+    if (e.prev !== prev) return `log_prev_mismatch (seq ${e.seq})`;
+    if (entryHashOf(e) !== e.hash) return `log_entry_hash_mismatch (seq ${e.seq})`;
     prev = e.hash;
   }
   return null;
@@ -365,4 +379,19 @@ export function verifyAgentPack(input: unknown): AgentPackVerdict {
   } catch (err) {
     return bad('agent_evidence_check_failed', 'input', err instanceof Error ? err.message.slice(0, 120) : 'non-error throw');
   }
+}
+
+/**
+ * The decision-log check this verifier applies to a pack's log slice (DECISION.md section 9: the hash chain from its genesis, the fifteen kinds and the
+ * payload members the evidence check reads), as a verdict: `{ ok: true }` or the first refusal with its `seq`. Exposed so the check can be judged by the
+ * specification's decision-log vectors (transaction-controls docs/core/vectors/decision-log.json). It takes no expected head: a pinned head is the
+ * Console's commitment, judged by the pack's own log checks.
+ */
+export function decisionLogVerdict(input: { logId: unknown; entries: unknown }): { ok: true } | { ok: false; reason: string; seq?: number; entry?: number } {
+  if (!Array.isArray(input?.entries)) return { ok: false, reason: 'log_entries_malformed' };
+  const p = chainProblem(input.logId, input.entries);
+  if (p === null) return { ok: true };
+  const m = /^([a-z_]+)(?: \((seq|entry) ([0-9]+)\))?$/.exec(p);
+  if (!m) return { ok: false, reason: p };
+  return { ok: false, reason: m[1]!, ...(m[2] === 'seq' ? { seq: Number(m[3]) } : m[2] === 'entry' ? { entry: Number(m[3]) } : {}) };
 }
