@@ -281,12 +281,16 @@ function checkTiming(t: Obj, decision: Obj, requestHash: string, entries: Obj[])
   for (const k of ['approvedAt', 'relayedAt', 'delaySeconds', 'window']) if (!has(t, k)) return bad('agent_evidence_element_missing', `timing.${k}`);
   const w = t.window;
   if (!isObj(w) || !isInt(t.approvedAt) || !isInt(t.relayedAt) || !isInt(t.delaySeconds) || !isInt(w.issuedAt) || !isInt(w.expiresAt) || !isInt(w.seconds) || !isInt(w.defaultSeconds)) return bad('agent_evidence_timing_mismatch', 'timing', 'malformed');
-  const issued = entries.filter((e) => e.kind === 'decision.issued' && e.payload.requestHash === requestHash && e.payload.decision === 'approve');
-  const outcome = entries.filter((e) => e.kind === 'outcome.recorded' && e.payload.requestHash === requestHash);
-  if (issued.length !== 1) return bad('agent_evidence_timing_mismatch', 'timing.approvedAt', `${issued.length} approving decisions logged`);
-  if (outcome.length !== 1 || !isInt(outcome[0]!.payload.relayedAt)) return bad('agent_evidence_timing_mismatch', 'timing.relayedAt', 'no recorded relay time');
-  if (t.approvedAt !== decision.issuedAt || t.approvedAt !== issued[0]!.at) return bad('agent_evidence_timing_mismatch', 'timing.approvedAt');
-  if (t.relayedAt !== outcome[0]!.payload.relayedAt) return bad('agent_evidence_timing_mismatch', 'timing.relayedAt');
+  // EV-10 (EVIDENCE-AGT.md section 6, AGT-F125): the effective decision and outcome are the LAST entries for the request among those up to the
+  // record's head (the caller passes only those); earlier ones are history (a reissued decision, an outcome appended when the destination is found)
+  const forRequest = (kind: string) => entries.filter((e) => e.kind === kind && e.payload.requestHash === requestHash);
+  const issued = forRequest('decision.issued').at(-1);
+  const outcome = forRequest('outcome.recorded').at(-1);
+  if (issued === undefined || issued.payload.decision !== 'approve') return bad('agent_evidence_timing_mismatch', 'timing.approvedAt', 'the last decision logged for the request is not an approval');
+  if (issued.payload.nonce !== decision.nonce || issued.payload.issuedAt !== decision.issuedAt || issued.payload.expiresAt !== decision.expiresAt) return bad('agent_evidence_timing_mismatch', 'timing.approvedAt', 'the last decision logged for the request is not the pack decision');
+  if (outcome === undefined || !isInt(outcome.payload.relayedAt)) return bad('agent_evidence_timing_mismatch', 'timing.relayedAt', 'no recorded relay time');
+  if (t.approvedAt !== decision.issuedAt || t.approvedAt !== issued.at) return bad('agent_evidence_timing_mismatch', 'timing.approvedAt');
+  if (t.relayedAt !== outcome.payload.relayedAt) return bad('agent_evidence_timing_mismatch', 'timing.relayedAt');
   if (t.delaySeconds !== t.relayedAt - t.approvedAt) return bad('agent_evidence_timing_mismatch', 'timing.delaySeconds');
   if (w.issuedAt !== decision.issuedAt || w.expiresAt !== decision.expiresAt || w.seconds !== w.expiresAt - w.issuedAt) return bad('agent_evidence_timing_mismatch', 'timing.window');
   if (w.defaultSeconds !== DEC2_DEFAULT_WINDOW_SECONDS) return bad('agent_evidence_timing_mismatch', 'timing.window.defaultSeconds');
@@ -341,7 +345,7 @@ export function verifyAgentPack(input: unknown): AgentPackVerdict {
     }
 
     const t: Obj = pack.timing;
-    const tv = checkTiming(t, pack.decision, requestHash, es);
+    const tv = checkTiming(t, pack.decision, requestHash, es.slice(0, rec.logHead.seq));
     if (!tv.ok) return tv;
 
     return {

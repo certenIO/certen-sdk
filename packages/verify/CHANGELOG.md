@@ -1,5 +1,13 @@
 # Changelog — @certen.io/proof-verify
 
+## 0.4.2 — the effective decision and outcome of an agent pack are the last logged ones (unreleased; tag verify-v0.4.2 publishes it)
+
+No API change. `verifyAgentPack` is raised to the specification (transaction-controls docs/agentic/EVIDENCE-AGT.md section 6 and EVIDENCE.md EV-10, finding AGT-F125). 0.4.1 demanded exactly one approving `decision.issued` and exactly one `outcome.recorded` for the request, so it refused every real executed pack: the Console appends an outcome entry when the outcome changes (the destination transaction found after the relay).
+
+### Changed
+- The timing check reads only the log entries up to the record's `logHead.seq`. The effective decision is the LAST `decision.issued` for the request: it must be `approve` and be the pack's decision (`nonce`, `issuedAt`, `expiresAt`), and `timing.approvedAt` must equal both `decision.issuedAt` and that entry's `at`. The effective outcome is the LAST `outcome.recorded` for the request: its `relayedAt` must be an integer equal to `timing.relayedAt`. Every other rule is unchanged.
+- Judged by the specification's vectors ae-01..ae-32 (ae-29..ae-32 appended by AGT-F125; the fixture is re-copied byte for byte and re-pinned by sha256, ae-01..ae-28 unchanged), plus a real gate-run executed pack (FICTIONAL parties) that 0.4.1 refused.
+
 ## 0.4.1 — an executed agent pack must name its destination transaction (unreleased; tag verify-v0.4.1 publishes it)
 
 No API change. `verifyAgentPack` is raised to the specification (transaction-controls docs/agentic/EVIDENCE-AGT.md section 1, finding AGT-F116).
