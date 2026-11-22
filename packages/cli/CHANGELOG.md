@@ -1,5 +1,16 @@
 # Changelog — @certen.io/cli
 
+## 0.17.0 — `certen agent` prints the seat's record of each intervention (unreleased; tag cli-v0.17.0 publishes it)
+
+Needs `@certen.io/sdk` `^0.16.0` and `@certen.io/proof-verify` `^0.4.3` (the same release).
+
+### Changed
+- **`certen agent cancel <tx>` requires `--subject <adi>`**, the agent whose pending transaction is rejected (the seat record's subject).
+- **`certen agent revoke`, `cancel` and `replace` print `seatRecord`, `recordedAtSeat: false` and `seatRecordStatement`**: the form the
+  named person submits at the seat (`POST /agents/interventions`) so the act is recorded in the seat's decision log; the CLI holds no
+  person session and records nothing there. `revoke` with `--agent-page` prints the one record of both halves (the Grant write as
+  `txHash`, the key operation as `keyTxHash`). A hash the CLI does not have is absent and named in `seatRecord.absent`.
+
 ## 0.16.0 — `certen agent`: enrollment, revoke, cancel by reject vote and replace (2026-11-21)
 
 Needs `@certen.io/sdk` `^0.15.0` and `@certen.io/proof-verify` `^0.4.1` (the same release).

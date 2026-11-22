@@ -211,17 +211,20 @@ export interface PrincipalWriteResult {
   createTx?: string;
   writeTx?: string;
   writeOperationId: string;
+  /** who signed the entry's write: `principal` (this call signed and submitted it with the principal's key) or `provider` (the identity is
+   *  provider-signed: the gateway signs and submits it, and `writeTx` is absent until the gateway returns one) */
+  writeSignedBy: 'principal' | 'provider';
 }
 
 /** One governance operation, checked and signed by the principal's own key, or by the provider when the identity is provider-signed. */
-async function signedOperation(client: CertenClient, a: { principal: string; page: string; signer: PrincipalSigner; operation: Record<string, unknown>; expected: Record<string, unknown> }): Promise<{ id: string; tx?: string }> {
+async function signedOperation(client: CertenClient, a: { principal: string; page: string; signer: PrincipalSigner; operation: Record<string, unknown>; expected: Record<string, unknown> }): Promise<{ id: string; tx?: string; signedBy: 'principal' | 'provider' }> {
   const created = await client.governance.create({ identity: a.principal, operations: [a.operation], signerKeyPage: a.page, signerPublicKey: a.signer.publicKey });
-  if (created.signing_mode === 'provider' || !created.signing_data) return { id: created.governance_op_id, ...(created.tx_hash ? { tx: created.tx_hash } : {}) };
+  if (created.signing_mode === 'provider' || !created.signing_data) return { id: created.governance_op_id, ...(created.tx_hash ? { tx: created.tx_hash } : {}), signedBy: 'provider' };
   // Rebuild the transaction the gateway returned and match it to exactly what was asked: nothing is signed on a mismatch.
   await checkGovernanceSigning(created.signing_data, { adiUrl: a.principal, operations: [a.expected as never], signerPublicKey: a.signer.publicKey, signerKeyPage: a.page });
   const hash = String((created.signing_data as { hash_to_sign?: unknown }).hash_to_sign ?? '');
   const submitted = await client.governance.submitSignature(created.governance_op_id, { signature: a.signer.sign(hash), publicKey: a.signer.publicKey });
-  return { id: created.governance_op_id, ...((submitted as { tx_hash?: string }).tx_hash ? { tx: (submitted as { tx_hash?: string }).tx_hash } : {}) };
+  return { id: created.governance_op_id, ...((submitted as { tx_hash?: string }).tx_hash ? { tx: (submitted as { tx_hash?: string }).tx_hash } : {}), signedBy: 'principal' };
 }
 
 /**
@@ -252,7 +255,7 @@ export async function writePrincipalEntry(client: CertenClient, a: { kind: Princ
     operation: { type: 'write_data', account_url: entry.account, entries: entry.elements },
     expected: { type: 'write_data', account_url: entry.account, entries: entry.elements },
   });
-  return { entry, accountCreated, ...(createTx ? { createTx } : {}), ...(w.tx ? { writeTx: w.tx } : {}), writeOperationId: w.id };
+  return { entry, accountCreated, ...(createTx ? { createTx } : {}), ...(w.tx ? { writeTx: w.tx } : {}), writeOperationId: w.id, writeSignedBy: w.signedBy };
 }
 
 /** The agent's GR-62 registration in the principal's registry (subject type agent). */

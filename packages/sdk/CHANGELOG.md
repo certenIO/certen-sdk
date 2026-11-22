@@ -1,5 +1,37 @@
 # Changelog — @certen.io/sdk
 
+## 0.16.0 — each intervention hands the named person the seat's record (unreleased; tag sdk-v0.16.0 publishes it)
+
+Requires `@certen.io/proof-verify` `^0.4.3`: an agent pack whose decision log holds `intervention.recorded` (the record below, once the
+seat accepts it) is refused by 0.4.2 as `log_kind_unknown`, and `@certen.io/sdk/verify` re-exports `verifyAgentPack`.
+
+Finding AGT-F135 (transaction-controls INTERVENTION.md lines 3-5): every intervention is held by a named seat with a reason and recorded in
+the seat's decision log. 0.15.0 required the seat and the reason and only echoed them back; nothing tied them to the act.
+
+### Added
+- **`seatRecord` on every intervention result** (`revokeGrant`, `revokeAgentKey`, `cancelByRejectVote`, `replaceAgent`): exactly the form
+  the Console's `POST /agents/interventions` takes, `{ act, subject, seat, reason, txHash, keyTxHash?, replacedBy? }`, with `txHash` the
+  64-hex Accumulate transaction that is the act: the Grant write (revoke), the pending transaction (reject), the retirement's write
+  (replace, with `replacedBy` the new agent ADI). Each result also carries `recordedAtSeat: false` and `seatRecordStatement`
+  (`SEAT_RECORD_STATEMENT`): the act is recorded in the seat's decision log only when the named person submits `seatRecord` at the seat
+  (`SEAT_RECORD_ROUTE`, `POST /agents/interventions`) in a person session. The SDK holds no person session and records nothing there.
+- **A hash the result does not have is absent, by name.** `seatRecord.absent` lists each missing hash with a code:
+  `provider_signing_pending` (a provider-signed identity whose gateway has not returned the hash yet), `gateway_returned_none`,
+  `tx_hash_unreadable` (the gateway's value, quoted, is neither a 64-hex hash nor a TxID) and, for `revokeAgentKey`,
+  `grant_write_not_in_this_call`: its record carries the key operation as `keyTxHash` and no `txHash`, because a revoke's `txHash` is the
+  Grant write.
+- **`revokeSeatRecord(grantResult, keyResult)`** joins the two calls of a revoke into the one record the seat takes (`txHash` from the
+  Grant write, `keyTxHash` from the key operation, each half's absence carried). Halves of different agents, seats or reasons, or passed
+  in the wrong order, are refused (`INTERVENTION_MALFORMED`).
+- `PrincipalWriteResult.writeSignedBy` (`principal` or `provider`): who signed the entry's write.
+- Types `SeatRecord`, `SeatRecordPart`, `SeatRecordAbsence`, `SeatRecordAbsenceCode`, `InterventionAct`.
+
+### Changed
+- **`cancelByRejectVote` requires `subject`**, the agent ADI whose pending transaction is rejected (the seat record's subject; the
+  authority's `identity` is not the agent). A call without it is refused before any request (`INTERVENTION_MALFORMED`).
+- `revokeGrant` refuses a Grant head whose subject is not an agent ADI, and `replaceAgent` a registration whose `adi` is not one, before
+  anything is signed.
+
 ## 0.15.0 — a principal's agent: enrollment, Grant, mandate, revoke, cancel by reject vote and replace (2026-11-21)
 
 Requires `@certen.io/proof-verify` `^0.4.1` (an executed agent payment's evidence pack must name its destination transaction).

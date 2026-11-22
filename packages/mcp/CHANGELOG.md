@@ -1,5 +1,11 @@
 # Changelog — @certen.io/mcp
 
+## 0.10.1 — requires the SDK and verifier of the seat's record (unreleased; tag mcp-v0.10.1 publishes it)
+
+No change to the MCP server's own code. The floors are raised: `@certen.io/sdk` `^0.16.0` and `@certen.io/proof-verify` `^0.4.3` (the verifier that
+knows the decision-log kind `intervention.recorded`). Needs the `@certen.io/sdk` of the same release. `certen_agent_cancel_by_reject_vote`
+builds its own sign request and does not return a seat record in this release.
+
 ## 0.10.0 — cancel an agent's pending intent by reject vote (2026-11-21)
 
 Needs `@certen.io/sdk` `^0.15.0` and `@certen.io/proof-verify` `^0.4.1` (the same release).

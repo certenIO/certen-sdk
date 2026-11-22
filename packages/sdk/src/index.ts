@@ -22,6 +22,6 @@ export type { BeforeSign } from './resources/execute.js';
 export { agentEnrollmentState, agentAuthorityOperation, agentBookDisableOperation, isUnderAdi } from './agent-enrollment.js';
 export { buildPrincipalEntry, canonicalJson, coreVerdict, PRINCIPAL_ENTRY_REFUSED_BY_CORE, entryHash, entryTag, envelopeDigestHex, issueGrant, issueMandate, registerAgent, taggedPreimage, writePrincipalEntry, ENTRY_TAGS, PRINCIPAL_ACCOUNTS, PRINCIPAL_ENTRY_MALFORMED, PRINCIPAL_ENTRY_NOT_PRINCIPALS, PRINCIPAL_PAGE_INVALID, PRINCIPAL_WRITE_UNSIGNED } from './principal-entries.js';
 export type { PrincipalEntry, PrincipalEntryKind, PrincipalSigner, PrincipalWriteResult } from './principal-entries.js';
-export { agentKeyRemoval, cancelByRejectVote, replaceAgent, revocationOf, revokeAgentKey, revokeGrant, EXPOSURE_WINDOW_STATEMENT, INTERVENTION_MALFORMED } from './principal-intervention.js';
-export type { CancelResult, ReplaceResult, RevokeGrantResult, RevokeKeyResult } from './principal-intervention.js';
+export { agentKeyRemoval, cancelByRejectVote, replaceAgent, revocationOf, revokeAgentKey, revokeGrant, revokeSeatRecord, EXPOSURE_WINDOW_STATEMENT, INTERVENTION_MALFORMED, SEAT_RECORD_ROUTE, SEAT_RECORD_STATEMENT } from './principal-intervention.js';
+export type { CancelResult, InterventionAct, ReplaceResult, RevokeGrantResult, RevokeKeyResult, SeatRecord, SeatRecordAbsence, SeatRecordAbsenceCode, SeatRecordPart } from './principal-intervention.js';
 export type { AgentEnrollmentFacts, AgentEnrollmentState, AgentEnrollmentStep, AgentEnrollmentVerdict, AuthorityEntry, SignedDocumentFacts } from './agent-enrollment.js';
