@@ -3,10 +3,11 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const { countsFromReport, describeCounts, applyCounts } = (await import(pathToFileURL(join(REPO_ROOT, 'scripts', 'test-counts.mjs')).href)) as {
+const { countsFromReport, describeCounts, applyCounts, maxWorkersArg } = (await import(pathToFileURL(join(REPO_ROOT, 'scripts', 'test-counts.mjs')).href)) as {
   countsFromReport: (r: unknown) => { files: number; tests: number; skipped: number; failed: number; perPackage: Record<string, number> };
   describeCounts: (c: ReturnType<typeof countsFromReport>) => string;
   applyCounts: (text: string, line: string) => { text: string; spans: number };
+  maxWorkersArg: (argv: string[]) => string[];
 };
 
 const report = {
@@ -34,5 +35,17 @@ describe('test counts quoted in the docs are measured from vitest\'s report', ()
 
   it('reports zero spans for a doc that has none, so a deleted marker cannot pass silently', () => {
     expect(applyCounts('no markers here', 'NEW').spans).toBe(0);
+  });
+});
+
+describe('--max-workers', () => {
+  it('passes a whole number >= 1 to vitest as --maxWorkers and adds nothing without the flag', () => {
+    expect(maxWorkersArg(['node', 'test-counts.mjs', '--write'])).toEqual([]);
+    expect(maxWorkersArg(['node', 'test-counts.mjs', '--write', '--max-workers', '6'])).toEqual(['--maxWorkers=6']);
+  });
+  it('refuses a missing, zero, negative, fractional or non-numeric value instead of ignoring it', () => {
+    for (const bad of [[], ['0'], ['-2'], ['1.5'], ['six'], ['50%']]) {
+      expect(() => maxWorkersArg(['node', 'test-counts.mjs', '--max-workers', ...bad])).toThrow(/--max-workers takes a whole number >= 1/);
+    }
   });
 });

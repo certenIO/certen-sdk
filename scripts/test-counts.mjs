@@ -4,6 +4,7 @@
  *
  *   node scripts/test-counts.mjs           # run the suite once, fail if a quoted count is out of date
  *   node scripts/test-counts.mjs --write   # run the suite once and rewrite the quoted counts
+ *   node scripts/test-counts.mjs --write --max-workers 6   # the same, with at most 6 vitest workers (the suite still runs whole and must be green)
  *
  * Prose cannot notice that the code moved: the README said "SDK 119, CLI 55, MCP 37" while the suite held 870 tests. Each quoted span sits
  * between <!-- test-counts:start --> and <!-- test-counts:end --> and is replaced with the line this script derives from vitest's own
@@ -48,13 +49,26 @@ export function applyCounts(text, line) {
   return { text: out, spans };
 }
 
-function runSuite() {
+/**
+ * `--max-workers N` (a whole number >= 1): run the WHOLE suite with at most N vitest workers. The counts are counts of tests, not timings, and the
+ * suite must still be green; this only lets a machine whose cores outnumber what its CLI tests can sustain (each spawns Node processes) measure
+ * without the per-test timeout firing under its own parallelism. Anything else after the flag is refused, never ignored.
+ */
+export function maxWorkersArg(argv) {
+  const i = argv.indexOf('--max-workers');
+  if (i < 0) return [];
+  const v = argv[i + 1];
+  if (!/^[1-9][0-9]*$/.test(String(v ?? ''))) throw new Error(`--max-workers takes a whole number >= 1, got ${v ?? 'nothing'}`);
+  return [`--maxWorkers=${v}`];
+}
+
+function runSuite(extra = []) {
   const vitest = join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
   if (!existsSync(vitest)) throw new Error(`cannot find vitest at ${vitest} — run npm ci at the repo root`);
   const dir = mkdtempSync(join(tmpdir(), 'test-counts-'));
   const outFile = join(dir, 'report.json');
   try {
-    const res = spawnSync(process.execPath, [vitest, 'run', '--reporter=default', '--reporter=json', `--outputFile.json=${outFile}`], { cwd: ROOT, stdio: 'inherit' });
+    const res = spawnSync(process.execPath, [vitest, 'run', ...extra, '--reporter=default', '--reporter=json', `--outputFile.json=${outFile}`], { cwd: ROOT, stdio: 'inherit' });
     if (!existsSync(outFile)) throw new Error('vitest wrote no JSON report');
     return { status: res.status ?? 1, report: JSON.parse(readFileSync(outFile, 'utf8')) };
   } finally {
@@ -64,7 +78,7 @@ function runSuite() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const write = process.argv.includes('--write');
-  const { status, report } = runSuite();
+  const { status, report } = runSuite(maxWorkersArg(process.argv));
   const counts = countsFromReport(report);
   if (status !== 0 || counts.failed > 0) {
     console.error(`test-counts: the suite failed (exit ${status}, ${counts.failed} failing); counts are not checked on a red suite`);
